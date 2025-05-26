@@ -20,6 +20,7 @@
         "build-nolog": "vite build --config vite/config.prod.mjs"
     },
     "devDependencies": {
+        "@esotericsoftware/spine-phaser-v3": "^4.2.82",
         "typescript": "~5.7.2",
         "vite": "^6.3.1"
     },
