@@ -1,5 +1,3 @@
-import { Events as PhaserEvents } from 'phaser';
-
 export class Events {
     static readonly START: string = 'start';
 
@@ -14,6 +12,7 @@ export class Events {
     static readonly WIN: string = 'win';
     static readonly CHANGE_LINE: string = 'changeLine';
     static readonly CHANGE_BET: string = 'change_bet';
+    static readonly ENHANCE_BET_TOGGLE: string = 'enhance_bet_toggle';
 
     // Autoplay events
     static readonly AUTOPLAY_START: string = 'autoplay_start';
@@ -22,5 +21,11 @@ export class Events {
 
     static readonly BONUS_WIN_CLOSED: string = 'bonus_win_closed';
 
-    static readonly emitter: PhaserEvents.EventEmitter = new PhaserEvents.EventEmitter();
+    static readonly HELP_SCREEN_TOGGLE: string = 'help_screen_toggle';
+
+    static readonly WIN_OVERLAY_SHOW: string = 'winOverlayShow';
+    static readonly WIN_OVERLAY_UPDATE_TOTAL_WIN: string = 'winOverlayUpdateTotalWin';
+    static readonly WIN_OVERLAY_HIDE: string = 'winOverlayHide';
+
+    static readonly emitter: Phaser.Events.EventEmitter = new Phaser.Events.EventEmitter();
 } 

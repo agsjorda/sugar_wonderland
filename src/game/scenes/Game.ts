@@ -9,6 +9,7 @@ import { Buttons } from '../ui/Buttons';
 import { WinLines } from '../ui/Winlines';
 import { AudioManager } from './components/AudioManager';    
 import { Autoplay } from './components/Autoplay';
+import { HelpScreen } from './components/HelpScreen';
 
 // Interface for component lifecycle management
 interface GameComponent {
@@ -28,6 +29,7 @@ export class Game extends Scene {
     public winLines: WinLines;
     public audioManager: AudioManager;
     public autoplay: Autoplay;
+    public helpScreen: HelpScreen;
 
     private components: GameComponent[];
 
@@ -43,7 +45,7 @@ export class Game extends Scene {
         this.buttons = new Buttons();
         this.winLines = new WinLines();
         this.audioManager = new AudioManager();
-        this.autoplay = new Autoplay();
+
 
         // Store components for lifecycle management
         this.components = [
@@ -52,7 +54,7 @@ export class Game extends Scene {
             this.character,
             this.buttons,
             this.winLines,
-            this.audioManager
+            this.audioManager,
         ];
     }
 
@@ -102,6 +104,7 @@ export class Game extends Scene {
             console.error('Error during update:', error);
             // Handle update error appropriately
         }
+        
     }
 
     shutdown(): void {
@@ -124,5 +127,13 @@ export class Game extends Scene {
             console.error('Error during shutdown:', error);
             // Handle shutdown error appropriately
         }
+    }
+
+    showHelpScreen(): void {
+        this.helpScreen.show();
+    }
+
+    hideHelpScreen(): void {
+        this.helpScreen.hide();
     }
 } 

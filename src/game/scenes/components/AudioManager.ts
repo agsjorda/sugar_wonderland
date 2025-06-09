@@ -7,6 +7,7 @@ export class AudioManager {
     // Background Music
     public MainBG: Sound.WebAudioSound;
     public BonusBG: Sound.WebAudioSound;
+    public BGChecker: Sound.WebAudioSound;
 
     // SFX
     private ClickSFX: Sound.WebAudioSound;
@@ -15,12 +16,14 @@ export class AudioManager {
     public SpinSFX: Sound.WebAudioSound;
     public UtilityButtonSFX: Sound.WebAudioSound;
     public ScatterSFX: Sound.WebAudioSound;
+    public TExplosion: Sound.WebAudioSound;
 
     // Quick Wins
-    private QW1Wins: Sound.WebAudioSound;
-    private QW2Wins: Sound.WebAudioSound;
-    private QW3Wins: Sound.WebAudioSound;
-    private QW4Wins: Sound.WebAudioSound;
+    private TW1Wins: Sound.WebAudioSound;
+    private TW2Wins: Sound.WebAudioSound;
+    private TW3Wins: Sound.WebAudioSound;
+    private TW4Wins: Sound.WebAudioSound;
+
 
     // Win Sounds
     public SmallW: Sound.WebAudioSound;
@@ -28,6 +31,9 @@ export class AudioManager {
     public BigW: Sound.WebAudioSound;
     public HugeW: Sound.WebAudioSound;
     public BonusW: Sound.WebAudioSound;
+    public FreeSpinWon: Sound.WebAudioSound;
+    public WinSkip: Sound.WebAudioSound;
+
 
     preload(scene: Scene): void {
         const prefixBGMusic = 'assets/Audio/BGMusic';
@@ -37,6 +43,7 @@ export class AudioManager {
         // BGMusic
         scene.load.audio('BonusBG', `${prefixBGMusic}/BonusBG_SW.wav`);
         scene.load.audio('MainBG', `${prefixBGMusic}/MainBG_SW.wav`);
+        scene.load.audio('BGChecker', `${prefixBGMusic}/MainBG_SW.wav`);
 
         // SFX
         scene.load.audio('ClickSFX', `${prefixSFX}/ClickSFX_SW.wav`);
@@ -45,34 +52,40 @@ export class AudioManager {
         scene.load.audio('SpinSFX', `${prefixSFX}/SpinSFX_SW.wav`);
         scene.load.audio('UtilityButtonSFX', `${prefixSFX}/UtilityButtonSFX_SW.wav`);
         scene.load.audio('ScatterSFX', `${prefixSFX}/ScatterSFX_SW.wav`);
+        scene.load.audio('TExplosion', `${prefixSFX}/TExplosion_SW.wav`);
         
         // Wins
         scene.load.audio('BigW', `${prefixWins}/BigW_SW.wav`);
         scene.load.audio('BonusW', `${prefixWins}/BonusW_SW.wav`);
-        scene.load.audio('HugeW', `${prefixWins}/HugeW_SW.wav`);
-        scene.load.audio('MediumW', `${prefixWins}/MediumW_SW.wav`);
-        scene.load.audio('SmallW', `${prefixWins}/SmallW_SW.wav`);
+        scene.load.audio('HugeW', `${prefixWins}/SuperW_SW.wav`);
+        scene.load.audio('MediumW', `${prefixWins}/MegaW_SW.wav`);
+        scene.load.audio('SmallW', `${prefixWins}/EpicW_SW.wav`);
+        scene.load.audio('FreeSpinWon', `${prefixWins}/FreeSpinWon_SW.wav`);
+        scene.load.audio('WinSkip', `${prefixWins}/WSkip_SW.wav`);
         
-        // Quick Wins
-        scene.load.audio('QW1Wins', `${prefixWins}/QW1_SW.wav`);
-        scene.load.audio('QW2Wins', `${prefixWins}/QW2_SW.wav`);
-        scene.load.audio('QW3Wins', `${prefixWins}/QW3_SW.wav`);
-        scene.load.audio('QW4Wins', `${prefixWins}/QW4_SW.wav`);
+        // Tumble Wins
+        scene.load.audio('TW1Wins', `${prefixSFX}/TW1_SW.wav`);
+        scene.load.audio('TW2Wins', `${prefixSFX}/TW2_SW.wav`);
+        scene.load.audio('TW3Wins', `${prefixSFX}/TW3_SW.wav`);
+        scene.load.audio('TW4Wins', `${prefixSFX}/TW4_SW.wav`);
     }
 
     create(scene: Scene): void {
         this.ClickSFX = scene.sound.add('ClickSFX', { volume: this.sfxVolume }) as Sound.WebAudioSound;
 
-        this.QW1Wins = scene.sound.add('QW1Wins', { volume: this.sfxVolume }) as Sound.WebAudioSound;
-        this.QW2Wins = scene.sound.add('QW2Wins', { volume: this.sfxVolume }) as Sound.WebAudioSound;
-        this.QW3Wins = scene.sound.add('QW3Wins', { volume: this.sfxVolume }) as Sound.WebAudioSound;
-        this.QW4Wins = scene.sound.add('QW4Wins', { volume: this.sfxVolume }) as Sound.WebAudioSound;
+        this.TW1Wins = scene.sound.add('TW1Wins', { volume: this.sfxVolume }) as Sound.WebAudioSound;
+        this.TW2Wins = scene.sound.add('TW2Wins', { volume: this.sfxVolume }) as Sound.WebAudioSound;
+        this.TW3Wins = scene.sound.add('TW3Wins', { volume: this.sfxVolume }) as Sound.WebAudioSound;
+        this.TW4Wins = scene.sound.add('TW4Wins', { volume: this.sfxVolume }) as Sound.WebAudioSound;
 
         this.ReelDrop = scene.sound.add('ReelDrop', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.TurboDrop = scene.sound.add('TurboDrop', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.SpinSFX = scene.sound.add('SpinSFX', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.UtilityButtonSFX = scene.sound.add('UtilityButtonSFX', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.ScatterSFX = scene.sound.add('ScatterSFX', { volume: this.sfxVolume }) as Sound.WebAudioSound;
+        this.TExplosion = scene.sound.add('TExplosion', { volume: this.sfxVolume }) as Sound.WebAudioSound;
+        this.FreeSpinWon = scene.sound.add('FreeSpinWon', { volume: this.sfxVolume }) as Sound.WebAudioSound;
+        this.WinSkip = scene.sound.add('WinSkip', { volume: this.sfxVolume }) as Sound.WebAudioSound;
 
         this.SmallW = scene.sound.add('SmallW', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.MediumW = scene.sound.add('MediumW', { volume: this.sfxVolume }) as Sound.WebAudioSound;
@@ -88,7 +101,12 @@ export class AudioManager {
             loop: true,
             volume: this.musicVolume
         }) as Sound.WebAudioSound;
+        this.BGChecker = scene.sound.add('BGChecker', {
+            loop: true,
+            volume: 0
+        }) as Sound.WebAudioSound;
         this.MainBG.play();
+        this.BGChecker.play();
 
         scene.input.on('pointerdown', (_pointer: Phaser.Input.Pointer, gameObjects: Phaser.GameObjects.GameObject[]) => {
             const clickedButton = gameObjects.find(obj => (obj as any).isButton);
@@ -112,47 +130,76 @@ export class AudioManager {
         const randSFX = Math.floor(Math.random() * 4);
         switch (randSFX) {
             case 0:
-                this.QW1Wins.play({ volume: this.sfxVolume });
+                this.TW1Wins.play({ volume: this.sfxVolume });
                 break;
             case 1:
-                this.QW2Wins.play({ volume: this.sfxVolume });
+                this.TW2Wins.play({ volume: this.sfxVolume });
                 break;
             case 2:
-                this.QW3Wins.play({ volume: this.sfxVolume });
+                this.TW3Wins.play({ volume: this.sfxVolume });
                 break;
             case 3:
-                this.QW4Wins.play({ volume: this.sfxVolume });
+                this.TW4Wins.play({ volume: this.sfxVolume });
                 break;
         }
     }
 
-    playWinSFX(multiplier: number): void {
-        if (multiplier < 10) {
+    playWinSFX(multiplier: number, _scene: Scene): void {
+        if(multiplier === -1) {
+            this.BGChecker.pause();
+            this.setMusicVolume(this.getMusicVolume() * 0.5);
+            let winSound: Sound.WebAudioSound | undefined;
+            winSound = this.FreeSpinWon;
+
+            if (winSound) {
+                winSound.once('complete', () => {
+                    this.BGChecker.pause();
+                    this.setMusicVolume(this.getMusicVolume() * 0.5);
+                });
+                winSound.play({ volume: this.sfxVolume });
+            }
             return;
         }
-        this.MainBG.pause();
+        else
+        { 
+            if (multiplier < 15) {
+                return;
+            }
+            
+            this.BGChecker.pause();
+            this.setMusicVolume(this.getMusicVolume() * 0.5);
 
-        let winSound: Sound.WebAudioSound | undefined;
-        if (multiplier >= 10 && multiplier < 25) {
-            winSound = this.SmallW;
-        } else if (multiplier >= 25 && multiplier < 50) {
-            winSound = this.MediumW;
-        } else if (multiplier >= 50 && multiplier < 100) {
-            winSound = this.HugeW;
-        } else if (multiplier >= 100) {
-            winSound = this.BigW;
-        }
+            let winSound: Sound.WebAudioSound | undefined;
+            if (multiplier >= 20 && multiplier < 30) {
+                winSound = this.SmallW;
+            } else if (multiplier >= 30 && multiplier < 50) {
+                winSound = this.MediumW;
+            } else if (multiplier >= 50 && multiplier < 100) {
+                winSound = this.HugeW;
+            } else if (multiplier >= 100) {
+                winSound = this.BigW;
+            }
 
-        if (winSound) {
-            winSound.once('complete', () => {
-                this.MainBG.resume();
-            });
-            winSound.play({ volume: this.sfxVolume });
+            if (winSound) {
+                winSound.once('complete', () => {
+                    
+                    this.BGChecker.resume();
+                    this.setMusicVolume(this.getMusicVolume() / 0.5);
+                    if(this.getMusicVolume() > 1) {
+                        this.setMusicVolume(1);
+                    }
+                });
+                winSound.play({ volume: this.sfxVolume });
+            }
         }
     }
 
-    stopWinSFX(): void {
-        this.MainBG.resume();
+    stopWinSFX(_scene: Scene): void {   
+            this.BGChecker.resume();
+            this.setMusicVolume(this.getMusicVolume() / 0.5);
+            if(this.getMusicVolume() > 1) {
+                this.setMusicVolume(1);
+            }
         this.SmallW.stop();
         this.MediumW.stop();
         this.HugeW.stop();
@@ -177,10 +224,10 @@ export class AudioManager {
         this.sfxVolume = vol;
         // Update all SFX objects
         if (this.ClickSFX) this.ClickSFX.setVolume(this.sfxVolume);
-        if (this.QW1Wins) this.QW1Wins.setVolume(this.sfxVolume);
-        if (this.QW2Wins) this.QW2Wins.setVolume(this.sfxVolume);
-        if (this.QW3Wins) this.QW3Wins.setVolume(this.sfxVolume);
-        if (this.QW4Wins) this.QW4Wins.setVolume(this.sfxVolume);
+        if (this.TW1Wins) this.TW1Wins.setVolume(this.sfxVolume);
+        if (this.TW2Wins) this.TW2Wins.setVolume(this.sfxVolume);
+        if (this.TW3Wins) this.TW3Wins.setVolume(this.sfxVolume);
+        if (this.TW4Wins) this.TW4Wins.setVolume(this.sfxVolume);
         if (this.ReelDrop) this.ReelDrop.setVolume(this.sfxVolume);
         if (this.SpinSFX) this.SpinSFX.setVolume(this.sfxVolume);
         if (this.UtilityButtonSFX) this.UtilityButtonSFX.setVolume(this.sfxVolume);
@@ -189,6 +236,10 @@ export class AudioManager {
         if (this.BigW) this.BigW.setVolume(this.sfxVolume);
         if (this.HugeW) this.HugeW.setVolume(this.sfxVolume);
         if (this.BonusW) this.BonusW.setVolume(this.sfxVolume);
+        if (this.FreeSpinWon) this.FreeSpinWon.setVolume(this.sfxVolume);
+        if (this.WinSkip) this.WinSkip.setVolume(this.sfxVolume);
+        if (this.TExplosion) this.TExplosion.setVolume(this.sfxVolume);
+        
     }
 
     getSFXVolume(): number {

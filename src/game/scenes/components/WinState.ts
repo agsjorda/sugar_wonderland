@@ -35,7 +35,7 @@ export class WinState extends State {
         Events.emitter.emit(Events.WIN, {});
     }
 
-    update(scene: Scene, time: number, delta: number): void {
+    update(scene: Scene, _time: number, delta: number): void {
         this.startText.setText(`You win $${this.winAmount}! New game in ${Math.floor(this.timer / 1000)} seconds`);
 
         this.timer -= delta;
@@ -46,7 +46,7 @@ export class WinState extends State {
         }
     }
 
-    end(scene: Scene): void {
+    end(_scene: Scene): void {
         this.overlay.destroy();
         this.startText.destroy();
     }
@@ -65,7 +65,8 @@ export class WinState extends State {
             fontSize: '70px',
             color: '#ffffff',
             align: 'center',
-            fontStyle: 'bold'
+            fontStyle: 'bold',
+            fontFamily: 'Poppins'
         });
 
         this.startText.setOrigin(0.5, 0.5);

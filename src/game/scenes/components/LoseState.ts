@@ -8,6 +8,7 @@ import { Buttons } from '../../ui/Buttons';
 interface GameScene extends Scene {
     gameData: GameData;
     buttons: Buttons;
+    helpScreen: any;
 }
 
 export class LoseState extends State {
