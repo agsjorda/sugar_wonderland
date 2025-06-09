@@ -1,15 +1,24 @@
 export class GameData {
     static readonly WIN_LINES: number[][][] = []; // This needs to be populated with actual win lines
 
+    winamounts: number[][] = [
+            [50, 25, 15, 12, 10, 8, 5, 0.4, 2, 100],
+            [25, 10, 5, 2, 1.5, 1.2, 1, 0.9, 0.75, 5],
+            [10, 2.5, 2, 1, 1, 0.8, 0.5, 0.4, 0.25, 3]
+    ];
+    
     currency: string = '$';
     slot: Slot = new Slot();
     line: number = 0;
     currentRow: number = 0;
-    bet: number = 1;
-    maxBet: number = 100;
-    minBet: number = 1;
+    bet: number = 10;
+    baseBet: number = 1;
 
-    balance: number = 18000;
+    maxBet: number = 100;
+    minBet: number = 0.2;
+    coinValue: number = 0.50;
+
+    balance: number = 100000;
     totalWin: number = 0;
     totalBonusWin: number = 0; // Track bonus round wins separately
     doubleChanceEnabled: boolean = false;
@@ -21,6 +30,9 @@ export class GameData {
     scatterChance: number = 0.025;
     maxScatter: number = 6;
     minScatter: number = 0;
+    isHelpScreenVisible: boolean = false;
+
+    isMain : boolean = true;
 
     defaultMinScatter: number = 0;
 
@@ -44,11 +56,13 @@ export class Slot {
     static readonly TOGGLE_DIFFICULTY: boolean = true;
     static readonly TOGGLE_WIN_EFFECT: boolean = false;
 
-    static readonly DIFFICULTY_SYMBOLS: number = 4;
+    static readonly DIFFICULTY_SYMBOLS: number = 3;
     static readonly SYMBOLS: number = 9;
     static readonly ROWS: number = 5;
     static readonly COLUMNS: number = 6;
-    static readonly SCATTER_SYMBOL: number = 99;
+    static readonly SCATTER_SYMBOL: number = 0;
+    static readonly SCATTER_SIZE: number = 1.25;
+    static readonly SYMBOL_SIZE: number = 1.5;
 
     values: number[][] = [];
     scatterCount: number = 0;

@@ -95,11 +95,12 @@ export class Autoplay {
         this.scene.add.existing(this.remainingSpinsText);
     }
 
-    private updateRemainingSpinsDisplay(): void {
+    public updateRemainingSpinsDisplay(): void {
         if (!this.scene || !this.remainingSpinsText) return;
 
+        // During bonus round, show total free spins (remaining + newly added)
         const displayText = this.scene.gameData.freeSpins ? 
-            `${this.remainingSpins} spins left` : 
+            `${this.scene.gameData.freeSpins} spins left` : 
             `${this.remainingSpins} spins left`;
         this.remainingSpinsText.setText(displayText);
         this.remainingSpinsText.setColor(this.scene.gameData.freeSpins ? '#66D449' : '#FFFFFF');
@@ -132,19 +133,21 @@ export class Autoplay {
     private spin(): void {
         if (!this.scene) return;
 
-        // For free spins, only check remaining spins if we're not in bonus round
-        if (!this.scene.gameData.isBonusRound && (!this.isAutoPlaying || this.remainingSpins <= 0)) {
+        if (this.scene.gameData.isSpinning) {
+            return;
+        }
+
+        // For free spins, check scene.gameData.freeSpins instead of remainingSpins
+        if (!this.isAutoPlaying || 
+            (!this.scene.gameData.isBonusRound && this.remainingSpins <= 0) ||
+            (this.scene.gameData.isBonusRound && this.scene.gameData.freeSpins <= 0)) {
             this.stop();
             Events.emitter.emit(Events.AUTOPLAY_COMPLETE);
             return;
         }
 
-        if (this.scene.gameData.isSpinning) {
-            return;
-        }
-
         // Check if audio manager's music is paused
-        if (this.scene.audioManager.MainBG?.isPaused) {
+        if (this.scene.audioManager.BGChecker?.isPaused) {
             // Wait and check again in a short interval
             setTimeout(() => this.spin(), 500);
             return;
@@ -163,10 +166,11 @@ export class Autoplay {
                 Events.emitter.emit(Events.AUTOPLAY_COMPLETE);
                 return;
             }
-            // Only reset total win for regular spins
-            this.scene.gameData.totalWin = 0;
-            Events.emitter.emit(Events.WIN, {});
         }
+
+        // Reset total win for new spin
+        this.scene.gameData.totalWin = 0;
+        Events.emitter.emit(Events.WIN, {});
 
         // Ensure we have valid slot data
         if (!this.scene.gameData.slot?.values?.length) {
@@ -183,11 +187,13 @@ export class Autoplay {
         });
 
         // Only decrease remaining spins if we're not in bonus round
-        if (!this.scene.gameData.isBonusRound) {
+        //if (!this.scene.gameData.isBonusRound) {
+        if(this.remainingSpins > 0) {
             this.remainingSpins--;
             // Update the display
             this.updateRemainingSpinsDisplay();
         }
+        //}
     }
 
     update(_scene: GameScene, _time: number, _delta: number): void {

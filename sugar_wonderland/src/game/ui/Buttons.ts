@@ -4,7 +4,7 @@ import { GameData } from '../scenes/components/GameData';
 import { Autoplay } from '../scenes/components/Autoplay';
 import { AudioManager } from '../scenes/components/AudioManager';
 import { SlotMachine } from '../scenes/components/SlotMachine';
-
+import { HelpScreen } from '../scenes/components/HelpScreen';
 // Custom button interfaces with proper type safety
 interface ButtonBase {
     isButton: boolean;
@@ -20,11 +20,13 @@ interface GameScene extends Scene {
     gameData: GameData;
     audioManager: AudioManager;
     slotMachine: SlotMachine;
+    helpScreen: HelpScreen;
 }
 
 export class Buttons {
 
     private spinButton: ButtonImage;
+    private greenCircBtn: ButtonImage;
     private turboButton: ButtonImage;
     private turboOnButton: ButtonImage;
     public buttonContainer: ButtonContainer;
@@ -47,7 +49,10 @@ export class Buttons {
     private static PANEL_HEIGHT = 120;
     private autoplayButton: ButtonImage;
     private autoplayOnButton: ButtonImage;
-
+    private betValue: ButtonText;
+    private coinValue: ButtonText;
+    private totalValue: ButtonText;
+    protected betParameters : number[][] = [[1, 0.01, 0.2],[2, 0.01, 0.4],[3, 0.01, 0.6],[4, 0.01, 0.8],[5, 0.01, 1],[6, 0.01, 1.2],[7, 0.01, 1.4],[8, 0.01, 1.6],[9, 0.01, 1.8],[10, 0.01, 2],[4, 0.03, 2.4],[5, 0.03, 3],[6, 0.03, 3.6],[4, 0.05, 4],[7, 0.03, 4.2],[8, 0.03, 4.8],[5, 0.05, 5],[9, 0.03, 5.4],[10, 0.03, 6],[7, 0.05, 7],[8, 0.05, 8],[9, 0.05, 9],[10, 0.05, 10],[6, 0.1, 12],[7, 0.1, 14],[8, 0.1, 16],[9, 0.1, 18],[10, 0.1, 20],[6, 0.2, 24],[7, 0.2, 28],[3, 0.5, 30],[8, 0.2, 32],[9, 0.2, 36],[10, 0.2, 40],[5, 0.5, 50],[6, 0.5, 60],[7, 0.5, 70],[8, 0.5, 80],[9, 0.5, 90],[10, 0.5, 10]];
     constructor() {
         this.autoplay = new Autoplay();
     }
@@ -70,10 +75,17 @@ export class Buttons {
         scene.load.image('volume', `${prefix}/Volume.png`);
         scene.load.image('settings', `${prefix}/Settings.png`);
         scene.load.image('star', `${prefix}/star.png`);
+        
         scene.load.image('buyFeatBG', 'assets/Reels/BuyFeatureBG.png');
+
         scene.load.image('greenBtn', 'assets/Buttons/greenBtn.png');
         scene.load.image('greenLongBtn', 'assets/Buttons/greenLongBtn.png');
         scene.load.image('greenRectBtn', 'assets/Buttons/greenRectBtn.png');
+        scene.load.image('greenCircBtn', 'assets/Buttons/greenCircBtn.png');
+
+        // Preload help screen assets
+        const helpScreen = new HelpScreen();
+        helpScreen.preload(scene);
     }
 
     create(scene: GameScene): void {
@@ -99,9 +111,22 @@ export class Buttons {
 
     private toggleTurbo(scene: GameScene): void {
         scene.audioManager.UtilityButtonSFX.play();
-        this.turboButton.visible = !this.turboButton.visible;
-        this.turboOnButton.visible = !this.turboOnButton.visible;
-        scene.gameData.turbo = !scene.gameData.turbo;
+        
+        // Only toggle if not currently spinning or wait for current spin to complete
+        if (!scene.gameData.isSpinning) {
+            this.turboButton.visible = !this.turboButton.visible;
+            this.turboOnButton.visible = !this.turboOnButton.visible;
+            scene.gameData.turbo = !scene.gameData.turbo;
+        } else {
+            // Queue the turbo toggle for after current spin completes
+            const onSpinComplete = () => {
+                this.turboButton.visible = !this.turboButton.visible;
+                this.turboOnButton.visible = !this.turboOnButton.visible;
+                scene.gameData.turbo = !scene.gameData.turbo;
+                Events.emitter.off(Events.MATCHES_DONE, onSpinComplete); // Remove listener after use
+            };
+            Events.emitter.once(Events.MATCHES_DONE, onSpinComplete);
+        }
     }
 
     private createTurboButton(scene: GameScene): void {
@@ -164,6 +189,10 @@ export class Buttons {
         this.spinButton = scene.add.image(0, 0, 'spinButton') as ButtonImage;
         const width = this.spinButton.width * 0.75;
         const height = this.spinButton.height * 0.75;
+        
+        this.greenCircBtn = scene.add.image(0, 0, 'greenCircBtn') as ButtonImage;
+        const widthgcb = this.greenCircBtn.width * 0.9;
+        const heightgcb = this.greenCircBtn.height * 0.9;
 
         const spinButtonBackgroundCircle = scene.add.graphics();
         spinButtonBackgroundCircle.fillStyle(0x000000, 0.15);
@@ -176,6 +205,11 @@ export class Buttons {
         this.spinButton.displayHeight = height;
         this.spinButton.setInteractive().isButton = true;
         container.add(this.spinButton);
+
+        this.greenCircBtn.displayWidth = widthgcb;
+        this.greenCircBtn.displayHeight = heightgcb;
+        this.greenCircBtn.setInteractive().isButton = true;
+        container.add(this.greenCircBtn);
 
         this.buttonContainer.add(container);
 
@@ -202,22 +236,34 @@ export class Buttons {
             return !scene.gameData.isSpinning && !this.autoplay.isAutoPlaying;
         };
 
+        const updateSpinButtonState = () => {
+            // Only disable spin button during actual spin animation or when win overlay is active
+            if (scene.gameData.isSpinning || scene.slotMachine.activeWinOverlay) {
+                this.spinButton.setAlpha(0.5);
+                this.spinButton.disableInteractive();
+            } else {
+                this.spinButton.setAlpha(1);
+                this.spinButton.setInteractive();
+            }
+        };
+
         const spinAction = () => {
-            if (scene.gameData.isSpinning || this.autoplay.isAutoPlaying) {
+            // Don't allow spin if currently spinning or win overlay is active
+            if (scene.gameData.isSpinning || scene.slotMachine.activeWinOverlay) {
                 return;
             }
 
-            // If music has resumed, destroy any active win overlay
-            if (scene.slotMachine.activeWinOverlay) {
-                scene.slotMachine.destroyWinOverlay(scene);
+            // Close help screen if it's open
+            if (scene.gameData.isHelpScreenVisible) {
+                scene.helpScreen.hide();
             }
 
-            // For free spins, don't check balance
-            if (!scene.gameData.freeSpins) {
-                // Check if player has enough balance for the bet
-                if (scene.gameData.balance < scene.gameData.bet) {
-                    return;
-                }
+            // If autoplay is active, stop it
+            if (this.autoplay.isAutoPlaying) {
+                this.autoplay.stop();
+                this.autoplayButton.visible = true;
+                this.autoplayOnButton.visible = false;
+                Events.emitter.emit(Events.AUTOPLAY_STOP);
             }
 
             // Reset total win for new spin
@@ -231,19 +277,38 @@ export class Buttons {
             });
         };
 
-        container.on('pointerdown', () => spinAction());
         this.spinButton.on('pointerdown', () => spinAction());
+
+        this.greenCircBtn.on('pointerdown', () => spinAction());
+        this.greenCircBtn.visible=false;
 
         Events.emitter.on(Events.SPIN_ANIMATION_START, () => {
             stopIdleRotation();
+            updateSpinButtonState();
         });
 
         Events.emitter.on(Events.MATCHES_DONE, () => {
+            updateSpinButtonState();
             if (canIdleRotate()) {
                 startIdleRotation();
             }
         });
 
+        Events.emitter.on(Events.SPIN_ANIMATION_END, () => {
+            updateSpinButtonState();
+        });
+
+        // Listen for win overlay state changes
+        Events.emitter.on(Events.WIN_OVERLAY_SHOW, () => {
+            updateSpinButtonState();
+        });
+
+        Events.emitter.on(Events.WIN_OVERLAY_HIDE, () => {
+            updateSpinButtonState();
+        });
+
+        // Initial state
+        updateSpinButtonState();
         if (canIdleRotate()) {
             startIdleRotation();
         }
@@ -352,7 +417,7 @@ export class Buttons {
         const buttonWidth = 90;
         const buttonHeight = 40;
         const spacing = 16;
-        let selectedSpins = 0;
+        let selectedSpins = spinOptions[0]; // Set default to first option
         let selectedButton: GameObjects.Container | null = null;
 
         const buttons = spinOptions.map((spins, index) => {
@@ -365,7 +430,7 @@ export class Buttons {
 
             // Button background
             const buttonBg = scene.add.graphics();
-            buttonBg.fillStyle(0x181818, 1);
+            buttonBg.fillStyle(index === 0 ? 0x66D449 : 0x181818, 1); // Highlight first button by default
             buttonBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
             buttonContainer.add(buttonBg);
 
@@ -410,6 +475,9 @@ export class Buttons {
             return buttonContainer;
         });
 
+        // Set initial selected button
+        selectedButton = buttons[0];
+
         // Total bet section
         const betLabel = scene.add.text(32, 300, 'Total Bet', {
             fontSize: '24px',
@@ -424,13 +492,13 @@ export class Buttons {
         (minusBtn as any as ButtonImage).setInteractive().isButton = true;
         popup.add(minusBtn);
 
-        let bet = scene.gameData.bet;
+        let bet = scene.gameData.bet * selectedSpins; // Initialize bet with selected spins
         const betValue = scene.add.text(popupWidth/2, 300, scene.gameData.currency + '0', {
             fontSize: '24px',
             color: '#FFFFFF',
             fontFamily: 'Poppins',
             align: 'center'
-        });
+        }) as ButtonText;
         betValue.setOrigin(0.5, 0);
         popup.add(betValue);
 
@@ -438,6 +506,68 @@ export class Buttons {
         plusBtn.setScale(0.4);
         (plusBtn as any as ButtonImage).setInteractive().isButton = true;
         popup.add(plusBtn);
+
+        plusBtn.on('pointerdown', () => {
+            scene.audioManager.UtilityButtonSFX.play();
+            
+            // Find the next higher spin option
+            const nextSpinOption = spinOptions.find(spins => spins > selectedSpins);
+            if (nextSpinOption) {
+                // Update selected spins and bet immediately
+                selectedSpins = nextSpinOption;
+                bet = scene.gameData.bet * selectedSpins;
+                
+                // Update button appearance
+                if (selectedButton) {
+                    const prevBg = selectedButton.list[0] as GameObjects.Graphics;
+                    prevBg.clear();
+                    prevBg.fillStyle(0x181818, 1);
+                    prevBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
+                }
+                
+                // Select the next button
+                const nextButton = buttons[spinOptions.indexOf(nextSpinOption)];
+                const nextBg = nextButton.list[0] as GameObjects.Graphics;
+                nextBg.clear();
+                nextBg.fillStyle(0x66D449, 1);
+                nextBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
+                selectedButton = nextButton;
+                
+                // Update display
+                updateBetDisplay();
+            }
+        });
+
+        minusBtn.on('pointerdown', () => {
+            scene.audioManager.UtilityButtonSFX.play();
+            
+            // Find the next lower spin option
+            const prevSpinOption = [...spinOptions].reverse().find(spins => spins < selectedSpins);
+            if (prevSpinOption) {
+                // Update selected spins and bet immediately
+                selectedSpins = prevSpinOption;
+                bet = scene.gameData.bet * selectedSpins;
+                
+                // Update button appearance
+                if (selectedButton) {
+                    const prevBg = selectedButton.list[0] as GameObjects.Graphics;
+                    prevBg.clear();
+                    prevBg.fillStyle(0x181818, 1);
+                    prevBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
+                }
+                
+                // Select the previous button
+                const prevButton = buttons[spinOptions.indexOf(prevSpinOption)];
+                const prevBg = prevButton.list[0] as GameObjects.Graphics;
+                prevBg.clear();
+                prevBg.fillStyle(0x66D449, 1);
+                prevBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
+                selectedButton = prevButton;
+                
+                // Update display
+                updateBetDisplay();
+            }
+        });
 
         function updateBetDisplay() {
             const autoplayCost = scene.gameData.bet * selectedSpins;
@@ -496,7 +626,7 @@ export class Buttons {
                 this.closeBuyFeaturePopup();
             }
             updateBalance();
-            bet = scene.gameData.bet;
+            bet = scene.gameData.bet * selectedSpins;
             updateBetDisplay();
             popup.setVisible(true);
         });
@@ -530,14 +660,16 @@ export class Buttons {
         const width = infoButton.width * 0.6;
         const height = infoButton.height * 0.6;
 
+        // inner circle
         const innerCircle = scene.add.graphics();
         innerCircle.fillStyle(0x000000, 0.5);
-        innerCircle.fillCircle(0, 0, width * 2.25);
+        innerCircle.fillCircle(0, 0, width * 1.5);
         container.add(innerCircle);
 
+        // outer circle
         const border = scene.add.graphics();
         border.fillStyle(0x000000, 0.15);
-        border.fillCircle(0, 0, width * 3);
+        border.fillCircle(0, 0, width * 2.25);
         container.add(border);
 
         infoButton.displayWidth = width;
@@ -558,13 +690,38 @@ export class Buttons {
 
         const toggleInfo = () => {
             scene.audioManager.UtilityButtonSFX.play();
-            infoButton.visible = !infoButton.visible;
-            infoOnButton.visible = !infoOnButton.visible;
+            this.hideBetPopup(scene);
+            
+            if (scene.gameData.isHelpScreenVisible) {
+                // If help screen is visible, hide and destroy it
+                scene.helpScreen.hide();
+                infoButton.visible = true;
+                infoOnButton.visible = false;
+            } else {
+                // If help screen is hidden, create and show it
+                if (!scene.helpScreen) {
+                    scene.helpScreen = new HelpScreen();
+                }
+                scene.helpScreen.create(scene);
+                scene.helpScreen.show();
+                infoButton.visible = false;
+                infoOnButton.visible = true;
+            }
+            
+            scene.gameData.isHelpScreenVisible = !scene.gameData.isHelpScreenVisible;
         };
 
         container.on('pointerdown', toggleInfo);
         infoButton.on('pointerdown', toggleInfo);
         infoOnButton.on('pointerdown', toggleInfo);
+
+        // Listen for help screen toggle event
+        Events.emitter.on(Events.HELP_SCREEN_TOGGLE, () => {
+            // Update button state based on help screen visibility
+            const isVisible = scene.gameData.isHelpScreenVisible;
+            infoButton.visible = !isVisible;
+            infoOnButton.visible = isVisible;
+        });
     }
 
     private createBalance(scene: GameScene): void {
@@ -639,6 +796,7 @@ export class Buttons {
         const cornerRadius = 10;
 
         const container = scene.add.container(x, y) as ButtonContainer;
+        container.setDepth(4);
 
         // Create a gradient texture for totalWin
         const gradientTexture = scene.textures.createCanvas('totalWinGradient', width, Buttons.PANEL_HEIGHT);
@@ -699,22 +857,11 @@ export class Buttons {
     private createBet(scene: GameScene): void {
         const width = Buttons.PANEL_WIDTH;
         const x = this.totalWinContainer.x + width * 1.5 + this.width * 0.01;
-        const y = this.totalWinContainer.y;
+        const y = this.height * 0.83;
         const cornerRadius = 10;
 
         const container = scene.add.container(x, y) as ButtonContainer;
-
-        // Create a gradient texture for bet
-        const gradientTexture = scene.textures.createCanvas('betGradient', width, Buttons.PANEL_HEIGHT);
-        if (gradientTexture) {
-            const context = gradientTexture.getContext();
-            const gradient = context.createLinearGradient(0, 0, 0, Buttons.PANEL_HEIGHT);
-            gradient.addColorStop(0, 'rgba(0, 0, 0, 0.24)');
-            gradient.addColorStop(1, 'rgba(0, 0, 0, 0.24)');
-            context.fillStyle = gradient;
-            context.fillRect(0, 0, width, Buttons.PANEL_HEIGHT);
-            gradientTexture.refresh();
-        }
+        container.setDepth(4);
 
         // Create the background with gradient and border
         this.totalBet = scene.add.graphics();
@@ -724,61 +871,414 @@ export class Buttons {
         this.totalBet.strokeRoundedRect(0, 0, width, Buttons.PANEL_HEIGHT, cornerRadius);
         container.add(this.totalBet);
 
-        const lineText = scene.add.text(width * 0.5, Buttons.PANEL_HEIGHT * 0.3, 'BET', {
+        const text1 = scene.add.text(width * 0.5, Buttons.PANEL_HEIGHT * 0.3, 'BET', {
             fontSize: '25px',
             color: '#57FFA3',
-            align: 'center',
+            align: 'center', 
             fontStyle: 'bold',
             fontFamily: 'Poppins'
         }) as ButtonText;
-        container.add(lineText);
-        lineText.setOrigin(0.5, 0.5);
+        container.add(text1);
+        text1.setOrigin(0.5, 0.5);
 
-        const numberText = scene.add.text(width * 0.5, Buttons.PANEL_HEIGHT * 0.65, scene.gameData.bet.toString(), {
+        // Add bet value text under BET
+        const betValueText = scene.add.text(width * 0.5, Buttons.PANEL_HEIGHT * 0.65, scene.gameData.currency + (scene.gameData.baseBet * scene.gameData.coinValue * 20).toFixed(2), {
             fontSize: '35px',
             color: '#FFFFFF',
             align: 'center',
             fontStyle: 'bold',
             fontFamily: 'Poppins'
         }) as ButtonText;
-        container.add(numberText);
-        numberText.setOrigin(0.5, 0.5);
+        container.add(betValueText);
+        betValueText.setOrigin(0.5, 0.5);
 
-        const minus = scene.add.image(width * 0.25, Buttons.PANEL_HEIGHT * 0.65, 'minus') as ButtonImage;
-        minus.scale = 0.25;
-        minus.setInteractive().isButton = true;
-        minus.on('pointerdown', () => {
-            if(scene.gameData.isSpinning) return;
-            if (scene.gameData.bet <= scene.gameData.minBet) return;
-            scene.audioManager.UtilityButtonSFX.play();
-            scene.gameData.bet -= 1;
-            if(scene.gameData.bet < scene.gameData.minBet) scene.gameData.bet = scene.gameData.minBet;
+        // Create plus/minus buttons
+        const plusBtn = scene.add.image(width * 0.9, Buttons.PANEL_HEIGHT * 0.65, 'plus') as ButtonImage;
+        plusBtn.setScale(0.25);
+        plusBtn.setInteractive().isButton = true;
+        container.add(plusBtn);
 
-            numberText.setText(scene.gameData.bet.toString());
-            Events.emitter.emit(Events.CHANGE_BET, {
-                bet: scene.gameData.bet
-            });
-        });
-        container.add(minus);
+        const minusBtn = scene.add.image(width * 0.1, Buttons.PANEL_HEIGHT * 0.65, 'minus') as ButtonImage;
+        minusBtn.setScale(0.25);
+        minusBtn.setInteractive().isButton = true;
+        container.add(minusBtn);
 
-        const plus = scene.add.image(width * 0.75, Buttons.PANEL_HEIGHT * 0.65, 'plus') as ButtonImage;
-        plus.scale = 0.25;
-        plus.setInteractive().isButton = true;
-        plus.on('pointerdown', () => {
+        // Add click handlers to show bet popup
+        plusBtn.on('pointerdown', () => {
             if(scene.gameData.isSpinning) return;
             scene.audioManager.UtilityButtonSFX.play();
-            scene.gameData.bet += 1;
-            if(scene.gameData.bet > scene.gameData.maxBet) scene.gameData.bet = scene.gameData.maxBet;
             
-            numberText.setText(scene.gameData.bet.toString());
-            Events.emitter.emit(Events.CHANGE_BET, {
-                bet: scene.gameData.bet
-            });
+            this.showBetPopup(scene);
         });
-        container.add(plus);
 
-        this.betContainer = container;
+        minusBtn.on('pointerdown', () => {
+            if(scene.gameData.isSpinning) return;
+            scene.audioManager.UtilityButtonSFX.play();
+            this.showBetPopup(scene);
+        });
+
+        // Update bet value when it changes
+        Events.emitter.on(Events.CHANGE_BET, () => {
+            const totalBet = (scene.gameData.bet).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            betValueText.setText(scene.gameData.currency + totalBet);
+        });
+
+        Events.emitter.on(Events.ENHANCE_BET_TOGGLE, (data: any) => {
+            if(scene.gameData.doubleChanceEnabled) {
+                betValueText.setText(scene.gameData.currency + (scene.gameData.baseBet * scene.gameData.coinValue * 1.25 * 20).toFixed(2));
+            } else {
+                betValueText.setText(scene.gameData.currency + (scene.gameData.baseBet * scene.gameData.coinValue  * 20).toFixed(2));
+            }
+        });
+
         this.buttonContainer.add(container);
+
+        // Create bet adjustment popup
+        const betContainer = scene.add.container(0, 0);
+        betContainer.setDepth(5);
+
+        // Create bet background
+        const betBg = scene.add.graphics();
+        betBg.fillStyle(0x333333, 0.95);
+        betBg.fillRoundedRect(0, 0, 400, 300, 20);
+        betBg.lineStyle(4, 0x57FFA3);
+        betBg.strokeRoundedRect(0, 0, 400, 300, 20);
+        betContainer.add(betBg);
+
+        // Title
+        const titleText = scene.add.text(200, 30, 'BET ADJUSTMENT', {
+            fontSize: '32px',
+            color: '#57FFA3',
+            fontFamily: 'Poppins',
+            fontStyle: 'bold'
+        });
+        titleText.setOrigin(0.5, 0.5);
+        betContainer.add(titleText);
+
+        // Close button
+        const closeBtn = scene.add.text(380, 30, '×', {
+            fontSize: '32px',
+            color: '#FFFFFF',
+            fontFamily: 'Poppins',
+            fontStyle: 'bold'
+        }) as ButtonText;
+        closeBtn.setOrigin(0.5, 0.5);
+        closeBtn.setInteractive().isButton = true;
+        betContainer.add(closeBtn);
+
+        // Add hover effect for close button
+        closeBtn.on('pointerover', () => {
+            closeBtn.setColor('#57FFA3');
+        });
+
+        closeBtn.on('pointerout', () => {
+            closeBtn.setColor('#FFFFFF');
+        });
+
+        // Close button click handler
+        closeBtn.on('pointerdown', () => {
+            scene.audioManager.UtilityButtonSFX.play();
+            this.hideBetPopup(scene);
+        });
+
+        // Row spacing constants
+        const rowHeight = 60;
+        const startY = 100;
+        const labelX = 50;
+        const valueX = 280;
+        const buttonSpacing = 70;
+
+        // Bet Controls
+        const betLabel = scene.add.text(labelX * 1.8, startY, 'BET', {
+            fontSize: '24px',
+            color: '#FFFFFF',
+            fontFamily: 'Poppins'
+        });
+        betContainer.add(betLabel);
+
+        const betValue = scene.add.text(valueX, startY + rowHeight / 4, scene.gameData.baseBet.toString(), {
+            fontSize: '24px',
+            color: '#FFFFFF',
+            fontFamily: 'Poppins'
+        }) as ButtonText;
+        betValue.setOrigin(0.5);
+        betContainer.add(betValue);
+
+        // Bet plus/minus buttons
+        const betMinusBtn = scene.add.image(valueX - buttonSpacing, startY + rowHeight / 4, 'minus') as ButtonImage;
+        betMinusBtn.setScale(0.25);
+        betMinusBtn.setInteractive().isButton = true;
+        betContainer.add(betMinusBtn);
+
+        const betPlusBtn = scene.add.image(valueX + buttonSpacing, startY + rowHeight / 4, 'plus') as ButtonImage;
+        betPlusBtn.setScale(0.25);
+        betPlusBtn.setInteractive().isButton = true;
+        betContainer.add(betPlusBtn);
+
+        // Coin Value Controls
+        const coinLabel = scene.add.text(labelX - 10, startY + rowHeight, 'COIN VALUE', {
+            fontSize: '24px',
+            color: '#FFFFFF',
+            fontFamily: 'Poppins'
+        });
+        betContainer.add(coinLabel);
+
+        const coinValue = scene.add.text(valueX, startY + rowHeight * 1.25,
+            scene.gameData.currency + scene.gameData.coinValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), {
+            fontSize: '24px',
+            color: '#FFFFFF',
+            fontFamily: 'Poppins'
+        }) as ButtonText;
+        coinValue.setOrigin(0.5);
+        betContainer.add(coinValue);
+
+        // Coin value plus/minus buttons
+        const coinMinusBtn = scene.add.image(valueX - buttonSpacing, startY + rowHeight * 1.25, 'minus') as ButtonImage;
+        coinMinusBtn.setScale(0.25);
+        coinMinusBtn.setInteractive().isButton = true;
+        betContainer.add(coinMinusBtn);
+
+        const coinPlusBtn = scene.add.image(valueX + buttonSpacing, startY + rowHeight * 1.25, 'plus') as ButtonImage;
+        coinPlusBtn.setScale(0.25);
+        coinPlusBtn.setInteractive().isButton = true;
+        betContainer.add(coinPlusBtn);
+
+        // Total Bet Display
+        const totalLabel = scene.add.text(labelX, startY + rowHeight * 2, 'TOTAL BET', {
+            fontSize: '24px',
+            color: '#FFFFFF',
+            fontFamily: 'Poppins'
+        });
+        betContainer.add(totalLabel);
+
+        const totalValue = scene.add.text(valueX, startY + rowHeight * 2.25, '$100', {
+            fontSize: '24px',
+            color: '#FFFFFF',
+            fontFamily: 'Poppins'
+        }) as ButtonText;
+        totalValue.setOrigin(0.5);
+        betContainer.add(totalValue);
+
+        // Total bet plus/minus buttons
+        const totalMinusBtn = scene.add.image(valueX - buttonSpacing, startY + rowHeight * 2.25, 'minus') as ButtonImage;
+        totalMinusBtn.setScale(0.25);
+        totalMinusBtn.setInteractive().isButton = true;
+        betContainer.add(totalMinusBtn);
+
+        const totalPlusBtn = scene.add.image(valueX + buttonSpacing, startY + rowHeight * 2.25, 'plus') as ButtonImage;
+        totalPlusBtn.setScale(0.25);
+        totalPlusBtn.setInteractive().isButton = true;
+        betContainer.add(totalPlusBtn);
+
+        // Bet Max Button
+        const betMaxBtn = scene.add.graphics();
+        betMaxBtn.fillStyle(0x57FFA3, 1);
+        betMaxBtn.fillRoundedRect(100, startY + rowHeight * 3, 200, 40, 20);
+        betContainer.add(betMaxBtn);
+
+        const betMaxText = scene.add.text(200, startY + rowHeight * 3 + 20, 'BET MAX', {
+            fontSize: '24px',
+            color: '#000000',
+            fontFamily: 'Poppins',
+            fontStyle: 'bold'
+        });
+        betMaxText.setOrigin(0.5, 0.5);
+        betContainer.add(betMaxText);
+
+        // Make bet max button interactive
+        const betMaxZone = scene.add.zone(200, startY + rowHeight * 3 + 20, 200, 40);
+        betMaxZone.setInteractive();
+        betContainer.add(betMaxZone);
+
+        // Add hover effects
+        betMaxZone.on('pointerover', () => {
+            betMaxBtn.clear();
+            betMaxBtn.fillStyle(0x3FFF0D, 1);
+            betMaxBtn.fillRoundedRect(100, startY + rowHeight * 3, 200, 40, 20);
+        });
+
+        betMaxZone.on('pointerout', () => {
+            betMaxBtn.clear();
+            betMaxBtn.fillStyle(0x57FFA3, 1);
+            betMaxBtn.fillRoundedRect(100, startY + rowHeight * 3, 200, 40, 20);
+        });
+
+        // Position the container
+        betContainer.setPosition(scene.scale.width / 2 - 200, scene.scale.height / 2 - 150);
+        betContainer.setVisible(false);
+
+        // Store references
+        this.betContainer = betContainer;
+        this.betValue = betValue;
+        this.coinValue = coinValue;
+        this.totalValue = totalValue;
+
+        // Coin value options
+        const coinValues = [0.01, 0.03, 0.05, 0.1, 0.2, 0.5];
+        let currentCoinIndex = coinValues.indexOf(parseFloat(coinValue.text.replace('$', '')));
+        if (currentCoinIndex === -1) currentCoinIndex = 0;
+
+        // Update total bet display
+        const updateTotalBet = () => {
+            const bet = scene.gameData.baseBet;
+            const coin = scene.gameData.coinValue;
+            const total = (bet * coin * 20).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            totalValue.setText('$' + total);
+            return total;
+        };
+
+        // Update bet value display
+        const updateBetValue = (value: number) => {
+            betValue.setText(value.toString());
+            scene.gameData.baseBet = value;
+            updateTotalBet();
+        };
+
+        // Update coin value display
+        const updateCoinValue = (index: number) => {
+            currentCoinIndex = index;
+            coinValue.setText('$' + coinValues[index].toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+            scene.gameData.coinValue = coinValues[index];
+            updateTotalBet();
+        };
+
+        // Bet value controls
+        betMinusBtn.on('pointerdown', () => {
+            if(scene.gameData.isSpinning) return;
+            scene.audioManager.UtilityButtonSFX.play();
+            const currentBet = parseInt(betValue.text);
+            if (currentBet > 1) {
+                updateBetValue(currentBet - 1);
+            }
+            updateGameData();
+        });
+
+        betPlusBtn.on('pointerdown', () => {
+            if(scene.gameData.isSpinning) return;
+            scene.audioManager.UtilityButtonSFX.play();
+            const currentBet = parseInt(betValue.text);
+            if (currentBet < 10) {
+                updateBetValue(currentBet + 1);
+            }
+            updateGameData();
+        });
+
+        // Coin value controls
+        coinMinusBtn.on('pointerdown', () => {
+            if(scene.gameData.isSpinning) return;
+            scene.audioManager.UtilityButtonSFX.play();
+            if (currentCoinIndex > 0) {
+                updateCoinValue(currentCoinIndex - 1);
+            }
+            updateGameData();
+        });
+
+        coinPlusBtn.on('pointerdown', () => {
+            if(scene.gameData.isSpinning) return;
+            scene.audioManager.UtilityButtonSFX.play();
+            if (currentCoinIndex < coinValues.length - 1) {
+                updateCoinValue(currentCoinIndex + 1);
+            }
+            updateGameData();
+        });
+
+        // Total bet controls
+        totalMinusBtn.on('pointerdown', () => {
+            if(scene.gameData.isSpinning) return;
+            scene.audioManager.UtilityButtonSFX.play();
+            const currentBet = parseInt(betValue.text);
+            if (currentBet > 1) {
+                updateBetValue(currentBet - 1);
+            } else if (currentCoinIndex > 0) {
+                updateBetValue(10);
+                updateCoinValue(currentCoinIndex - 1);
+            }
+            updateGameData();
+        });
+
+        totalPlusBtn.on('pointerdown', () => {
+            if(scene.gameData.isSpinning) return;
+            scene.audioManager.UtilityButtonSFX.play();
+            const currentBet = parseInt(betValue.text);
+            if (currentBet < 10) {
+                updateBetValue(currentBet + 1);
+            } else if (currentCoinIndex < coinValues.length - 1) {
+                updateBetValue(1);
+                updateCoinValue(currentCoinIndex + 1);
+            }
+            updateGameData();
+        });
+
+        // Bet max button
+        betMaxZone.on('pointerdown', () => {
+            if(scene.gameData.isSpinning) return;
+            scene.audioManager.UtilityButtonSFX.play();
+            updateBetValue(10);
+            updateCoinValue(coinValues.length - 1);
+            updateGameData();
+        });
+
+        // Update game data when values change
+        const updateGameData = () => {
+            const baseBet = parseInt(betValue.text);
+            const coin = parseFloat(coinValue.text.replace('$', ''));
+            scene.gameData.baseBet = baseBet;
+            scene.gameData.coinValue = coin;
+            scene.gameData.bet = baseBet * coin * 20;
+            
+            Events.emitter.emit(Events.CHANGE_BET, {});
+        };
+
+        // Add change handlers
+        betValue.on('changedata', updateGameData);
+        coinValue.on('changedata', updateGameData);
+    }
+
+    private updateTotalBet(scene: GameScene): void {
+        const baseBet = parseInt(this.betValue.text);
+        const coinValue = parseFloat(this.coinValue.text.replace('$', ''));
+        const total = (baseBet * coinValue).toFixed(2);
+        
+        this.totalValue.setText('$' + total);
+
+        // Update game data
+        scene.gameData.baseBet = baseBet;
+        scene.gameData.coinValue = coinValue;
+        scene.gameData.bet = (baseBet * coinValue * 20);
+        
+        Events.emitter.emit(Events.CHANGE_BET, {});
+    }
+
+    public showBetPopup(scene: GameScene): void {
+        if (this.betContainer) {
+            // Initialize values from current game state
+            this.betValue.setText(scene.gameData.baseBet.toString());
+            this.coinValue.setText('$' + scene.gameData.coinValue.toFixed(2));
+            this.updateTotalBet(scene);
+
+            this.betContainer.setVisible(true);
+            this.betContainer.setAlpha(0);
+            scene.tweens.add({
+                targets: this.betContainer,
+                alpha: 1,
+                duration: 1000,
+                ease: 'Back.easeOut'
+            });
+        }
+    }
+
+    public hideBetPopup(scene: GameScene): void {
+        if (this.betContainer) {
+            scene.tweens.add({
+                targets: this.betContainer,
+                alpha: 0,
+                duration: 200,
+                ease: 'Back.easeIn',
+                onComplete: () => {
+                    this.betContainer.setVisible(false);
+                }
+            });
+        }
     }
 
     private createBuyFeature(scene: GameScene): void {
@@ -820,7 +1320,7 @@ export class Buttons {
 
         // Price text (large, green)
         const price = scene.gameData.getBuyFeaturePrice();
-        this.buyFeaturePriceText = scene.add.text(0, 24, scene.gameData.currency + price.toLocaleString(), {
+        this.buyFeaturePriceText = scene.add.text(0, 24, scene.gameData.currency + price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), {
             fontSize: '42px',
             color: '#00FF6A',
             fontFamily: 'Poppins',
@@ -868,13 +1368,13 @@ export class Buttons {
         popupContainer.add(title);
 
         // Main text
-        const buyText = scene.add.text(width / 2, 90, '', {
+        const buyText = scene.add.text(width / 2, 100, '', {
             fontSize: '28px',
             color: '#FFFFFF',
             fontFamily: 'Poppins',
             fontStyle: 'bold',
             align: 'center',
-            wordWrap: { width: width - 40 }
+            wordWrap: { width: width }
         }) as ButtonText;
         buyText.setOrigin(0.5, 0.5);
         popupContainer.add(buyText);
@@ -909,7 +1409,7 @@ export class Buttons {
         buyBtnBg.on('pointerdown', () => {
             // Set up for guaranteed scatter trigger
             scene.gameData.minScatter = 4;
-            scene.gameData.balance -= scene.gameData.getBuyFeaturePrice();
+            scene.gameData.balance -= scene.gameData.getBuyFeaturePrice() - scene.gameData.bet;
             
             // Reset any existing state
             scene.gameData.isSpinning = false;
@@ -960,7 +1460,7 @@ export class Buttons {
             if (this.autoplayPopup && this.autoplayPopup.visible) {
                 this.autoplayPopup.setVisible(false);
             }
-            const cost = scene.gameData.getBuyFeaturePrice();
+            const cost = scene.gameData.getBuyFeaturePrice().toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             buyText.setText(`Buy 10 Free Spin\nAt the cost of $${cost}?`);
             buyText.setStyle({
                 color: '#FFFFFF',
@@ -1001,7 +1501,7 @@ export class Buttons {
 
     updateBuyFeaturePrice(scene: GameScene, newPrice: number) {
 		if (this.buyFeaturePriceText) {
-			this.buyFeaturePriceText.setText(scene.gameData.currency + newPrice.toLocaleString());
+			this.buyFeaturePriceText.setText(scene.gameData.currency + newPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 		}
 	}
 
@@ -1029,7 +1529,7 @@ export class Buttons {
         
         const betLabel = scene.add.text(60, 45, 'BET', {
             fontSize: '24px',
-            color: '#FFFFFF',
+            color: '#DDDDDD',
             fontFamily: 'Poppins',
             fontStyle: 'bold',
             align: 'center'
@@ -1124,12 +1624,17 @@ export class Buttons {
                 
                 // Gray out bet box when enabled
                 betBox.clear();
-                betBox.fillStyle(0x333333, 1);
+                betBox.fillStyle(0x000000, 1);
                 betBox.fillRoundedRect(15, 20, 90, 90, 16);
+
+                betLabel.setColor('#FFFFFF');
                 this.doubleFeaturePriceText.setColor('#3FFF0D');
+
+                scene.gameData.doubleChanceEnabled = true;
+                Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {});
             } else {
                 toggleBg.clear();
-                toggleBg.fillStyle(0x66D449, 1);
+                toggleBg.fillStyle(0xDDDDDD, 1);
                 toggleBg.lineStyle(3, 0xFFFFFF, 1);
                 toggleBg.strokeRoundedRect(toggleX, toggleY, toggleWidth, toggleHeight, toggleRadius);
                 toggleBg.fillRoundedRect(toggleX, toggleY, toggleWidth, toggleHeight, toggleRadius);
@@ -1140,7 +1645,11 @@ export class Buttons {
                 betBox.clear();
                 betBox.fillStyle(0x181818, 1);
                 betBox.fillRoundedRect(15, 20, 90, 90, 16);
-                this.doubleFeaturePriceText.setColor('#FFFFFF');
+                betLabel.setColor('#888888');
+                this.doubleFeaturePriceText.setColor('#888888');
+
+                scene.gameData.doubleChanceEnabled = false;
+                Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {});
             }
         };
         drawToggle();
@@ -1178,7 +1687,7 @@ export class Buttons {
         const container = scene.add.container(x, y) as ButtonContainer;
 
         const logo = scene.add.image(0, 0, 'logo') as ButtonImage;
-        logo.setScale(0.75);
+        logo.setScale(0.2);
         container.add(logo);
         this.buttonContainer.add(container);
     }
@@ -1250,7 +1759,9 @@ export class Buttons {
         const musicValue = scene.add.text(100 * scaleFactor, 40 * scaleFactor, '75%', {
             fontSize: `${16 * scaleFactor}px`, color: '#fff', fontFamily: 'Poppins'
         }) as ButtonText;
+
         panel.add(musicValue);
+
 
         // SFX row
         const sfxIcon = scene.add.image(24 * scaleFactor, 88 * scaleFactor, 'volume').setScale(0.35 * scaleFactor);
@@ -1273,6 +1784,7 @@ export class Buttons {
         musicSlider.fillStyle(0xffffff, 1);
         musicSlider.fillCircle(150 * scaleFactor + 0.75 * 90 * scaleFactor, 51 * scaleFactor, 9 * scaleFactor);
         panel.add(musicSlider);
+
 
         // SFX slider
         const sfxSliderBg = scene.add.graphics();
@@ -1329,6 +1841,30 @@ export class Buttons {
 
         // Initial slider setup
         updateSliders();
+        
+        musicIcon.setInteractive();
+        musicIcon.on('pointerdown', () => {
+            if(scene.audioManager.getMusicVolume() === 0) {
+                scene.audioManager.setMusicVolume(1);
+                musicIcon.setTint(0xFFFFFF);
+            } else {
+                scene.audioManager.setMusicVolume(0);
+                musicIcon.setTint(0xFF0000);
+            }
+            updateSliders();
+        });
+
+        sfxIcon.setInteractive();
+        sfxIcon.on('pointerdown', () => {
+            if(scene.audioManager.getSFXVolume() === 0) {
+                scene.audioManager.setSFXVolume(1);
+                sfxIcon.setTint(0xFFFFFF);
+            } else {
+                scene.audioManager.setSFXVolume(0);
+                sfxIcon.setTint(0xFF0000);
+            }
+            updateSliders();
+        });
 
         // Make sliders draggable
         let isDraggingMusic = false;

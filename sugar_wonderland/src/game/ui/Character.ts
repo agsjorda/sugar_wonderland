@@ -1,17 +1,14 @@
+import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3/dist/SpineGameObject';
 import { Scene } from 'phaser';
-import { Events } from '../scenes/components/Events';
-import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 
 export class Character {
-    private spineCharacter: SpineGameObject | null = null;
 
     constructor() {
-        this.spineCharacter = null;
     }
 
     preload(scene: Scene): void {
         const prefix = 'assets/Assets/Character';
-        scene.load.spineAtlas('character-atlas', `${prefix}/char.atlas`, `${prefix}/char.png`);
+        scene.load.spineAtlas('character-atlas', `${prefix}/char.atlas`);
         scene.load.spineJson('character', `${prefix}/char.json`);
     }
 

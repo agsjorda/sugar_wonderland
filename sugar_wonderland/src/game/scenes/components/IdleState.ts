@@ -64,7 +64,7 @@ export class IdleState extends State {
             if (scene.gameData.freeSpins === 0) {
                 // End of bonus round
                 scene.gameData.isBonusRound = false;
-                scene.background.disableBonusBackground(scene);
+                scene.background.toggleBackground(scene);
                 scene.audioManager.changeBackgroundMusic(scene);
                 
                 // Stop autoplay when free spins are done
@@ -76,6 +76,8 @@ export class IdleState extends State {
                 const bonusWin = scene.gameData.totalBonusWin;
                 Events.emitter.once(Events.SPIN_ANIMATION_END, () => {
                     scene.slotMachine.showBonusWin(scene, bonusWin);
+                    // Ensure spin button is enabled
+                    scene.gameData.isSpinning = false;
                 });
             }
         } else {
@@ -163,7 +165,7 @@ export function getRandomRows(): number[] {
     let poolIndex = 0;
     
     while (poolIndex < poolSize) {
-        const symbol = Math.floor(Math.random() * Slot.SYMBOLS);
+        const symbol = Math.floor(Math.random() * Slot.SYMBOLS) + 1;
         if (!symbolPool.includes(symbol)) {
             symbolPool[poolIndex] = symbol;
             poolIndex++;

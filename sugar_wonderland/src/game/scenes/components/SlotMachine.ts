@@ -3,7 +3,9 @@ import { Events } from "./Events";
 import { Slot } from "./GameData";
 import { GameData } from "./GameData";
 import { AudioManager } from "./AudioManager";
-
+import { Animation } from './Animation';
+import { WinAnimation } from './WinAnimation';
+import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3/dist/SpineGameObject';
 // Extend Scene to include gameData and audioManager
 interface GameScene extends Scene {
     gameData: GameData;
@@ -39,6 +41,8 @@ export class SlotMachine {
     private slotY: number;
     public activeWinOverlay: boolean = false;
     private winOverlayContainer: GameObjects.Container | null = null;
+    private animation: Animation;
+    private winAnimation: WinAnimation;
 
     constructor() {
         this.symbolDisplayWidth = 153.17;
@@ -54,16 +58,16 @@ export class SlotMachine {
     }
 
     preload(scene: Scene): void {
-        const gameScene = scene as GameScene;
-        gameScene.load.image('slotBackground', 'assets/Reels/Property 1=Default.png');
+        scene.load.image('slotBackground', 'assets/Reels/Property 1=Default.png');
 
-        for (let i = 0; i < Slot.SYMBOLS; i++) {
-            gameScene.load.image('symbol_' + i, 'assets/Symbols/Symbol_' + i + '.png');
-        }
+        // Initialize animation
+        this.animation = new Animation(scene);
+        this.animation.preload();
 
-        gameScene.load.image('symbol_99', 'assets/Symbols/Symbol_99.png');
+        this.winAnimation = new WinAnimation(scene);
+        this.winAnimation.preload();
 
-        this.initVariables(gameScene);
+        this.initVariables(scene);
     }
 
     private initVariables(scene: GameScene): void {
@@ -79,11 +83,14 @@ export class SlotMachine {
     }
 
     create(scene: Scene): void {
-        const gameScene = scene as GameScene;
-        this.createContainer(gameScene);
-        this.createBackground(gameScene);
-        this.createSlot(gameScene);
-        this.eventListeners(gameScene);
+        this.createContainer(scene);
+        this.createBackground(scene);
+        this.createSlot(scene);
+        this.eventListeners(scene);
+        
+        // Initialize animations
+        this.animation.create();
+        this.winAnimation.create();
     }
 
     private createContainer(scene: GameScene): void {
@@ -96,10 +103,10 @@ export class SlotMachine {
         background.setDepth(3);
 
         const paddingX = 90;
-        const paddingY = 90;
+        const paddingY = 75;
 
-        background.x = this.slotX - paddingX * 0.5;
-        background.y = this.slotY - paddingY * 0.5;
+        background.x = this.slotX - paddingX/2;
+        background.y = this.slotY - paddingY/2;
 
         background.displayWidth = this.totalGridWidth + paddingX;
         background.displayHeight = this.totalGridHeight + paddingY;
@@ -137,7 +144,7 @@ export class SlotMachine {
         });
 
         const rowInterval = 150; // ms between each row's arrival in a column
-        let turboSpeed = scene.gameData.turbo ? 0.1 : 1;
+        let turboSpeed = scene.gameData.turbo ? 0.2 : 1;
         let offsetDelay = 1100;
 
         for (let col = 0; col < numCols; col++) {
@@ -149,11 +156,23 @@ export class SlotMachine {
                 const symbolY = centerY + row * (height + verticalSpacing);
                 const delay = (col * 250 + (numRows - 1 - row) * rowInterval) * turboSpeed;
 
-                // Create and tween in the new symbol
+                // Modify the symbol creation part
                 const symbolValue = newValues[row][col];
-                const symbolKey = 'symbol_' + symbolValue;
+                let symbolKey = 'Symbol0_SW'; // Default to scatter symbol
+                let frameKey = 'Symbol0_SW-00000.png';
+                if (symbolValue >= 1 && symbolValue <= 9) {
+                    symbolKey = `Symbol${symbolValue}_SW`;
+                    frameKey = `Symbol${symbolValue}_SW-00000.png`;
+                }
                 const startY = symbolY - height * (numRows + 1);
-                const newSymbol = scene.add.sprite(symbolX, startY, symbolKey);
+                const newSymbol = scene.add.sprite(symbolX, startY, symbolKey, frameKey);
+
+                // Set the display size based on the symbol type
+                if (symbolValue === 0) {
+                    newSymbol.setDisplaySize(width * Slot.SCATTER_SIZE, height * Slot.SCATTER_SIZE);
+                } else {
+                    newSymbol.setDisplaySize(width * Slot.SYMBOL_SIZE, height * Slot.SYMBOL_SIZE);
+                }   
 
                 // Calculate duration based on distance to maintain consistent speed
                 const distance = symbolY - startY;
@@ -166,7 +185,7 @@ export class SlotMachine {
                 // Add extra delay for turbo mode to prevent overlap
                 let tweenDelay = (delay + offsetDelay) * turboSpeed;
                 if (scene.gameData.turbo) {
-                    tweenDelay += duration * 0.1;
+                    tweenDelay += duration / turboSpeed;
                     scene.audioManager.TurboDrop.play();
                 }
 
@@ -177,24 +196,55 @@ export class SlotMachine {
                     const baseSpeed = 2;
                     const durationOld = (distance / baseSpeed) * turboSpeed;
 
+                    // Add enhanced blur effect to the symbol
+                    if ((scene.sys.game.renderer as any).pipelines) {
+                        symbol.setPipeline('BlurPostFX');
+                        (symbol as any).blurStrength = 0.5;
+                    }
+
+                    // Create multiple motion trails
+                    const trails: Phaser.GameObjects.Sprite[] = [];
+                    const numTrails = 10;
+                    const trailSpacing = -100; // Space between trails
+
+                    for (let i = 0; i < numTrails; i++) {
+                        const trail = scene.add.sprite(symbol.x, symbol.y, symbol.texture.key, symbol.frame.name);
+                        trail.setDisplaySize(symbol.displayWidth, symbol.displayHeight);
+                        trail.setAlpha(0.7 - (i * 0.15)); // Decreasing alpha for each trail
+                        trail.setPipeline('BlurPostFX');
+
+                        (trail as any).blurStrength = 0.8 + (i * 0.1); // Increasing blur for each trail
+                        trail.setDepth(symbol.depth - (i + 1)); // Place trails behind the symbol
+                        if(scene.gameData.turbo == false) {
+                            this.container.add(trail);
+                            trails.push(trail);
+                        }
+                    }
+
                     scene.tweens.add({
                         targets: symbol,
                         y: endY,
-                        duration: durationOld,
+                        alpha: 0.1,
+                        scale: 0.5,
+                        duration: durationOld ,
                         delay: delay,
                         ease: 'Quart.easeInOut',
+                        onUpdate: () => {
+                            // Update trail positions and fade
+                            if(scene.gameData.turbo == false) {
+                                setTimeout(() => {
+                                    trails.forEach((trail, index) => {
+                                        trail.y = symbol.y - (trailSpacing * (index + 1));
+                                        trail.alpha = symbol.alpha * (0.7 - (index * 0.15));
+                                    });
+                                }, 100);
+                            }
+                        },
                         onComplete: () => {
+                            trails.forEach(trail => trail.destroy());
                             symbol.destroy();
                         }
                     });
-                }
-
-                if (symbolValue === 99) {
-                    newSymbol.displayWidth = width * 1.1;
-                    newSymbol.displayHeight = height * 1.1;
-                } else {
-                    newSymbol.displayWidth = width * 0.9;
-                    newSymbol.displayHeight = height * 0.9;
                 }
 
                 this.container.add(newSymbol);
@@ -208,9 +258,8 @@ export class SlotMachine {
                     ease: 'Quart.easeInOut',
                     onComplete: () => {
                         completedSymbols++;
-
                         if (!scene.gameData.turbo) {
-                            if (row === 0 || row === 1 || row === 4) {
+                            if (row === 4) {
                                 scene.audioManager.ReelDrop.play();
                             }
                         }
@@ -260,22 +309,27 @@ export class SlotMachine {
         });
 
         for (let row = 0; row < numRows; row++) {
+            let sampleScatterCount = 0;
             for (let col = 0; col < numCols; col++) {
                 const symbolValue = symbols[row][col];
-                const symbolKey = 'symbol_' + symbolValue;
-                const centerX = width * 0.5;
+                let symbolKey = 'Symbol0_SW'; // Default to scatter symbol
+                let frameKey = 'Symbol0_SW-00000.png';
+                if (symbolValue >= 1 && symbolValue <= 9) {
+                    symbolKey = `Symbol${symbolValue}_SW`;
+                    frameKey = `Symbol${symbolValue}_SW-00000.png`;
+                }
+                const centerX = width * 0.5 + 20;
                 const centerY = height * 0.5;
                 const symbolX = centerX + col * (width + horizontalSpacing);
                 const symbolY = centerY + row * (height + verticalSpacing);
 
-                const symbol = scene.add.sprite(symbolX, symbolY, symbolKey);
+                const symbol = scene.add.sprite(symbolX, symbolY, symbolKey, frameKey);
 
-                if (symbolValue === 99) {
-                    symbol.displayWidth = width * 1.1;
-                    symbol.displayHeight = height * 1.1;
+                if (symbolValue === 0 && sampleScatterCount < 3){
+                    sampleScatterCount++;
+                    symbol.setDisplaySize(width * Slot.SCATTER_SIZE, height * Slot.SCATTER_SIZE);
                 } else {
-                    symbol.displayWidth = width * 0.9;
-                    symbol.displayHeight = height * 0.9;
+                    symbol.setDisplaySize(width * Slot.SYMBOL_SIZE, height * Slot.SYMBOL_SIZE);
                 }
 
                 this.container.add(symbol);
@@ -310,9 +364,10 @@ export class SlotMachine {
 
                 // Create new symbol
                 let symbolValue = newValues[row][col];
-                let symbolKey = 'symbol_' + symbolValue;
+                let symbolKey = symbolValue === 0 ? 'Symbol0_SW' : `Symbol${symbolValue}_SW`;
+                let frameKey = `${symbolKey}-00000.png`;
                 let startY = symbolY - height * (numRows + 1);
-                let newSymbol = scene.add.sprite(symbolX, startY, symbolKey);
+                let newSymbol = scene.add.sprite(symbolX, startY, symbolKey, frameKey);
 
                 // Calculate duration based on distance and speed
                 let distance = symbolY - startY;
@@ -441,6 +496,8 @@ export class SlotMachine {
                     stars.forEach(star => star.destroy());
                     // Emit event when bonus win overlay is closed
                     Events.emitter.emit(Events.BONUS_WIN_CLOSED);
+                    // Enable spin button by setting isSpinning to false
+                    scene.gameData.isSpinning = false;
                 }
             });
         };
@@ -467,13 +524,13 @@ export class SlotMachine {
         // Add popup background
         const popupBg = scene.add.graphics();
         popupBg.fillStyle(0x333333, 0.95);
-        popupBg.fillRoundedRect(-200, -150, 400, 300, 20);
+        popupBg.fillRoundedRect(-325, -150, 650, 300, 20);
         popupBg.lineStyle(4, 0x57FFA3);
-        popupBg.strokeRoundedRect(-200, -150, 400, 300, 20);
+        popupBg.strokeRoundedRect(-325, -150, 650, 300, 20);
         container.add(popupBg);
 
         // Add title text
-        const titleText = scene.add.text(0, -100, 'BONUS ROUND!', {
+        const titleText = scene.add.text(0, -100, 'BONUS ROUND', {
             fontSize: '48px',
             color: '#57FFA3',
             fontFamily: 'Poppins',
@@ -483,7 +540,7 @@ export class SlotMachine {
         container.add(titleText);
 
         // Add free spins amount text
-        const spinsText = scene.add.text(0, 0, `You got ${freeSpins} FREE SPINS`, {
+        const spinsText = scene.add.text(0, 0, `You got ${freeSpins} FREE SPINS!`, {
             fontSize: '48px',
             color: '#FFFFFF',
             fontFamily: 'Poppins',
@@ -551,9 +608,16 @@ export class SlotMachine {
     }
 
     private showWinOverlay(scene: GameScene, totalWin: number, bet: number): void {
+        // Calculate multiplier for win type
+        const multiplier = totalWin / bet;
+        if(multiplier < 1) return;
+        
         // Store reference to the win overlay container
         this.winOverlayContainer = scene.add.container(0, 0);
         this.activeWinOverlay = true;
+
+        // Emit event that win overlay is showing
+        Events.emitter.emit(Events.WIN_OVERLAY_SHOW);
 
         // Create semi-transparent background
         const bg = scene.add.graphics();
@@ -565,49 +629,64 @@ export class SlotMachine {
         const container = scene.add.container(scene.scale.width / 2, scene.scale.height / 2);
         this.winOverlayContainer.add(container);
 
-        // Calculate multiplier for win type
-        const multiplier = totalWin / bet;
-        if(multiplier < 20) return;
-
         let winType = '';
-        if (multiplier >= 20) winType = 'Small Win!';
-        else if (multiplier >= 30) winType = 'Medium Win!';
-        else if (multiplier >= 45) winType = 'Large Win!';
-        else if (multiplier >= 60) winType = 'Big Win!';
+        if (multiplier >= 25) winType = 'SuperWin';
+        else if (multiplier >= 20) winType = 'MegaWin';
+        else if (multiplier >= 15) winType = 'EpicWin';
+        else if (multiplier >= 1) winType = 'BigWin'; // test win
 
         // Add win type text
-        const winTypeText = scene.add.text(0, -80, winType, {
-            fontSize: '64px',
-            color: '#57FFA3',
-            fontFamily: 'Poppins',
-            fontStyle: 'bold',
-            align: 'center'
-        });
-        winTypeText.setOrigin(0.5);
-        container.add(winTypeText);
+       //const winTypeText = scene.add.text(0, -80, winType, {
+       //    fontSize: '64px',
+       //    color: '#57FFA3',
+       //    fontFamily: 'Poppins',
+       //    fontStyle: 'bold',
+       //    align: 'center'
+       //});
+       //winTypeText.setOrigin(0.5);
+       //container.add(winTypeText);
+
+        // Add win animation
+        const winAnim = scene.add.spine(0, 0, 'myWinAnim2', 'myWinAnim2') as SpineGameObject;
+        winAnim.setScale(1);
+        winAnim.setPosition(0, 0);
+        container.add(winAnim);
+
+        this.winAnimation.playWinAnimation(winAnim, totalWin, winType);
 
         // Add win amount
-        const winText = scene.add.text(0, 20, `${scene.gameData.currency}${totalWin.toFixed(2)}`, {
+        const winText = scene.add.text(0, 80, '0.00', {
             fontSize: '84px',
             color: '#FFD700',
             fontFamily: 'Poppins',
             fontStyle: 'bold',
-            align: 'center'
+            align: 'center',
+            stroke: '#000000',
+            strokeThickness: 3
         });
         winText.setOrigin(0.5);
         container.add(winText);
 
+        Events.emitter.on(Events.WIN_OVERLAY_UPDATE_TOTAL_WIN, (totalWin: number) => {
+            winText.setText(`${totalWin.toFixed(2)}`);
+        });
+
         // Add continue button
         const buttonBg = scene.add.graphics();
+        buttonBg.lineStyle(3, 0x000000);
         buttonBg.fillStyle(0x57FFA3, 1);
         buttonBg.fillRoundedRect(-100, 120, 200, 60, 30);
+        buttonBg.strokeRoundedRect(-100, 120, 200, 60, 30);
         container.add(buttonBg);
 
         const buttonText = scene.add.text(0, 150, 'CONTINUE', {
             fontSize: '32px',
             color: '#FFFFFF',
             fontFamily: 'Poppins',
-            fontStyle: 'bold'
+            fontStyle: 'bold',
+            align: 'center',
+            stroke: '#000000',
+            strokeThickness: 3
         });
         buttonText.setOrigin(0.5);
         container.add(buttonText);
@@ -616,15 +695,52 @@ export class SlotMachine {
         this.createWinParticles(scene, scene.scale.width / 2, scene.scale.height / 2);
 
         // Set depth - Increase depth values to ensure overlay is on top
-        this.winOverlayContainer.setDepth(10000); // Increased from 1000 to 10000
+        this.winOverlayContainer.setDepth(10000); 
 
-        // Make button interactive
-        const buttonZone = scene.add.zone(-100, 120, 200, 60);
+        // Make button interactive - align with button background
+        const buttonZone = scene.add.zone(0, 150, 200, 60);
         buttonZone.setInteractive();
         container.add(buttonZone);
 
+        // Add hover effects
+        buttonZone.on('pointerover', () => {
+            buttonBg.clear();
+            buttonBg.fillStyle(0x3FFF0D, 1);
+            buttonBg.fillRoundedRect(-100, 120, 200, 60, 30);
+        });
+
+        buttonZone.on('pointerout', () => {
+            buttonBg.clear();
+            buttonBg.fillStyle(0x57FFA3, 1);
+            buttonBg.fillRoundedRect(-100, 120, 200, 60, 30);
+        });
+
+        // Get the appropriate win sound based on multiplier
+        let winSound = scene.audioManager.SmallW;
+        if(multiplier >= 20 && multiplier < 30) {
+            winSound = scene.audioManager.SmallW;
+        } else if (multiplier >= 30 && multiplier < 50) {
+            winSound = scene.audioManager.MediumW;
+        } else if (multiplier >= 50 && multiplier < 100) {
+            winSound = scene.audioManager.HugeW;
+        } else if (multiplier >= 100) {
+            winSound = scene.audioManager.BigW;
+        }
+
+        // Listen for win sound completion
+        winSound.once('complete', () => {
+            if (this.activeWinOverlay) {
+                Events.emitter.off(Events.WIN_OVERLAY_UPDATE_TOTAL_WIN);
+                this.destroyWinOverlay(scene);
+                
+            }
+            // not complete, sound will continue playing until winning counting to final value
+        });
+
         buttonZone.on('pointerdown', () => {
-            scene.audioManager.UtilityButtonSFX.play();
+            scene.audioManager.WinSkip.play();
+            // skip winning counting to final value
+            Events.emitter.off(Events.WIN_OVERLAY_UPDATE_TOTAL_WIN);
             this.destroyWinOverlay(scene);
         });
 
@@ -638,11 +754,15 @@ export class SlotMachine {
         });
     }
 
-    public destroyWinOverlay(_scene: GameScene): void {
+    public destroyWinOverlay(scene: GameScene): void {
         if (this.winOverlayContainer) {
             this.winOverlayContainer.destroy();
             this.winOverlayContainer = null;
             this.activeWinOverlay = false;
+            scene.audioManager.stopWinSFX(scene);
+            
+            // Emit event that win overlay is hidden
+            Events.emitter.emit(Events.WIN_OVERLAY_HIDE);
         }
     }
 
@@ -734,22 +854,22 @@ export class SlotMachine {
 
         if (!foundMatch) {
             // --- SCATTER CHECK ---
-            const scatterCount = symbolCount[99] || 0;
+            const scatterCount = symbolCount[0] || 0;
             if (scatterCount >= 4 || (scene.gameData.isBonusRound && scatterCount >= 3)) {
                 // Prevent new spins during scatter sequence
                 scene.gameData.isSpinning = true;
                 
-                // Explosive tween for all scatter symbols
+                // Play animation for all scatter symbols
                 let scatterSprites: GameObjects.Sprite[] = [];
                 for (let row = 0; row < rows; row++) {
                     for (let col = 0; col < cols; col++) {
-                        if (symbolGrid[row][col] === 99 && this.symbolGrid[row][col]) {
+                        if (symbolGrid[row][col] === 0 && this.symbolGrid[row][col]) {
                             scatterSprites.push(this.symbolGrid[row][col]);
                         }
                     }
                 }
-                let tweensToComplete = scatterSprites.length;
-                const onAllTweensComplete = () => {
+                let animationsToComplete = scatterSprites.length;
+                const onAllAnimationsComplete = () => {
                     // Award free spins based on scatterCount
                     let freeSpins = scene.gameData.freeSpins || 0;
 
@@ -761,6 +881,10 @@ export class SlotMachine {
                         else if (scatterCount === 6) freeSpins += 15;
                         
                         scene.gameData.freeSpins = freeSpins;
+                        // Update the remaining spins display
+                        if (scene.buttons.autoplay.isAutoPlaying) {
+                            scene.buttons.autoplay.updateRemainingSpinsDisplay();
+                        }
                         // Continue with next spin since we're already in bonus
                         scene.gameData.isSpinning = false;
                         Events.emitter.emit(Events.SPIN, {
@@ -777,7 +901,9 @@ export class SlotMachine {
                         scene.gameData.isBonusRound = true;
                         scene.gameData.freeSpins = freeSpins;
                         scene.gameData.totalBonusWin = 0; // Reset bonus win counter at start
-                        scene.background.enableBonusBackground(scene);
+                        
+                        
+                        scene.background.toggleBackground(scene);
                         scene.audioManager.changeBackgroundMusic(scene);
 
                         // If in autoplay, stop it before showing free spins popup
@@ -790,8 +916,8 @@ export class SlotMachine {
                     }
                 };
 
-                if (tweensToComplete === 0) {
-                    onAllTweensComplete();
+                if (animationsToComplete === 0) {
+                    onAllAnimationsComplete();
                 } else {
                     scene.audioManager.ScatterSFX.play();
                     
@@ -799,18 +925,13 @@ export class SlotMachine {
                         // Create particles for scatter explosion
                         this.createWinParticles(scene, sprite.x, sprite.y, 0xFF0000);
                         
-                        scene.tweens.add({
-                            targets: sprite,
-                            scale: 2,
-                            alpha: 0,
-                            duration: 700,
-                            ease: 'Cubic.easeOut',
-                            onComplete: () => {
-                                sprite.destroy();
-                                tweensToComplete--;
-                                if (tweensToComplete === 0) {
-                                    onAllTweensComplete();
-                                }
+                        // Play scatter symbol animation
+                        this.animation.playSymbolAnimation(sprite, 0);
+                        sprite.once('animationcomplete', () => {
+                            sprite.alpha = 0;
+                            animationsToComplete--;
+                            if (animationsToComplete === 0) {
+                                onAllAnimationsComplete();
                             }
                         });
                     });
@@ -833,10 +954,10 @@ export class SlotMachine {
             const totalWin = scene.gameData.totalWin || 0;
             const multiplier = totalWin / bet;
             
-            if (multiplier >= 10) {
+            if (multiplier > 1) {
                 this.showWinOverlay(scene, totalWin, bet);
             }
-            scene.audioManager.playWinSFX(multiplier);
+            scene.audioManager.playWinSFX(multiplier, scene);
 
             Events.emitter.emit(Events.MATCHES_DONE, { symbolGrid });
             return "No more matches";
@@ -850,50 +971,30 @@ export class SlotMachine {
         // WIN AMOUNT SHOULD BE IN BACKEND 
         // TEMPORARY ONLY FOR TESTING
         let winAmount = 0;
-        if (matchedCells.length === 8 || matchedCells.length === 9) {
-            winAmount = matchedSymbol === 1 ? 10 * bet :
-                       matchedSymbol === 2 ? 2.5 * bet :
-                       matchedSymbol === 3 ? 2 * bet :
-                       matchedSymbol === 4 ? 1 * bet :
-                       matchedSymbol === 5 ? 1 * bet :
-                       matchedSymbol === 6 ? 0.8 * bet :
-                       matchedSymbol === 7 ? 0.5 * bet :
-                       matchedSymbol === 8 ? 0.4 * bet :
-                       matchedSymbol === 9 ? 0.25 * bet :
-                       matchedSymbol === 99 ? 100 * bet : 0;
+        if (matchedSymbol !== null) {
+            if (matchedCells.length === 8 || matchedCells.length === 9) {
+                winAmount = matchedSymbol === 0 ? 100 * bet :
+                           scene.gameData.winamounts[0][matchedSymbol] * bet;
 
-        } else if (matchedCells.length === 10 || matchedCells.length === 11) {
-            winAmount = matchedSymbol === 1 ? 25 * bet :
-                       matchedSymbol === 2 ? 10 * bet :
-                       matchedSymbol === 3 ? 5 * bet :
-                       matchedSymbol === 4 ? 2 * bet :
-                       matchedSymbol === 5 ? 1.5 * bet :
-                       matchedSymbol === 6 ? 1.2 * bet :
-                       matchedSymbol === 7 ? 1 * bet :
-                       matchedSymbol === 8 ? 0.9 * bet :
-                       matchedSymbol === 9 ? 0.75 * bet :
-                       matchedSymbol === 99 ? 5 * bet : 0;
-        } else if (matchedCells.length >= 12) {
-            winAmount = matchedSymbol === 1 ? 50 * bet :
-                       matchedSymbol === 2 ? 25 * bet :
-                       matchedSymbol === 3 ? 15 * bet :
-                       matchedSymbol === 4 ? 12 * bet :
-                       matchedSymbol === 5 ? 10 * bet :
-                       matchedSymbol === 6 ? 8 * bet :
-                       matchedSymbol === 7 ? 5 * bet :
-                       matchedSymbol === 8 ? 0.4 * bet :
-                       matchedSymbol === 9 ? 2 * bet :
-                       matchedSymbol === 99 ? 3 * bet : 0;
+            } else if (matchedCells.length === 10 || matchedCells.length === 11) {
+                winAmount = matchedSymbol === 0 ? 5 * bet :
+                           scene.gameData.winamounts[1][matchedSymbol] * bet;
+
+            } else if (matchedCells.length >= 12) {
+                winAmount = matchedSymbol === 0 ? 3 * bet :
+                           scene.gameData.winamounts[2][matchedSymbol] * bet;
+            }
         }
+
         // TEMPORARY ONLY FOR TESTING
 
 
-        scene.gameData.totalWin += winAmount;
-        scene.gameData.balance += winAmount;
+        scene.gameData.totalWin += winAmount; // win amount should already be calculated in backend
+        scene.gameData.balance += winAmount; // balance should already be updated in backend
         
         // Track bonus wins separately
         if (scene.gameData.isBonusRound) {
-            scene.gameData.totalBonusWin += winAmount;
+            scene.gameData.totalBonusWin += winAmount; // bonus win amount should already be calculated in backend
         }
         
         Events.emitter.emit(Events.WIN, {});
@@ -921,9 +1022,10 @@ export class SlotMachine {
                 fontStyle: 'bold',
                 stroke: '#000',
                 strokeThickness: 6,
-                fontFamily: 'Segoe UI'
+                fontFamily: 'Poppins'
             }
         );
+
         popupText.setOrigin(0.5, 0.5);
         popupText.setDepth(100);
 
@@ -933,8 +1035,8 @@ export class SlotMachine {
             y: popupPos.y - 80,
             alpha: 0,
             scale: 1.5,
-            duration: 1200,
-            ease: 'Cubic.easeOut',
+            duration: 2000,
+            ease: 'Back.easeOut',
             onComplete: () => {
                 popupText.destroy();
             }
@@ -961,10 +1063,18 @@ export class SlotMachine {
                 
                 scene.tweens.add({
                     targets: symbolSprite,
-                    alpha: 0,
-                    scale: 0,
+                    alpha: 1,
+                    scale: 1,
                     duration: 1000,
                     ease: 'Circ.easeInOut',
+                    onStart: () => {
+                        // Add blur effect when starting the removal animation
+                        if ((scene.sys.game.renderer as any).pipelines) {
+                            symbolSprite.setPipeline('BlurPostFX');
+                            (symbolSprite as any).blurStrength = 0.8;
+                        }
+                       
+                    },
                     onComplete: () => {
                         symbolSprite.destroy();
                         tweensToComplete--;
@@ -980,6 +1090,16 @@ export class SlotMachine {
         scene.gameData.currentMatchingSymbols = matchedCells.map(() => 
             matchedSymbol !== null ? matchedSymbol : 0
         );
+
+        // After finding matches of 8 or more symbols
+        if (matchedCells.length >= 8 && matchedSymbol !== null && matchedSymbol >= 1 && matchedSymbol <= 9) {
+            matchedCells.forEach(({ row, col }) => {
+                const symbolSprite = this.symbolGrid[row][col];
+                if (symbolSprite) {
+                    this.animation.playSymbolAnimation(symbolSprite, matchedSymbol);
+                }
+            });
+        }
 
         return "continue match";
     }
@@ -1009,7 +1129,7 @@ export class SlotMachine {
             // Fill the rest with new random symbols at the top
             const numNew = rows - newCol.length;
             for (let i = 0; i < numNew; i++) {
-                const newSymbol = Math.floor(Math.random() * Slot.SYMBOLS);
+                const newSymbol = Math.floor(Math.random() * Slot.SYMBOLS) + 1;
                 newCol.unshift(newSymbol);
             }
 
@@ -1038,13 +1158,23 @@ export class SlotMachine {
             // Create and animate new symbols at the top
             for (let i = 0; i < numNew; i++) {
                 const symbolValue = newCol[i];
-                const symbolKey = 'symbol_' + symbolValue;
+                let symbolKey = 'Symbol0_SW'; // Default to scatter symbol
+                let frameKey = 'Symbol0_SW-00000.png';
+                if (symbolValue >= 1 && symbolValue <= 9) {
+                    symbolKey = `Symbol${symbolValue}_SW`;
+                    frameKey = `Symbol${symbolValue}_SW-00000.png`;
+                }
                 const centerX = width * 0.5 + col * (width + horizontalSpacing);
                 const startY = (height * 0.5) + (i - numNew) * (height + verticalSpacing);
                 const endY = (height * 0.5) + i * (height + verticalSpacing);
+                const newSymbol = scene.add.sprite(centerX, startY, symbolKey, frameKey);
 
-                const newSymbol = scene.add.sprite(centerX, startY, symbolKey);
-                newSymbol.setDisplaySize(width * 0.9, height * 0.9);
+                if (symbolValue === 0) {
+                    newSymbol.setDisplaySize(width * Slot.SCATTER_SIZE, height * Slot.SCATTER_SIZE);
+                } else {
+                    newSymbol.setDisplaySize(width * Slot.SYMBOL_SIZE, height * Slot.SYMBOL_SIZE);
+                }
+
                 this.container.add(newSymbol);
                 newSymbols.push(newSymbol);
                 this.symbolGrid[i][col] = newSymbol;

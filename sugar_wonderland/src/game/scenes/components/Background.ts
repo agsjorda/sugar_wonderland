@@ -5,24 +5,81 @@ export class Background {
     private initialLayerY: number = 0;
 
 
-    private background: GameObjects.Image;
-    private bonusbackground: GameObjects.Image;
+    private main_background: GameObjects.Image;
+    private bonus_background: GameObjects.Image;
+
+    private main_cloud: GameObjects.Image;
+    private bonus_cloud: GameObjects.Image;
+
+    private main_foreground: GameObjects.Image;
+    private bonus_foreground: GameObjects.Image;
+    
+    private main_lantern1: GameObjects.Image;
+    private main_lantern2: GameObjects.Image;
+    private main_lantern3: GameObjects.Image;
+    private bonus_lantern1: GameObjects.Image;
+    private bonus_lantern2: GameObjects.Image;
+    private bonus_lantern3: GameObjects.Image;
+
+    private floatingSpeedX: number = 0.001;
+    private floatingSpeedY: number = 0.0012;
+
+    private floatingAmplitudeX: number = 200;
+    private floatingAmplitudeY: number = 250;
+
+    private cloudParallaxSpeed: number = 0.1;
+    private foregroundParallaxSpeed: number = 0.0;
 
 
     preload(scene: Scene): void {
         const prefix = 'assets/background';
 
-        scene.load.image('background', `${prefix}/mainBackground.png`);
-        scene.load.image('bonusbackground', `${prefix}/bonusBackground.png`);
-        scene.load.image('cloud', `${prefix}/Cloud.png`);
-        scene.load.image('foreground', `${prefix}/Foreground.png`);
-        scene.load.image('lantern', `${prefix}/Lantern.png`);
+        scene.load.image('bonus_background', `${prefix}/Bonus_Background.png`);
+        scene.load.image('bonus_cloud', `${prefix}/Bonus_Cloud.png`);
+        scene.load.image('bonus_foreground', `${prefix}/Bonus_Foreground.png`);
+        scene.load.image('bonus_lantern', `${prefix}/Bonus_Lantern.png`);
+
+        scene.load.image('main_background', `${prefix}/Main_Background.png`);
+        scene.load.image('main_cloud', `${prefix}/Main_Cloud.png`);
+        scene.load.image('main_foreground', `${prefix}/Main_Foreground.png`);
+        scene.load.image('main_lantern', `${prefix}/Main_Lantern.png`);
     }
 
     create(scene: Scene): void {
         this.createBackground(scene);
-        //this.createLanterns(scene);
+        this.createLanterns(scene);
+
+        scene.gameData.isBonusRound = false;
+        this.toggleBackground(scene);
     }
+
+    toggleBackground(_scene: Scene): void {
+        let main_status = 0;
+        let bonus_status = 0;
+
+        if(_scene.gameData.isBonusRound){
+            main_status = 0;
+            bonus_status = 1;
+        } else {
+            main_status = 1;
+            bonus_status = 0;
+        }
+
+        this.main_background.alpha = main_status;
+        this.main_cloud.alpha = main_status;
+        this.main_foreground.alpha = main_status;
+        this.main_lantern1.alpha = main_status;
+        this.main_lantern2.alpha = main_status;
+        this.main_lantern3.alpha = main_status;
+
+        this.bonus_background.alpha = bonus_status;
+        this.bonus_cloud.alpha = bonus_status;
+        this.bonus_foreground.alpha = bonus_status;
+        this.bonus_lantern1.alpha = bonus_status;
+        this.bonus_lantern2.alpha = bonus_status;
+        this.bonus_lantern3.alpha = bonus_status;
+    }
+
 
     private createBackground(scene: Scene): void {
         const width = scene.scale.width;
@@ -33,45 +90,149 @@ export class Background {
         this.initialLayerX = centerX;
         this.initialLayerY = centerY;
 
-        this.background = scene.add.image(this.initialLayerX, this.initialLayerY, 'background');
-        this.bonusbackground = scene.add.image(this.initialLayerX, this.initialLayerY, 'bonusbackground');
-        //this.cloud = scene.add.image(this.initialLayerX, this.initialLayerY, 'cloud');
-        //this.foreground = scene.add.image(this.initialLayerX, height * 0.45, 'foreground');
+        this.main_background = scene.add.image(this.initialLayerX, this.initialLayerY, 'main_background');
+        this.main_cloud = scene.add.image(this.initialLayerX, this.initialLayerY, 'main_cloud');
+        this.main_foreground = scene.add.image(this.initialLayerX, height * 0.4, 'main_foreground');
 
-        const scaleFactor = 1;
-        this.background.setScale(scaleFactor);
-        this.bonusbackground.setScale(scaleFactor);
-        //this.cloud.setScale(scaleFactor);
-        //this.foreground.setScale(scaleFactor);
+        this.bonus_background = scene.add.image(this.initialLayerX, this.initialLayerY, 'bonus_background');
+        this.bonus_cloud = scene.add.image(this.initialLayerX, this.initialLayerY, 'bonus_cloud');
+        this.bonus_foreground = scene.add.image(this.initialLayerX, height * 0.4, 'bonus_foreground');
 
-        this.background.setDepth(0);
-        this.bonusbackground.setDepth(0);
-        this.bonusbackground.setAlpha(0);
-        //this.cloud.setDepth(1);
-        //this.foreground.setDepth(2);
+        const scaleFactor = 0.525;
+        this.main_background.setScale(scaleFactor);
+        this.main_cloud.setScale(scaleFactor * 1.25);
+        this.main_foreground.setScale(scaleFactor);
+
+        this.main_background.setDepth(0);
+        this.main_cloud.setDepth(1);
+        this.main_foreground.setDepth(2);
+        
+
+        this.bonus_background.setScale(scaleFactor);
+        this.bonus_cloud.setScale(scaleFactor * 1.25);
+        this.bonus_foreground.setScale(scaleFactor);
+
+        this.bonus_background.setDepth(0);
+        this.bonus_cloud.setDepth(1);
+        this.bonus_foreground.setDepth(2);
     }
 
 
-    enableBonusBackground(_scene: Scene): void {
-        this.bonusbackground.setAlpha(1);
+    update(_scene: Scene, _time: number, _delta: number): void {
+        const floatingOffsetX = Math.sin(_time * this.floatingSpeedX) * this.floatingAmplitudeX;
+        const floatingOffsetY = Math.sin(_time * this.floatingSpeedY) * this.floatingAmplitudeY;
+
+        if (this.main_cloud) {
+            this.main_cloud.x = this.initialLayerX + floatingOffsetX * this.cloudParallaxSpeed;
+            this.main_cloud.y = this.initialLayerY + floatingOffsetY * this.cloudParallaxSpeed;
+        }
+
+        if (this.bonus_cloud) {
+            this.bonus_cloud.x = this.initialLayerX + floatingOffsetX * this.cloudParallaxSpeed;
+            this.bonus_cloud.y = this.initialLayerY + floatingOffsetY * this.cloudParallaxSpeed;
+        }
+
+        if (this.main_foreground) {
+            this.main_foreground.x = this.initialLayerX + floatingOffsetX * this.foregroundParallaxSpeed;
+            this.main_foreground.y = this.initialLayerY + floatingOffsetY * this.foregroundParallaxSpeed;
+        }
+
+        if (this.bonus_foreground) {
+            this.bonus_foreground.x = this.initialLayerX + floatingOffsetX * this.foregroundParallaxSpeed;
+            this.bonus_foreground.y = this.initialLayerY + floatingOffsetY * this.foregroundParallaxSpeed;
+        }
     }
 
-    disableBonusBackground(_scene: Scene): void {
-        this.bonusbackground.setAlpha(0);
-    }
+	createLanterns(scene: Scene) {
+		const width = scene.scale.width;
+		const height = scene.scale.height;
+        const depth = 2;
+        
+        // Main Lanterns
+		this.main_lantern1 = scene.add.image(width * 0.1, height * 0.25, 'main_lantern');
+		this.main_lantern1.setScale(0.325);
+		this.main_lantern1.setDepth(depth);
+		this.main_lantern1.setOrigin(0.5, 0);
 
-    update(): void {
-        //const floatingOffsetX = Math.sin(time * this.floatingSpeedX) * this.floatingAmplitudeX;
-        //const floatingOffsetY = Math.sin(time * this.floatingSpeedY) * this.floatingAmplitudeY;
+		scene.tweens.add({
+			targets: this.main_lantern1,
+			angle: { from: 0, to: 20 },
+			duration: 1000,
+			ease: 'Sine.easeInOut',
+			yoyo: true,
+			repeat: -1
+		});
 
-        //if (this.cloud) {
-        //    this.cloud.x = this.initialLayerX + floatingOffsetX * this.cloudParallaxSpeed;
-        //    this.cloud.y = this.initialLayerY + floatingOffsetY * this.cloudParallaxSpeed;
-        //}
+		this.main_lantern2 = scene.add.image(width * 0.1825, height * 0.19, 'main_lantern');
+		this.main_lantern2.setScale(0.45);
+		this.main_lantern2.setDepth(depth);
+		this.main_lantern2.setOrigin(0.5, 0);
 
-        //if (this.foreground) {
-        //    this.foreground.x = this.initialLayerX + floatingOffsetX * this.foregroundParallaxSpeed;
-        //    this.foreground.y = this.initialLayerY + floatingOffsetY * this.foregroundParallaxSpeed;
-        //}
-    }
+		scene.tweens.add({
+			targets: this.main_lantern2,
+			angle: { from: 0, to: 20 },
+			duration: 1200,
+			ease: 'Sine.easeInOut',
+			yoyo: true,
+			repeat: -1
+		});
+
+		this.main_lantern3 = scene.add.image(width * 0.94, height * 0.15, 'main_lantern');
+		this.main_lantern3.setScale(0.325);
+		this.main_lantern3.setDepth(depth);
+		this.main_lantern3.setOrigin(0.5, 0);
+
+		scene.tweens.add({
+			targets: this.main_lantern3,
+			angle: { from: 0, to: 20 },
+			duration: 1100,
+			ease: 'Sine.easeInOut',
+			yoyo: true,
+			repeat: -1
+		}); 
+
+
+		// Bonus Lanterns
+		this.bonus_lantern1 = scene.add.image(width * 0.1, height * 0.2, 'bonus_lantern');
+		this.bonus_lantern1.setScale(0.325);
+		this.bonus_lantern1.setDepth(depth);
+		this.bonus_lantern1.setOrigin(0.5, 0);
+
+		scene.tweens.add({
+			targets: this.bonus_lantern1,
+			angle: { from: 0, to: 20 },
+			duration: 1000,
+			ease: 'Sine.easeInOut',
+			yoyo: true,
+			repeat: -1
+		});
+
+		this.bonus_lantern2 = scene.add.image(width * 0.1825, height * 0.14, 'bonus_lantern');
+		this.bonus_lantern2.setScale(0.45);
+		this.bonus_lantern2.setDepth(depth);
+		this.bonus_lantern2.setOrigin(0.5, 0);
+
+		scene.tweens.add({
+			targets: this.bonus_lantern2,
+			angle: { from: 0, to: 20 },
+			duration: 1200,
+			ease: 'Sine.easeInOut',
+			yoyo: true,
+			repeat: -1
+		});
+
+		this.bonus_lantern3 = scene.add.image(width * 0.94, height * 0.10, 'bonus_lantern');
+		this.bonus_lantern3.setScale(0.325);
+		this.bonus_lantern3.setDepth(depth);
+		this.bonus_lantern3.setOrigin(0.5, 0);
+
+		scene.tweens.add({
+			targets: this.bonus_lantern3,
+			angle: { from: 0, to: 20 },
+			duration: 1100,
+			ease: 'Sine.easeInOut',
+			yoyo: true,
+			repeat: -1
+		});
+	}
 } 
