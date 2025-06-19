@@ -1,16 +1,15 @@
-import { Scene } from "phaser";
-import { EventManager, GameEvents } from "../../event/EventManager";
-import { Data } from "../../tmp_backend/MockBackend";
+import { Data } from "../../tmp_backend/Data";
 import { GameObjects } from 'phaser';
+import { BackendEvent, BackendEvents } from "../../tmp_backend/BackendEvent";
+import { Game } from "../scenes/Game";
+import { EventManager, GameEvents } from "../../event/EventManager";
 type Sprite = GameObjects.Sprite;
 
-export class Symbols {  
-  public static WIND_UP_HEIGHT: number = 50;
-  public static WIND_UP_DURATION: number = 500;
-  public static DROP_DURATION: number = 1000;
+export class Symbols {
+  
   public static FILLER_COUNT: number = 20;
   public reelCount: number = 0;
-  public scene: Scene;
+  public scene: Game;
   public container: Phaser.GameObjects.Container;
   public displayWidth: number;
   public displayHeight: number;
@@ -25,7 +24,7 @@ export class Symbols {
 
   constructor() { }
 
-  public preload(scene: Scene) {
+  public preload(scene: Game) {
     this.scene = scene;
     initVariables(this);
     loadImages(this)
@@ -63,7 +62,7 @@ function initVariables(self: Symbols) {
 }
 
 function loadImages(self: Symbols) {
-  for (let i = 0; i < Data.TOTAL_SYMBOLS; i++) {
+  for (let i = 0; i < Data.ALL_SYMBOLS.length; i++) {
     self.scene.load.image('symbol_' + i, 'assets/symbols/Symbol' + i + '_KA.png');
   }
 }
@@ -86,7 +85,7 @@ function createContainer(self: Symbols) {
 }
 
 function onStart(self: Symbols) {
-  EventManager.on(GameEvents.START_RESPONSE, (data: Data) => {
+  BackendEvent.on(BackendEvents.START_RESPONSE, (data: Data) => {
     let scene = self.scene;
 
     const symbolTotalWidth = self.displayWidth + self.horizontalSpacing;
@@ -117,15 +116,18 @@ function onStart(self: Symbols) {
 }
 
 function onSpinResponse(self: Symbols) {
-  EventManager.on(GameEvents.SPIN_RESPONSE, async (data: Data) => {
+  BackendEvent.on(BackendEvents.SPIN_RESPONSE, async (data: Data) => {
+    // console.log(data.symbols);
     createNewSymbols(self, data);
-    await dropReels(self, data)
+    await dropReels(self, data);
+    self.scene.gameData.isSpinning = false;
+
     disposeSymbols(self.symbols);
     self.symbols = self.newSymbols;
     self.newSymbols = [];
-    
+    tintWinSymbols(self, data);
 
-    EventManager.emit(GameEvents.WINLINE_REQUEST);
+    EventManager.emit(GameEvents.SPIN_DONE, data);
   });
 }
 
@@ -165,13 +167,10 @@ async function dropReels(self: Symbols, data: Data) {
     dropPrevSymbols(self, row)
     dropFillers(self, row)
     dropNewSymbols(self, row)
-    await delay(200)
+    await delay(self.scene.gameData.dropReelsDelay)
   }
-  await delay(2000)
+  await delay(self.scene.gameData.dropReelsDuration)
 }
-
-
-
 
 async function delay(duration: number) {
   return new Promise((resolve) => {
@@ -181,34 +180,32 @@ async function delay(duration: number) {
   });
 }
 
-
-
 function dropPrevSymbols(self: Symbols, index: number) {
   const height = self.symbols[0][0].displayHeight + self.verticalSpacing;
-  const DROP_DISTANCE = Symbols.FILLER_COUNT * height + Symbols.WIND_UP_HEIGHT;
+  const DROP_DISTANCE = Symbols.FILLER_COUNT * height + self.scene.gameData.winUpHeight;
 
   for (let i = 0; i < self.symbols.length; i++) {
     self.scene.tweens.chain({
       targets: self.symbols[i][index],
       tweens: [
         {
-          y: `-= ${Symbols.WIND_UP_HEIGHT}`,
-          duration: Symbols.WIND_UP_DURATION,
+          y: `-= ${self.scene.gameData.winUpHeight}`,
+          duration: self.scene.gameData.winUpDuration,
           ease: Phaser.Math.Easing.Circular.Out,
         },
         {
           y: `+= ${DROP_DISTANCE}`,
-          duration: Symbols.DROP_DURATION * 0.9,
+          duration: self.scene.gameData.dropDuration * 0.9,
           ease: Phaser.Math.Easing.Linear,
         },
         {
           y: `+= ${40}`,
-          duration: Symbols.DROP_DURATION * 0.05,
+          duration: self.scene.gameData.dropDuration * 0.05,
           ease: Phaser.Math.Easing.Linear,
         },
         {
           y: `-= ${40}`,
-          duration: Symbols.DROP_DURATION * 0.05,
+          duration: self.scene.gameData.dropDuration * 0.05,
           ease: Phaser.Math.Easing.Linear,
         }
       ]
@@ -219,7 +216,7 @@ function dropPrevSymbols(self: Symbols, index: number) {
 function dropFillers(self: Symbols, index: number) {
   const height = self.symbols[0][0].displayHeight + self.verticalSpacing;
   const TOTAL_ITEMS = Symbols.FILLER_COUNT + Data.SLOT_COLUMNS;
-  const DROP_DISTANCE = TOTAL_ITEMS * height + Symbols.WIND_UP_HEIGHT;
+  const DROP_DISTANCE = TOTAL_ITEMS * height + self.scene.gameData.winUpHeight;
   const fillerSymbols: Sprite[] = [];
   for (let i = 0; i < Symbols.FILLER_COUNT; i++) {
 
@@ -230,7 +227,8 @@ function dropFillers(self: Symbols, index: number) {
     const x = startX + index * symbolTotalWidth + symbolTotalWidth * 0.5;
     const y = getYPos(self, i + START_INDEX_Y)
 
-    let symbol = self.scene.add.sprite(x, y, 'symbol_' + Math.floor(Math.random() * Data.TOTAL_SYMBOLS));
+
+    let symbol = self.scene.add.sprite(x, y, 'symbol_' + Math.floor(Math.random() * Data.ALL_SYMBOLS.length));
     symbol.displayWidth = self.displayWidth;
     symbol.displayHeight = self.displayHeight;
     self.container.add(symbol);
@@ -243,23 +241,23 @@ function dropFillers(self: Symbols, index: number) {
       targets: fillerSymbols[i],
       tweens: [
         {
-          y: `-= ${Symbols.WIND_UP_HEIGHT}`,
-          duration: Symbols.WIND_UP_DURATION,
+          y: `-= ${self.scene.gameData.winUpHeight}`,
+          duration: self.scene.gameData.winUpDuration,
           ease: Phaser.Math.Easing.Circular.Out,
         },
         {
           y: `+= ${DROP_DISTANCE}`,
-          duration: Symbols.DROP_DURATION * 0.9,
+          duration: self.scene.gameData.dropDuration * 0.9,
           ease: Phaser.Math.Easing.Linear,
         },
         {
           y: `+= ${40}`,
-          duration: Symbols.DROP_DURATION * 0.05,
+          duration: self.scene.gameData.dropDuration * 0.05,
           ease: Phaser.Math.Easing.Linear,
         },
         {
           y: `-= ${40}`,
-          duration: Symbols.DROP_DURATION * 0.05,
+          duration: self.scene.gameData.dropDuration * 0.05,
           ease: Phaser.Math.Easing.Linear,
           onComplete: () => {
             fillerSymbols[i].destroy();
@@ -278,7 +276,7 @@ function dropNewSymbols(self: Symbols, index: number) {
 
   const START_INDEX = Symbols.FILLER_COUNT + Data.SLOT_COLUMNS;
 
-  const DROP_DISTANCE = START_INDEX * height + Symbols.WIND_UP_HEIGHT;
+  const DROP_DISTANCE = START_INDEX * height + self.scene.gameData.winUpHeight;
 
   for (let col = 0; col < self.newSymbols.length; col++) {
     let symbol = self.newSymbols[col][index];
@@ -292,120 +290,29 @@ function dropNewSymbols(self: Symbols, index: number) {
       targets: symbol,
       tweens: [
         {
-          y: `-= ${Symbols.WIND_UP_HEIGHT}`,
-          duration: Symbols.WIND_UP_DURATION,
+          y: `-= ${self.scene.gameData.winUpHeight}`,
+          duration: self.scene.gameData.winUpDuration,
           ease: Phaser.Math.Easing.Circular.Out,
         },
         {
           y: `+= ${DROP_DISTANCE}`,
-          duration: Symbols.DROP_DURATION * 0.9,
+          duration: self.scene.gameData.dropDuration * 0.9,
           ease: Phaser.Math.Easing.Linear,
         },
         {
           y: `+= ${40}`,
-          duration: Symbols.DROP_DURATION * 0.05,
+          duration: self.scene.gameData.dropDuration * 0.05,
           ease: Phaser.Math.Easing.Linear,
         },
         {
           y: `-= ${40}`,
-          duration: Symbols.DROP_DURATION * 0.05,
+          duration: self.scene.gameData.dropDuration * 0.05,
           ease: Phaser.Math.Easing.Linear,
         }
       ]
     })
   }
 }
-
-
-
-
-
-
-function playWindUpAnimation(self: Symbols, fillers: Sprite[], index: number) {
-  for (let i = 0; i < self.symbols.length; i++) {
-    self.scene.tweens.add({
-      targets: self.symbols[i][index],
-      y: `-= ${Symbols.WIND_UP_HEIGHT}`,
-      duration: Symbols.WIND_UP_DURATION,
-      ease: Phaser.Math.Easing.Circular.Out,
-    });
-
-    console.log("wind up", i)
-  }
-  
-  // for (let i = 0; i < fillers.length; i++) {
-  //   const filler = fillers[i];
-  //   self.scene.tweens.add({
-  //     targets: filler,
-  //     y: `-= ${Symbols.WIND_UP_HEIGHT}`,
-  //     duration: Symbols.WIND_UP_DURATION,
-  //     ease: Phaser.Math.Easing.Circular.Out,
-  //   });
-  // }
-
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(true);
-    }, Symbols.WIND_UP_DURATION);
-  });
-}
-
-function playDropAnimation(self: Symbols, fillers: Sprite[], index: number) { 
-  const TOTAL_ITEMS = fillers.length;
-  const SYMBOL_HEIGHT = fillers[0].displayHeight + self.verticalSpacing;
-  const DROP_DISTANCE = TOTAL_ITEMS * SYMBOL_HEIGHT + Symbols.WIND_UP_HEIGHT;
-  for (let i = 0; i < self.symbols.length; i++) {
-    self.scene.tweens.add({
-      targets: self.symbols[i][index],
-      y: `+= ${DROP_DISTANCE}`,
-      duration: Symbols.DROP_DURATION * 0.9,
-      ease: Phaser.Math.Easing.Linear,
-    });
-  }
-  
-  for (let i = 0; i < fillers.length; i++) {
-    const filler = fillers[i];
-    self.scene.tweens.chain({
-      targets: filler,
-      tweens: [
-        {
-          targets: filler,
-          y: `+= ${DROP_DISTANCE}`,
-          duration: Symbols.DROP_DURATION * 0.9,
-          ease: Phaser.Math.Easing.Linear,
-        },
-        {
-          targets: filler,
-          y: `+= ${40}`,
-          duration: Symbols.DROP_DURATION * 0.05,
-          ease: Phaser.Math.Easing.Linear,
-        },
-        {
-          targets: filler,
-          y: `-= ${40}`,
-          duration: Symbols.DROP_DURATION * 0.05,
-          ease: Phaser.Math.Easing.Linear,
-        },
-      ]
-    })
-  }
-
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(true);
-    }, Symbols.DROP_DURATION);
-  });
-}
-
-function appendNewSymbols(self: Symbols, fillers: Sprite[], index: number) {
-  const startIndex = fillers.length + Data.SLOT_COLUMNS;
-  for (let i = 0; i < self.newSymbols.length; i++) {
-    const clone = cloneSprite(self, self.newSymbols[i][index])
-    clone.y = getYPos(self, i - startIndex)
-    fillers.push(clone);
-  }
-}
-
 
 
 function disposeSymbols(symbols: Phaser.GameObjects.Sprite[][]) {
@@ -416,36 +323,6 @@ function disposeSymbols(symbols: Phaser.GameObjects.Sprite[][]) {
   }
 }
 
-function goToSymbolPosition(
-  symbol: Phaser.GameObjects.Sprite, 
-  targetY: number,
-  duration: number
-) {
-  symbol.scene.tweens.add({
-    targets: symbol,
-    y: targetY,
-    duration: duration,
-    ease: 'power2.inOut',
-  });
-}
-
-
-function cloneSprite(self: Symbols, original: Sprite): Sprite {
-  const clone = self.scene.add.sprite(original.x, original.y, original.texture.key, original.frame.name);
-
-  // Copy other desired properties
-  clone.setScale(original.scaleX, original.scaleY);
-  clone.setAlpha(original.alpha);
-  clone.setFlip(original.flipX, original.flipY);
-  clone.rotation = original.rotation;
-  clone.setDepth(original.depth);
-  clone.setTint(original.tintTopLeft);
-
-  self.container.add(clone);
-
-  return clone;
-}
-
 
 function getYPos(self: Symbols, index: number) {
   const symbolTotalHeight = self.displayHeight + self.verticalSpacing;
@@ -453,3 +330,26 @@ function getYPos(self: Symbols, index: number) {
 
   return startY + index * symbolTotalHeight + symbolTotalHeight * 0.5;
 }
+
+
+function tintWinSymbols(self: Symbols, data: Data) {
+  const wins = data.wins;
+
+  for (const win of wins.allMatching.values()) {
+    for (const grid of win) {
+      self.symbols[grid.y][grid.x].setTint(0xFFFFFF);
+      self.symbols[grid.y][grid.x].setBlendMode(Phaser.BlendModes.ADD);
+
+      self.scene.tweens.add({
+        targets: self.symbols[grid.y][grid.x],
+        alpha: 0.5, 
+        duration: 250, 
+        ease: Phaser.Math.Easing.Sine.InOut,
+        yoyo: true,
+        repeat: -1,
+      });
+    }
+  }
+}
+
+

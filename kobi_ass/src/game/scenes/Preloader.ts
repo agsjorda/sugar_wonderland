@@ -29,18 +29,32 @@ export class Preloader extends Scene
 
   preload ()
   {
-    // //  Load the assets for the game - Replace with your own assets
-    // this.load.setPath('assets');
-
-    // this.load.image('logo', 'logo.png');
+    const FONTS = 'assets/fonts/poppins/';
+    this.load.font('poppins-black', FONTS + 'Poppins-Black.ttf');
+    this.load.font('poppins-black-italic', FONTS + 'Poppins-BlackItalic.ttf');
+    
+    this.load.font('poppins-bold', FONTS + 'Poppins-Bold.ttf');
+    this.load.font('poppins-extrabold', FONTS + 'Poppins-ExtraBold.ttf');
+    this.load.font('poppins-extrabold-italic', FONTS + 'Poppins-ExtraBoldItalic.ttf');
+    this.load.font('poppins-extralight', FONTS + 'Poppins-ExtraLight.ttf');
+    this.load.font('poppins-extralight-italic', FONTS + 'Poppins-ExtraLightItalic.ttf');
+    this.load.font('poppins-italic', FONTS + 'Poppins-Italic.ttf');
+    this.load.font('poppins-light', FONTS + 'Poppins-Light.ttf');
+    this.load.font('poppins-light-italic', FONTS + 'Poppins-LightItalic.ttf');
+    this.load.font('poppins-medium', FONTS + 'Poppins-Medium.ttf');
+    this.load.font('poppins-medium-italic', FONTS + 'Poppins-MediumItalic.ttf');
+    this.load.font('poppins-regular', FONTS + 'Poppins-Regular.ttf');
+    this.load.font('poppins-semibold', FONTS + 'Poppins-SemiBold.ttf');
+    this.load.font('poppins-semibold-italic', FONTS + 'Poppins-SemiBoldItalic.ttf');
+    this.load.font('poppins-thin', FONTS + 'Poppins-Thin.ttf');
+    this.load.font('poppins-thin-italic', FONTS + 'Poppins-ThinItalic.ttf');
+    this.load.font('poppins', FONTS + 'Poppins-Regular.ttf');
+    this.load.font('poppins-semibold', FONTS + 'Poppins-SemiBold.ttf');
+    this.load.font('poppins-thin', FONTS + 'Poppins-Thin.ttf');
   }
 
   create ()
   {
-    //  When all the assets have loaded, it's often worth creating global objects here that the rest of the game can use.
-    //  For example, you can define global animations here, so we can use them in other scenes.
-
-    //  Move to the MainMenu. You could also swap this for a Scene Transition, such as a camera fade.
     this.scene.start('Game');
   }
 }
