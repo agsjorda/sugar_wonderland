@@ -12,6 +12,7 @@ export class AudioManager {
     // SFX
     private ClickSFX: Sound.WebAudioSound;
     public ReelDrop: Sound.WebAudioSound;
+    public ReelStart: Sound.WebAudioSound;
     public TurboDrop: Sound.WebAudioSound;
     public SpinSFX: Sound.WebAudioSound;
     public UtilityButtonSFX: Sound.WebAudioSound;
@@ -26,48 +27,54 @@ export class AudioManager {
 
 
     // Win Sounds
-    public SmallW: Sound.WebAudioSound;
-    public MediumW: Sound.WebAudioSound;
+    public EpicW: Sound.WebAudioSound;
+    public MegaW: Sound.WebAudioSound;
     public BigW: Sound.WebAudioSound;
-    public HugeW: Sound.WebAudioSound;
+    public SuperW: Sound.WebAudioSound;
+    public CongratsW: Sound.WebAudioSound;
+    public FreeSpinW: Sound.WebAudioSound;
+
     public BonusW: Sound.WebAudioSound;
     public FreeSpinWon: Sound.WebAudioSound;
     public WinSkip: Sound.WebAudioSound;
 
 
     preload(scene: Scene): void {
-        const prefixBGMusic = 'assets/Audio/BGMusic';
-        const prefixWins = 'assets/Audio/Wins';
-        const prefixSFX = 'assets/Audio/SFX';
+        const prefixAudio = 'assets/Audio';
+        const fileType = '.ogg';
 
         // BGMusic
-        scene.load.audio('BonusBG', `${prefixBGMusic}/BonusBG_SW.wav`);
-        scene.load.audio('MainBG', `${prefixBGMusic}/MainBG_SW.wav`);
-        scene.load.audio('BGChecker', `${prefixBGMusic}/MainBG_SW.wav`);
+        scene.load.audio('BonusBG', `${prefixAudio}/bonusbg_sw${fileType}`);
+        scene.load.audio('MainBG', `${prefixAudio}/mainbg_sw${fileType}`);
+        scene.load.audio('BGChecker', `${prefixAudio}/mainbg_sw${fileType}`);
+
 
         // SFX
-        scene.load.audio('ClickSFX', `${prefixSFX}/ClickSFX_SW.wav`);
-        scene.load.audio('ReelDrop', `${prefixSFX}/ReelDrop_SW.wav`);
-        scene.load.audio('TurboDrop', `${prefixSFX}/TurboDropSFX_SW.wav`);
-        scene.load.audio('SpinSFX', `${prefixSFX}/SpinSFX_SW.wav`);
-        scene.load.audio('UtilityButtonSFX', `${prefixSFX}/UtilityButtonSFX_SW.wav`);
-        scene.load.audio('ScatterSFX', `${prefixSFX}/ScatterSFX_SW.wav`);
-        scene.load.audio('TExplosion', `${prefixSFX}/TExplosion_SW.wav`);
+        scene.load.audio('ClickSFX', `${prefixAudio}/click_sw${fileType}`);
+        scene.load.audio('ReelDrop', `${prefixAudio}/reeldrop_sw${fileType}`);
+        scene.load.audio('ReelStart', `${prefixAudio}/reelstarting_sw${fileType}`);
+        scene.load.audio('TurboDrop', `${prefixAudio}/turbodrop_sw${fileType}`);
+        scene.load.audio('SpinSFX', `${prefixAudio}/spin_sw${fileType}`);
+        scene.load.audio('UtilityButtonSFX', `${prefixAudio}/ub${fileType}`);
+        scene.load.audio('ScatterSFX', `${prefixAudio}/scatter_sw${fileType}`);
+        scene.load.audio('TExplosion', `${prefixAudio}/texplosion_sw${fileType}`);
         
         // Wins
-        scene.load.audio('BigW', `${prefixWins}/BigW_SW.wav`);
-        scene.load.audio('BonusW', `${prefixWins}/BonusW_SW.wav`);
-        scene.load.audio('HugeW', `${prefixWins}/SuperW_SW.wav`);
-        scene.load.audio('MediumW', `${prefixWins}/MegaW_SW.wav`);
-        scene.load.audio('SmallW', `${prefixWins}/EpicW_SW.wav`);
-        scene.load.audio('FreeSpinWon', `${prefixWins}/FreeSpinWon_SW.wav`);
-        scene.load.audio('WinSkip', `${prefixWins}/WSkip_SW.wav`);
+        scene.load.audio('BigW', `${prefixAudio}/bigw_sw${fileType}`);
+        scene.load.audio('BonusW', `${prefixAudio}/bonusw_sw${fileType}`);
+        scene.load.audio('SuperW', `${prefixAudio}/superw_sw${fileType}`);
+        scene.load.audio('MegaW', `${prefixAudio}/megaw_sw${fileType}`);
+        scene.load.audio('EpicW', `${prefixAudio}/epicw_sw${fileType}`);
+        scene.load.audio('FreeSpinWon', `${prefixAudio}/freespinwon${fileType}`);
+        scene.load.audio('WinSkip', `${prefixAudio}/wskip_sw${fileType}`);
+        scene.load.audio('Congrats', `${prefixAudio}/superw_sw${fileType}`);
+        scene.load.audio('FreeSpin', `${prefixAudio}/superw_sw${fileType}`);
         
         // Tumble Wins
-        scene.load.audio('TW1Wins', `${prefixSFX}/TW1_SW.wav`);
-        scene.load.audio('TW2Wins', `${prefixSFX}/TW2_SW.wav`);
-        scene.load.audio('TW3Wins', `${prefixSFX}/TW3_SW.wav`);
-        scene.load.audio('TW4Wins', `${prefixSFX}/TW4_SW.wav`);
+        scene.load.audio('TW1Wins', `${prefixAudio}/tw1_sw${fileType}`);
+        scene.load.audio('TW2Wins', `${prefixAudio}/tw2_sw${fileType}`);
+        scene.load.audio('TW3Wins', `${prefixAudio}/tw3_sw${fileType}`);
+        scene.load.audio('TW4Wins', `${prefixAudio}/tw4_sw${fileType}`);
     }
 
     create(scene: Scene): void {
@@ -79,6 +86,7 @@ export class AudioManager {
         this.TW4Wins = scene.sound.add('TW4Wins', { volume: this.sfxVolume }) as Sound.WebAudioSound;
 
         this.ReelDrop = scene.sound.add('ReelDrop', { volume: this.sfxVolume }) as Sound.WebAudioSound;
+        this.ReelStart = scene.sound.add('ReelStart', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.TurboDrop = scene.sound.add('TurboDrop', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.SpinSFX = scene.sound.add('SpinSFX', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.UtilityButtonSFX = scene.sound.add('UtilityButtonSFX', { volume: this.sfxVolume }) as Sound.WebAudioSound;
@@ -87,11 +95,13 @@ export class AudioManager {
         this.FreeSpinWon = scene.sound.add('FreeSpinWon', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.WinSkip = scene.sound.add('WinSkip', { volume: this.sfxVolume }) as Sound.WebAudioSound;
 
-        this.SmallW = scene.sound.add('SmallW', { volume: this.sfxVolume }) as Sound.WebAudioSound;
-        this.MediumW = scene.sound.add('MediumW', { volume: this.sfxVolume }) as Sound.WebAudioSound;
+        this.EpicW = scene.sound.add('EpicW', { volume: this.sfxVolume }) as Sound.WebAudioSound;
+        this.MegaW = scene.sound.add('MegaW', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.BigW = scene.sound.add('BigW', { volume: this.sfxVolume }) as Sound.WebAudioSound;
-        this.HugeW = scene.sound.add('HugeW', { volume: this.sfxVolume }) as Sound.WebAudioSound;
+        this.SuperW = scene.sound.add('SuperW', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.BonusW = scene.sound.add('BonusW', { volume: this.sfxVolume }) as Sound.WebAudioSound;
+        this.CongratsW = scene.sound.add('Congrats', { volume: 0 }) as Sound.WebAudioSound;
+        this.FreeSpinW = scene.sound.add('FreeSpin', { volume: 0}) as Sound.WebAudioSound;
 
         this.BonusBG = scene.sound.add('BonusBG', { 
             loop: true, 
@@ -147,14 +157,14 @@ export class AudioManager {
     playWinSFX(multiplier: number, _scene: Scene): void {
         if(multiplier === -1) {
             this.BGChecker.pause();
-            this.setMusicVolume(this.getMusicVolume() * 0.5);
+            this.setMusicVolume(this.getMusicVolume() * 0.01);
             let winSound: Sound.WebAudioSound | undefined;
             winSound = this.FreeSpinWon;
 
             if (winSound) {
                 winSound.once('complete', () => {
                     this.BGChecker.pause();
-                    this.setMusicVolume(this.getMusicVolume() * 0.5);
+                    this.setMusicVolume(this.getMusicVolume() * 0.01);
                 });
                 winSound.play({ volume: this.sfxVolume });
             }
@@ -167,15 +177,15 @@ export class AudioManager {
             }
             
             this.BGChecker.pause();
-            this.setMusicVolume(this.getMusicVolume() * 0.5);
+            this.setMusicVolume(this.getMusicVolume() * 0.01);
 
             let winSound: Sound.WebAudioSound | undefined;
             if (multiplier >= 20 && multiplier < 30) {
-                winSound = this.SmallW;
+                winSound = this.EpicW;
             } else if (multiplier >= 30 && multiplier < 50) {
-                winSound = this.MediumW;
+                winSound = this.MegaW;
             } else if (multiplier >= 50 && multiplier < 100) {
-                winSound = this.HugeW;
+                winSound = this.SuperW;
             } else if (multiplier >= 100) {
                 winSound = this.BigW;
             }
@@ -184,7 +194,7 @@ export class AudioManager {
                 winSound.once('complete', () => {
                     
                     this.BGChecker.resume();
-                    this.setMusicVolume(this.getMusicVolume() / 0.5);
+                    this.setMusicVolume(this.getMusicVolume() / 0.01);
                     if(this.getMusicVolume() > 1) {
                         this.setMusicVolume(1);
                     }
@@ -196,13 +206,13 @@ export class AudioManager {
 
     stopWinSFX(_scene: Scene): void {   
             this.BGChecker.resume();
-            this.setMusicVolume(this.getMusicVolume() / 0.5);
+            this.setMusicVolume(this.getMusicVolume() / 0.01);
             if(this.getMusicVolume() > 1) {
                 this.setMusicVolume(1);
             }
-        this.SmallW.stop();
-        this.MediumW.stop();
-        this.HugeW.stop();
+        this.EpicW.stop();
+        this.MegaW.stop();
+        this.SuperW.stop();
         this.BigW.stop();
     }
 
@@ -231,15 +241,16 @@ export class AudioManager {
         if (this.ReelDrop) this.ReelDrop.setVolume(this.sfxVolume);
         if (this.SpinSFX) this.SpinSFX.setVolume(this.sfxVolume);
         if (this.UtilityButtonSFX) this.UtilityButtonSFX.setVolume(this.sfxVolume);
-        if (this.SmallW) this.SmallW.setVolume(this.sfxVolume);
-        if (this.MediumW) this.MediumW.setVolume(this.sfxVolume);
+        if (this.EpicW) this.EpicW.setVolume(this.sfxVolume);
+        if (this.MegaW) this.MegaW.setVolume(this.sfxVolume);
         if (this.BigW) this.BigW.setVolume(this.sfxVolume);
-        if (this.HugeW) this.HugeW.setVolume(this.sfxVolume);
+        if (this.SuperW) this.SuperW.setVolume(this.sfxVolume);
         if (this.BonusW) this.BonusW.setVolume(this.sfxVolume);
         if (this.FreeSpinWon) this.FreeSpinWon.setVolume(this.sfxVolume);
         if (this.WinSkip) this.WinSkip.setVolume(this.sfxVolume);
         if (this.TExplosion) this.TExplosion.setVolume(this.sfxVolume);
-        
+        if (this.CongratsW) this.CongratsW.setVolume(0);
+        if (this.FreeSpinW) this.FreeSpinW.setVolume(0);
     }
 
     getSFXVolume(): number {

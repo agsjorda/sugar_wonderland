@@ -13,3 +13,12 @@ body {
     justify-content: center;
     align-items: center;
 }
+
+canvas {
+    z-index: 2;
+}
+
+.custom-background {
+    z-index: 1;
+    position: absolute;
+}

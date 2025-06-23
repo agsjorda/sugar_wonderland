@@ -1,4 +1,6 @@
 import { Game as MainGame } from './scenes/Game';
+import { LandingPage } from './scenes/LandingPage';
+import { LoadingPage } from './scenes/LoadingPage';
 import { AUTO, Game, Scale, Types } from 'phaser';
 import { SpinePlugin } from '@esotericsoftware/spine-phaser-v3';
 
@@ -9,12 +11,14 @@ const config: Types.Core.GameConfig = {
     width: 1920,
     height: 1080,
     parent: 'game-container',
-    backgroundColor: '#028af8',
+    backgroundColor: '#000000',
     scale: {
         mode: Scale.FIT,
         autoCenter: Scale.CENTER_BOTH
     },
     scene: [
+        LandingPage,
+        LoadingPage,
         MainGame,
     ],
     plugins: {
@@ -25,6 +29,9 @@ const config: Types.Core.GameConfig = {
                 mapping: 'spine'
             }
         ]
+    },
+    dom: {
+        createContainer: true
     }
 };
 

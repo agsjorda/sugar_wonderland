@@ -1,53 +1,124 @@
 import { Scene } from 'phaser';
 import { Events } from "./Events";
-import { Attachment, Bone, SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
+import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 
 export class WinAnimation {
     private scene: Scene;
+    private spineWinAnim: SpineGameObject;
+    private bombAtlas: number[] = [2,3,4,5,6,8,10,12,15,20,25,50,100];
+    private bombImages: Phaser.GameObjects.Image[] = [];
+    private currentBombImage: Phaser.GameObjects.Image | null = null;
 
     constructor(scene: Scene) {
         this.scene = scene;
     }
 
     preload(): void {
-        this.scene.load.spineAtlas('myWinAnim', 'assets/Win/Test/Win.atlas');
-        this.scene.load.spineJson('myWinAnim', 'assets/Win/Test/Win.json');
-
         this.scene.load.spineAtlas('myWinAnim2', 'assets/Win/Win.atlas');
         this.scene.load.spineJson('myWinAnim2', 'assets/Win/Win.json');
+
+        this.scene.load.spineAtlas('Symbol10_SW', 'assets/Symbols/Bomb/Symbol10_SW.atlas');
+        this.scene.load.spineJson('Symbol10_SW', 'assets/Symbols/Bomb/Symbol10_SW.json');
+        
     }
 
     create(): void {
         let spineObject2 = this.scene.add.spine(0, 0, 'myWinAnim2', 'myWinAnim2') as SpineGameObject;
-        
+        this.spineWinAnim = spineObject2;
         spineObject2.setPosition(0, 0);
         spineObject2.setAlpha(0);
+
+        let bombSymbol = this.scene.add.spine(0, 0, 'Symbol10_SW', 'Symbol10_SW') as SpineGameObject;
+        bombSymbol.setPosition(0, 0);
+        bombSymbol.setAlpha(0);
+        
     }
 
     update(): void {
     }
 
+    playBombAnimation(spineObject: SpineGameObject, multiplier: number, bombType: string = ''): void {
+        // Hide any currently displayed bomb image
+        this.hideCurrentBombImage();
+        //
+        
+        // Find and display the appropriate bomb image
+        const bombIndex = this.bombAtlas.indexOf(multiplier);
+        if (bombIndex !== -1 && this.bombImages[bombIndex]) {
+            this.currentBombImage = this.bombImages[bombIndex];
+            this.currentBombImage.setVisible(true);
+            this.currentBombImage.setAlpha(1);
+            this.currentBombImage.setPosition(spineObject.x, spineObject.y);
+            this.currentBombImage.setScale(0.5);
+            
+            // Animate the bomb image appearing
+            this.scene.tweens.add({
+                targets: this.currentBombImage,
+                alpha: 1,
+                scale: 1,
+                duration: 500,
+                ease: 'Back.easeOut',
+                delay: 200
+            });
+        }
+        
+        if(bombType == 'low'){
+            spineObject.animationState.setAnimation(0, 'low-static');
+        }
+        else if(bombType == 'medium'){
+            spineObject.animationState.setAnimation(0, 'medium-static');
+        }
+        else if(bombType == 'high'){
+            spineObject.animationState.setAnimation(0, 'high-static');
+        }
+        
+        // Auto-hide bomb image after animation completes
+        spineObject.once('animationcomplete', () => {
+            if (this.currentBombImage) {
+                this.scene.tweens.add({
+                    targets: this.currentBombImage,
+                    alpha: 0,
+                    scale: 0.5,
+                    duration: 300,
+                    ease: 'Power2',
+                    onComplete: () => {
+                        this.hideCurrentBombImage();
+                    }
+                });
+            }
+        });
+    }
+
+    private hideCurrentBombImage(): void {
+        if (this.currentBombImage) {
+            this.currentBombImage.setVisible(true);
+            this.currentBombImage.setAlpha(1);
+            this.currentBombImage = null;
+        }
+    }
+
     playWinAnimation(spineObject: SpineGameObject, totalwin: number, winType:string = ''): void {
-        spineObject.setAlpha(1);
+        spineObject.alpha = 1;
+        this.spineWinAnim = spineObject;
         let animationName = '';
         let animationName2 = '';
         
-        const sampleDuration = 25;
-        const intervalWin = totalwin/sampleDuration;
+        const sampleDuration = 500;
+        const intervalWin = (totalwin/sampleDuration * 100)/ 100;
         let runningWin = 0;
         let runningChar : string[] = [];
 
         // Get the AmountWin bone
-        const amountWinBone = spineObject.skeleton.findBone('AmountWin');
-        if (!amountWinBone) {
-            console.error(`${amountWinBone} bone not found`);
-            return;
-        }
-
-        // Position the AmountWin bone at the center of the screen
-        const screenWidth = this.scene.cameras.main.width;
-        amountWinBone.x = screenWidth / 2;
-        amountWinBone.y = 0; // Adjust this if you need vertical positioning
+        // const amountWinBone = spineObject.skeleton.findBone('AmountWin');
+        // if (!amountWinBone) {
+        //     console.error(`${amountWinBone} bone not found`);
+        //     return;
+        // }
+// 
+        // // Position the AmountWin bone at the center of the screen
+        // const screenWidth = this.scene.cameras.main.width;
+        // amountWinBone.x = screenWidth / 2;
+        // amountWinBone.y = 0; // Adjust this if you need vertical positioning
 
         for(let i = 0 ; i < sampleDuration; i++){
             setTimeout(() => {
@@ -57,10 +128,12 @@ export class WinAnimation {
                 }
                 else{
                     runningWin += intervalWin;
-                    runningWin = Math.round(runningWin * 100) / 100;
                 }
                 
-                Events.emitter.emit(Events.WIN_OVERLAY_UPDATE_TOTAL_WIN, runningWin);
+                Events.emitter.emit(Events.WIN_OVERLAY_UPDATE_TOTAL_WIN,
+                     runningWin,
+                     winType
+                    );
 
                 // Convert running win to character array
                 runningChar = [];
@@ -74,41 +147,80 @@ export class WinAnimation {
                         runningChar.push(numStr[i]);
                     }
                 }
-                
-
-            }, sampleDuration * i * 10);
+            }, 3000 * i / sampleDuration);
         }
     
         switch (winType) {
             case 'BigWin':
                 animationName = 'BigWin-Intro';
-                animationName2 = 'BigWin-Idle';                
-
+                animationName2 = 'BigWin-Idle'; 
                 break;
+
             case 'EpicWin':
                 animationName = 'EpicWin-Intro';
                 animationName2 = 'EpicWin-Idle';
+                break;
 
-                break;
-            case 'FreeSpin':
-                animationName = 'FreeSpin-Intro';
-                animationName2 = 'FreeSpin-Idle';
-                break;
             case 'MegaWin':
                 animationName = 'MegaWin-Intro';
                 animationName2 = 'MegaWin-Idle';
                 break;
+
             case 'SuperWin':
                 animationName = 'SuperWin-Intro';
                 animationName2 = 'SuperWin-Idle';
                 break;
+                
+            case 'FreeSpin':
+                animationName = 'FreeSpin-Intro';
+                animationName2 = 'FreeSpin-Idle';
+                break;
+
             case 'Congrats':
                 animationName = 'Congrats-Intro';
-                animationName2 = 'Congrats-Idle';
+                animationName2 = 'Congrats-Idle'; 
                 break;
+            default:
+                spineObject.destroy();
+                console.error("Win type not found: " + winType);
+                return;
         }
+        if(animationName != '' && animationName2 != ''){
+            // Check if there's an ongoing animation
+            if (spineObject.animationState.tracks.length > 0) {
+                spineObject.animationState.addAnimation(this.currentTrack, animationName, false);
+                spineObject.animationState.addAnimation(this.currentTrack + 1, animationName2, true);
+                this.currentTrack += 2;
+            }
+            else{
+                spineObject.animationState.setAnimation(this.currentTrack, animationName, false);
+                spineObject.animationState.addAnimation(this.currentTrack + 1, animationName2, true);
+                this.currentTrack += 2;
+            }
+        } 
+    }
+    private currentTrack: number = 0;
+    
+    exitAnimation(): void {
+        this.scene.tweens.add({
+            targets: this.spineWinAnim,
+            alpha: 0,
+            duration: 1000,
+            ease: 'Sine.easeInOut',
+        });
         
-        spineObject.animationState.setAnimation(0, animationName, false);
-        spineObject.animationState.addAnimation(1, animationName2, true);
+        // Also hide bomb image when exiting
+        this.hideCurrentBombImage();
+    }
+
+    destroy(): void {
+        // Clean up all bomb images
+        this.bombImages.forEach(image => {
+            if (image && image.active) {
+                image.destroy();
+            }
+        });
+        this.bombImages = [];
+        this.currentBombImage = null;
     }
 } 

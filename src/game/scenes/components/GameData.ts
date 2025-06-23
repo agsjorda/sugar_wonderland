@@ -1,10 +1,9 @@
 export class GameData {
-    static readonly WIN_LINES: number[][][] = []; // This needs to be populated with actual win lines
-
+    
     winamounts: number[][] = [
-            [50, 25, 15, 12, 10, 8, 5, 0.4, 2, 100],
-            [25, 10, 5, 2, 1.5, 1.2, 1, 0.9, 0.75, 5],
-            [10, 2.5, 2, 1, 1, 0.8, 0.5, 0.4, 0.25, 3]
+            [100, 50, 25, 15, 12, 10, 8, 5, 0.4, 2, 100],
+            [5, 25, 10, 5, 2, 1.5, 1.2, 1, 0.9, 0.75, 5],
+            [3, 10, 2.5, 2, 1, 1, 0.8, 0.5, 0.4, 0.25, 3]
     ];
     
     currency: string = '$';
@@ -12,11 +11,9 @@ export class GameData {
     line: number = 0;
     currentRow: number = 0;
     bet: number = 10;
-    baseBet: number = 1;
 
-    maxBet: number = 100;
+    maxBet: number = 150;
     minBet: number = 0.2;
-    coinValue: number = 0.50;
 
     balance: number = 100000;
     totalWin: number = 0;
@@ -30,6 +27,19 @@ export class GameData {
     scatterChance: number = 0.025;
     maxScatter: number = 6;
     minScatter: number = 0;
+
+    minBomb: number = 0;
+    maxBomb: number = 3;
+    bombMultiplier: number[] = [2, 3, 4, 5, 6, 8, 10,  // Low
+                                12, 15, 20, 25, // Medium
+                                50, 100]; // High
+    bombChance: number = 10; // Base chance for bomb to spawn
+    bombTypeChances: { low: number, medium: number, high: number } = {
+        low: 0.6,    // 60% chance for low multiplier
+        medium: 0.3, // 30% chance for medium multiplier
+        high: 0.1    // 10% chance for high multiplier
+    };
+
     isHelpScreenVisible: boolean = false;
 
     isMain : boolean = true;
@@ -39,7 +49,10 @@ export class GameData {
     currentMatchingSymbols: number[] = [];
     doubleChanceMultiplier: number = 2;
     
+    winRank : number[] = [1, 10, 20, 30, 50];
+    
     freeSpins: number = 0;
+    totalFreeSpins: number = 0;
 
     getDoubleFeaturePrice(): number {
         const doubleMultiplier = 1.25; // temporary multiplier
@@ -48,7 +61,7 @@ export class GameData {
 
     getBuyFeaturePrice(): number {
         const featureMultiplier = 100; // temporary multiplier
-        return Math.round(this.bet * featureMultiplier * 100) / 100;
+        return Math.round(this.bet * featureMultiplier);
     }
 }
 
@@ -56,16 +69,21 @@ export class Slot {
     static readonly TOGGLE_DIFFICULTY: boolean = true;
     static readonly TOGGLE_WIN_EFFECT: boolean = false;
 
-    static readonly DIFFICULTY_SYMBOLS: number = 3;
+    static readonly DIFFICULTY_SYMBOLS: number = 1;
     static readonly SYMBOLS: number = 9;
     static readonly ROWS: number = 5;
     static readonly COLUMNS: number = 6;
     static readonly SCATTER_SYMBOL: number = 0;
+    static readonly BOMB_SYMBOL: number[] = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
     static readonly SCATTER_SIZE: number = 1.25;
     static readonly SYMBOL_SIZE: number = 1.5;
+    static readonly BOMB_SIZE_X: number = 1.25;
+    static readonly BOMB_SIZE_Y: number = 1.0;
+    static readonly BOMBS_MAX_COUNT: number = 3;
 
     values: number[][] = [];
     scatterCount: number = 0;
+    bombCount: number = 0;
 
     constructor() {
         // 5 x 6
@@ -82,6 +100,67 @@ export class Slot {
     setRows(rowValues: number[], index: number): void {
         for (let y = 0; y < Slot.COLUMNS; y++) {
             this.values[index][y] = rowValues[y];
+        }
+    }
+
+    placeBombs(minBomb: number = 0, maxBomb: number, bombChance: number, isBonusRound: boolean): void {
+        this.bombCount = 0;
+
+        if(!isBonusRound){
+            return;
+        }
+        // Flatten all cell positions
+        interface Cell {
+            row: number;
+            col: number;
+        }
+
+        const allCells: Cell[] = [];
+        for (let r = 0; r < Slot.ROWS; r++) {
+            for (let c = 0; c < Slot.COLUMNS; c++) {
+                allCells.push({ row: r, col: c });
+            }
+        }
+
+        // Shuffle
+        for (let i = allCells.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [allCells[i], allCells[j]] = [allCells[j], allCells[i]];
+        }
+
+        // Place bombs
+        for (let i = 0; i < allCells.length && this.bombCount < maxBomb; i++) {
+            if (this.bombCount < minBomb) {
+                const { row, col } = allCells[i];
+                // Determine bomb type based on probabilities
+                const rand = Math.random();
+                let bombType;
+                if (rand < 0.6) { // Low (60%)
+                    bombType = Math.floor(Math.random() * 7) + 10; // 10-16
+                } else if (rand < 0.9) { // Medium (30%)
+                    bombType = Math.floor(Math.random() * 4) + 17; // 17-20
+                } else { // High (10%)
+                    bombType = Math.floor(Math.random() * 2) + 21; // 21-22
+                }
+                this.values[row][col] = bombType;
+                this.bombCount++; 
+            } else {
+                if (Math.random() < bombChance) {
+                    const { row, col } = allCells[i];
+                    // Determine bomb type based on probabilities
+                    const rand = Math.random();
+                    let bombType;
+                    if (rand < 0.6) { // Low (60%)
+                        bombType = Math.floor(Math.random() * 7) + 10; // 10-16
+                    } else if (rand < 0.9) { // Medium (30%)
+                        bombType = Math.floor(Math.random() * 4) + 17; // 17-20
+                    } else { // High (10%)
+                        bombType = Math.floor(Math.random() * 2) + 21; // 21-22
+                    }
+                    this.values[row][col] = bombType;
+                    this.bombCount++;
+                }
+            }
         }
     }
 

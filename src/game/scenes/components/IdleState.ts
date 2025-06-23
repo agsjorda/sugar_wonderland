@@ -12,6 +12,7 @@ interface SpinEventData {
     symbols: number[][];
     currentRow: number;
     newRandomValues?: number[][];
+    isBuyFeature?: boolean;
 }
 
 interface GameScene extends Scene {
@@ -52,14 +53,23 @@ export class IdleState extends State {
             Events.emitter.off(Events.CHANGE_LINE, this.changeLineListener);
             this.changeLineListener = undefined;
         }
-
     }
 
-    private spin(scene: GameScene, _data?: SpinEventData): void {
+    private spin(scene: GameScene, data?: SpinEventData): void {
         if (scene.gameData.isSpinning) { return; }
         scene.gameData.isSpinning = true;
 
-        if (scene.gameData.freeSpins > 0) {
+        if(data?.isBuyFeature) {
+            scene.gameData.balance -= scene.gameData.getBuyFeaturePrice();
+            
+            scene.gameData.minScatter = 4;
+        }
+
+        if (scene.gameData.freeSpins > 0) 
+        {
+            if(scene.buttons.autoplay.remainingSpins > 0) {
+                scene.buttons.autoplay.remainingSpins = 0; // stop autoplay if doing free spins
+            }
             scene.gameData.freeSpins--;
             if (scene.gameData.freeSpins === 0) {
                 // End of bonus round
@@ -71,7 +81,6 @@ export class IdleState extends State {
                 if (scene.buttons.autoplay.isAutoPlaying) {
                     scene.buttons.autoplay.stop();
                 }
-
                 // Show bonus end summary after the last spin completes
                 const bonusWin = scene.gameData.totalBonusWin;
                 Events.emitter.once(Events.SPIN_ANIMATION_END, () => {
@@ -95,6 +104,10 @@ export class IdleState extends State {
         // Place scatters after the grid is built
         slot.placeScatters(scene.gameData.minScatter, scene.gameData.maxScatter, scene.gameData.scatterChance);
         scene.gameData.minScatter = 0;
+
+            slot.placeBombs(scene.gameData.minBomb, scene.gameData.maxBomb, scene.gameData.bombChance, scene.gameData.isBonusRound);
+            scene.gameData.minBomb = 0;
+
 
         // Add listener to reset isSpinning when animation ends
         Events.emitter.once(Events.SPIN_ANIMATION_END, () => {
@@ -126,38 +139,6 @@ export class IdleState extends State {
     }
 }
 
-export function isWinLineMatching(scene: GameScene, slotRowIndex: number): boolean {
-    const slot = scene.gameData.slot;
-    scene.gameData.currentMatchingSymbols = [];
-    
-    const lineToMatch = GameData.WIN_LINES[scene.gameData.line];
-    if (!lineToMatch) return false;
-
-    let symbolToDetect = -1;
-
-    for (let col = 0; col < Slot.COLUMNS; col++) {
-        for (let row = 0; row <= slotRowIndex; row++) {
-            const selectedSymbol = slot.values[col][row];
-            const isDetect = lineToMatch[col][row];
-
-            if (isDetect === 0) {
-                continue;
-            }
-
-            if (symbolToDetect === -1) {
-                symbolToDetect = selectedSymbol;
-            }
-
-            if (symbolToDetect !== selectedSymbol) {
-                return false;
-            }
-
-            scene.gameData.currentMatchingSymbols.push(selectedSymbol);
-        }
-    }
-
-    return symbolToDetect !== -1 && scene.gameData.currentMatchingSymbols.length > 0;
-}
 
 export function getRandomRows(): number[] {
     const symbolPool: number[] = Array(Slot.SYMBOLS).fill(null);
