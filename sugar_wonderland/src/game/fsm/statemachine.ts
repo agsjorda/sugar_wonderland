@@ -13,6 +13,7 @@ export class StateMachine {
             this.state.end(scene);
         }
         this.state = state;
+        //@ts-ignore
         this.state.stateMachine = this;
         this.state.start(scene);
     }

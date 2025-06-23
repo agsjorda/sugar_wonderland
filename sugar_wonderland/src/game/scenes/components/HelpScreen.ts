@@ -13,7 +13,7 @@ export class HelpScreen {
     private mask: Phaser.Display.Masks.GeometryMask;
     private isVisible: boolean = false;
     private scene: GameScene;
-    protected viewWidth: number = 1520;
+    protected viewWidth: number = 1329;
 
     constructor() {
         this.isVisible = false;
@@ -42,8 +42,20 @@ export class HelpScreen {
         scene.load.image('paylineNoWin1', `${prefix}paylineNoWin1.png`);
         scene.load.image('paylineNoWin2', `${prefix}paylineNoWin2.png`);
 
+        scene.load.image('howToPlay1', `${prefix}HowToPlay1.png`);
+        scene.load.image('howToPlay2', `${prefix}HowToPlay2.png`);
+        scene.load.image('howToPlay3', `${prefix}HowToPlay3.png`);
+        scene.load.image('howToPlay4', `${prefix}HowToPlay4.png`);
+        scene.load.image('howToPlay5', `${prefix}HowToPlay5.png`);
+        scene.load.image('howToPlay6', `${prefix}HowToPlay6.png`);
+        scene.load.image('howToPlay7', `${prefix}HowToPlay7.png`);
+        scene.load.image('howToPlay8', `${prefix}HowToPlay8.png`);
+        scene.load.image('howToPlay9', `${prefix}HowToPlay9.png`);
+        scene.load.image('howToPlay10', `${prefix}HowToPlay10.png`);
+
         // Load UI elements
         scene.load.image('greenRectBtn', 'assets/Buttons/greenRectBtn.png');
+        scene.load.image('ekis', 'assets/Buttons/ekis.png');
     }
 
     create(scene: GameScene): void {
@@ -59,14 +71,9 @@ export class HelpScreen {
         // Create background with blur effect
         const bg = scene.add.graphics();
         bg.fillStyle(0x000000, 0.8);
-        bg.lineStyle(2, 0x66D449);
+        bg.lineStyle(5, 0x66D449);
         bg.fillRoundedRect(0, 0, this.viewWidth, screenHeight, 1);
         bg.strokeRoundedRect(0, 0, this.viewWidth, screenHeight, 1);
-        
-        // Add shadow and blur effect
-        if ((scene.game.renderer as any).pipelines) {
-            bg.setPipeline('BlurPostFX');
-        }
         this.container.add(bg);
 
         // Create scroll view container
@@ -88,14 +95,13 @@ export class HelpScreen {
         // Create close button
         const closeButtonContainer = scene.add.container(this.viewWidth - padding, padding);
         const closeButton = scene.add.image(0, 0, 'greenRectBtn');
-        closeButton.setScale(0.5);
+        closeButton.setScale(0.25, 0.5);
         
-        const closeText = scene.add.text(0, 0, '×', {
-            fontSize: '32px',
-            color: '#FFFFFF',
-            fontFamily: 'Poppins'
-        });
+        const closeText = scene.add.image(0, 0, 'ekis');
         closeText.setOrigin(0.5);
+        
+        closeButton.setPosition(closeButton.x + closeButton.width/4, closeButton.y);
+        closeText.setPosition(closeText.x + closeButton.width/4, closeText.y);
 
         closeButtonContainer.add(closeButton);
         closeButtonContainer.add(closeText);
@@ -427,7 +433,7 @@ export class HelpScreen {
         this.contentContainer.add(freeSpinContainer);
         
         this.yPosition += this.padding;
-        this.addDivider(0x57FFA3, 1);
+        //this.addDivider(0x57FFA3, 1);
 
         const multiplierContainer = this.scene.add.container(this.padding, this.yPosition);
 
@@ -579,7 +585,7 @@ export class HelpScreen {
         paylinesContainer.add(paylinesText2);
 
         this.yPosition += this.createBorder(paylinesContainer, 
-            0, 
+            this.padding, 
             0, 
             genericTableWidth, 
             scaledSymbolSize * 9.5
@@ -588,21 +594,84 @@ export class HelpScreen {
         
         this.yPosition += this.padding;
 
-        this.addDivider(0x57FFA3, 1);
-
-        this.addDivider();
-
-        this.addContent('How to Play', 'title');
-
-        this.addContent('Game Actions', 'title');
-
-        this.addContent('Display & Stats', 'title');
-
-        this.addContent('General Controls', 'title');
-
-        this.addDivider();
         
 
+        this.addContent('How to Play', 'title');
+        
+        const howToPlayContainer = this.scene.add.container(this.padding, this.yPosition);
+
+        this.yPosition += this.createBorder(howToPlayContainer, 
+            this.padding, 
+            0, 
+            genericTableWidth, 
+            scaledSymbolSize * 20
+        );
+        this.contentContainer.add(howToPlayContainer);
+
+        this.createHeader(this.padding * 4, this.padding * 2, howToPlayContainer, 'Bet Controls', '#66D449');
+
+        this.createHowToPlayEntry(this.padding * 5, this.padding * 6, howToPlayContainer, 'howToPlay1', 'Adjust your total bet');
+
+        this.createHeader(this.padding * 4, this.padding * 9, howToPlayContainer, 'Game Actions', '#66D449');
+        
+        this.createHowToPlayEntry(this.padding * 5, this.padding * 14, howToPlayContainer, 'howToPlay2', 'Start the game round');
+        this.createHowToPlayEntry(this.padding * 5, this.padding * 21, howToPlayContainer, 'howToPlay3', 'Open the autoplay menu. Tap again to stop autoplay');
+        this.createHowToPlayEntry(this.padding * 5, this.padding * 28, howToPlayContainer, 'howToPlay4', 'Speeds up the game');
+
+        this.createHeader(this.padding * 4, this.padding * 32, howToPlayContainer, 'Display & Stats', '#66D449');
+
+        this.createHowToPlayEntry(this.padding * 5, this.padding * 37, howToPlayContainer, 'howToPlay5', 'Shows your current available credits');
+        this.createHowToPlayEntry(this.padding * 5, this.padding * 44, howToPlayContainer, 'howToPlay6', 'Display your total winnings from the current round');
+        this.createHowToPlayEntry(this.padding * 5, this.padding * 51, howToPlayContainer, 'howToPlay7', 'Adjust your wager using the - and + buttons');
+
+        this.createHeader(this.padding * 4, this.padding * 55, howToPlayContainer, 'General Controls', '#66D449');
+
+        this.createHowToPlayEntry(this.padding * 5, this.padding * 59, howToPlayContainer, 'howToPlay8', 'Toggle game sounds on and off');
+        this.createHowToPlayEntry(this.padding * 5, this.padding * 63, howToPlayContainer, 'howToPlay9', 'Access gameplay preferences and system options');
+        this.createHowToPlayEntry(this.padding * 5, this.padding * 68, howToPlayContainer, 'howToPlay10', 'View game rules, features, and paytable');
+        
+
+        //this.addDivider();
+        
+
+    }
+
+    private createHeader(x: number, y: number, container: GameObjects.Container, text: string, color: string): void {
+        const genericTableWidth = 1129;
+        
+        const header = this.scene.add.text(0, 0,text,
+            {
+                ...this.textStyle,
+                wordWrap: { width: genericTableWidth - this.padding * 6 },
+                fontSize: '20px',
+                color: color,
+                fontFamily: 'Poppins',
+                fontStyle: 'bold'
+            }
+        );
+        header.setPosition(x, y);
+        container.add(header);
+    }
+
+    private createHowToPlayEntry(x: number, y: number, container: GameObjects.Container, image: string, text: string): void {
+        const genericTableWidth = 1129;
+        
+        const imageElement = this.scene.add.image(x, y, image);
+        imageElement.setScale(1);
+        imageElement.setOrigin(0, 0.5);
+        container.add(imageElement);
+     
+        const textElement = this.scene.add.text(
+            0, 0,
+            text,
+            {
+                ...this.textStyle,
+                wordWrap: { width: genericTableWidth - this.padding * 6 },
+            }
+        );
+        textElement.setPosition(x + imageElement.displayWidth + this.padding, y);
+        textElement.setOrigin(0, 0.5);
+        container.add(textElement);   
     }
 
     private createBorder(_container: GameObjects.Container, _x: number, _y: number, _width: number, _height: number): number {
@@ -613,7 +682,7 @@ export class HelpScreen {
         border.strokeRoundedRect(_x, _y, _width, _height, 8);
         _container.add(border);
         _container.sendToBack(border);
-        return _height;;
+        return _height;
     }
 
     private addDivider(_color: number = 0xFFFFFF, _padding: number = 4): void {
@@ -627,7 +696,7 @@ export class HelpScreen {
 
     private createPayoutTable(x: number, y: number, container: GameObjects.Container, symbolIndex: number): void {
         const cellWidth1 = 45;
-        const cellWidth2 = 90;
+        const cellWidth2 = 80;
         const cellHeight = 30;
         const cellPadding = 5;
 
@@ -646,83 +715,77 @@ export class HelpScreen {
         const graphics = this.scene.add.graphics();
 
         for (let row = 0; row < 3; row++) {
-            for (let col = 0; col < 2; col++) {
+            for (let col = 0; col < 3; col++) {
                 let cellWidth = 0;
                 if(col == 0) {
                     cellWidth = cellWidth1;
+                } else if(col == 1) {
+                    cellWidth = cellWidth2;
                 } else {
-                    cellWidth = cellWidth2 ;
+                    cellWidth = cellWidth2 * 2;
                 }
-                const cellX = x + col * (cellWidth + cellPadding);
+                const cellX = x + (col == 2 ? cellWidth1 + cellWidth2 + cellPadding * 2 : col * (cellWidth + cellPadding));
                 const cellY = tableY + row * (cellHeight + cellPadding);
 
                 // Draw cell border
                 graphics.strokeRect(cellX, cellY, cellWidth, cellHeight);
 
-                let matchText = '';  
                 if(symbolIndex != 0) {
-                    matchText = matchNumRange[row];
-                }
-                else {
-                    matchText = scatterNumRange[row];
-                    
-                    symbolIndex = this.scene.gameData.winamounts[row].length - 1;
-                } 
+                    // For regular symbols
+                    if(col < 2) {
+                        const text = col == 0 ? matchNumRange[row] : 
+                            this.scene.gameData.currency + ' ' + 
+                            (this.scene.gameData.winamounts[row][symbolIndex] * this.scene.gameData.bet)
+                                .toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-                
-
-                const matchNumText = this.scene.add.text(cellX + cellWidth/2, cellY + cellHeight/2, matchText, {
-                    fontSize: '20px',
-                    color: '#FFFFFF',
-                    fontFamily: 'Poppins',
-                });
-                
-                const payout = this.scene.gameData.winamounts[row][symbolIndex] * this.scene.gameData.bet;
-                const payoutString = this.scene.gameData.currency + ' ' + payout.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-                const payoutText = this.scene.add.text(cellX + cellWidth/2, cellY + cellHeight/2, payoutString, {
-                        fontSize: '20px',
-                        color: '#FFFFFF',
-                        fontFamily: 'Poppins'
-                });
-                matchNumText.setOrigin(0, 0.5);
-
-                if(symbolIndex == this.scene.gameData.winamounts[row].length - 1) {
-                    payoutText.setOrigin(0.25, 0.5);
-                }
-                else{
-                    payoutText.setOrigin(0.5, 0.5);
-                }
-
-                if(col == 0) {
-                    container.add(matchNumText);
-                } else {
-                    container.add(payoutText);
-                }
-                
-                // Add scatter text column for symbol 0
-                if (symbolIndex === 0 && col === 1) {
-                    const scatterTextCell = this.scene.add.text(
-                        cellX + cellWidth + cellPadding + cellWidth2/2,
-                        cellY + cellHeight/2,
-                        scatterText[row], 
-                        {
+                        const textElement = this.scene.add.text(cellX + cellWidth/2, cellY + cellHeight/2, text, {
                             fontSize: '20px',
-                            color: '#FFFFFF', 
-                            fontFamily: 'Poppins',
-                            align: 'center'
-                        }
-                    );
-                    scatterTextCell.setOrigin(0, 0.5);
-                    container.add(scatterTextCell);
+                            color: '#FFFFFF',
+                            fontFamily: 'Poppins'
+                        });
+
+                        textElement.setOrigin(col == 0 ? 0 : 0.5, 0.5);
+                        container.add(textElement);
+                    }
+                } else {
+                    // For scatter symbol
+                    if(col == 0) {
+                        const text = scatterNumRange[row];
+                        const textElement = this.scene.add.text(cellX + cellWidth/2, cellY + cellHeight/2, text, {
+                            fontSize: '20px',
+                            color: '#FFFFFF',
+                            fontFamily: 'Poppins'
+                        });
+                        textElement.setOrigin(col == 0 ? 0 : 0.5, 0.5);
+                        container.add(textElement);
+                    } else if(col == 1) {
+                        const text = this.scene.gameData.currency + ' ' + 
+                        (this.scene.gameData.winamounts[row][symbolIndex] * this.scene.gameData.bet)
+                            .toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            
+                        const textElement = this.scene.add.text(cellX + cellWidth/2, cellY + cellHeight/2, text, {
+                            fontSize: '20px',
+                            color: '#FFFFFF',
+                            fontFamily: 'Poppins'
+                        });
+                        textElement.setOrigin(0.5, 0.5);
+                        container.add(textElement);
                     
-                    // Draw additional cell border for scatter text
-                    graphics.strokeRect(
-                        cellX + cellWidth + cellPadding,
-                        cellY,
-                        cellWidth2,
-                        cellHeight
-                    );
+                    } else {
+                        const scatterTextCell = this.scene.add.text(
+                            cellX + cellWidth/2,
+                            cellY + cellHeight/2,
+                            scatterText[row], 
+                            {
+                                fontSize: '20px',
+                                color: '#FFFFFF',
+                                fontFamily: 'Poppins',
+                                align: 'center'
+                            }
+                        );
+                        scatterTextCell.setOrigin(0, 0.5);
+                        container.add(scatterTextCell);
+                    }
                 }
             }
         }

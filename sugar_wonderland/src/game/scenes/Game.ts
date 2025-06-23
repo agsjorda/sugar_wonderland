@@ -6,7 +6,6 @@ import { GameData } from './components/GameData';
 import { StartState } from './components/StartState';
 import { Character } from '../ui/Character';
 import { Buttons } from '../ui/Buttons';
-import { WinLines } from '../ui/Winlines';
 import { AudioManager } from './components/AudioManager';    
 import { Autoplay } from './components/Autoplay';
 import { HelpScreen } from './components/HelpScreen';
@@ -26,7 +25,6 @@ export class Game extends Scene {
     public slotMachine: SlotMachine;
     public character: Character;
     public buttons: Buttons;
-    public winLines: WinLines;
     public audioManager: AudioManager;
     public autoplay: Autoplay;
     public helpScreen: HelpScreen;
@@ -43,9 +41,9 @@ export class Game extends Scene {
         this.slotMachine = new SlotMachine();
         this.character = new Character();
         this.buttons = new Buttons();
-        this.winLines = new WinLines();
         this.audioManager = new AudioManager();
-
+        this.autoplay = new Autoplay();
+        this.helpScreen = new HelpScreen();
 
         // Store components for lifecycle management
         this.components = [
@@ -53,8 +51,9 @@ export class Game extends Scene {
             this.slotMachine,
             this.character,
             this.buttons,
-            this.winLines,
             this.audioManager,
+            this.autoplay,
+            this.helpScreen,
         ];
     }
 
@@ -83,15 +82,44 @@ export class Game extends Scene {
                     component.create(this);
                 }
             }
+
+            // Initialize fade-in
+            this.initFadeIn();
+
+            // Add keyboard input handling
         } catch (error) {
             console.error('Error during create:', error);
             // Handle creation error appropriately
         }
     }
 
+    private initFadeIn(): void {
+        // Create a black rectangle to cover the screen
+        const fadeRect = this.add.rectangle(
+            this.cameras.main.centerX,
+            this.cameras.main.centerY,
+            this.cameras.main.width,
+            this.cameras.main.height,
+            0x000000
+        );
+        fadeRect.setDepth(9999);
+
+        // Fade in the scene
+        this.tweens.add({
+            targets: fadeRect,
+            alpha: 0,
+            duration: 1000,
+            ease: 'Circ.easeInOut',
+            onComplete: () => {
+                fadeRect.destroy();
+            }
+        });
+    }
+
+
     update(time: number, delta: number): void {
         try {
-            // Update state machine first
+            // Update state machine
             this.stateMachine.update(this, time, delta);
 
             // Update all components
@@ -104,7 +132,6 @@ export class Game extends Scene {
             console.error('Error during update:', error);
             // Handle update error appropriately
         }
-        
     }
 
     shutdown(): void {
