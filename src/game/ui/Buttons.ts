@@ -5,6 +5,7 @@ import { Autoplay } from '../scenes/components/Autoplay';
 import { AudioManager } from '../scenes/components/AudioManager';
 import { SlotMachine } from '../scenes/components/SlotMachine';
 import { HelpScreen } from '../scenes/components/HelpScreen';
+import { GameAPI } from '../scenes/backend/GameAPI';
 // Custom button interfaces with proper type safety
 interface ButtonBase {
     isButton: boolean;
@@ -49,9 +50,20 @@ export class Buttons {
     private static PANEL_HEIGHT = 120;
     private autoplayButton: ButtonImage;
     private autoplayOnButton: ButtonImage;
+    private isMobile: boolean = false;
+
+    private mobile_buttons_x: number = 0;
+    private mobile_buttons_y: number = 0;
     
     constructor() {
         this.autoplay = new Autoplay();
+        this.isMobile = this.isMobileDevice();
+    }
+
+    // Function to detect if the device is mobile
+    private isMobileDevice(): boolean {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+               window.innerWidth <= 768;
     }
 
     preload(scene: GameScene): void {
@@ -80,7 +92,11 @@ export class Buttons {
         scene.load.image('greenLongBtn', 'assets/Buttons/greenLongBtn.png');
         scene.load.image('greenRectBtn', 'assets/Buttons/greenRectBtn.png');
         scene.load.image('greenCircBtn', 'assets/Buttons/greenCircBtn.png');
-        
+
+        scene.load.image('hamburger', 'assets/Mobile/Hamburger.png');
+        scene.load.image('buyFeature','assets/Mobile/BuyFeature.png');
+        scene.load.image('doubleFeature','assets/Mobile/DoubleFeature.png');
+        scene.load.image('marquee', 'assets/Mobile/Marquee.png');
 
         // Preload help screen assets
         const helpScreen = new HelpScreen();
@@ -99,15 +115,16 @@ export class Buttons {
         this.createBuyFeature(scene);
         this.createDoubleFeature(scene);
         this.createLogo(scene);
+        this.createMarquee(scene);
         this.createVolumeSettings(scene);
-        this.createSettingsButton(scene);
+        //this.createSettingsButton(scene);
         
         this.setupKeyboardInput(scene);
     }
 
     private createContainer(scene: GameScene): void {
         this.buttonContainer = scene.add.container(0, 0) as ButtonContainer;
-        this.buttonContainer.setDepth(4);
+        if(!this.isMobile) this.buttonContainer.setDepth(4);
     }
 
     private toggleTurbo(scene: GameScene): void {
@@ -131,8 +148,8 @@ export class Buttons {
     }
 
     private createTurboButton(scene: GameScene): void {
-        const x = this.width * 0.88;
-        const y = this.height * 0.29;
+        const x = this.isMobile ? this.width * 0.866 : this.width * 0.88;
+        const y = this.isMobile ? this.height * 0.85 : this.height * 0.29;
         const container = scene.add.container(x, y) as ButtonContainer;
 
         this.turboButton = scene.add.image(0, 0, 'turboButton') as ButtonImage;
@@ -150,6 +167,7 @@ export class Buttons {
         const border = scene.add.graphics();
         border.fillStyle(0x000000, 0.15);
         border.fillCircle(0, 0, width * 1.55);
+        border.setVisible(this.isMobile ? false : true);
 
         container.add(border);
 
@@ -161,7 +179,13 @@ export class Buttons {
         this.turboOnButton.setInteractive().isButton = true;
         container.add(this.turboButton);
         container.add(this.turboOnButton);
-            
+        
+        if(this.isMobile){
+            this.mobile_buttons_x = container.x;
+            this.mobile_buttons_y = container.y;
+        }
+        container.name = 'turboContainer';
+        container.setScale(this.isMobile ? 0.8 : 1);
         this.buttonContainer.add(container);
 
         container.setInteractive(
@@ -224,22 +248,23 @@ export class Buttons {
     }
 
     private createSpinButton(scene: GameScene): void {
-        const x = this.width * 0.88;
-        const y = this.height * 0.443;
+        const x = this.isMobile ? this.width * 0.5 : this.width * 0.88;
+        const y = this.isMobile ? this.mobile_buttons_y : this.height * 0.443;
         const container = scene.add.container(x, y) as ButtonContainer;
 
         this.spinButton = scene.add.image(0, 0, 'spinButton') as ButtonImage;
-        const width = this.spinButton.width * 0.75;
-        const height = this.spinButton.height * 0.75;
+        const width = this.isMobile ? this.spinButton.width / 2.5 : this.spinButton.width * 0.75;
+        const height = this.isMobile ? this.spinButton.height / 2.5 : this.spinButton.height * 0.75;
 
-        this.freeSpinBtn = scene.add.image(0, 0, 'greenCircBtn') as ButtonImage;
+        this.freeSpinBtn = scene.add.image(x, y, 'greenCircBtn') as ButtonImage;
         this.autoplayIndicator = scene.add.image(0, 0, 'autoplayIndicator') as ButtonImage;
 
-        const widthgcb = this.freeSpinBtn.width * 0.9;
-        const heightgcb = this.freeSpinBtn.height * 0.9;
+        const widthgcb = this.isMobile ? this.freeSpinBtn.width / 2.25 : this.freeSpinBtn.width * 0.9;
+        const heightgcb = this.isMobile ? this.freeSpinBtn.height / 2.25 : this.freeSpinBtn.height * 0.9;
 
         const spinButtonBackgroundCircle = scene.add.graphics();
         spinButtonBackgroundCircle.fillStyle(0x000000, 0.15);
+        spinButtonBackgroundCircle.setVisible(this.isMobile ? false : true);
         const spinCircleRadius = width * 0.57;
         spinButtonBackgroundCircle.fillCircle(0, 0, spinCircleRadius);
 
@@ -257,10 +282,14 @@ export class Buttons {
         this.autoplayIndicator.displayHeight = heightgcb;
         this.autoplayIndicator.setInteractive().isButton = true;
         this.autoplayIndicator.setScale(0.95, 0.95);
+        if(this.isMobile) {
+            this.autoplayIndicator.setScale(0.5, 0.5);
+        }
         
         container.add(this.freeSpinBtn);
         container.add(this.autoplayIndicator);
 
+        container.name = 'spinContainer';
         this.buttonContainer.add(container);
 
         const startIdleRotation = () => {
@@ -374,8 +403,8 @@ export class Buttons {
     }
 
     private createAutoplay(scene: GameScene): void {
-        const x = this.width * 0.88;
-        const y = this.height * 0.598;
+        const x = this.isMobile ? this.width * 0.15 : this.width * 0.88;
+        const y = this.isMobile ? this.mobile_buttons_y : this.height * 0.598;
         const radius = 60;
         const padding = 32; 
         const textPadding = 4;
@@ -384,21 +413,24 @@ export class Buttons {
 
         this.autoplayButton = scene.add.image(0, 0, 'autoplayButton') as ButtonImage;
         this.autoplayOnButton = scene.add.image(0, 0, 'autoplayOn') as ButtonImage;
+        this.autoplayButton.setScale(this.isMobile ? 0.6 : 1);
+        this.autoplayOnButton.setScale(this.isMobile ? 0.6 : 1);
         
         const innerCircle = scene.add.graphics();
         innerCircle.fillStyle(0x000000, 0.5);
-        innerCircle.fillCircle(0, 0, radius * 0.78);
+        innerCircle.fillCircle(0, 0, radius * (this.isMobile ? 0.514 : 0.78));
         container.add(innerCircle);
 
         const outerCircle = scene.add.graphics();
         outerCircle.fillStyle(0x000000, 0.15);
-        outerCircle.fillCircle(0, 0, radius * 0.95);
-
+        outerCircle.fillCircle(0, 0, radius * (this.isMobile ? 0.675 : 0.95));
+        outerCircle.setVisible(this.isMobile ? false : true);
         container.add(outerCircle);
 
         this.autoplayButton.setInteractive().isButton = true;
         this.autoplayOnButton.setInteractive().isButton = true;
-        this.autoplayOnButton.scale = 1.1;
+        this.autoplayOnButton.setScale(this.isMobile ? 0.7 : 1.1);
+
         container.add(this.autoplayButton);
         container.add(this.autoplayOnButton);
         this.autoplayOnButton.visible = false;
@@ -408,9 +440,12 @@ export class Buttons {
         // --- AUTOPLAY SETTINGS POPUP ---
         const popupWidth = 466;
         const popupHeight = 547;
-        const popup = scene.add.container(this.width / 2 - popupWidth / 2, this.height / 2 - popupHeight / 2);
+        const popup = scene.add.container(
+            this.isMobile ? scene.scale.width / 2 - popupWidth * 0.38: scene.scale.width / 2 - popupWidth / 2,
+            this.isMobile ? scene.scale.height / 2 - popupHeight * 0.42: scene.scale.height / 2 - popupHeight / 2);
         popup.setDepth(1000);
         popup.setVisible(false);
+        popup.setScale(this.isMobile ? 0.75 : 1);
 
         // Store popup reference for external access
         this.autoplayPopup = popup;
@@ -454,7 +489,9 @@ export class Buttons {
         });
         popup.add(balanceLabel);
 
-        const balanceValue = scene.add.text(balanceLabel.x + balanceLabel.width + textPadding + padding / 2, balanceLabel.y, scene.gameData.currency + scene.gameData.balance.toLocaleString(), {
+        const balanceValue = 
+        scene.add.text(balanceLabel.x + balanceLabel.width + textPadding + padding / 2,
+             balanceLabel.y, scene.gameData.currency + scene.gameData.balance.toLocaleString(), {
             fontSize: '24px',
             color: '#FFFFFF',
             fontFamily: 'Poppins',
@@ -547,7 +584,7 @@ export class Buttons {
         const betValueY = betLabel.y + betLabel.height + padding*1.5;
         // Bet controls
         const minusBtn = scene.add.image(padding * 2, betValueY, 'minus');
-        minusBtn.setScale(0.4);
+        minusBtn.setScale(0.35);   
         (minusBtn as any as ButtonImage).setInteractive().isButton = true;
         popup.add(minusBtn);
 
@@ -675,7 +712,7 @@ export class Buttons {
                     }
                 });
                 
-                console.log(scene.buttons.autoplay.isAutoPlaying);
+                scene.gameData.debugLog("autoplay.isAutoPlaying", this.autoplay.isAutoPlaying);
                 // Start autoplay 
                 Events.emitter.emit(Events.AUTOPLAY_START, selectedSpins);
 
@@ -703,7 +740,7 @@ export class Buttons {
 
         // Update balance display when popup is shown
         const updateBalance = () => {
-            const balance = scene.gameData.balance;
+                const balance = scene.gameData.balance;
             balanceValue.setText(scene.gameData.currency + balance.toLocaleString());
         };
 
@@ -734,8 +771,12 @@ export class Buttons {
                     }
                 });
             });
+            mask.setScale(this.isMobile ? 2.5 : 1);
+            mask.setPosition(
+                this.isMobile ? - popupWidth / 2 : -popup.x,
+                this.isMobile ? - popupHeight * 1.25: -popup.y); // Adjust position relative to container
+                
             popup.add(mask);
-            mask.setPosition(-popup.x, -popup.y); // Adjust position relative to container
             popup.sendToBack(mask); // Ensure mask is behind other elements
             
 
@@ -760,7 +801,7 @@ export class Buttons {
             this.autoplayOnButton.visible = false;
         });
 
-        this.buttonContainer.add(popup);
+        //this.buttonContainer.add(popup);
     }
     public resetAutoplayButtons(): void {
         this.autoplayButton.visible = true;
@@ -770,8 +811,9 @@ export class Buttons {
     }
 
     private createInfo(scene: GameScene): void {
-        const x = this.width * 0.88;
-        const y = this.height * 0.70;
+        const x = this.isMobile ? this.width * 0.115 : this.width * 0.88;
+        const y = this.isMobile ? this.height * 0.67 : this.height * 0.70;
+
         const container = scene.add.container(x, y) as ButtonContainer;
 
         const infoButton = scene.add.image(0, 0, 'info') as ButtonImage;
@@ -784,17 +826,19 @@ export class Buttons {
         // inner circle
         const innerCircle = scene.add.graphics();
         innerCircle.fillStyle(0x000000, 0.5);
-        innerCircle.fillCircle(0, 0, width * 1.5 / 0.8);
+        innerCircle.fillCircle(0, 0, this.isMobile ? width * 1.75 : width * 1.875);
         container.add(innerCircle);
 
         // outer circle
         const border = scene.add.graphics();
         border.fillStyle(0x000000, 0.15);
         border.fillCircle(0, 0, width * 2.25);
+        border.setVisible(this.isMobile ? false : true);
         container.add(border);
 
         infoButton.displayWidth = width * .8;
         infoButton.displayHeight = height * .8;
+        
         infoOnButton.displayWidth = width * 4.5 * .8;
         infoOnButton.displayHeight = height * 2.25 * .8;
 
@@ -803,6 +847,7 @@ export class Buttons {
         container.add(infoButton);
         container.add(infoOnButton);
 
+        container.setScale(this.isMobile ? 0.8 : 1);
         this.buttonContainer.add(container);
 
         container.setInteractive(
@@ -840,16 +885,14 @@ export class Buttons {
         // Listen for help screen toggle event
         Events.emitter.on(Events.HELP_SCREEN_TOGGLE, () => {
             // Update button state based on help screen visibility
-            const isVisible = scene.gameData.isHelpScreenVisible;
-            infoButton.visible = !isVisible;
-            infoOnButton.visible = isVisible;
+            toggleInfo();
         });
     }
 
     private createBalance(scene: GameScene): void {
         const width = Buttons.PANEL_WIDTH * 1.5;
-        const x = this.width * 0.24;
-        const y = this.height * 0.83;
+        const x = this.isMobile ? this.width * 0.05 : this.width * 0.24;
+        const y = this.isMobile ? this.height * 0.715 : this.height * 0.83;
         const cornerRadius = 10;
 
         const container = scene.add.container(x, y) as ButtonContainer;
@@ -881,6 +924,7 @@ export class Buttons {
             fontStyle: 'bold',
             fontFamily: 'Poppins'
         }) as ButtonText;
+        text1.setScale(this.isMobile ? 1.25 : 1);
         container.add(text1);
         text1.setOrigin(0.5, 0.5);
 
@@ -894,27 +938,39 @@ export class Buttons {
             fontStyle: 'bold',
             fontFamily: 'Poppins'
         }) as ButtonText;
+        text2.setScale(this.isMobile ? 1.25 : 1);
         container.add(text2);
         text2.setOrigin(0.5, 0.5);
 
         Events.emitter.on(Events.SPIN_ANIMATION_START, () => {
-            const balance2 = scene.gameData.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            text2.setText(`$ ${balance2}`);
+            Events.emitter.emit(Events.UPDATE_BALANCE);            
         });
 
         Events.emitter.on(Events.WIN, () => {
-            const balance2 = scene.gameData.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            text2.setText(`$ ${balance2}`);
+            Events.emitter.emit(Events.UPDATE_BALANCE);     
         });
 
+        Events.emitter.on(Events.UPDATE_BALANCE, () => {
+            scene.gameAPI.getBalance().then((data) => {
+                const balance = data.data.balance;
+                text2.setText(scene.gameData.currency + " " + balance); 
+                scene.gameData.debugLog("update balance " + balance);
+
+                scene.gameData.balance = parseFloat(balance);
+            });
+        });
+
+        container.setScale(this.isMobile ? 0.5 : 1);
         this.balanceContainer = container;
         this.buttonContainer.add(container);
+
+        Events.emitter.emit(Events.UPDATE_BALANCE);
     }
 
     private createTotalWin(scene: GameScene): void {
-        const width = Buttons.PANEL_WIDTH * 1.5;
-        const x = this.balanceContainer.x + width + this.width * 0.01;
-        const y = this.balanceContainer.y;
+        const width =  Buttons.PANEL_WIDTH * 1.5; 
+        const x = this.isMobile ? this.balanceContainer.x + width * 0.525 : this.balanceContainer.x + width + this.width * 0.01;
+        const y = this.isMobile ? this.balanceContainer.y : this.balanceContainer.y;
         const cornerRadius = 10;
 
         const container = scene.add.container(x, y) as ButtonContainer;
@@ -972,14 +1028,16 @@ export class Buttons {
             text2.setText(`$ ${totalWin2}`);
         });
 
+        container.setScale(this.isMobile ? 0.5 : 1);
         this.totalWinContainer = container;
+        this.totalWinContainer.setVisible(this.isMobile ? false : true);
         this.buttonContainer.add(container);
     }
 
     private createBet(scene: GameScene): void {
-        const width = Buttons.PANEL_WIDTH;
-        const x = this.totalWinContainer.x + width * 1.5 + this.width * 0.01;
-        const y = this.height * 0.83;
+        const width = this.isMobile ? Buttons.PANEL_WIDTH * 1.5 : Buttons.PANEL_WIDTH;
+        const x = this.isMobile ? this.totalWinContainer.x : this.totalWinContainer.x + width * 1.5 + this.width * 0.01;
+        const y = this.isMobile ? this.totalWinContainer.y : this.height * 0.83;
         const cornerRadius = 10;
 
         const container = scene.add.container(x, y) as ButtonContainer;
@@ -1002,6 +1060,7 @@ export class Buttons {
             fontStyle: 'bold',
             fontFamily: 'Poppins'
         }) as ButtonText;
+        text1.setScale(this.isMobile ? 1.25 : 1);
         container.add(text1);
         text1.setOrigin(0.5, 0.5);
 
@@ -1014,19 +1073,30 @@ export class Buttons {
             fontStyle: 'bold',
             fontFamily: 'Poppins'
         }) as ButtonText;
+        betValueText.setScale(this.isMobile ? 1.25 : 1);
         container.add(betValueText);
         betValueText.setOrigin(0.5, 0.5);
 
-        // Create plus/minus buttons
-        const plusBtn = scene.add.image(width - 50, Buttons.PANEL_HEIGHT * 0.65, 'plus') as ButtonImage;
-        plusBtn.setScale(0.30);
+        // plus button
+        const plusBtn = scene.add.image(0, 0, 'plus') as ButtonImage;
+        plusBtn.setPosition(this.isMobile ? this.mobile_buttons_x * 0.425 : width - 50, this.isMobile ? this.mobile_buttons_y / 3.125 : Buttons.PANEL_HEIGHT * 0.65);
+        plusBtn.setScale(this.isMobile ? 0.5 : 0.3);
+        
         plusBtn.setInteractive().isButton = true;
+        plusBtn.setAlpha(0.8);
         container.add(plusBtn);
 
-        const minusBtn = scene.add.image(50, Buttons.PANEL_HEIGHT * 0.65, 'minus') as ButtonImage;
-        minusBtn.setScale(0.30);
+        // minus button
+        const minusBtn = scene.add.image(0, 0, 'minus') as ButtonImage;
+        minusBtn.setPosition(this.isMobile ? - plusBtn.x * 1.11 : 50, this.isMobile ? plusBtn.y : Buttons.PANEL_HEIGHT * 0.65);
+        minusBtn.setScale(this.isMobile ? 0.5 : 0.3);
+
         minusBtn.setInteractive().isButton = true;
+        minusBtn.setAlpha(0.8); 
         container.add(minusBtn);
+
+        // bet container
+        container.setScale(this.isMobile ? 0.5 : 1);
 
         // Add click handlers to show bet popup
         plusBtn.on('pointerdown', () => {
@@ -1073,11 +1143,13 @@ export class Buttons {
             }
         });
 
-        this.buttonContainer.add(container);
+        container.name = 'betContainer';
+        //this.buttonContainer.add(container);
 
         // Create bet adjustment popup
         const betContainer = scene.add.container(0, 0);
-        betContainer.setDepth(5);
+        betContainer.setScale(this.isMobile ? 0.75 : 1);
+        betContainer.setDepth(30);
         const padding = 32;
         // Create bet background
         const betBg = scene.add.graphics();
@@ -1191,7 +1263,7 @@ export class Buttons {
         betBtnBg.displayHeight = btnHeight;
         betContainer.add(betBtnBg);
         
-        const betButtonText = scene.add.text(btnWidth/2 + padding, 702 - padding * 2, 'BET', {
+        const betButtonText = scene.add.text(btnWidth/2 + padding, 702 - padding * 2, 'CONFIRM', {
             fontSize: '28px',
             color: '#000000',
             fontStyle: 'bold',
@@ -1229,12 +1301,14 @@ export class Buttons {
         selectedButton = buttons[0];
 
         // Position the container
-        betContainer.setPosition(scene.scale.width * 0.5 - 720 / 3, scene.scale.height * 0.5 - 420);
+        betContainer.setPosition(
+            this.isMobile ? scene.scale.width / 2 - 466 * 0.38: scene.scale.width * 0.5 - 720 / 3,
+            this.isMobile ? scene.scale.height / 2 - 709 * 0.42  : scene.scale.height * 0.5 - 420);
         betContainer.setVisible(false);
 
+        this.betContainer = betContainer;
 
         // Store references
-        this.betContainer = betContainer;
     }
 
     public showBetPopup(scene: GameScene): void {
@@ -1247,12 +1321,17 @@ export class Buttons {
             mask.setInteractive(new Geom.Rectangle(0, 0, scene.scale.width, scene.scale.height), Geom.Rectangle.Contains);
             mask.on('pointerdown', () => this.hideBetPopup(scene));
             this.betContainer.add(mask);
-            mask.setPosition(-this.betContainer.x, -this.betContainer.y); // Adjust position relative to container
+            
+            mask.setScale(this.isMobile ? 2.25 : 1, this.isMobile ? 2.5 : 1);
+            mask.setPosition(
+                this.isMobile ? -scene.scale.width / 2 : -this.betContainer.x,
+                this.isMobile ? -scene.scale.height : -this.betContainer.y); // Adjust position relative to container
             this.betContainer.sendToBack(mask); // Ensure mask is behind other elements
             
             if(this.betContainer.visible === false) {
                 this.betContainer.setVisible(true);
                 this.betContainer.alpha = 0;
+                    
                 scene.tweens.add({
                     targets: this.betContainer,
                     alpha: { from: 0, to: 1 },
@@ -1285,44 +1364,78 @@ export class Buttons {
 
     private createBuyFeature(scene: GameScene): void {
         // Elliptical buy feature button in upper left
-        const x = this.width * 0.15;
-        const y = this.height * 0.13;
+        const x = this.isMobile ? this.width * 0.341 : this.width * 0.15;
+        const y = this.isMobile ? this.height * 0.67 : this.height * 0.13;
+
         const ellipseWidth = 277;
         const ellipseHeight = 114;
         const container = scene.add.container(x, y) as ButtonContainer;
 
         // Button background
-        const buttonBg = scene.add.graphics();
-        buttonBg.fillStyle(0x181818, 0.95);
-        buttonBg.lineStyle(2, 0x66D449, 1);
-        buttonBg.strokeRoundedRect(-ellipseWidth/2, -ellipseHeight/2, ellipseWidth, ellipseHeight, ellipseHeight/2);
-        buttonBg.fillRoundedRect(-ellipseWidth/2, -ellipseHeight/2, ellipseWidth, ellipseHeight, ellipseHeight/2);
-        container.add(buttonBg);
+        let buttonBg : GameObjects.Image | GameObjects.Graphics;
+        if(this.isMobile){
+            buttonBg = scene.add.image(0, 0, 'buyFeature') as ButtonImage;
+            buttonBg.setInteractive();
+            (buttonBg as any).isButton = true;
+            container.add(buttonBg);
+        } else {
+            buttonBg = scene.add.graphics();
+            buttonBg.fillStyle(0x181818, 0.95);
+            buttonBg.lineStyle(2, 0x66D449, 1);
+            buttonBg.strokeRoundedRect(-ellipseWidth/2, -ellipseHeight/2, ellipseWidth, ellipseHeight, ellipseHeight/2);
+            buttonBg.fillRoundedRect(-ellipseWidth/2, -ellipseHeight/2, ellipseWidth, ellipseHeight, ellipseHeight/2);
+            buttonBg.setInteractive();
+            (buttonBg as any).isButton = true;
+            container.add(buttonBg);
+        }
 
+        let starLeft : GameObjects.Image;
+        let starRight : GameObjects.Image;
         // Stars
-        const starLeft = scene.add.image(-ellipseWidth/2 + 32, -24, 'star') as ButtonImage;
-        container.add(starLeft);
-        const starRight = scene.add.image(ellipseWidth/2 - 32, -24, 'star') as ButtonImage;
-        container.add(starRight);
-
+        if(!this.isMobile){
+            starLeft = scene.add.image(-ellipseWidth/2 + 32, -24, 'star') as ButtonImage;
+            container.add(starLeft);
+            starRight = scene.add.image(ellipseWidth/2 - 32, -24, 'star') as ButtonImage;
+            container.add(starRight);
+        }
+        
         // BUY FEATURE text
+        
         const buttonText = scene.add.text(0, -24, 'BUY FEATURE', {
-            fontSize: '24px',
-            color: '#FFFFFF',
-            fontFamily: 'Poppins',
-            fontStyle: 'bold',
-            align: 'center',
-            letterSpacing: 1.5,
-            stroke: '#181818',
-            strokeThickness: 2,
-            shadow: { offsetX: 0, offsetY: 2, color: '#000000', blur: 4, fill: true }
         }) as ButtonText;
         buttonText.setOrigin(0.5, 0.5);
+        if(this.isMobile){
+            buttonText.setScale(0.5);
+            buttonText.setPosition(0, -12);
+            buttonText.setStyle({
+                fontSize: '24px',
+                color: '#FFFFFF',
+                fontFamily: 'Poppins',
+                fontStyle: 'bold',
+                align: 'center',
+            });
+        }
+        else{
+            buttonText.setStyle({
+                fontSize: '24px',
+                color: '#FFFFFF',
+                fontFamily: 'Poppins',
+                fontStyle: 'bold',
+                align: 'center',
+                letterSpacing: 1.5,
+                stroke: '#181818',
+                strokeThickness: 2,
+                shadow: { offsetX: 0, offsetY: 2, color: '#000000', blur: 4, fill: true }
+            })  
+        }
         container.add(buttonText);
 
         // Price text (large, green)
         const price = scene.gameData.getBuyFeaturePrice();
-        this.buyFeaturePriceText = scene.add.text(0, 24, price.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }), {
+        const priceText = this.isMobile ? 
+        scene.gameData.currency + ' ' + price.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+        : price.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        this.buyFeaturePriceText = scene.add.text(0, 24,  priceText, {
             fontSize: '42px',
             color: '#3FFF0D',
             fontFamily: 'Poppins',
@@ -1330,33 +1443,37 @@ export class Buttons {
             fontStyle: 'bold'
         }) as ButtonText;
         this.buyFeaturePriceText.setOrigin(0.5, 0.5);
+        if(this.isMobile){
+            this.buyFeaturePriceText.setScale(0.4);
+            this.buyFeaturePriceText.setPosition(0, 8);
+            this.buyFeaturePriceText.setColor('#FFFFFF');
+        }
         container.add(this.buyFeaturePriceText);
 
-        // Make button interactive
-        buttonBg.setInteractive(
-            new Geom.Rectangle(-ellipseWidth/2, -ellipseHeight/2, ellipseWidth, ellipseHeight),
-            Geom.Rectangle.Contains
-        );
-        (buttonBg as any).isButton = true;
+        container.name = 'buyFeatureContainer';
         this.buttonContainer.add(container);
+        this.buttonContainer.sendToBack(container);
 
         // Create the popup
         const width = 573;
         const height = 369;
-        const popupX = scene.scale.width / 2 - width / 2;
-        const popupY = scene.scale.height / 2 - height / 2;
+        const popupX = this.isMobile ? scene.scale.width / 2 - width / 4 : scene.scale.width / 2 - width / 2; 
+        const popupY = this.isMobile ? scene.scale.height / 2 - height / 4 : scene.scale.height / 2 - height / 2;
 
         const popupContainer = scene.add.container(popupX, popupY) as ButtonContainer;
         popupContainer.setDepth(1000);
         popupContainer.setVisible(false);
 
         // Popup background
-        const bg = scene.add.image(width/2, height/2, 'buyFeatBG') as ButtonImage;
+        const bg = scene.add.image(
+            this.isMobile ? scene.scale.width * 0.65 : width/2,
+            this.isMobile ? scene.scale.height / 5 : height/2,
+            'buyFeatBG') as ButtonImage;
         bg.setOrigin(0.5, 0.5);
         popupContainer.add(bg);
-        if ((scene.sys.game.renderer as any).pipelines) {
-            bg.setPipeline('BlurPostFX');
-        }
+        //if ((scene.sys.game.renderer as any).pipelines) {
+        //    bg.setPipeline('BlurPostFX');
+        //}
 
         
         const freeSpinDisplay = scene.add.image(width / 2, 46, 'freeSpinDisplay');
@@ -1411,6 +1528,7 @@ export class Buttons {
         }) as ButtonText;
         closeBtnText.setOrigin(0.5, 0.5);
         popupContainer.add(closeBtnText);
+        popupContainer.setScale(this.isMobile ? 0.5 : 1);
 
         buyBtnBg.setInteractive().isButton = true;
         buyBtnBg.on('pointerdown', () => {
@@ -1450,14 +1568,18 @@ export class Buttons {
                 buttonBg.setAlpha(0.5);
                 this.buyFeaturePriceText.setAlpha(0.5);
                 buttonText.setAlpha(0.5);
-                starLeft.setAlpha(0.5);
-                starRight.setAlpha(0.5);
+                if(!this.isMobile) {
+                    starLeft.setAlpha(0.5);
+                    starRight.setAlpha(0.5);
+                }
             } else {
                 buttonBg.setAlpha(1);
                 this.buyFeaturePriceText.setAlpha(1);
                 buttonText.setAlpha(1);
-                starLeft.setAlpha(1);
-                starRight.setAlpha(1);
+                if(!this.isMobile) {
+                    starLeft.setAlpha(1);
+                    starRight.setAlpha(1);
+                }
             }
         };
 
@@ -1498,8 +1620,11 @@ export class Buttons {
                     }
                 });
             });
+            mask.setScale(this.isMobile ? 2.5 : 1);
             popupContainer.add(mask);
-            mask.setPosition(-popupContainer.x, -popupContainer.y); // Adjust position relative to container
+            mask.setPosition(
+                this.isMobile ? -popupContainer.x * 3 : -popupContainer.x,
+                this.isMobile ? -popupContainer.y * 2 : -popupContainer.y); // Adjust position relative to container
             popupContainer.sendToBack(mask); // Ensure mask is behind other elements
             
 
@@ -1534,36 +1659,50 @@ export class Buttons {
         
 		// Listen for bet changes to update price
 		Events.emitter.on(Events.CHANGE_BET, () => {
-			this.updateBuyFeaturePrice(scene.gameData.getBuyFeaturePrice());
+			this.updateBuyFeaturePrice(scene, scene.gameData.getBuyFeaturePrice());
 		});
     }
 
-    updateBuyFeaturePrice(newPrice: number) {
+    updateBuyFeaturePrice(scene: GameScene, newPrice: number) {
 		if (this.buyFeaturePriceText) {
-			this.buyFeaturePriceText.setText(newPrice.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
+			this.buyFeaturePriceText.setText(this.isMobile ? 
+            scene.gameData.currency + ' ' + newPrice.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+            : newPrice.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
 		}
 	}
 
 
     private createDoubleFeature(scene: GameScene): void {
-        const width = 254;
-        const height = 131;
-        const x = this.width * 0.8;
-        const y = this.height * 0.82;
+        const x = this.isMobile ? this.width * 0.5125 : this.width * 0.8;
+        const y = this.isMobile ? this.height * 0.64 : this.height * 0.82;
+
+        const width = this.isMobile ? 240 : 254;
+        const height = this.isMobile ? 108 : 131;
 
         const container = scene.add.container(x, y) as ButtonContainer;
 
-        // Green gradient background with border
-        const bg = scene.add.image(width / 2, height / 2, 'greenRectBtn') as ButtonImage;
-        bg.displayWidth = width;
-        bg.displayHeight = height;
-        bg.setOrigin(0.5, 0.5);
-        container.add(bg);
+        if(this.isMobile){
+            // elliptical button
+            const bg = scene.add.image(width / 2, height / 2, 'doubleFeature') as ButtonImage;
+            bg.displayWidth = width;
+            bg.displayHeight = height;
+            bg.setOrigin(0.5, 0.5);
+            container.add(bg);
+        }
+        else{
+            // rectangular button
+            const bg = scene.add.image(width / 2, height / 2, 'greenRectBtn') as ButtonImage;
+            bg.displayWidth = width;
+            bg.displayHeight = height;
+            bg.setOrigin(0.5, 0.5);
+            container.add(bg);
+        }
 
         // Bet box (left)
         const betBox = scene.add.graphics();
         betBox.fillStyle(0x181818, 1);
         betBox.fillRoundedRect(15, 20, 90, 90, 16);
+        betBox.setVisible(this.isMobile ? false : true);
         container.add(betBox);
         
         const betLabel = scene.add.text(60, 45, 'BET', {
@@ -1574,46 +1713,28 @@ export class Buttons {
             align: 'center'
         }) as ButtonText;
         betLabel.setOrigin(0.5, 0.5);
+        betLabel.setVisible(this.isMobile ? false : true);
         container.add(betLabel);
 
         // Create auto-sized double feature price text
-        this.doubleFeaturePriceText = scene.add.text(60, 90, scene.gameData.getDoubleFeaturePrice().toString(), {
+        this.doubleFeaturePriceText = scene.add.text(
+            this.isMobile ? width * 0.7 : 60, 
+            this.isMobile ? height * 0.725 : 90, scene.gameData.getDoubleFeaturePrice().toString(), {
             fontSize: '36px',
-            color: '#3FFF0D',
             fontFamily: 'Poppins',
             fontStyle: 'bold',
             align: 'center',
-            wordWrap: { width: 80 }, // Slightly less than box width for padding
-            metrics: {
-                fontSize: 36,
-                ascent: 28,
-                descent: 8
-            }
         }) as ButtonText;
         this.doubleFeaturePriceText.setOrigin(0.5, 0.75);
+        this.doubleFeaturePriceText.setColor(this.isMobile ? '#FFFFFF' : '#3FFF0D');
+        if(!this.isMobile){
+            this.doubleFeaturePriceText.setWordWrapWidth(80);
+        }
         container.add(this.doubleFeaturePriceText);
 
         // Function to update text size based on content
         const updateTextSize = () => {
-
-            //const maxWidth = 80; // Maximum width available in the box
-            //const currentWidth = this.doubleFeaturePriceText.width;
-            //const currentSize = parseInt(this.doubleFeaturePriceText.style.fontSize as string);
-        
-            this.doubleFeaturePriceText.setStyle({ fontSize: `${24}px` });
-           //if (currentWidth > maxWidth) {
-           //    // Calculate new size, but not smaller than minFontSize
-           //    let newSize = Math.max(24, Math.floor(currentSize * (maxWidth / currentWidth)));
-           //    // Cap at maxFontSize
-           //    newSize = Math.min(24, newSize);
-           //    this.doubleFeaturePriceText.setStyle({ fontSize: `${newSize}px` });
-           //} else if (currentWidth < maxWidth * 0.8 && currentSize < 36) {
-           //    // Try to increase size if there's room, but not larger than maxFontSize
-           //    let newSize = Math.min(36, Math.floor(currentSize * (maxWidth / currentWidth)));
-           //    // Don't go below minFontSize
-           //    newSize = Math.max(24, newSize);
-           //    this.doubleFeaturePriceText.setStyle({ fontSize: `${newSize}px` });
-           //}
+            this.doubleFeaturePriceText.setStyle({ fontSize: `${this.isMobile ? '32px' : '36px'}` });
         };
 
         // Initial size update
@@ -1628,26 +1749,29 @@ export class Buttons {
         });
 
         // Enhanced Bet label (right, top)
-        const enhancedLabel = scene.add.text(width - 140, 10, 'Enhanced Bet', {
-            fontSize: '14px',
+        const enhancedLabel = scene.add.text(this.isMobile ? width * 0.15 : width - 140, this.isMobile ? height * 0.15 : 10, 'ENHANCED BET', {
+            fontSize: '12px',
             color: '#FFFFFF',
             fontFamily: 'Poppins',
             fontStyle: 'bold'
         }) as ButtonText;
+        enhancedLabel.setFontSize(this.isMobile ? '22px' : '14px');
         container.add(enhancedLabel);
 
         // Toggle switch (right, middle)
-        const toggleX = width - 120;
-        const toggleY = 40;
         const toggleWidth = 64;
         const toggleHeight = 36;
         const toggleRadius = 18;
+        const toggleX = this.isMobile ? toggleWidth * 0.75 : width - 120;
+        const toggleY = toggleHeight + toggleRadius * 0.75;
+
         const toggleBg = scene.add.graphics();
         toggleBg.fillStyle(0x181818, 1);
         toggleBg.lineStyle(3, 0xFFFFFF, 0.5);
         toggleBg.strokeRoundedRect(toggleX, toggleY, toggleWidth, toggleHeight, toggleRadius);
         toggleBg.fillRoundedRect(toggleX, toggleY, toggleWidth, toggleHeight, toggleRadius);
         container.add(toggleBg);
+        
 
         const toggleCircle = scene.add.graphics();
         let isEnabled = !!scene.gameData.doubleChanceEnabled;
@@ -1669,7 +1793,7 @@ export class Buttons {
                 betBox.fillRoundedRect(15, 20, 90, 90, 16);
 
                 betLabel.setColor('#FFFFFF');
-                this.doubleFeaturePriceText.setColor('#3FFF0D');
+                this.doubleFeaturePriceText.setColor(this.isMobile ? '#FFFFFF' : '#3FFF0D');
 
                 scene.gameData.doubleChanceEnabled = true;
                 Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {});                
@@ -1686,8 +1810,8 @@ export class Buttons {
                 betBox.clear();
                 betBox.fillStyle(0x181818, 0.5);
                 betBox.fillRoundedRect(15, 20, 90, 90, 16);
-                betLabel.setColor('#888888');
-                this.doubleFeaturePriceText.setColor('#888888');
+                betLabel.setColor(this.isMobile ? '#FFFFFF' : '#888888'); 
+                this.doubleFeaturePriceText.setColor(this.isMobile ? '#FFFFFF' : '#888888');
 
                 scene.gameData.doubleChanceEnabled = false;
                 Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {});
@@ -1716,26 +1840,86 @@ export class Buttons {
             align: 'center'
         }) as ButtonText;
         desc.setOrigin(0, 0.5);
+        desc.setVisible(this.isMobile ? false : true);
         container.add(desc);
 
         container.setDepth(5);
+        container.name = 'doubleFeatureContainer';
+        container.setScale(this.isMobile ? 0.5 : 1);
         this.buttonContainer.add(container);
     }
 
     private createLogo(scene: GameScene): void {
-        const x = this.width * 0.88;
-        const y = this.height * 0.12;
+        const x = this.isMobile ? this.width * 0.22 : this.width * 0.88;
+        const y = this.isMobile ? this.height * 0.10 : this.height * 0.12;
         const container = scene.add.container(x, y) as ButtonContainer;
 
         const logo = scene.add.image(0, 0, 'logo') as ButtonImage;
         logo.setScale(0.25);
         container.add(logo);
+
+        container.name = 'logoContainer';
+        container.setScale(this.isMobile ? 0.5 : 1);
         this.buttonContainer.add(container);
     }
 
+    private createMarquee(scene: GameScene): void {
+        if(!this.isMobile) return;
+        const x = this.width * 0.5;
+        const y = this.height * 0.175;
+        const container = scene.add.container(x, y);
+        container.setDepth(20);
+        
+        const marquee = scene.add.image(0, 0, 'marquee');
+        container.add(marquee);
+
+        // Title
+        const youWonString = scene.gameData.totalWin.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        const youWonLabel = scene.add.text(0, 0, 'YOU WON ', {
+            fontSize: '20px',
+            color: '#FFFFFF', 
+            fontFamily: 'Poppins'
+        });
+        const youWonAmount = scene.add.text(youWonLabel.width, -youWonLabel.height/3, scene.gameData.currency + ' ' + youWonString, {
+            fontSize: '32px',
+            color: '#FFFFFF',
+            fontFamily: 'Poppins',
+            fontStyle: 'bold'
+        });
+        const youWonText = scene.add.container(-youWonLabel.width/2 - youWonAmount.width/2, -youWonLabel.height/3, [youWonLabel, youWonAmount]);
+        container.add(youWonText);
+               
+        const hideMarquee = () => {
+            //marquee.setVisible(false);
+            youWonText.setVisible(false);
+        };
+
+        const showMarquee = () => {
+            //marquee.setVisible(true);
+            youWonText.setVisible(true);
+        };
+
+        hideMarquee();
+        Events.emitter.on(Events.UPDATE_TOTAL_WIN, () => {
+            if(!this.isMobile) return;
+            showMarquee();
+            const youWonString = scene.gameData.totalWin.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+            youWonAmount.setText(scene.gameData.currency + ' ' + youWonString);
+
+            setTimeout(() => {
+                hideMarquee();
+            }, 1000);
+        });
+
+        Events.emitter.on(Events.UPDATE_CURRENCY, () => {
+            if(!this.isMobile) return;
+            youWonAmount.setText(scene.gameData.currency + ' ' + youWonString);
+        });
+    }
+
     private createVolumeSettings(scene: GameScene): void {
-        const x = this.width * 0.05;
-        const y = this.height * 0.95;
+        const x = this.isMobile ? scene.scale.width * 0.88 : this.width * 0.05;
+        const y = this.isMobile ? scene.scale.height * 0.67 : this.height * 0.95;
         const container = scene.add.container(x, y) as ButtonContainer;
 
         const widthSlider = 180;
@@ -1743,11 +1927,20 @@ export class Buttons {
         const radius = 40 * scaleFactor;
         const padding = 32 * scaleFactor;;
 
-        // Add volume icon
-        const volumeIcon = scene.add.image(0, 0, 'volume') as ButtonImage;
+
+        const volumeIcon = scene.add.image(0, 0, this.isMobile ? 'hamburger' : 'volume') as ButtonImage;
         volumeIcon.setOrigin(0.5, 0.5);
-        volumeIcon.setScale(0.6 * scaleFactor);
+        volumeIcon.setScale(this.isMobile ? 1.1 * scaleFactor : 0.6 * scaleFactor);
+
+        if(this.isMobile){
+            const innerCircle = scene.add.graphics();
+            innerCircle.fillStyle(0x000000, 0.5);
+            innerCircle.fillCircle(0, 0, volumeIcon.width * 1.25);
+            container.add(innerCircle);
+        }
         container.add(volumeIcon);
+
+        // Add volume icon
 
         // Make container interactive
         container.setInteractive(
@@ -1769,6 +1962,7 @@ export class Buttons {
         bg.strokeRoundedRect(0, -panelHeight * 0.1, panelWidth, panelHeight * 1.2, 16 * scaleFactor);
         bg.fillRoundedRect(0, -panelHeight * 0.1, panelWidth, panelHeight * 1.2 , 16 * scaleFactor);
         panel.add(bg);
+
 
         // Title
         const title = scene.add.text(24 * scaleFactor, 24 * scaleFactor, 'SYSTEM SETTINGS', {
@@ -2008,7 +2202,11 @@ export class Buttons {
         const showPanel = () => {
             if (isOpen) return;
             isOpen = true;
-            panel.setPosition(panelWidth/10, panelHeight * 5.5); // Position below the volume button
+            if(this.isMobile) {
+                panel.setPosition(scene.scale.width * 0.5 - panelWidth / 2, scene.scale.height * 0.5 - panelHeight / 2); // Position below the volume button
+            } else {
+                panel.setPosition(panelWidth/10, panelHeight * 5.5); // Position below the volume button
+            }
             panel.setAlpha(1);
         };
 
@@ -2040,8 +2238,6 @@ export class Buttons {
             hidePanel();
         });
 
-        this.buttonContainer.add(container);
-        this.buttonContainer.add(panel);
     }
 
     private createSettingsButton(scene: GameScene): void {

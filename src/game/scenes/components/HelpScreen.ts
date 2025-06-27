@@ -13,11 +13,17 @@ export class HelpScreen {
     private mask: Phaser.Display.Masks.GeometryMask;
     private isVisible: boolean = false;
     private scene: GameScene;
-    protected viewWidth: number = 1329;
+    private viewWidth: number = 1329;
+    private isMobile: boolean = false;
 
     constructor() {
         this.isVisible = false;
     }
+
+    private isMobileDevice(): boolean {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+               window.innerWidth <= 768;
+    }   
 
     preload(scene: GameScene): void {
         // Load scatter symbol
@@ -25,6 +31,8 @@ export class HelpScreen {
         scene.load.image('ScatterLabel', `${prefix}ScatterSymbol.png`);
         scene.load.image('BuyFeatHelp', `${prefix}BuyFeatHelp.png`);
         scene.load.image('DoubleHelp', `${prefix}DoubleHelp.png`);
+        scene.load.image('BuyFeatMobile', `${prefix}BuyFeatMobile.png`);
+        scene.load.image('DoubleHelpMobile', `${prefix}DoubleHelpMobile.png`);
 
         scene.load.image('tumbleSymbol', `${prefix}tumbleIcon.png`);
         scene.load.image('tumbleGame', `${prefix}tumbleGame.png`);
@@ -41,6 +49,8 @@ export class HelpScreen {
         scene.load.image('paylineWin2', `${prefix}paylineWin2.png`);
         scene.load.image('paylineNoWin1', `${prefix}paylineNoWin1.png`);
         scene.load.image('paylineNoWin2', `${prefix}paylineNoWin2.png`);
+        scene.load.image('paylineMobileWin', `${prefix}paylineMobileWin.png`);
+        scene.load.image('paylineMobileNoWin', `${prefix}paylineMobileNoWin.png`);
 
         scene.load.image('howToPlay1', `${prefix}HowToPlay1.png`);
         scene.load.image('howToPlay2', `${prefix}HowToPlay2.png`);
@@ -56,12 +66,17 @@ export class HelpScreen {
         // Load UI elements
         scene.load.image('greenRectBtn', 'assets/Buttons/greenRectBtn.png');
         scene.load.image('ekis', 'assets/Buttons/ekis.png');
+        
     }
 
     create(scene: GameScene): void {
         this.scene = scene;
+        this.isMobile = this.isMobileDevice();
+
         const screenHeight = scene.scale.height;
-        const padding = 64;
+        const padding = this.isMobile ? 16 : 64;
+
+        this.viewWidth = this.isMobile ? scene.scale.width : 1329;
 
         // Position container initially off-screen to the left
         this.container = scene.add.container(-this.viewWidth, 0);
@@ -71,7 +86,7 @@ export class HelpScreen {
         // Create background with blur effect
         const bg = scene.add.graphics();
         bg.fillStyle(0x000000, 0.8);
-        bg.lineStyle(5, 0x66D449);
+        bg.lineStyle(5, 0x379557);
         bg.fillRoundedRect(0, 0, this.viewWidth, screenHeight, 1);
         bg.strokeRoundedRect(0, 0, this.viewWidth, screenHeight, 1);
         this.container.add(bg);
@@ -93,12 +108,14 @@ export class HelpScreen {
         //this.scrollView.setMask(this.mask);
 
         // Create close button
-        const closeButtonContainer = scene.add.container(this.viewWidth - padding, padding);
+        const closeButtonContainer = scene.add.container(
+            this.isMobile ? this.viewWidth - padding * 6 : this.viewWidth - padding,  this.isMobile ? padding * 2 : padding);
         const closeButton = scene.add.image(0, 0, 'greenRectBtn');
-        closeButton.setScale(0.25, 0.5);
+        closeButton.setScale(this.isMobile ? 0.125 : 0.25, this.isMobile ? 0.25 : 0.5);
         
         const closeText = scene.add.image(0, 0, 'ekis');
         closeText.setOrigin(0.5);
+        closeText.setScale(this.isMobile ? 0.5 : 1);
         
         closeButton.setPosition(closeButton.x + closeButton.width/4, closeButton.y);
         closeText.setPosition(closeText.x + closeButton.width/4, closeText.y);
@@ -109,15 +126,23 @@ export class HelpScreen {
         closeButton.setInteractive()
             .on('pointerover', () => closeButton.setTint(0x3FFF0D))
             .on('pointerout', () => closeButton.clearTint())
-            .on('pointerdown', () => this.hide());
+            .on('pointerdown', () => this.hide()
+        );
 
         this.container.add(closeButtonContainer);
 
         // Create help screen content
-        this.createContent();
+        if(this.isMobile){
+            this.createMobileContent();
+        }
+        else{
+            this.createContent();
+        }
 
         // Enable scrolling
         this.enableScrolling(this.scene);
+        this.contentContainer.setSize(this.contentWidth, this.yPosition);
+        this.contentContainer.setInteractive();
     }
 
     
@@ -126,7 +151,7 @@ export class HelpScreen {
     
     protected titleStyle = {
         fontSize: '24px',
-        color: '#57FFA3',
+        color: '#379557',
         fontFamily: 'Poppins',
         fontStyle: 'bold'
     };
@@ -140,7 +165,7 @@ export class HelpScreen {
     };
 
     private yPosition: number = 0;
-    private addContent(_text:string, _type:string): void {
+    private addContent(_text:string, _type:string, _wordWrap: boolean = false, _wordWrapWidth: number = 0): void {
         
 
         if(_type == 'title'){
@@ -149,21 +174,258 @@ export class HelpScreen {
             this.yPosition += content.height + this.padding;
         }
         else if(_type == 'text'){
-            const content = this.scene.add.text(this.padding, this.yPosition, _text, this.textStyle);
+            const content = this.scene.add.text(this.padding, this.yPosition, _text, {
+                ...this.textStyle,
+                wordWrap: _wordWrap ? { width: _wordWrapWidth } : undefined
+            });
             this.contentContainer.add(content);
             this.yPosition += content.height + this.padding;
         }
     }
 
+    private createMobileContent(): void {
+        this.padding = 10;
+        this.contentWidth = this.viewWidth - this.padding * 6;
+        this.yPosition = this.padding * 4;
+
+        this.addContent('Game Rules', 'title');
+
+        this.addContent('Win by landing 8 or more matching symbols anywhere on the screen.', 'text', true, this.contentWidth - this.padding * 2);
+        this.addContent('The more matching symbols you get, the higher your payout.', 'text', true, this.contentWidth - this.padding * 4);
+
+        this.addContent('RTP', 'title');
+        this.addContent('96.49% - 96.6%', 'text');
+
+        this.yPosition += this.padding * 2;
+
+        this.addContent('Payout', 'title');
+        
+        this.yPosition += this.padding * 10;
+
+        // Create 9 row symbol grid with payouts
+        const symbolSize = 153;
+        const symbolScale = 0.5;
+        const scaledSymbolSize = symbolSize * symbolScale;
+        for (let i = 0; i < 9; i++) {
+            const cellX = this.padding;
+            const cellY = this.yPosition;
+
+            // Create symbol container with white border
+            const symbolContainer = this.scene.add.container(cellX, cellY);
+
+            this.createBorder(symbolContainer, 
+                0, 
+                -scaledSymbolSize, 
+                this.contentWidth,
+                scaledSymbolSize * 1.5
+            );
+
+            // Add symbol
+            const symbol = this.scene.add.sprite(0, 0, `Symbol${i + 1}_SW`);
+            symbol.setFrame(`Symbol${i + 1}_SW-00000.png`);
+            symbol.setScale(symbolScale);
+            symbol.setOrigin(0, 0.7);
+            symbolContainer.add(symbol);
+
+            // Add payout table next to symbol
+            this.createPayoutTable(
+                scaledSymbolSize + symbolSize/5,  // Position table right of symbol
+                0,                      // Center vertically with symbol
+                symbolContainer,
+                i + 1
+            );
+
+            this.contentContainer.add(symbolContainer);
+            this.yPosition += scaledSymbolSize + this.padding * 5;  // Move to next row
+        }
+        this.yPosition -=  scaledSymbolSize;
+
+        this.addContent('Scatter', 'title');
+
+        this.yPosition += this.padding * 10;
+
+        { // scatter payouts
+            const cellX = this.padding;
+            const cellY = this.yPosition;
+
+            // Create symbol container with white border
+            const symbolContainer = this.scene.add.container(cellX, cellY);
+
+            this.createBorder(symbolContainer, 
+                0, 
+                -scaledSymbolSize, 
+                this.contentWidth,
+                scaledSymbolSize * 5.5
+            );
+
+            // Add symbol
+            const symbol = this.scene.add.sprite(this.viewWidth * 4 / 9, 0, 'ScatterLabel');
+            symbol.setScale(0.25);
+            symbol.setOrigin(0.5, 0.5);
+            symbolContainer.add(symbol);
+
+            // Add payout table next to symbol
+            this.createPayoutTable( 
+                symbol.x / 3,  // Position table right of symbol
+                symbol.height * 3 / 10,                      // Center vertically with symbol
+                symbolContainer,
+                0       
+            );
+
+            this.contentContainer.add(symbolContainer);
+            this.yPosition += scaledSymbolSize * 5;  // Move to next row
+        }
+
+        this.addDivider();
+
+        this.addContent('Enhanced Bet', 'title');
+        const doubleHelpContainer = this.scene.add.container(0, this.yPosition);
+        this.yPosition += this.createBorder(doubleHelpContainer, 
+            this.padding, 
+            0, 
+            this.contentWidth, 
+            scaledSymbolSize * 3
+        );
+        this.contentContainer.add(doubleHelpContainer);
+        this.createHowToPlayEntry(20, 40, doubleHelpContainer, 'DoubleHelpMobile', 'You\'re wagering 25% more per spin, but you also have better chances at hitting big features.');
+ 
+        this.yPosition -= scaledSymbolSize * 3;
+        
+        const buyFeatHelpContainer = this.scene.add.container(0, this.yPosition);
+        this.yPosition += this.createBorder(buyFeatHelpContainer, 
+            this.padding, 
+            0, 
+            this.contentWidth, 
+            scaledSymbolSize * 3
+        );
+        this.contentContainer.add(buyFeatHelpContainer);
+        this.createHowToPlayEntry(20, 40, buyFeatHelpContainer, 'BuyFeatMobile', 'Lets you buy the free spins round for 100x your total bet');
+
+        this.yPosition -= scaledSymbolSize * 4;
+        this.addContent('Tumble Win', 'title');
+
+        const tumbleWinContainer = this.scene.add.container(0, this.yPosition);
+        this.yPosition += this.createBorder(tumbleWinContainer, 
+            this.padding, 
+            0, 
+            this.contentWidth, 
+            scaledSymbolSize * 10
+        );
+        this.contentContainer.add(tumbleWinContainer);
+        this.createHowToPlayEntry(20, 120, tumbleWinContainer, 'tumbleGame', 
+            'After each spin, winning symbols are paid and then removed from the screen. Remaining symbols drop down, and new ones fall from above to fill the empty spaces.\n\n' +
+            'Tumbles continue as long as new winning combinations appear — there\'s no limit to the number of tumbles per spin.\n\n' +
+            'All wins are credited to the player\'s balance after all tumbles from a base spin are completed.');
+
+
+        const tumbleSymbolImage = this.scene.add.image(0, 0, 'tumbleSymbol');
+        tumbleSymbolImage.setScale(0.5);
+        tumbleSymbolImage.setOrigin(0.5, 0.5);
+        tumbleSymbolImage.setPosition(70, 35);
+        tumbleWinContainer.add(tumbleSymbolImage);
+        
+
+        const tumbleWinImage = this.scene.add.image(0, 0, 'tumbleWin');
+        tumbleWinImage.setScale(0.5);
+        tumbleWinImage.setOrigin(0.5, 0.5);
+        tumbleWinImage.setPosition(tumbleSymbolImage.x - tumbleSymbolImage.displayWidth/2 + this.padding * 2, tumbleSymbolImage.y - tumbleWinImage.height/3);
+        tumbleWinContainer.add(tumbleWinImage);
+        
+        this.yPosition -= scaledSymbolSize * 11;
+
+        this.addContent('Free Spins Rules', 'title');
+
+        const freeSpinContainer = this.scene.add.container(0, this.yPosition);
+        this.yPosition += this.createBorder(freeSpinContainer, 
+            this.padding, 
+            0, 
+            this.contentWidth, 
+            scaledSymbolSize * 6.75
+            
+        );
+        this.contentContainer.add(freeSpinContainer);
+        
+        this.yPosition += scaledSymbolSize  * 1;
+
+        this.createHowToPlayEntry(20, 120, freeSpinContainer, 'scatterGame', 
+            'Land 4 or more scatter symbols anywhere on the screen to trigger the free spins feature.\n\n' +
+            'You\'ll start with 10 free spins.\n\n' +
+            'During the bonus round, hitting 3 or more scatter symbols awards 5 extra free spins');
+
+        const scatterSymbolImage = this.scene.add.image(0, 0, 'scatterIcon');
+        scatterSymbolImage.setScale(0.5);
+        scatterSymbolImage.setOrigin(0.5, 0.5);
+        scatterSymbolImage.setPosition(100, 60);
+        freeSpinContainer.add(scatterSymbolImage);
+        
+        const scatterWinImage = this.scene.add.image(0, 0, 'scatterWin');
+        scatterWinImage.setScale(0.5);
+        scatterWinImage.setOrigin(0.5, 0.5);
+        scatterWinImage.setPosition(scatterSymbolImage.x - scatterSymbolImage.displayWidth/2 + this.padding * 2, scatterSymbolImage.y * 3/4 - scatterWinImage.height/ 4);
+        freeSpinContainer.add(scatterWinImage);
+        
+        this.yPosition -= scaledSymbolSize * 9;
+        this.addDivider();
+
+        this.addContent('Multiplier', 'title');
+        
+        const multiplierContainer = this.scene.add.container(0, this.yPosition);
+        this.yPosition += this.createBorder(multiplierContainer, 
+            this.padding, 
+            0, 
+            this.contentWidth, 
+            scaledSymbolSize * 10.5
+        );
+        this.yPosition += scaledSymbolSize * 1;
+        this.contentContainer.add(multiplierContainer);
+        this.createHowToPlayEntry(20, 120, multiplierContainer, 'multiplierGame', 'The multiplier symbol only appears during the FREE SPINS round and remains on the screen until the tumbling sequence ends.\n\n' +
+            'Each time a bomb symbol lands, it randomly takes a multiplier value: 2x, 3x, 4x, 5x, 6x, 8x, 10x, 12x, 15x, 20x, 25x, 50x, or even 100x!\n\n' +
+            'Once all tumbles are finished, the total of all multipliers is added and applied to the total win of the that sequence.\n\n' +
+            'Special reels are used during the FREE SPINS round.');
+
+        this.yPosition -= scaledSymbolSize * 12.5
+        this.addContent('Game Settings', 'title');
+
+        const gamesettingsContainer = this.scene.add.container(0, this.yPosition);
+        this.yPosition += this.createBorder(gamesettingsContainer, 
+            this.padding, 
+            0, 
+            this.contentWidth, 
+            scaledSymbolSize * 10
+        );
+        this.contentContainer.add(gamesettingsContainer);
+
+        this.yPosition -= scaledSymbolSize * 9.75;
+
+        this.addContent('Paylines', 'title');
+
+        this.createHowToPlayEntry(20, scaledSymbolSize * 0.75, gamesettingsContainer, '', 'Symbols can land anywhere on the screen.');
+
+        this.createHowToPlayEntry(20, scaledSymbolSize * 2.75, gamesettingsContainer, 'paylineMobileWin', '');
+        this.createHowToPlayEntry(20, scaledSymbolSize * 5.25, gamesettingsContainer, 'paylineMobileNoWin', '');
+
+        this.createHowToPlayEntry(20, scaledSymbolSize * 6.5, gamesettingsContainer, '', 'All wins are multiplied by the base bet.');
+        this.createHowToPlayEntry(20, scaledSymbolSize * 7.5, gamesettingsContainer, '', 'When multiple symbol wins occur, all values are combined into the total win.');
+        this.createHowToPlayEntry(20, scaledSymbolSize * 8.75, gamesettingsContainer, '', 'Free spins rewards are granted after the round ends.');
+
+        this.yPosition -= scaledSymbolSize * 4;
+
+        this.commonRules(this.contentWidth, 153);
+
+        this.yPosition -= scaledSymbolSize * 38;
+    }
+
     private createContent(): void {
+        this.padding = 20;
+        this.contentWidth = 1200;
         this.yPosition = 0;
 
         // Game Rules Header
         this.addContent('Game Rules', 'title');
 
         // Game Rules Text
-        this.addContent('Win by landing 8 or more matching symbols anywhere on the screen.', 'text');
-        this.addContent('The more matching symbols you get, the higher your payout.', 'text');
+        this.addContent('Win by landing 8 or more matching symbols anywhere on the screen.', 'text', true, this.contentWidth - this.padding * 2);
+        this.addContent('The more matching symbols you get, the higher your payout.', 'text', true, this.contentWidth - this.padding * 4);
 
 
         // RTP Header
@@ -595,45 +857,48 @@ export class HelpScreen {
         this.yPosition += this.padding;
 
         
-
-        this.addContent('How to Play', 'title');
+        this.commonRules(genericTableWidth, scaledSymbolSize);
         
-        const howToPlayContainer = this.scene.add.container(this.padding, this.yPosition);
+
+        this.yPosition += scaledSymbolSize * 5;
+    }
+
+    private commonRules(genericTableWidth: number, scaledSymbolSize: number): void {
+        
+        this.addContent('How to Play', 'title');
+        const commonPadding = 20;
+        
+        const howToPlayContainer = this.scene.add.container(0, this.yPosition);
 
         this.yPosition += this.createBorder(howToPlayContainer, 
             this.padding, 
             0, 
             genericTableWidth, 
-            scaledSymbolSize * 20
+            scaledSymbolSize * 15
         );
         this.contentContainer.add(howToPlayContainer);
 
-        this.createHeader(this.padding * 4, this.padding * 2, howToPlayContainer, 'Bet Controls', '#66D449');
+        this.createHeader(commonPadding * 2, this.isMobile ? commonPadding : commonPadding * 1.5, howToPlayContainer, 'Bet Controls', '#379557');
 
-        this.createHowToPlayEntry(this.padding * 5, this.padding * 6, howToPlayContainer, 'howToPlay1', 'Adjust your total bet');
+        this.createHowToPlayEntry(commonPadding * 2, this.isMobile ? commonPadding * 5 : commonPadding * 6 , howToPlayContainer, 'howToPlay1', 'Adjust your total bet.');
 
-        this.createHeader(this.padding * 4, this.padding * 9, howToPlayContainer, 'Game Actions', '#66D449');
+        this.createHeader(commonPadding * 2, this.isMobile ? commonPadding * 10 : commonPadding * 9, howToPlayContainer, 'Game Actions', '#379557');
         
-        this.createHowToPlayEntry(this.padding * 5, this.padding * 14, howToPlayContainer, 'howToPlay2', 'Start the game round');
-        this.createHowToPlayEntry(this.padding * 5, this.padding * 21, howToPlayContainer, 'howToPlay3', 'Open the autoplay menu. Tap again to stop autoplay');
-        this.createHowToPlayEntry(this.padding * 5, this.padding * 28, howToPlayContainer, 'howToPlay4', 'Speeds up the game');
+        this.createHowToPlayEntry(commonPadding * 2, this.isMobile ? commonPadding * 15 : commonPadding * 14, howToPlayContainer, 'howToPlay2', 'Start the game round.');
+        this.createHowToPlayEntry(commonPadding * 2, this.isMobile ? commonPadding * 25 : commonPadding * 21, howToPlayContainer, 'howToPlay3', 'Open the autoplay menu. Tap again to stop autoplay.');
+        this.createHowToPlayEntry(commonPadding * 2, this.isMobile ? commonPadding * 35 : commonPadding * 28, howToPlayContainer, 'howToPlay4', 'Speeds up the game.');
 
-        this.createHeader(this.padding * 4, this.padding * 32, howToPlayContainer, 'Display & Stats', '#66D449');
+        this.createHeader(commonPadding * 2, this.isMobile ? commonPadding * 42 : commonPadding * 32, howToPlayContainer, 'Display & Stats', '#379557');
 
-        this.createHowToPlayEntry(this.padding * 5, this.padding * 37, howToPlayContainer, 'howToPlay5', 'Shows your current available credits');
-        this.createHowToPlayEntry(this.padding * 5, this.padding * 44, howToPlayContainer, 'howToPlay6', 'Display your total winnings from the current round');
-        this.createHowToPlayEntry(this.padding * 5, this.padding * 51, howToPlayContainer, 'howToPlay7', 'Adjust your wager using the - and + buttons');
+        this.createHowToPlayEntry(commonPadding * 2, this.isMobile ? commonPadding * 47 : commonPadding * 37, howToPlayContainer, 'howToPlay5', 'Shows your current available credits.');
+        this.createHowToPlayEntry(commonPadding * 2, this.isMobile ? commonPadding * 58 : commonPadding * 44, howToPlayContainer, 'howToPlay6', 'Display your total winnings from the current round.');
+        this.createHowToPlayEntry(commonPadding * 2, this.isMobile ? commonPadding * 69 : commonPadding * 51, howToPlayContainer, 'howToPlay7', 'Adjust your wager using the - and + buttons.');
 
-        this.createHeader(this.padding * 4, this.padding * 55, howToPlayContainer, 'General Controls', '#66D449');
+        this.createHeader(commonPadding * 2, this.isMobile ? commonPadding * 77 : commonPadding * 55, howToPlayContainer, 'General Controls', '#379557');
 
-        this.createHowToPlayEntry(this.padding * 5, this.padding * 59, howToPlayContainer, 'howToPlay8', 'Toggle game sounds on and off');
-        this.createHowToPlayEntry(this.padding * 5, this.padding * 63, howToPlayContainer, 'howToPlay9', 'Access gameplay preferences and system options');
-        this.createHowToPlayEntry(this.padding * 5, this.padding * 68, howToPlayContainer, 'howToPlay10', 'View game rules, features, and paytable');
-        
-
-        //this.addDivider();
-        
-
+        this.createHowToPlayEntry(commonPadding * 2, this.isMobile ? commonPadding * 80 : commonPadding * 59, howToPlayContainer, 'howToPlay8', 'Toggle game sounds on and off.');
+        this.createHowToPlayEntry(commonPadding * 2, this.isMobile ? commonPadding * 88 : commonPadding * 63, howToPlayContainer, 'howToPlay9', 'Access gameplay preferences and system options.');
+        this.createHowToPlayEntry(commonPadding * 2, this.isMobile ? commonPadding * 98 : commonPadding * 68, howToPlayContainer, 'howToPlay10', 'View game rules, features, and paytable.');        
     }
 
     private createHeader(x: number, y: number, container: GameObjects.Container, text: string, color: string): void {
@@ -654,49 +919,66 @@ export class HelpScreen {
     }
 
     private createHowToPlayEntry(x: number, y: number, container: GameObjects.Container, image: string, text: string): void {
-        const genericTableWidth = 1129;
-        
-        const imageElement = this.scene.add.image(x, y, image);
-        imageElement.setScale(1);
-        imageElement.setOrigin(0, 0.5);
-        container.add(imageElement);
+        const genericTableWidth = this.isMobile ? this.viewWidth - this.padding * 2 : 1129;
+        let imageElement = null;
+        if(image!=''){
+            imageElement = this.scene.add.image(x, y, image);
+        }
+        if(imageElement != null){
+            if(image == 'tumbleGame' || image == 'scatterGame' || image == 'multiplierGame'){
+                imageElement.setScale(0.5);
+            }
+            imageElement.setOrigin(0, 0.5);
+        }
+        if(imageElement != null){
+            container.add(imageElement);
+        }
      
         const textElement = this.scene.add.text(
             0, 0,
             text,
             {
                 ...this.textStyle,
-                wordWrap: { width: genericTableWidth - this.padding * 6 },
+                wordWrap: { width: genericTableWidth - this.padding * 6},
+                
             }
         );
-        textElement.setPosition(x + imageElement.displayWidth + this.padding, y);
-        textElement.setOrigin(0, 0.5);
-        container.add(textElement);   
+        textElement.setPosition(
+            this.isMobile ? x : x + (imageElement != null ? imageElement.displayWidth + this.padding : 0),
+            this.isMobile ? (imageElement != null ? imageElement.y + imageElement.displayHeight / 2 + this.padding * 2 : y) : y);
+        textElement.setOrigin(0, 0);
+        
+        container.add(textElement); 
+        if(this.isMobile){
+            this.yPosition += (imageElement != null ? imageElement.displayHeight * 2 : 0) + textElement.displayHeight + this.padding * 2;
+        }
     }
 
     private createBorder(_container: GameObjects.Container, _x: number, _y: number, _width: number, _height: number): number {
         const border = this.scene.add.graphics();
         border.fillStyle(0x333333);
         border.fillRoundedRect(_x, _y, _width, _height, 8);
-        border.lineStyle(2, 0xFFFFFF);
+        border.lineStyle(2, 0x333333);
         border.strokeRoundedRect(_x, _y, _width, _height, 8);
+        border.setAlpha(0.7);
         _container.add(border);
         _container.sendToBack(border);
         return _height;
     }
 
-    private addDivider(_color: number = 0xFFFFFF, _padding: number = 4): void {
+    private addDivider(_color: number = 0xFFFFFF): void {
         // Add divider
         const divider = this.scene.add.graphics();
         divider.lineStyle(2, _color);
-        divider.lineBetween(this.padding, this.yPosition, this.contentWidth + this.padding * 5, this.yPosition );
+        const x2 = this.isMobile ? this.viewWidth - this.padding * 4 : this.contentWidth + this.padding * 2;
+        divider.lineBetween(this.padding, this.yPosition, x2, this.yPosition );
         this.contentContainer.add(divider);
-        this.yPosition += this.padding * _padding;
+        this.yPosition += this.padding;
     }
 
     private createPayoutTable(x: number, y: number, container: GameObjects.Container, symbolIndex: number): void {
-        const cellWidth1 = 45;
-        const cellWidth2 = 80;
+        const cellWidth1 = this.isMobile ? 60 : 45;
+        const cellWidth2 = this.isMobile ? 120 : 80;
         const cellHeight = 30;
         const cellPadding = 5;
 
@@ -741,7 +1023,8 @@ export class HelpScreen {
                         const textElement = this.scene.add.text(cellX + cellWidth/2, cellY + cellHeight/2, text, {
                             fontSize: '20px',
                             color: '#FFFFFF',
-                            fontFamily: 'Poppins'
+                            fontFamily: 'Poppins', 
+                            align: 'right'
                         });
 
                         textElement.setOrigin(col == 0 ? 0 : 0.5, 0.5);
@@ -780,11 +1063,14 @@ export class HelpScreen {
                                 fontSize: '20px',
                                 color: '#FFFFFF',
                                 fontFamily: 'Poppins',
-                                align: 'center'
                             }
                         );
                         scatterTextCell.setOrigin(0, 0.5);
                         container.add(scatterTextCell);
+                        if(this.isMobile){
+                            scatterTextCell.setPosition(this.padding * 3, scatterTextCell.y + scatterTextCell.displayHeight + this.padding * 10);
+                            scatterTextCell.setWordWrapWidth(this.contentWidth - this.padding * 6);
+                        }
                     }
                 }
             }

@@ -1,4 +1,5 @@
 import { Scene } from 'phaser';
+import { GameAPI } from './backend/GameAPI';
 
 export class LandingPage extends Scene {
     private spinButton!: Phaser.GameObjects.Image;
@@ -6,48 +7,78 @@ export class LandingPage extends Scene {
     private isRotating: boolean = false;
     protected pressed: boolean = false;
     private isTransitioning: boolean = false;
+    private isMobile: boolean = false;
+
     constructor() {
         super('LandingPage');
     }
 
     preload(): void {
         this.load.image('logostart', 'assets/Logo/Logo.png');
-        this.load.image('background', 'assets/background/preloader.png');
+        this.load.image('background_desktop', 'assets/background/preloader_desktop.png');
+        this.load.image('background_mobile', 'assets/background/preloader_mobile.png');
         this.load.image('spinButton', 'assets/Controllers/Spin.png');
+        this.load.image('gameTemplateBackground', 'assets/background/Main_Background.png')
     }
 
     create(): void {
-        this.add.image(this.cameras.main.width / 2, this.cameras.main.height / 2, 'background')
+        console.log(this.cameras.main.width, this.cameras.main.height);
+        // Detect if mobile
+        this.isMobile = this.isMobileDevice();
+        
+        // Choose background based on device
+        const backgroundKey = this.isMobile ? 'background_mobile' : 'background_desktop';
+        this.add.image(this.cameras.main.width / 2, this.cameras.main.height / 2, backgroundKey)
         .setOrigin(0.5);
         
-        this.add.image(600, 150, 'logostart')
-        .setScale(0.4);
+        // Adjust logo position and scale based on device
+        const logoScale = this.isMobile ? 0.25 : 0.4;
+        const logoX = this.isMobile ? this.cameras.main.width / 2 : 600;
+        const logoY = this.isMobile ? this.cameras.main.height * 0.2 : 150;
+        
+        this.add.image(logoX, logoY, 'logostart')
+        .setScale(logoScale);
 
-        this.add.text(this.cameras.main.width / 4, this.cameras.main.height * 0.8, 'Win up to 21,000x', {
-            fontSize: '48px',
+        // Adjust win text position and size
+        const winTextX = this.isMobile ? this.cameras.main.width / 2 : this.cameras.main.width / 4;
+        const winTextY = this.isMobile ? this.cameras.main.height * 0.7 : this.cameras.main.height * 0.8;
+        const winTextSize = this.isMobile ? '32px' : '48px';
+        
+        this.add.text(winTextX, winTextY, 'Win up to 21,000x', {
+            fontSize: winTextSize,
             color: '#ffffff',
             fontStyle: 'bold',
             fontFamily: 'Poppins',
             stroke: '#379557',
-            strokeThickness: 8,
+            strokeThickness: this.isMobile ? 4 : 8,
             shadow: {
-                offsetX: 2,
-                offsetY: 8,
+                offsetX: this.isMobile ? 1 : 2,
+                offsetY: this.isMobile ? 4 : 8,
                 color: '#000000',
                 blur: 0,
                 fill: true
             }
         }).setOrigin(0.5);
 
-        this.notificationText = this.add.text(this.cameras.main.width * 0.72, this.cameras.main.height * 0.6, 'Press Play To Continue', {
-            fontSize: '24px',
+        // Adjust notification text position and size
+        const notifX = this.isMobile ? this.cameras.main.width *  0.25: this.cameras.main.width * 0.72;
+        const notifY = this.isMobile ? this.cameras.main.height * 0.88 : this.cameras.main.height * 0.6;
+        const notifSize = this.isMobile ? '18px' : '24px';
+        
+        this.notificationText = this.add.text(notifX, notifY, 'Press Play To Continue', {
+            fontSize: notifSize,
             color: '#ffffff',
             fontStyle: 'bold',
             fontFamily: 'Poppins',
             stroke: '#379557',
         }).setAlpha(0);
 
-        this.spinButton = this.add.image(this.cameras.main.width * 0.8, this.cameras.main.height * 0.425, 'spinButton');
+        // Adjust spin button position and scale
+        const buttonX = this.isMobile ? this.cameras.main.width / 2 : this.cameras.main.width * 0.8;
+        const buttonY = this.isMobile ? this.cameras.main.height * 0.8 : this.cameras.main.height * 0.425;
+        const buttonScale = this.isMobile ? 0.4 : 1;
+        
+        this.spinButton = this.add.image(buttonX, buttonY, 'spinButton').setScale(buttonScale);
         this.spinButton.setAlpha(0.5);
 
         this.startIdleRotation();
@@ -75,6 +106,11 @@ export class LandingPage extends Scene {
         this.scene.launch('LoadingPage');
     }
 
+    // Function to detect if the device is mobile
+    private isMobileDevice(): boolean {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+               window.innerWidth <= 768;
+    }
     
     private startIdleRotation(): void {
         if (!this.isRotating) {
@@ -92,5 +128,38 @@ export class LandingPage extends Scene {
     public doneLoading(): void {
         this.spinButton.setAlpha(1);
         this.notificationText.setAlpha(1);
+        
+           // Initialize and run the game launcher with retries
+           const gameAPI = new GameAPI(this.gameData);
+           const maxRetries = 50;
+           let retryCount = 0;
+           
+           const tryLaunchGame = async () => {
+               try {
+                   await gameAPI.gameLauncher();
+                   this.spinButton.setAlpha(1);
+               } catch (error) {
+                   console.error(`Failed to launch game (attempt ${retryCount + 1}):`, error);
+                   if (retryCount < maxRetries) {
+                       retryCount++;
+                       await tryLaunchGame();
+                   } else {
+                       console.error('Max retries reached, game launch failed');
+                       this.spinButton.setAlpha(0.75);
+                   }
+               }
+           };
+
+           tryLaunchGame();
+//
+                // Fade out the current scene
+           //     this.cameras.main.fadeOut(1000, 0, 0, 0);
+//
+           //     // When fade out is complete, start the Game scene
+           //     this.cameras.main.once('camerafadeoutcomplete', () => {
+           //         this.scene.start('Game');
+           //         this.scene.remove('LoadingPage');
+           //     });
+           // }
     }
 } 

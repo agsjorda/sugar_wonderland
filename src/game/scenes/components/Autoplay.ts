@@ -20,9 +20,17 @@ export class Autoplay {
     private remainingSpinsText?: GameObjects.Text;
     private spinsText_Y: number = 0;
     private remainingSpinsBg?: GameObjects.Graphics;
+    private isMobile: boolean = false;
 
     preload(scene: GameScene): void {
         this.scene = scene;
+        this.isMobile = this.isMobileDevice();
+    }
+    
+    // Function to detect if the device is mobile
+    private isMobileDevice(): boolean {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+               window.innerWidth <= 768;
     }
 
     create(scene: GameScene): void {
@@ -87,8 +95,8 @@ export class Autoplay {
         }
 
         // Position it near the autoplay button
-        const x = scene.scale.width * 0.88;
-        const y = scene.scale.height * 0.443;
+        const x = this.isMobile ? scene.buttons.freeSpinBtn.x : scene.scale.width * 0.88;
+        const y = this.isMobile ? scene.buttons.freeSpinBtn.y : scene.scale.height * 0.443;
 
 
         // Create text for remaining spins
@@ -101,6 +109,7 @@ export class Autoplay {
         });
         this.remainingSpinsText.setOrigin(0.5, 0.5);
         this.remainingSpinsText.setDepth(1000);
+        this.remainingSpinsText.setScale(this.isMobile ? 0.5 : 1);
         this.spinsText_Y = this.remainingSpinsText.y;
 
         // Update button visibility
@@ -128,13 +137,13 @@ export class Autoplay {
         // Update text position based on number of digits
         if (displayCount.toString().length === 3) {
             this.remainingSpinsText.setFontSize('50px');
-            this.remainingSpinsText.setPosition(this.remainingSpinsText.x, this.spinsText_Y + 20);
+            this.remainingSpinsText.setPosition(this.remainingSpinsText.x, this.isMobile ? this.spinsText_Y : this.spinsText_Y + 20);
         } else if (displayCount.toString().length === 2) {
             this.remainingSpinsText.setFontSize('80px');
-            this.remainingSpinsText.setPosition(this.remainingSpinsText.x, this.spinsText_Y + 15);
+            this.remainingSpinsText.setPosition(this.remainingSpinsText.x, this.isMobile ? this.spinsText_Y : this.spinsText_Y + 15);
         } else {
             this.remainingSpinsText.setFontSize('110px');
-            this.remainingSpinsText.setPosition(this.remainingSpinsText.x, this.spinsText_Y + 10);
+            this.remainingSpinsText.setPosition(this.remainingSpinsText.x, this.isMobile ? this.spinsText_Y : this.spinsText_Y + 10);
         }
 
         // Update the text
@@ -165,43 +174,41 @@ export class Autoplay {
     }
 
     private spin(): void {
-            console.error("A");
-            console.log("autoplay: " + this.isAutoPlaying + "\nbonus: " + this.scene.gameData.isBonusRound + "\nspins: " + this.remainingSpins + "\nfree: " + this.scene.gameData.freeSpins);
+            this.scene.gameData.debugError("A spin");
+            this.scene.gameData.debugLog("autoplay: " + this.isAutoPlaying + "\nbonus: " + this.scene.gameData.isBonusRound + "\nspins: " + this.remainingSpins + "\nfree: " + this.scene.gameData.freeSpins);
 
         // Check if we should stop autoplay
         if (!this.isAutoPlaying || 
             (!this.scene.gameData.isBonusRound && this.remainingSpins <= 0) ||
             (this.scene.gameData.isBonusRound && this.scene.gameData.freeSpins <= 0)) {
             this.stop();
-            console.log("a1");
+            this.scene.gameData.debugLog("a1 stop"); 
             Events.emitter.emit(Events.AUTOPLAY_COMPLETE);
             return;
         }
-        console.log("B");
 
         // If music has resumed, destroy any active win overlay
         if (this.scene.slotMachine.activeWinOverlay) {
             if(!this.scene.audioManager.BGChecker?.isPlaying) {
                 this.scene.slotMachine.destroyWinOverlay(this.scene);
-                console.log("b1");
+                this.scene.gameData.debugLog("b1 destroy win overlay");
             }
         }
-        console.log("C");
 
         // For free spins, don't check balance
         if (!this.scene.gameData.isBonusRound) {
-            console.log("c2");
+            this.scene.gameData.debugLog("c2 not Bonus Round");
             // Check if player has enough balance for the bet
             if (this.scene.gameData.balance < this.scene.gameData.bet) {
                 this.stop();
-                console.log("c3");
+                this.scene.gameData.debugLog("c3 not enough balance");
                 Events.emitter.emit(Events.AUTOPLAY_COMPLETE);
                 return;
             }
             // Decrement remaining spins for regular play
             this.remainingSpins--;
         }
-        console.log("d");
+        this.scene.gameData.debugLog("d1");
 
         // Reset total win for new spin
         this.scene.gameData.totalWin = 0;
@@ -209,12 +216,12 @@ export class Autoplay {
 
         // Ensure we have valid slot data
         if (!this.scene.gameData.slot?.values?.length) {
-            console.error('Invalid slot data in autoplay spin');
+            this.scene.gameData.debugError('Invalid slot data in autoplay spin');
             this.stop();
             Events.emitter.emit(Events.AUTOPLAY_COMPLETE);
             return;
         }
-        console.log("e");
+        this.scene.gameData.debugLog("e1");
 
         // Trigger spin
         Events.emitter.emit(Events.SPIN, {

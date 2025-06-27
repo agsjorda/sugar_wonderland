@@ -9,6 +9,7 @@ import { Buttons } from '../ui/Buttons';
 import { AudioManager } from './components/AudioManager';    
 import { Autoplay } from './components/Autoplay';
 import { HelpScreen } from './components/HelpScreen';
+import { GameAPI } from './backend/GameAPI';
 
 // Interface for component lifecycle management
 interface GameComponent {
@@ -28,6 +29,7 @@ export class Game extends Scene {
     public audioManager: AudioManager;
     public autoplay: Autoplay;
     public helpScreen: HelpScreen;
+    public gameAPI: GameAPI;
 
     private components: GameComponent[];
 
@@ -36,7 +38,7 @@ export class Game extends Scene {
         
         // Initialize all components
         this.stateMachine = new StateMachine();
-        this.gameData = new GameData();
+        this.gameData = new GameData(this.gameAPI);
         this.background = new Background();
         this.slotMachine = new SlotMachine();
         this.character = new Character();
@@ -44,7 +46,7 @@ export class Game extends Scene {
         this.audioManager = new AudioManager();
         this.autoplay = new Autoplay();
         this.helpScreen = new HelpScreen();
-
+        this.gameAPI = new GameAPI(this.gameData);
         // Store components for lifecycle management
         this.components = [
             this.background,
@@ -73,6 +75,11 @@ export class Game extends Scene {
     
     create(): void {
         try {
+            // Debug logging example
+            this.gameData.debugLog('Game scene created');
+            this.gameData.debugLog('Current bet:', this.gameData.bet);
+            this.gameData.debugLog('Current balance:', this.gameData.balance);
+            
             // Set initial state
             this.stateMachine.setState(new StartState(), this);
 
@@ -119,6 +126,11 @@ export class Game extends Scene {
 
     update(time: number, delta: number): void {
         try {
+            // Debug logging example (only logs every 60 frames to avoid spam)
+            if (this.gameData.debugged && time % 1000 < 16) { // ~60fps
+                this.gameData.debugLog('Game update - isSpinning:', this.gameData.isSpinning);
+            }
+            
             // Update state machine
             this.stateMachine.update(this, time, delta);
 

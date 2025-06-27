@@ -8,6 +8,8 @@ export class WinAnimation {
     private bombAtlas: number[] = [2,3,4,5,6,8,10,12,15,20,25,50,100];
     private bombImages: Phaser.GameObjects.Image[] = [];
     private currentBombImage: Phaser.GameObjects.Image | null = null;
+    private onBombAnimationStart?: () => void;
+    private onBombAnimationEnd?: () => void;
 
     constructor(scene: Scene) {
         this.scene = scene;
@@ -38,6 +40,11 @@ export class WinAnimation {
     }
 
     playBombAnimation(spineObject: SpineGameObject, multiplier: number, bombType: string = ''): void {
+        // Notify that bomb animation is starting
+        if (this.onBombAnimationStart) {
+            this.onBombAnimationStart();
+        }
+        
         // Hide any currently displayed bomb image
         this.hideCurrentBombImage();
         //
@@ -83,8 +90,17 @@ export class WinAnimation {
                     ease: 'Power2',
                     onComplete: () => {
                         this.hideCurrentBombImage();
+                        // Notify that bomb animation has ended
+                        if (this.onBombAnimationEnd) {
+                            this.onBombAnimationEnd();
+                        }
                     }
                 });
+            } else {
+                // Notify that bomb animation has ended (if no image was shown)
+                if (this.onBombAnimationEnd) {
+                    this.onBombAnimationEnd();
+                }
             }
         });
     }
@@ -222,5 +238,10 @@ export class WinAnimation {
         });
         this.bombImages = [];
         this.currentBombImage = null;
+    }
+
+    setBombAnimationCallbacks(onStart?: () => void, onEnd?: () => void): void {
+        this.onBombAnimationStart = onStart;
+        this.onBombAnimationEnd = onEnd;
     }
 } 

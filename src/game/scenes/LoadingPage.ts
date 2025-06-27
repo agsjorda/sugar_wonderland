@@ -8,13 +8,13 @@ import { Buttons } from '../ui/Buttons';
 import { AudioManager } from './components/AudioManager';
 import { Autoplay } from './components/Autoplay';
 import { HelpScreen } from './components/HelpScreen';
-
 export class LoadingPage extends Scene {
     private loadingBar!: Phaser.GameObjects.Graphics;
     private progressText!: Phaser.GameObjects.Text;
     private width = 310;
     private barX: number = 0;
     private barY: number = 0;
+    private isMobile: boolean = false;
 
     public stateMachine: StateMachine;
     public gameData: GameData;
@@ -33,7 +33,6 @@ export class LoadingPage extends Scene {
         
         // Initialize all components
         this.stateMachine = new StateMachine();
-        this.gameData = new GameData();
         this.background = new Background();
         this.slotMachine = new SlotMachine();
         this.character = new Character();
@@ -55,13 +54,12 @@ export class LoadingPage extends Scene {
     }
 
     preload(): void {
+        // Detect if mobile
+        this.isMobile = this.isMobileDevice();
+        
         // Create loading bar
         this.createLoadingBar();
         
-
-        // Load background
-        this.load.image('background', 'assets/background/preloader.png');
-
         // Preload all components
         try {
             for (const component of this.components) {
@@ -84,46 +82,62 @@ export class LoadingPage extends Scene {
         this.progressText.destroy();
     }
 
+    // Function to detect if the device is mobile
+    private isMobileDevice(): boolean {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+               window.innerWidth <= 768;
+    }
+
     private createLoadingBar(): void {  
-        const height = 40;
-        const innerHeight = 30;
-        const borderRadius = 16;
-        this.barX = this.cameras.main.centerX + this.width + 100;
-        this.barY = this.cameras.main.centerY + 160;
-        console.log(this.barX, this.barY);
+        const height = this.isMobile ? 30 : 40;
+        const innerHeight = this.isMobile ? 22 : 30;
+        const borderRadius = this.isMobile ? 12 : 16;
+        const barWidth = this.isMobile ? 200 : 310;
+        const fontSize = this.isMobile ? '18px' : '24px';
+        
+        // Adjust positioning based on device
+        if (this.isMobile) {
+            this.barX = this.cameras.main.centerX - barWidth / 2;
+            this.barY = this.cameras.main.centerY + barWidth * 2;
+        } else {
+            this.barX = this.cameras.main.centerX + this.width + 100;
+            this.barY = this.cameras.main.centerY + 160;
+        }
+        
 
         // Create loading bar background
         this.loadingBar = this.add.graphics();
         this.loadingBar.fillStyle(0x222222, 0.8);
-        this.loadingBar.fillRoundedRect(this.barX, this.barY, this.width, height, borderRadius);
+        this.loadingBar.fillRoundedRect(this.barX, this.barY, barWidth, height, borderRadius);
 
         // Create progress bar
         this.loadingBar.fillStyle(0x4CAF50, 1);
         this.loadingBar.fillRoundedRect(this.barX, this.barY, 0, innerHeight, borderRadius);
 
         // Create progress text
-        this.progressText = this.add.text(this.barX + this.width / 2, this.barY + 15, '0%', {
-            fontSize: '24px',
+        this.progressText = this.add.text(this.barX + barWidth / 2, this.barY + height / 2 - 3, '0%', {
+            fontSize: fontSize,
             color: '#ffffff',
-            fontStyle: 'bold'
+            fontStyle: 'bold',
+            fontFamily: 'Poppins'
         }).setOrigin(0.5);
 
         // Set up loading events
         this.load.on('progress', (value: number) => {
             this.loadingBar.clear();
             this.loadingBar.fillStyle(0x222222, 0.8);
-            this.loadingBar.fillRoundedRect(this.barX - 5, this.barY - 5, this.width + 10, height, borderRadius);
+            this.loadingBar.fillRoundedRect(this.barX - 5, this.barY - 5, barWidth + 10, height, borderRadius);
             this.loadingBar.fillStyle(0x4CAF50, 1);
-            this.loadingBar.fillRoundedRect(this.barX, this.barY, this.width * value, innerHeight, borderRadius);
+            this.loadingBar.fillRoundedRect(this.barX, this.barY, barWidth * value, innerHeight, borderRadius);
             this.progressText.setText(`${Math.floor(value * 100)}%`);
         });
 
         this.load.on('complete', () => {
             this.loadingBar.clear();
             this.loadingBar.fillStyle(0x222222, 0.8);
-            this.loadingBar.fillRoundedRect(this.barX - 5, this.barY - 5, this.width  + 10, height, borderRadius);
+            this.loadingBar.fillRoundedRect(this.barX - 5, this.barY - 5, barWidth + 10, height, borderRadius);
             this.loadingBar.fillStyle(0x4CAF50, 1);
-            this.loadingBar.fillRoundedRect(this.barX, this.barY, this.width, innerHeight, borderRadius);
+            this.loadingBar.fillRoundedRect(this.barX, this.barY, barWidth, innerHeight, borderRadius);
             this.progressText.setText('100%');
         });
     }
