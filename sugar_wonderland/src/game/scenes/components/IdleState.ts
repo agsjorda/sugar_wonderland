@@ -15,13 +15,12 @@ interface SpinEventData {
     isBuyFeature?: boolean;
 }
 
-interface GameScene extends Scene {
+interface GameScene extends Scene { 
     gameData: GameData;
     background: Background;
     audioManager: AudioManager;
     buttons: Buttons;
-    slotMachine: SlotMachine;
-}
+    slotMachine: SlotMachine;}
 
 export class IdleState extends State {
     private spinEventListener?: (data: SpinEventData) => void;
@@ -108,17 +107,17 @@ export class IdleState extends State {
             slot.placeBombs(scene.gameData.minBomb, scene.gameData.maxBomb, scene.gameData.bombChance, scene.gameData.isBonusRound);
             scene.gameData.minBomb = 0;
 
-
-        // Add listener to reset isSpinning when animation ends
-        Events.emitter.once(Events.SPIN_ANIMATION_END, () => {
-            scene.gameData.isSpinning = false;
-        });
-
-        Events.emitter.emit(Events.SPIN_ANIMATION_START, {
-            symbols: slot.values,
-            currentRow: scene.gameData.currentRow,
-            newRandomValues: newRandomValues
-        });
+            // Add listener to reset isSpinning when animation ends
+            Events.emitter.once(Events.SPIN_ANIMATION_END, () => {
+                scene.gameData.isSpinning = false;
+            });
+    
+            Events.emitter.emit(Events.SPIN_ANIMATION_START, {
+                symbols: slot.values,
+                currentRow: scene.gameData.currentRow,
+                newRandomValues: newRandomValues
+            });
+                
     }
 
     private initEventListeners(scene: GameScene): void {

@@ -24,13 +24,21 @@ export class WinOverlayContainer {
     private isActive: boolean = false;
     private isAnimating: boolean = false;
     private multiplier: number = 0;
+    private isMobile: boolean = false;
 
     constructor(scene: GameScene, winAnimation: WinAnimation) {
         this.scene = scene;
+        this.isMobile = this.isMobileDevice();
         this.winAnimation = winAnimation;
         this.container = scene.add.container(0, 0);
         this.container.setDepth(10000);
+        this.container.setScale(this.isMobile ? 0.5 : 1);
         this.createOverlay();
+    }
+
+    private isMobileDevice(): boolean {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+               window.innerWidth <= 768;
     }
 
     private createOverlay(): void {
@@ -38,10 +46,15 @@ export class WinOverlayContainer {
         const bg = this.scene.add.graphics();
         bg.fillStyle(0x000000, 0.7);
         bg.fillRect(0, 0, this.scene.scale.width, this.scene.scale.height * 2);
+        if(this.isMobile) {
+            bg.setScale(2, 2);
+        }
         this.container.add(bg);
 
         // Create container for content
-        const contentContainer = this.scene.add.container(this.scene.scale.width / 2, this.scene.scale.height / 2);
+        const contentContainer = this.scene.add.container(
+            this.isMobile ? this.scene.scale.width : this.scene.scale.width / 2,
+            this.isMobile ? this.scene.scale.height : this.scene.scale.height / 2);
         this.container.add(contentContainer);
 
         // Add win animation
@@ -118,7 +131,11 @@ export class WinOverlayContainer {
 
         // Make entire screen interactive
         const buttonZone = this.scene.add.zone(0, 0, this.scene.scale.width, this.scene.scale.height);
-        buttonZone.setInteractive();
+
+        buttonZone.setInteractive(
+            new Phaser.Geom.Rectangle(0, 0, this.scene.scale.width* 2 , this.scene.scale.height * 2),
+            Phaser.Geom.Rectangle.Contains
+        );
         contentContainer.add(buttonZone);
 
         // Set up event listeners
@@ -142,7 +159,9 @@ export class WinOverlayContainer {
                 this.winText.setText(`${totalWin.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
                 this.freeSpinsText.visible = false;
             }
+            
         });
+
 
         buttonZone.on('pointerdown', () => {
             if (this.multiplier === -1) {

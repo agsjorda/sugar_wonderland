@@ -6,7 +6,7 @@ import { SpinePlugin } from '@esotericsoftware/spine-phaser-v3';
 
 // Find out more information about the Game Config at:
 // https://docs.phaser.io/api-documentation/typedef/types-core#gameconfig
-const config: Types.Core.GameConfig = {
+const desktopConfig: Types.Core.GameConfig = {
     type: AUTO,
     width: 1920,
     height: 1080,
@@ -35,7 +35,43 @@ const config: Types.Core.GameConfig = {
     }
 };
 
+const mobileConfig: Types.Core.GameConfig = {
+    type: AUTO,
+    width: 428,
+    height: 926,
+    parent: 'game-container',
+    backgroundColor: '#000000',
+    scale: {
+        mode: Scale.FIT,
+        autoCenter: Scale.CENTER_BOTH
+    },
+    scene: [
+        LandingPage,
+        LoadingPage,
+        MainGame,
+    ],
+    plugins: {
+        scene: [
+            {
+                key: 'spine.SpinePlugin',
+                plugin: SpinePlugin,
+                mapping: 'spine'
+            }
+        ]
+    },
+    dom: {
+        createContainer: true
+    }
+};
+
+// Function to detect if the device is mobile
+const isMobile = (): boolean => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           window.innerWidth <= 768;
+};
+
 const StartGame = (parent: string): Game => {
+    const config = isMobile() ? mobileConfig : desktopConfig;
     return new Game({ ...config, parent });
 };
 

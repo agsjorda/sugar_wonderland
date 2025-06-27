@@ -7,25 +7,31 @@ import { Animation } from './Animation';
 import { WinAnimation } from './WinAnimation';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3/dist/SpineGameObject';
 import { WinOverlayContainer } from './WinOverlayContainer';
+import { GameAPI } from '../backend/GameAPI';
+import { BombContainer } from './BombContainer';
 
 // Extend Scene to include gameData and audioManager
 interface GameScene extends Scene {
+    gameAPI: GameAPI;
     gameData: GameData;
     audioManager: AudioManager;
 }
 
 // Improved SymbolGrid interface with proper typing
 interface SymbolGrid {
-    [index: number]: (GameObjects.Sprite | SpineGameObject)[];
+    [index: number]: (GameObjects.Sprite | SpineGameObject | BombContainer)[];
     length: number;
-    map: <T>(callback: (row: (GameObjects.Sprite | SpineGameObject)[], index: number) => T[]) => T[][];
-    forEach: (callback: (row: (GameObjects.Sprite | SpineGameObject)[], index: number) => void) => void;
+    map: <T>(callback: (row: (GameObjects.Sprite | SpineGameObject | BombContainer)[], index: number) => T[]) => T[][];
+    forEach: (callback: (row: (GameObjects.Sprite | SpineGameObject | BombContainer)[], index: number) => void) => void;
 }
-
 
 interface SpinData {
     symbols: number[][];
     currentRow: number;
+}
+
+function transpose(matrix: number[][]): number[][] {
+    return matrix[0].map((_, colIndex) => matrix.map(row => row[colIndex]));
 }
 
 export class SlotMachine {
@@ -43,12 +49,15 @@ export class SlotMachine {
     private slotY: number;
     public activeWinOverlay: boolean = false;
     public tweensToComplete: number = 0;
+    private bombAnimationActive: boolean = false;
 
     private winOverlayContainers: WinOverlayContainer[] = [];
     private bombPopupContainer: GameObjects.Container | null = null;
 
     private animation: Animation;
     private winAnimation: WinAnimation;
+
+    private isMobile: boolean = false;
 
     constructor() {
         this.symbolDisplayWidth = 153.17;
@@ -73,7 +82,8 @@ export class SlotMachine {
         this.winAnimation = new WinAnimation(scene);
         this.winAnimation.preload();
 
-        this.initVariables(scene);
+        this.initVariables(scene as GameScene);
+        this.isMobile = this.isMobileDevice();
     }
 
     private initVariables(scene: GameScene): void {
@@ -89,22 +99,41 @@ export class SlotMachine {
     }
 
     create(scene: Scene): void {
-        this.createContainer(scene);
-        this.createBackground(scene);
-        this.createSlot(scene);
-        this.eventListeners(scene);
+        this.createContainer(scene as GameScene);
+        this.createBackground(scene as GameScene);
+        this.createSlot(scene as GameScene);
+        this.eventListeners(scene as GameScene);
         
         // Initialize animations
         this.animation.create();
         this.winAnimation.create();
+        
+        // Set up bomb animation callbacks
+        this.winAnimation.setBombAnimationCallbacks(
+            () => this.setBombAnimationActive(true),  // On start
+            () => this.setBombAnimationActive(false)  // On end
+        );
+    }
+
+    // Function to detect if the device is mobile
+    private isMobileDevice(): boolean {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+               window.innerWidth <= 768;
     }
 
     private createContainer(scene: GameScene): void {
-        this.container = scene.add.container(this.slotX, this.slotY);
+        this.container = scene.add.container(
+            this.isMobile ? scene.scale.width * 0.01 : this.slotX,
+            this.isMobile ? scene.scale.height * 0.23 : this.slotY);
+        this.container.setScale(this.isMobile ? 0.43 : 1);
+
+        this.totalGridWidth = this.isMobile ? this.totalGridWidth * 0.43 : this.totalGridWidth;
+        this.totalGridHeight = this.isMobile ? this.totalGridHeight * 0.43 : this.totalGridHeight; 
         this.container.setDepth(4);
     }
 
     private createBackground(scene: GameScene): void {
+        if(this.isMobile) return;
         const background = scene.add.image(0, 0, 'slotBackground').setOrigin(0, 0);
         background.setDepth(3);
 
@@ -119,8 +148,13 @@ export class SlotMachine {
     }
 
     private createSlot(scene: GameScene): void {
+        const x = this.isMobile ? scene.scale.width * 0 : this.slotX - 45;    
+        const y = this.isMobile ? scene.scale.height * 0.21 : this.slotY - 75/5;
+        const width = this.isMobile ? this.totalGridWidth  : this.totalGridWidth + 90;
+        const height = this.isMobile ? this.totalGridHeight * 1.22 : this.totalGridHeight + 75*0.8;
+        
         const maskShape = scene.add.graphics();
-        maskShape.fillRect(this.slotX - 45, this.slotY - 75/5, this.totalGridWidth + 90, this.totalGridHeight + 75*0.8);
+        maskShape.fillRect(x, y, width, height);
 
         const mask = maskShape.createGeometryMask();
         this.container.setMask(mask);
@@ -128,6 +162,14 @@ export class SlotMachine {
     }
 
     private createReel(scene: GameScene, data: SpinData): void {
+        
+        Events.emitter.emit(Events.UPDATE_BALANCE);
+
+        scene.gameAPI.getBalance().then((data) => {
+            scene.gameData.debugLog(data);
+            Events.emitter.emit(Events.UPDATE_BALANCE, data);
+        });
+
         this.cleanupAloneSymbols();
         const numRows = Slot.ROWS;
         const numCols = Slot.COLUMNS;
@@ -135,180 +177,205 @@ export class SlotMachine {
         const height = this.symbolDisplayHeight;
         const horizontalSpacing = this.horizontalSpacing;
         const verticalSpacing = this.verticalSpacing;
-
-        const newValues = data.symbols;
-        let completedSymbols = 0;
-        const totalSymbols = numCols * numRows;
-
-        // Initialize newSymbolGrid with proper nested arrays
-        let newSymbolGrid = Array(numRows).fill(null).map(() => Array(numCols).fill(null)) as unknown as SymbolGrid;
-        Object.assign(newSymbolGrid, {
-            length: numRows,
-            map: (callback: (row: (GameObjects.Sprite | SpineGameObject)[], index: number) => any[]) => 
-                Array(numRows).fill(null).map((_, row) => callback(newSymbolGrid[row], row)),
-            forEach: (callback: (row: (GameObjects.Sprite | SpineGameObject)[], index: number) => void) => 
-                Array(numRows).fill(null).forEach((_, index) => callback(newSymbolGrid[index], index))
-        });
-
-        const rowInterval = 150; // ms between each row's arrival in a column
-        let turboSpeed = scene.gameData.turbo ? 0.2 : 1;
-        let offsetDelay = 1100;
+        let newValues: number[][] = [];
         
+        scene.gameAPI.doSpin(scene.gameData.bet).then(result => {
+            scene.gameData.debugLog("result",result);
+            scene.gameData.debugLog("slotArea",result.data.slotArea);
 
-        if(scene.gameData.turbo){
-            scene.audioManager.TurboDrop.play();
-        }
-        for (let col = 0; col < numCols; col++) {
-            for (let row = numRows - 1; row >= 0; row--) {
-                const symbol = this.symbolGrid[row][col];
-                const centerX = width * 0.5 + col * (width + horizontalSpacing);
-                const centerY = height * 0.5;
-                const symbolX = centerX;
-                const symbolY = centerY + row * (height + verticalSpacing);
-                const delay = (col * 250 + (numRows - 1 - row) * rowInterval) * turboSpeed;
+            
+            newValues = transpose(result.data.slotArea);
 
-                // Modify the symbol creation part
-                const symbolValue = newValues[row][col];
-                
-                let newSymbol: GameObjects.Sprite | SpineGameObject;
-                let symbolKey = 'Symbol0_SW'; // Default to scatter symbol
-                let frameKey = 'Symbol0_SW-00000.png';
-                const startY = symbolY - height * (numRows + 1);
+           //for(let i = 0; i < newValues.length; i++){
+           //    for(let j = 0; j < newValues[i].length; j++){
+           //        if(newValues[i][j] == 0){
+           //            newValues[i][j] = -1;
+           //            // currently disable scatter 
+           //        }
+           //    }
+           //}
 
-                if (symbolValue >= 1 && symbolValue <= 9) {
-                    symbolKey = `Symbol${symbolValue}_SW`;
-                    frameKey = `Symbol${symbolValue}_SW-00000.png`;
-                    newSymbol = scene.add.sprite(symbolX, startY, symbolKey, frameKey);
-                } else if (symbolValue >= 10 && symbolValue <= 22) {
-                    // Create spine object for bomb
-                    newSymbol = scene.add.spine(symbolX, startY, 'Symbol10_SW', 'Symbol10_SW');
-                    newSymbol.setVisible(true);
-                    newSymbol.animationState.timeScale = 0;
-                    
-                    // Don't create fake symbols here - let WinAnimation handle the bomb images
-                    // The showBombPopup method will handle the animation and image display
-                } else {
-                    newSymbol = scene.add.sprite(symbolX, startY, symbolKey, frameKey);
-                }
-
-                // Set the display size based on the symbol type
-                if (symbolValue === 0) {
-                    newSymbol.setDisplaySize(width * Slot.SCATTER_SIZE, height * Slot.SCATTER_SIZE);
-                } else if (symbolValue >= 10 && symbolValue <= 22) {
-                    newSymbol.setDisplaySize(width * Slot.BOMB_SIZE_X, height * Slot.BOMB_SIZE_Y);
-                    console.log(symbolValue);
-                    this.showBombPopup(scene, symbolValue, newSymbol);
-                } else {
-                    newSymbol.setDisplaySize(width * Slot.SYMBOL_SIZE, height * Slot.SYMBOL_SIZE);
-                }
-
-                // Calculate duration based on distance to maintain consistent speed
-                const distance = symbolY - startY;
-                const baseSpeed = 2; // pixels per millisecond
-                let duration = (distance / baseSpeed) * turboSpeed;
-                if (scene.gameData.turbo) {
-                    duration = Math.min(duration, 1250 * turboSpeed);
-                }
-
-                // Add extra delay for turbo mode to prevent overlap
-                let tweenDelay = (delay + offsetDelay) * turboSpeed;
-                if (scene.gameData.turbo) {
-                    tweenDelay += duration / turboSpeed;
-                }
-
-                // Tween out the old symbol
-                if (symbol) {
-                    const endY = symbol.y + height * (numRows + 1);
-                    const distance = endY - symbol.y;
-                    const baseSpeed = 2;
-                    const durationOld = (distance / baseSpeed) * turboSpeed;
-
-                
-                    // Create multiple motion trails
-                    const trails: Phaser.GameObjects.Sprite[] = [];
-                    const numTrails = 10;
-                    const trailSpacing = -100; // Space between trails
-
-                    for (let i = 0; i < numTrails; i++) {
-                        if(scene.gameData.turbo == false && 'texture' in symbol) {
-                            const trail = scene.add.sprite(symbol.x, symbol.y, symbol.texture.key, symbol.frame.name);
-                            trail.setDisplaySize(symbol.displayWidth, symbol.displayHeight);
-                            trail.setAlpha(0.7 - (i * 0.15)); // Decreasing alpha for each trail
-                            trail.setPipeline('BlurPostFX');
-
-                            (trail as any).blurStrength = 0.8 + (i * 0.1); // Increasing blur for each trail
-                            trail.setDepth(symbol.depth - (i + 1)); // Place trails behind the symbol
-                            this.container.add(trail);
-                            trails.push(trail);
-                        }
-                    }
-
-                    scene.tweens.add({
-                        targets: symbol,
-                        y: endY,
-                        alpha: 0.1,
-                        scale: 0.5,
-                        duration: durationOld,
-                        delay: delay,
-                        ease: 'Quart.easeInOut',
-                        onUpdate: () => {
-                            // Update trail positions and fade
-                            if(scene.gameData.turbo == false) {
-                                setTimeout(() => {
-                                    trails.forEach((trail, index) => {
-                                        trail.y = symbol.y - (trailSpacing * (index + 1));
-                                        trail.alpha = symbol.alpha * (0.7 - (index * 0.15));
-                                    });
-                                }, 100);
-                            }
-                        },
-                        onComplete: () => {
-                            trails.forEach(trail => trail.destroy());
-                            symbol.destroy();
-                        }
-                    });
-                }
-
-                // Move new symbol down
-                scene.tweens.add({
-                    targets: newSymbol,
-                    y: symbolY,
-                    duration: duration,
-                    ease: 'Quart.easeInOut',
-                    delay: tweenDelay,
-                    onComplete: () => {
-                        completedSymbols++;
-                        if (completedSymbols === totalSymbols) {
-                            // console.log(newValues); debug symbols
-                            Events.emitter.emit(Events.SPIN_ANIMATION_END, {
-                                symbols: newValues,
-                                currentRow: data.currentRow
-                            });
-                            const result = this.checkMatch(newValues, scene);
-                            console.log(result);
-                            if(result === "No more matches" ) {
-                                scene.gameData.isSpinning = false;
-                            }
-                        }
-                        
-                        if(row === 4){
-                            if(!scene.gameData.turbo){
-                                scene.audioManager.ReelDrop.play();
-                            }
-                        }
-                    }
-                });
-
-                this.container.add(newSymbol);
-                newSymbolGrid[row][col] = newSymbol;
+            if(scene.gameData.debugged){
+                newValues = data.symbols;
             }
-        }
 
-        this.symbolGrid = newSymbolGrid;
+
+            let completedSymbols = 0;
+            const totalSymbols = numCols * numRows;
+
+            // Initialize newSymbolGrid with proper nested arrays
+            let newSymbolGrid = Array(numRows).fill(null).map(() => Array(numCols).fill(null)) as unknown as SymbolGrid;
+            Object.assign(newSymbolGrid, {
+                length: numRows,
+                map: (callback: (row: (GameObjects.Sprite | SpineGameObject | BombContainer)[], index: number) => any[]) => 
+                    Array(numRows).fill(null).map((_, row) => callback(newSymbolGrid[row], row)),
+                forEach: (callback: (row: (GameObjects.Sprite | SpineGameObject | BombContainer)[], index: number) => void) => 
+                    Array(numRows).fill(null).forEach((_, index) => callback(newSymbolGrid[index], index))
+            });
+
+            const rowInterval = 150; // ms between each row's arrival in a column
+            let turboSpeed = scene.gameData.turbo ? 0.2 : 1;
+            let offsetDelay = 1100;
+            
+
+            if(scene.gameData.turbo){
+                scene.audioManager.TurboDrop.play();
+            }
+            for (let col = 0; col < numCols; col++) {
+                for (let row = numRows - 1; row >= 0; row--) {
+                    const symbol = this.symbolGrid[row][col];
+                    const centerX = width * 0.5 + col * (width + horizontalSpacing);
+                    const centerY = height * 0.5;
+                    const symbolX = centerX;
+                    const symbolY = centerY + row * (height + verticalSpacing);
+                    const delay = (col * 250 + (numRows - 1 - row) * rowInterval) * turboSpeed;
+
+                    // Modify the symbol creation part
+                    const symbolValue = newValues[row][col];
+                    
+                    let newSymbol: GameObjects.Sprite | SpineGameObject | BombContainer | null = null;
+                    let symbolKey = 'Symbol0_SW'; // Default to scatter symbol
+                    let frameKey = 'Symbol0_SW-00000.png';
+                    const startY = symbolY - height * (numRows + 1);
+
+                    if (symbolValue >= 1 && symbolValue <= 9) {
+                        symbolKey = `Symbol${symbolValue}_SW`;
+                        frameKey = `Symbol${symbolValue}_SW-00000.png`;
+                        newSymbol = scene.add.sprite(symbolX, startY, symbolKey, frameKey) as GameObjects.Sprite;
+                    } else if (symbolValue >= 10 && symbolValue <= 22) {
+                        // Create BombContainer for bomb
+                        newSymbol = new BombContainer(scene, symbolX, startY, symbolValue, scene.gameData);
+                        newSymbol.setBombDisplaySize(width * Slot.BOMB_SIZE_X, height * Slot.BOMB_SIZE_Y);
+                        scene.gameData.debugLog('Created BombContainer for dropAndRefill', { symbolValue, position: { x: symbolX, y: startY } });
+                    } else {
+                        newSymbol = scene.add.sprite(symbolX, startY, symbolKey, frameKey) as GameObjects.Sprite;
+                    }
+
+                    // Set the display size based on the symbol type
+                    if (symbolValue === 0) {
+                        newSymbol?.setDisplaySize(width * Slot.SCATTER_SIZE, height * Slot.SCATTER_SIZE);
+                    } else if (symbolValue >= 10 && symbolValue <= 22) {
+                        // Handle BombContainer display size
+                        if (newSymbol instanceof BombContainer) {
+                            newSymbol.setBombDisplaySize(width * Slot.BOMB_SIZE_X, height * Slot.BOMB_SIZE_Y);
+                        } else if (newSymbol) {
+                            newSymbol.setDisplaySize(width * Slot.BOMB_SIZE_X, height * Slot.BOMB_SIZE_Y);
+                        }
+                        scene.gameData.debugLog("symbolValue", symbolValue);
+                    } else {
+                        newSymbol?.setDisplaySize(width * Slot.SYMBOL_SIZE, height * Slot.SYMBOL_SIZE);
+                    }
+
+                    // Calculate duration based on distance to maintain consistent speed
+                    const distance = symbolY - startY;
+                    const baseSpeed = 2; // pixels per millisecond
+                    let duration = (distance / baseSpeed) * turboSpeed;
+                    if (scene.gameData.turbo) {
+                        duration = Math.min(duration, 1250 * turboSpeed);
+                    }
+
+                    // Add extra delay for turbo mode to prevent overlap
+                    let tweenDelay = (delay + offsetDelay) * turboSpeed;
+                    if (scene.gameData.turbo) {
+                        tweenDelay += duration / turboSpeed;
+                    }
+
+                    // Tween out the old symbol
+                    if (symbol) {
+                        const endY = symbol.y + height * (numRows + 1);
+                        const distance = endY - symbol.y;
+                        const baseSpeed = 2;
+                        const durationOld = (distance / baseSpeed) * turboSpeed;
+
+                    
+                        // Create multiple motion trails
+                        const trails: Phaser.GameObjects.Sprite[] = [];
+                        const numTrails = 10;
+                        const trailSpacing = -100; // Space between trails
+
+                        for (let i = 0; i < numTrails; i++) {
+                            if(scene.gameData.turbo == false && 'texture' in symbol) {
+                                const trail = scene.add.sprite(symbol.x, symbol.y, symbol.texture.key, symbol.frame.name);
+                                trail.setDisplaySize(symbol.displayWidth, symbol.displayHeight);
+                                trail.setAlpha(0.7 - (i * 0.15)); // Decreasing alpha for each trail
+                                trail.setPipeline('BlurPostFX');
+
+                                (trail as any).blurStrength = 0.8 + (i * 0.1); // Increasing blur for each trail
+                                trail.setDepth(symbol.depth - (i + 1)); // Place trails behind the symbol
+                                this.container.add(trail);
+                                trails.push(trail);
+                            }
+                        }
+
+                        scene.tweens.add({
+                            targets: symbol,
+                            y: endY,
+                            alpha: 0.1,
+                            scale: 0.5,
+                            duration: durationOld,
+                            delay: delay,
+                            ease: 'Quart.easeInOut',
+                            onUpdate: () => {
+                                // Update trail positions and fade
+                                if(scene.gameData.turbo == false) {
+                                    setTimeout(() => {
+                                        trails.forEach((trail, index) => {
+                                            trail.y = symbol.y - (trailSpacing * (index + 1));
+                                            trail.alpha = symbol.alpha * (0.7 - (index * 0.15));
+                                        });
+                                    }, 100);
+                                }
+                            },
+                            onComplete: () => {
+                                trails.forEach(trail => trail.destroy());
+                                symbol.destroy();
+                            }
+                        });
+                    }
+
+                    // Move new symbol down
+                    if(newSymbol)
+                    scene.tweens.add({
+                        targets: newSymbol,
+                        y: symbolY,
+                        duration: duration,
+                        ease: 'Quart.easeInOut',
+                        delay: tweenDelay,
+                       onComplete: () => {
+                           completedSymbols++;
+                           if (completedSymbols === totalSymbols) {
+                               // console.log(newValues); debug symbols
+                               Events.emitter.emit(Events.SPIN_ANIMATION_END, {
+                                   symbols: newValues,
+                                   currentRow: data.currentRow
+                               });
+                               const result = this.checkMatch(newValues, scene);
+                               scene.gameData.debugLog(result);
+                               if(result === "No more matches" ) {
+                                   scene.gameData.isSpinning = false;
+                               }
+                           }
+                           
+                           if(row === 4){
+                               if(!scene.gameData.turbo){
+                                   scene.audioManager.ReelDrop.play();
+                               }
+                           }
+                       }
+                    });
+
+                    if(newSymbol)
+                            this.container.add(newSymbol);
+                    newSymbolGrid[row][col] = newSymbol;
+                }
+            }
+
+            this.symbolGrid = newSymbolGrid;
+        });
     }
 
     private eventListeners(scene: GameScene): void {
-        Events.emitter.on(Events.SPIN_ANIMATION_START, (data: SpinData) => {
+        Events.emitter.on(Events.SPIN, (data: SpinData) => {
             scene.audioManager.ReelStart.play();
             this.createReel(scene, data);
         });
@@ -327,11 +394,11 @@ export class SlotMachine {
         const verticalSpacing = this.verticalSpacing;
 
         // Initialize the symbolGrid with proper nested arrays
-        this.symbolGrid = Array(numRows).fill(null).map(() => Array(numCols).fill(null)) as unknown as SymbolGrid;
+        this.symbolGrid = Array(numRows).fill(null).map(() => Array(numCols).fill(null)) as SymbolGrid;
         Object.assign(this.symbolGrid, {
-            map: (callback: (row: (GameObjects.Sprite | SpineGameObject)[], index: number) => any[]) => 
+            map: (callback: (row: (GameObjects.Sprite | SpineGameObject | BombContainer)[], index: number) => any[]) => 
                 Array(numRows).fill(null).map((_, row) => callback(this.symbolGrid[row], row)),
-            forEach: (callback: (row: (GameObjects.Sprite | SpineGameObject)[], index: number) => void) => 
+            forEach: (callback: (row: (GameObjects.Sprite | SpineGameObject | BombContainer)[], index: number) => void) => 
                 Array(numRows).fill(null).forEach((_, index) => callback(this.symbolGrid[index], index))
         });
 
@@ -350,7 +417,7 @@ export class SlotMachine {
                 const symbolX = centerX + col * (width + horizontalSpacing);
                 const symbolY = centerY + row * (height + verticalSpacing);
 
-                const symbol = scene.add.sprite(symbolX, symbolY, symbolKey, frameKey);
+                const symbol = scene.add.sprite(symbolX, symbolY, symbolKey, frameKey) as GameObjects.Sprite;
 
                 if (symbolValue === 0 && sampleScatterCount < 3){
                     sampleScatterCount++;
@@ -366,7 +433,7 @@ export class SlotMachine {
     }
 
 
-    public spin(scene: Scene, data: any): void {
+    public async spin(scene: Scene, data: any): Promise<void> {
         // Clear previous bomb animations
         
         const gameScene = scene as GameScene;
@@ -452,84 +519,21 @@ export class SlotMachine {
                 if (this.activeWinOverlay) {
                     // Still active, check again in a short delay
                     scene.time.delayedCall(1000, checkOverlay);
-                    console.log("overlay active, waiting to show free spins popup");
+                    scene.gameData.debugLog("overlay active, waiting to show free spins popup");
                 } else {
                     // Overlay removed, proceed with free spins popup
-                    console.log("overlay removed, showing free spins popup");
+                    scene.gameData.debugLog("overlay removed, showing free spins popup");
                     this.showWinOverlay(scene, freeSpins, -1);
                 }
             };
             checkOverlay();
         } else {
-            console.log("no overlay active, showing free spins popup immediately");
+            scene.gameData.debugLog("no overlay active, showing free spins popup immediately");
             // No overlay active, proceed immediately
             this.showWinOverlay(scene, freeSpins, -1);
         }
     }
 
-    private showBombPopup(scene: GameScene, bombMultiplier: number, bomb: SpineGameObject | GameObjects.Sprite): void {
-        if(bombMultiplier < 10 || bombMultiplier > 22)
-            return;
-        
-        const multiplier = scene.gameData.bombMultiplier[bombMultiplier - 10];
-        
-        // Play bomb animation if it's a spine object
-        if (bomb instanceof SpineGameObject) {
-            let bombType = 'low';
-            if (multiplier >= 15) {
-                bombType = 'high';
-            } else if (multiplier >= 8) {
-                bombType = 'medium';
-            }
-            
-            this.winAnimation.playBombAnimation(bomb, multiplier, bombType);
-        }
-        
-        const x = bomb.x;
-        const y = bomb.y;
-        this.bombPopupContainer = scene.add.container(x, y);
-        
-        const text = scene.add.text(0, 0, `${multiplier}X`, {
-            fontSize: '88px',
-            color: '#FFD700',
-            fontFamily: 'Poppins',
-            fontStyle: 'bold',
-            align: 'center',
-            stroke: '#FF0000',
-            strokeThickness: 10,
-            shadow: {
-                offsetX: 0,
-                offsetY: 0,
-                color: '#FFFFFF',
-                blur: 20,
-                stroke: true,
-                fill: false
-            }
-        });
-        const gradient = text.context.createLinearGradient(0,0,0,text.height);
-        gradient.addColorStop(0, '#FFF15A');
-        gradient.addColorStop(0.5, '#FFD000');
-        gradient.addColorStop(1, '#FFB400');
-        text.setFill(gradient);
-
-        this.bombPopupContainer.add(text);
-        Events.emitter.on(Events.SPIN_ANIMATION_END, () => {
-            scene.tweens.add({
-                targets: text,
-                alpha: 1,
-                duration: 1000,
-                ease: 'Power2',
-                onComplete: () => {
-                    text.destroy();
-                    // Clean up bomb animation
-                    if (this.bombPopupContainer) {
-                        this.bombPopupContainer.destroy();
-                        this.bombPopupContainer = null;
-                    }
-                }
-            });
-        });
-    }
 
     private showWinOverlay(scene: GameScene, totalWin: number, bet: number): void {
         // Calculate multiplier for win type
@@ -689,7 +693,9 @@ export class SlotMachine {
                         }
 
                         // Show popup with retrigger info
-                        const popupContainer = scene.add.container(scene.scale.width/2, scene.scale.height/2);
+                        const popupContainer = scene.add.container(
+                            this.isMobile ? scene.scale.width * 0.5: scene.scale.width/2,
+                            this.isMobile ? scene.scale.height * 0.5 : scene.scale.height/2);
                         popupContainer.setDepth(1000);
                     
                         const bg = scene.add.image(0, 0, 'buyFeatBG');
@@ -724,6 +730,7 @@ export class SlotMachine {
 
                         popupContainer.add(text);
                         popupContainer.add(freeSpinsCount);
+                        popupContainer.setScale(this.isMobile ? 0.5 : 1);
 
                         // Make container interactive
                         popupContainer.setInteractive(new Phaser.Geom.Rectangle(-popupContainer.width/2, -popupContainer.height/2, popupContainer.width, popupContainer.height), Phaser.Geom.Rectangle.Contains);
@@ -827,7 +834,7 @@ export class SlotMachine {
                             
                             if (animationsToComplete === 0) {
                                 onAllAnimationsComplete();
-                                console.log("scatter animations complete");
+                                scene.gameData.debugLog("scatter animations complete");
                                 
                                 // Only trigger drop and refill after all scatter animations are done
                                 if (scatterAnimationsComplete === scatterSprites.length) {
@@ -889,50 +896,55 @@ export class SlotMachine {
             }
             
             Events.emitter.emit(Events.WIN, {});
+   
+            if(this.isMobile) {
+                Events.emitter.emit(Events.UPDATE_TOTAL_WIN, winAmount);
+            }
+            else
+            {
+                // Popup text at the matched symbol closest to the center
+                const gridCenter = { row: (rows - 1) / 2, col: (cols - 1) / 2 };
+                let minDist = Infinity;
+                let popupPos = { x: scene.scale.width / 2, y: scene.scale.height / 2 };
+                matchedCells.forEach(({ row, col }) => {
+                    const dist = Math.abs(row - gridCenter.row) + Math.abs(col - gridCenter.col);
+                    if (dist < minDist && this.symbolGrid[row][col]) {
+                        minDist = dist;
+                        const symbolSprite = this.symbolGrid[row][col];
+                        popupPos = { x: symbolSprite.x, y: symbolSprite.y };
+                    }
+                });
 
-            // Popup text at the matched symbol closest to the center
-            const gridCenter = { row: (rows - 1) / 2, col: (cols - 1) / 2 };
-            let minDist = Infinity;
-            let popupPos = { x: scene.scale.width / 2, y: scene.scale.height / 2 };
-            matchedCells.forEach(({ row, col }) => {
-                const dist = Math.abs(row - gridCenter.row) + Math.abs(col - gridCenter.col);
-                if (dist < minDist && this.symbolGrid[row][col]) {
-                    minDist = dist;
-                    const symbolSprite = this.symbolGrid[row][col];
-                    popupPos = { x: symbolSprite.x, y: symbolSprite.y };
-                }
-            });
+                const popupText = scene.add.text(
+                    popupPos.x,
+                    popupPos.y,
+                    `+$${winAmount.toFixed(2)}`,
+                    {
+                        fontSize: '64px',
+                        color: '#FFD700',
+                        fontStyle: 'bold',
+                        stroke: '#000',
+                        strokeThickness: 6,
+                        fontFamily: 'Poppins'
+                    }
+                );
 
-            const popupText = scene.add.text(
-                popupPos.x,
-                popupPos.y,
-                `+$${winAmount.toFixed(2)}`,
-                {
-                    fontSize: '64px',
-                    color: '#FFD700',
-                    fontStyle: 'bold',
-                    stroke: '#000',
-                    strokeThickness: 6,
-                    fontFamily: 'Poppins'
-                }
-            );
+                popupText.setOrigin(0.5, 0.5);
+                popupText.setDepth(100);
 
-            popupText.setOrigin(0.5, 0.5);
-            popupText.setDepth(100);
-
-            // Animate the popup text with scale and float effect
-            scene.tweens.add({
-                targets: popupText,
-                y: popupPos.y - 80,
-                alpha: 0,
-                scale: 1.5,
-                duration: 2000,
-                ease: 'Back.easeOut',
-                onComplete: () => {
-                    popupText.destroy();
-                }
-            });
-
+                // Animate the popup text with scale and float effect
+                scene.tweens.add({
+                    targets: popupText,
+                    y: popupPos.y - 80,
+                    alpha: 0,
+                    scale: 1.5,
+                    duration: 2000,
+                    ease: 'Back.easeOut',
+                    onComplete: () => {
+                        popupText.destroy();
+                    }
+                });
+            }
             // 5. Mark matched cells for removal
             const toRemove = Array.from({ length: rows }, () => Array(cols).fill(false));
             matchedCells.forEach(({ row, col }) => {
@@ -970,7 +982,7 @@ export class SlotMachine {
                             symbolSprite.destroy();
                             this.tweensToComplete--;
                             if (this.tweensToComplete === 0) {
-                                console.log("tweens complete");
+                                scene.gameData.debugLog("tweens complete");
                                 this.dropAndRefillWithOverlayCheck(symbolGrid, toRemove, scene);
                             }
                         }
@@ -998,24 +1010,62 @@ export class SlotMachine {
     }
 
     private dropAndRefillWithOverlayCheck(symbolGrid: number[][], toRemove: boolean[][], scene: GameScene): void {
-        // Check if there's an active win overlay
-        if (this.activeWinOverlay) {
-            // Wait for the win overlay to be removed before proceeding
-            const checkOverlay = () => {
+        // Check if there's an active win overlay or bomb animations
+        if (this.activeWinOverlay || this.hasActiveBombAnimations()) {
+            // Wait for the win overlay and bomb animations to complete before proceeding
+            const checkAnimations = () => {
                 if (this.activeWinOverlay) {
-                    // Still active, check again in a short delay
-                    scene.time.delayedCall(500, checkOverlay)
-                    console.log("overlay active");
-                } else {
-                    // Overlay removed, proceed with drop and refill
-                    this.dropAndRefill(symbolGrid, toRemove, scene);
+                    scene.gameData.debugLog("overlay active, waiting");
+                    scene.time.delayedCall(500, checkAnimations);
+                    return;
                 }
+                
+                if (this.hasActiveBombAnimations()) {
+                    scene.gameData.debugLog("bomb animations active, waiting");
+                    scene.time.delayedCall(500, checkAnimations);
+                    return;
+                }
+                
+                // All animations and overlays are complete, proceed with drop and refill
+                this.dropAndRefill(symbolGrid, toRemove, scene);
             };
-            checkOverlay();
+            checkAnimations();
         } else {
-            console.log("no overlay active");
-            // No overlay active, proceed immediately
+            scene.gameData.debugLog("no overlay or bomb animations active, proceeding immediately");
+            // No overlay or bomb animations active, proceed immediately
             this.dropAndRefill(symbolGrid, toRemove, scene);
+        }
+    }
+
+    private hasActiveBombAnimations(): boolean {
+        // Check if bomb animation is active through WinAnimation system
+        if (this.bombAnimationActive) {
+            return true;
+        }
+        
+        // Check if any BombContainer is playing animation
+        for (let row = 0; row < this.symbolGrid.length; row++) {
+            for (let col = 0; col < this.symbolGrid[row].length; col++) {
+                const symbol = this.symbolGrid[row][col];
+                if (symbol instanceof BombContainer) {
+                    if (symbol.isPlayingAnimation()) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    public setBombAnimationActive(active: boolean): void {
+        this.bombAnimationActive = active;
+        
+        // If setting to active, add a timeout to reset it after a reasonable time
+        if (active) {
+            // Reset after 5 seconds as a fallback (bomb animations typically last 2-3 seconds)
+            setTimeout(() => {
+                this.bombAnimationActive = false;
+            }, 5000);
         }
     }
     
@@ -1023,11 +1073,11 @@ export class SlotMachine {
     private dropAndRefillQueue: Array<{symbolGrid: number[][], toRemove: boolean[][], scene: GameScene}> = [];
 
     private dropAndRefill(symbolGrid: number[][], toRemove: boolean[][], scene: GameScene): void {
-        console.log("drop and refill requested");
+        scene.gameData.debugLog("drop and refill requested");
         
         // If already processing, queue this request
         if(this.ongoingDropAndRefill) {
-            console.log("drop and refill already in progress, queuing request");
+            scene.gameData.debugLog("drop and refill already in progress, queuing request");
             this.dropAndRefillQueue.push({symbolGrid, toRemove, scene});
             return;
         }
@@ -1037,7 +1087,7 @@ export class SlotMachine {
     }
 
     private processDropAndRefill(symbolGrid: number[][], toRemove: boolean[][], scene: GameScene): void {
-        console.log("processing drop and refill");
+        scene.gameData.debugLog("processing drop and refill");
 
         const rows = symbolGrid.length;
         const cols = symbolGrid[0].length;
@@ -1046,7 +1096,7 @@ export class SlotMachine {
         const horizontalSpacing = this.horizontalSpacing;
         const verticalSpacing = this.verticalSpacing;
         const dropTweens: Promise<void>[] = [];
-        const newSymbols: (GameObjects.Sprite | SpineGameObject)[] = [];
+        const newSymbols: (GameObjects.Sprite | SpineGameObject | BombContainer)[] = [];
 
         // Clean up any Alone symbols that might be left on screen
         this.cleanupAloneSymbols();
@@ -1071,7 +1121,7 @@ export class SlotMachine {
             }
 
             // Create a temporary grid to track the new positions
-            const tempSymbolGrid: (GameObjects.Sprite | SpineGameObject)[] = [];
+            const tempSymbolGrid: (GameObjects.Sprite | SpineGameObject | BombContainer)[] = [];
             
             // Animate drop for each cell in this column
             let targetRow = rows - 1;
@@ -1112,16 +1162,15 @@ export class SlotMachine {
                 const startY = centerY + (i - numNew) * (height + verticalSpacing);
                 const endY = centerY + i * (height + verticalSpacing);
                 
-                let newSymbol: GameObjects.Sprite | SpineGameObject;
+                let newSymbol: GameObjects.Sprite | SpineGameObject | BombContainer;
                 
                 if (symbolValue >= 10 && symbolValue <= 22) {
-                    // Create spine object for bomb
-                    newSymbol = scene.add.spine(symbolX, startY, 'Symbol10_SW', 'Symbol10_SW');
-                    newSymbol.setVisible(true);
-                    newSymbol.animationState.timeScale = 0;
-                    newSymbol.setDisplaySize(width * Slot.BOMB_SIZE_X, height * Slot.BOMB_SIZE_Y);
+                    // Create BombContainer for bomb
+                    newSymbol = new BombContainer(scene, symbolX, startY, symbolValue, scene.gameData);
+                    newSymbol.setBombDisplaySize(width * Slot.BOMB_SIZE_X, height * Slot.BOMB_SIZE_Y);
+                    scene.gameData.debugLog('Created BombContainer for dropAndRefill', { symbolValue, position: { x: symbolX, y: startY } });
                 } else {
-                    newSymbol = scene.add.sprite(symbolX, startY, symbolKey, frameKey);
+                    newSymbol = scene.add.sprite(symbolX, startY, symbolKey, frameKey) as GameObjects.Sprite;
                     if (symbolValue === 0) {
                         newSymbol.setDisplaySize(width * Slot.SCATTER_SIZE, height * Slot.SCATTER_SIZE);
                     } else {
@@ -1175,19 +1224,43 @@ export class SlotMachine {
                 scene.gameData.isSpinning = false;
             }
             
-            // Process next queued drop and refill if any
-            this.processNextQueuedDropAndRefill();
+            // Wait for any active bomb animations and win overlays before processing next queued drop and refill
+            this.waitForAnimationsAndOverlays(scene);
         });
     }
 
-    private processNextQueuedDropAndRefill(): void {
+    private waitForAnimationsAndOverlays(scene: GameScene): void {
+        // Check if there are any active bomb animations or win overlays
+        const checkForCompletion = () => {
+            // Check if there's an active win overlay
+            if (this.activeWinOverlay) {
+                scene.gameData.debugLog("Waiting for win overlay to complete");
+                scene.time.delayedCall(500, checkForCompletion);
+                return;
+            }
+
+            // Check if there are any ongoing bomb animations
+            if (this.hasActiveBombAnimations()) {
+                scene.gameData.debugLog("Waiting for bomb animations to complete");
+                scene.time.delayedCall(500, checkForCompletion);
+                return;
+            }
+
+            // All animations and overlays are complete, process next queued drop and refill
+            this.processNextQueuedDropAndRefill(scene);
+        };
+
+        checkForCompletion();
+    }
+
+    private processNextQueuedDropAndRefill(scene: GameScene): void {
         this.ongoingDropAndRefill = false;
-        console.log("drop and refill complete");
+        scene.gameData.debugLog("drop and refill complete");
         
         if (this.dropAndRefillQueue.length > 0) {
             const next = this.dropAndRefillQueue.shift();
             if (next) {
-                console.log("processing next queued drop and refill");
+                scene.gameData.debugLog("processing next queued drop and refill");
                 this.dropAndRefill(next.symbolGrid, next.toRemove, next.scene);
             }
         }
@@ -1242,5 +1315,23 @@ export class SlotMachine {
         this.ongoingDropAndRefill = false;
         this.dropAndRefillQueue = [];
         this.tweensToComplete = 0;
+    }
+
+    /**
+     * Fetches the latest balance from the backend and updates GameData.
+     * @param scene The current game scene (must have gameAPI and gameData)
+     */
+    public async getBalance(scene: Scene): Promise<void> {
+        const gameScene = scene as GameScene;
+        try {
+            await gameScene.gameAPI.getBalance();
+            // Optionally, emit an event to update UI or notify listeners
+            Events.emitter.emit(Events.UPDATE_CURRENCY, {
+                balance: gameScene.gameData.balance,
+                currency: gameScene.gameData.currency
+            });
+        } catch (error) {
+            console.error('Failed to fetch balance:', error);
+        }
     }
 } 

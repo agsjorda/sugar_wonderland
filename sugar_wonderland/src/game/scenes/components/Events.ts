@@ -26,6 +26,10 @@ export class Events {
     static readonly WIN_OVERLAY_SHOW: string = 'winOverlayShow';
     static readonly WIN_OVERLAY_UPDATE_TOTAL_WIN: string = 'winOverlayUpdateTotalWin';
     static readonly WIN_OVERLAY_HIDE: string = 'winOverlayHide';
+    
+    static readonly UPDATE_TOTAL_WIN: string = 'updateTotalWin';
+    static readonly UPDATE_CURRENCY: string = 'updateCurrency';
+    static readonly UPDATE_BALANCE: string = 'updateBalance';
 
     static readonly emitter: Phaser.Events.EventEmitter = new Phaser.Events.EventEmitter();
 } 

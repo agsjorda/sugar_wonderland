@@ -65,7 +65,7 @@ export class Animation {
     playSymbolAnimation(symbolSprite: Phaser.GameObjects.Sprite, symbolValue: number): void {
         if (symbolValue >= 0 && symbolValue <= Slot.SYMBOLS) {
             // Play the animation for matched symbols
-            console.log("playing animation for symbol: " + symbolValue);
+            this.scene.gameData.debugLog("playing animation for symbol: " + symbolValue);
             symbolSprite.play(`symbol${symbolValue}_anim`);
             symbolSprite.setDepth(symbolSprite.depth + 1000);
             // Create and play explosion with delay
@@ -90,7 +90,7 @@ export class Animation {
                         explosion.destroy();
                     });
                 } catch (error) {
-                    console.error("error playing explosion animation: " + error);
+                    this.scene.gameData.debugError("error playing explosion animation: " + error);
                 }
                 
             });
