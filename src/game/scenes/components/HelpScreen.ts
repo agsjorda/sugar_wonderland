@@ -126,7 +126,12 @@ export class HelpScreen {
         closeButton.setInteractive()
             .on('pointerover', () => closeButton.setTint(0x3FFF0D))
             .on('pointerout', () => closeButton.clearTint())
-            .on('pointerdown', () => this.hide()
+            .on('pointerdown', () => {
+            this.scene.audioManager.UtilityButtonSFX.play();
+            this.hide();
+            this.scene.gameData.isHelpScreenVisible = false;
+            Events.emitter.emit(Events.HELP_SCREEN_TOGGLE);
+            }
         );
 
         this.container.add(closeButtonContainer);

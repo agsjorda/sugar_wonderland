@@ -22,6 +22,7 @@ interface GameScene extends Scene {
     audioManager: AudioManager;
     slotMachine: SlotMachine;
     helpScreen: HelpScreen;
+    autoplay: Autoplay;
 }
 
 export class Buttons {
@@ -34,8 +35,13 @@ export class Buttons {
     public buttonContainer: ButtonContainer;
     private width: number;
     private height: number;
+    private isVisuallyDisabled: boolean = false; // Separate visual state for immediate feedback
     private buyFeaturePriceText: ButtonText;
     private doubleFeaturePriceText: ButtonText;
+    private buyFeatureButton: GameObjects.Image | GameObjects.Graphics | null = null;
+    private buyFeatureButtonText: ButtonText | null = null;
+    private buyFeatureStarLeft: GameObjects.Image | null = null;
+    private buyFeatureStarRight: GameObjects.Image | null = null;
     private autoplayPopup: GameObjects.Container | null = null;
     private buyFeaturePopup: GameObjects.Container | null = null;
     private balance: Phaser.GameObjects.Graphics;
@@ -56,7 +62,8 @@ export class Buttons {
     private mobile_buttons_y: number = 0;
     
     constructor() {
-        this.autoplay = new Autoplay();
+        // Autoplay will be injected from the Game scene to ensure single instance
+        this.autoplay = null as any; // Temporary until injected
         this.isMobile = this.isMobileDevice();
     }
 
@@ -104,6 +111,11 @@ export class Buttons {
     }
 
     create(scene: GameScene): void {
+        // Initialize autoplay if it wasn't injected properly
+        if (!this.autoplay || !this.autoplay.create) {
+            this.autoplay = scene.autoplay;
+        }
+        
         this.createContainer(scene);
         this.createTurboButton(scene);
         this.createSpinButton(scene);
@@ -215,9 +227,13 @@ export class Buttons {
         if(scene.gameData.isBonusRound) return;
             if (scene.gameData.isSpinning || 
                 scene.slotMachine.activeWinOverlay || 
-                scene.gameData.isHelpScreenVisible) {
+                scene.gameData.isHelpScreenVisible ||
+                this.isVisuallyDisabled) {
                 return;
             }
+
+            // IMMEDIATELY disable buttons visually for instant feedback (don't touch game logic)
+            this.disableButtonsVisually(scene);
 
             // Close help screen if it's open
             if (scene.gameData.isHelpScreenVisible) {
@@ -239,7 +255,7 @@ export class Buttons {
             scene.gameData.totalWin = 0;
             Events.emitter.emit(Events.WIN, {});
 
-            // Trigger spin
+            // Trigger spin (will be handled by the sequential system)
             Events.emitter.emit(Events.SPIN, {
                 currentRow: scene.gameData.currentRow,
                 symbols: scene.gameData.slot.values
@@ -316,25 +332,18 @@ export class Buttons {
         };
 
         const updateSpinButtonState = () => {
-            // Only disable spin button during actual spin animation or when win overlay is active
-            if (scene.gameData.isSpinning || scene.slotMachine.activeWinOverlay) {
-                this.spinButton.setAlpha(0.5);
-                this.spinButton.disableInteractive();
-                this.autoplayButton?.setAlpha(0.5);
-                this.autoplayButton?.disableInteractive();
-            } else {
-                this.spinButton.setAlpha(1);
-                this.spinButton.setInteractive();
-                this.autoplayButton?.setAlpha(1);
-                this.autoplayButton?.setInteractive();
-            }
+            // Use centralized button state management
+            this.updateButtonStates(scene);
         };
 
         const spinAction = () => {
             // Don't allow spin if currently spinning or win overlay is active
-            if (scene.gameData.isSpinning || scene.slotMachine.activeWinOverlay) {
+            if (scene.gameData.isSpinning || scene.slotMachine.activeWinOverlay || this.isVisuallyDisabled) {
                 return;
             }
+
+            // IMMEDIATELY disable buttons visually for instant feedback (don't touch game logic)
+            this.disableButtonsVisually(scene);
 
             // Close help screen if it's open
             if (scene.gameData.isHelpScreenVisible) {
@@ -348,12 +357,11 @@ export class Buttons {
                 Events.emitter.emit(Events.AUTOPLAY_STOP);
             }
 
-
             // Reset total win for new spin
             scene.gameData.totalWin = 0;
             Events.emitter.emit(Events.WIN, {});
 
-            // Trigger spin
+            // Trigger spin (will be handled by the sequential system)
             Events.emitter.emit(Events.SPIN, {
                 currentRow: scene.gameData.currentRow,
                 symbols: scene.gameData.slot.values
@@ -808,6 +816,66 @@ export class Buttons {
         this.autoplayOnButton.visible = false;
         this.freeSpinBtn.visible = false;
         this.autoplayIndicator.visible = false;
+    }
+
+    // Centralized method to immediately update button states
+    public updateButtonStates(scene: GameScene): void {
+        const gameLogicDisabled = scene.gameData.isSpinning || scene.slotMachine.activeWinOverlay;
+        const shouldDisable = this.isVisuallyDisabled || gameLogicDisabled;
+        
+        // Buy feature has additional logic - also disabled during autoplay and bonus round
+        const buyFeatureShouldDisable = shouldDisable || this.autoplay.isAutoPlaying || scene.gameData.isBonusRound;
+        
+        // Update spin button
+        if (shouldDisable) {
+            this.spinButton.setAlpha(0.5);
+            this.spinButton.disableInteractive();
+        } else {
+            this.spinButton.setAlpha(1);
+            this.spinButton.setInteractive();
+        }
+        
+        // Update autoplay button
+        if (this.autoplayButton) {
+            if (shouldDisable) {
+                this.autoplayButton.setAlpha(0.5);
+                this.autoplayButton.disableInteractive();
+            } else {
+                this.autoplayButton.setAlpha(1);
+                this.autoplayButton.setInteractive();
+            }
+        }
+        
+        // Update buy feature button (follows same visual disabled state)
+        if (this.buyFeatureButton) {
+            this.buyFeatureButton.setAlpha(buyFeatureShouldDisable ? 0.5 : 1);
+        }
+        if (this.buyFeaturePriceText) {
+            this.buyFeaturePriceText.setAlpha(buyFeatureShouldDisable ? 0.5 : 1);
+        }
+        if (this.buyFeatureButtonText) {
+            this.buyFeatureButtonText.setAlpha(buyFeatureShouldDisable ? 0.5 : 1);
+        }
+        if (this.buyFeatureStarLeft) {
+            this.buyFeatureStarLeft.setAlpha(buyFeatureShouldDisable ? 0.5 : 1);
+        }
+        if (this.buyFeatureStarRight) {
+            this.buyFeatureStarRight.setAlpha(buyFeatureShouldDisable ? 0.5 : 1);
+        }
+        
+        scene.gameData.debugLog(`Button states updated - visuallyDisabled: ${this.isVisuallyDisabled}, gameLogicDisabled: ${gameLogicDisabled}, buyFeatureDisabled: ${buyFeatureShouldDisable}`);
+    }
+
+    // Method to immediately disable buttons visually (separate from game logic)
+    public disableButtonsVisually(scene: GameScene): void {
+        this.isVisuallyDisabled = true;
+        this.updateButtonStates(scene);
+    }
+
+    // Method to re-enable buttons visually
+    public enableButtonsVisually(scene: GameScene): void {
+        this.isVisuallyDisabled = false;
+        this.updateButtonStates(scene);
     }
 
     private createInfo(scene: GameScene): void {
@@ -1372,42 +1440,40 @@ export class Buttons {
         const container = scene.add.container(x, y) as ButtonContainer;
 
         // Button background
-        let buttonBg : GameObjects.Image | GameObjects.Graphics;
         if(this.isMobile){
-            buttonBg = scene.add.image(0, 0, 'buyFeature') as ButtonImage;
-            buttonBg.setInteractive();
-            (buttonBg as any).isButton = true;
-            container.add(buttonBg);
+            this.buyFeatureButton = scene.add.image(0, 0, 'buyFeature') as ButtonImage;
+            this.buyFeatureButton.setInteractive();
+            (this.buyFeatureButton as any).isButton = true;
+            container.add(this.buyFeatureButton);
         } else {
-            buttonBg = scene.add.graphics();
-            buttonBg.fillStyle(0x181818, 0.95);
-            buttonBg.lineStyle(2, 0x66D449, 1);
-            buttonBg.strokeRoundedRect(-ellipseWidth/2, -ellipseHeight/2, ellipseWidth, ellipseHeight, ellipseHeight/2);
-            buttonBg.fillRoundedRect(-ellipseWidth/2, -ellipseHeight/2, ellipseWidth, ellipseHeight, ellipseHeight/2);
-            buttonBg.setInteractive();
-            (buttonBg as any).isButton = true;
-            container.add(buttonBg);
+            this.buyFeatureButton = scene.add.graphics();
+            this.buyFeatureButton.fillStyle(0x181818, 0.95);
+            this.buyFeatureButton.lineStyle(2, 0x66D449, 1);
+            this.buyFeatureButton.setInteractive();
+            this.buyFeatureButton.strokeRoundedRect(-ellipseWidth/2, -ellipseHeight/2, ellipseWidth, ellipseHeight, ellipseHeight/2);
+            this.buyFeatureButton.fillRoundedRect(-ellipseWidth/2, -ellipseHeight/2, ellipseWidth, ellipseHeight, ellipseHeight/2);
+            this.buyFeatureButton.setInteractive(new Geom.Rectangle(-ellipseWidth/2, -ellipseHeight/2, ellipseWidth, ellipseHeight), Geom.Rectangle.Contains);
+            (this.buyFeatureButton as any).isButton = true;
+            container.add(this.buyFeatureButton);
         }
 
-        let starLeft : GameObjects.Image;
-        let starRight : GameObjects.Image;
         // Stars
         if(!this.isMobile){
-            starLeft = scene.add.image(-ellipseWidth/2 + 32, -24, 'star') as ButtonImage;
-            container.add(starLeft);
-            starRight = scene.add.image(ellipseWidth/2 - 32, -24, 'star') as ButtonImage;
-            container.add(starRight);
+            this.buyFeatureStarLeft = scene.add.image(-ellipseWidth/2 + 32, -24, 'star') as ButtonImage;
+            container.add(this.buyFeatureStarLeft);
+            this.buyFeatureStarRight = scene.add.image(ellipseWidth/2 - 32, -24, 'star') as ButtonImage;
+            container.add(this.buyFeatureStarRight);
         }
         
         // BUY FEATURE text
         
-        const buttonText = scene.add.text(0, -24, 'BUY FEATURE', {
+        this.buyFeatureButtonText = scene.add.text(0, -24, 'BUY FEATURE', {
         }) as ButtonText;
-        buttonText.setOrigin(0.5, 0.5);
+        this.buyFeatureButtonText.setOrigin(0.5, 0.5);
         if(this.isMobile){
-            buttonText.setScale(0.5);
-            buttonText.setPosition(0, -12);
-            buttonText.setStyle({
+            this.buyFeatureButtonText.setScale(0.5);
+            this.buyFeatureButtonText.setPosition(0, -12);
+            this.buyFeatureButtonText.setStyle({
                 fontSize: '24px',
                 color: '#FFFFFF',
                 fontFamily: 'Poppins',
@@ -1416,7 +1482,7 @@ export class Buttons {
             });
         }
         else{
-            buttonText.setStyle({
+            this.buyFeatureButtonText.setStyle({
                 fontSize: '24px',
                 color: '#FFFFFF',
                 fontFamily: 'Poppins',
@@ -1428,7 +1494,7 @@ export class Buttons {
                 shadow: { offsetX: 0, offsetY: 2, color: '#000000', blur: 4, fill: true }
             })  
         }
-        container.add(buttonText);
+        container.add(this.buyFeatureButtonText);
 
         // Price text (large, green)
         const price = scene.gameData.getBuyFeaturePrice();
@@ -1557,34 +1623,14 @@ export class Buttons {
             });
         });
 
-        // Function to update button state
+        // Function to update button state - now handled by centralized method
         const updateButtonState = () => {
-            // Disable if spinning, autoplay is active, or in bonus round
-            const shouldDisable = scene.gameData.isSpinning || 
-                this.autoplay.isAutoPlaying || 
-                scene.gameData.isBonusRound;
-
-            if (shouldDisable) {
-                buttonBg.setAlpha(0.5);
-                this.buyFeaturePriceText.setAlpha(0.5);
-                buttonText.setAlpha(0.5);
-                if(!this.isMobile) {
-                    starLeft.setAlpha(0.5);
-                    starRight.setAlpha(0.5);
-                }
-            } else {
-                buttonBg.setAlpha(1);
-                this.buyFeaturePriceText.setAlpha(1);
-                buttonText.setAlpha(1);
-                if(!this.isMobile) {
-                    starLeft.setAlpha(1);
-                    starRight.setAlpha(1);
-                }
-            }
+            this.updateButtonStates(scene);
         };
 
         // Show popup when buy feature is pressed
         const showBuyFeaturePopup = () => {
+            console.log('showBuyFeaturePopup');
             // Don't show if spinning, autoplay is active, or in bonus round
             if (scene.gameData.isSpinning || 
                 this.autoplay.isAutoPlaying || 
@@ -1639,7 +1685,7 @@ export class Buttons {
         };
 
         // Add click handlers
-        buttonBg.on('pointerdown', showBuyFeaturePopup);
+        this.buyFeatureButton.on('pointerdown', showBuyFeaturePopup);
         
         closeBtnBg.setInteractive().isButton = true;
         
@@ -1919,7 +1965,7 @@ export class Buttons {
 
     private createVolumeSettings(scene: GameScene): void {
         const x = this.isMobile ? scene.scale.width * 0.88 : this.width * 0.05;
-        const y = this.isMobile ? scene.scale.height * 0.67 : this.height * 0.95;
+        const y = this.isMobile ? scene.scale.height * 0.67 : this.height * 0.9;
         const container = scene.add.container(x, y) as ButtonContainer;
 
         const widthSlider = 180;
@@ -1940,6 +1986,7 @@ export class Buttons {
         }
         container.add(volumeIcon);
 
+        this.buttonContainer.add(container);
         // Add volume icon
 
         // Make container interactive
