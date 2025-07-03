@@ -38,7 +38,13 @@ export class Game extends Scene {
         
         // Initialize all components
         this.stateMachine = new StateMachine();
+        
+        // Create a temporary gameAPI for gameData initialization
+        this.gameAPI = {} as GameAPI; // Temporary placeholder
         this.gameData = new GameData(this.gameAPI);
+        // Now create the real gameAPI with gameData
+        this.gameAPI = new GameAPI(this.gameData);
+        
         this.background = new Background();
         this.slotMachine = new SlotMachine();
         this.character = new Character();
@@ -46,7 +52,9 @@ export class Game extends Scene {
         this.audioManager = new AudioManager();
         this.autoplay = new Autoplay();
         this.helpScreen = new HelpScreen();
-        this.gameAPI = new GameAPI(this.gameData);
+        
+        // Inject the single autoplay instance into buttons
+        this.buttons.autoplay = this.autoplay;
         // Store components for lifecycle management
         this.components = [
             this.background,

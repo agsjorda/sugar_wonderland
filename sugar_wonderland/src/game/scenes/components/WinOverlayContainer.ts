@@ -25,6 +25,7 @@ export class WinOverlayContainer {
     private isAnimating: boolean = false;
     private multiplier: number = 0;
     private isMobile: boolean = false;
+    private updateWinListener: (totalWin: number, winType: string) => void; // Store listener reference
 
     constructor(scene: GameScene, winAnimation: WinAnimation) {
         this.scene = scene;
@@ -33,6 +34,27 @@ export class WinOverlayContainer {
         this.container = scene.add.container(0, 0);
         this.container.setDepth(10000);
         this.container.setScale(this.isMobile ? 0.5 : 1);
+        
+        // Create unique listener for this instance
+        this.updateWinListener = (totalWin: number, winType: string) => {
+            if (!this.isActive) return; // Only respond if this overlay is active
+            
+            if (winType === 'Congrats') {
+                this.winText.setPosition(0, -60);
+                this.winText.setText(`${totalWin.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+                this.freeSpinsText.visible = true;
+                this.freeSpinsText.setText(`${this.scene.gameData.totalFreeSpins.toFixed(0)}`);
+            } else if (winType === 'FreeSpin') {
+                this.winText.setPosition(0, -60);
+                this.winText.setText(`${totalWin.toFixed(0)}`);
+                this.freeSpinsText.visible = false;
+            } else {
+                this.winText.setPosition(0, 120);
+                this.winText.setText(`${totalWin.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+                this.freeSpinsText.visible = false;
+            }
+        };
+        
         this.createOverlay();
     }
 
@@ -143,25 +165,8 @@ export class WinOverlayContainer {
     }
 
     private setupEventListeners(buttonZone: GameObjects.Zone): void {
-        Events.emitter.on(Events.WIN_OVERLAY_UPDATE_TOTAL_WIN, (totalWin: number, winType: string) => {
-            if (winType === 'Congrats') {
-                this.winText.setPosition(0, -60);
-                this.winText.setText(`${totalWin.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-                this.freeSpinsText.visible = true;
-                this.freeSpinsText.setText(`${this.scene.gameData.totalFreeSpins.toFixed(0)}`);
-            } else if (winType === 'FreeSpin') {
-                this.winText.setPosition(0, -60);
-                this.winText.setText(`${totalWin.toFixed(0)}`);
-                this.freeSpinsText.visible = false;
-
-            } else {
-                this.winText.setPosition(0, 120);
-                this.winText.setText(`${totalWin.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-                this.freeSpinsText.visible = false;
-            }
-            
-        });
-
+        // Use the unique listener for this instance
+        Events.emitter.on(Events.WIN_OVERLAY_UPDATE_TOTAL_WIN, this.updateWinListener);
 
         buttonZone.on('pointerdown', () => {
             if (this.multiplier === -1) {
@@ -277,15 +282,32 @@ export class WinOverlayContainer {
 
     public destroy(): void {
         if (this.isActive) {
-            this.scene.slotMachine.activeWinOverlay = false;
-            this.winAnimation.exitAnimation();
-            Events.emitter.off(Events.WIN_OVERLAY_UPDATE_TOTAL_WIN);
-            this.container.destroy();
             this.isActive = false;
             this.isAnimating = false;
+            
+            // Clean up unique listener for this instance
+            Events.emitter.off(Events.WIN_OVERLAY_UPDATE_TOTAL_WIN, this.updateWinListener);
+            
+            // Clean up win animation
+            this.winAnimation.exitAnimation();
+            
+            // Clean up container
+            this.container.destroy();
+            
+            // Stop win sound effects
             this.scene.audioManager.stopWinSFX(this.scene);
             
-            Events.emitter.emit(Events.WIN_OVERLAY_HIDE);
+            // Remove this overlay from the SlotMachine's array
+            const index = this.scene.slotMachine.winOverlayContainers.indexOf(this);
+            if (index > -1) {
+                this.scene.slotMachine.winOverlayContainers.splice(index, 1);
+            }
+            
+            // Update active state only if this was the last overlay
+            if (this.scene.slotMachine.winOverlayContainers.length === 0) {
+                this.scene.slotMachine.activeWinOverlay = false;
+                Events.emitter.emit(Events.WIN_OVERLAY_HIDE);
+            }
         }
     }
 } 

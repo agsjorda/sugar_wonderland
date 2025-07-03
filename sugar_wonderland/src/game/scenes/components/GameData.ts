@@ -148,7 +148,6 @@ export class GameData {
 export class Slot {
     static readonly TOGGLE_DIFFICULTY: boolean = true;
     static readonly TOGGLE_WIN_EFFECT: boolean = false;
-    static readonly TOGGLE_FRONTEND: boolean = true;
 
     static readonly DIFFICULTY_SYMBOLS: number = 1;
     static readonly SYMBOLS: number = 9;

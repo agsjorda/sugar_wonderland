@@ -151,15 +151,14 @@ export class LandingPage extends Scene {
            };
 
            tryLaunchGame();
-//
-                // Fade out the current scene
-           //     this.cameras.main.fadeOut(1000, 0, 0, 0);
-//
-           //     // When fade out is complete, start the Game scene
-           //     this.cameras.main.once('camerafadeoutcomplete', () => {
-           //         this.scene.start('Game');
-           //         this.scene.remove('LoadingPage');
-           //     });
-           // }
+
+           // Fade out the current scene
+          // this.cameras.main.fadeOut(1000, 0, 0, 0);
+
+           // When fade out is complete, start the Game scene
+          // this.cameras.main.once('camerafadeoutcomplete', () => {
+          //     this.scene.start('Game');
+          //     this.scene.remove('LoadingPage');
+          // });
     }
 } 

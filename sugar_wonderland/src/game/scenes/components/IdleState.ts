@@ -20,7 +20,9 @@ interface GameScene extends Scene {
     background: Background;
     audioManager: AudioManager;
     buttons: Buttons;
-    slotMachine: SlotMachine;}
+    slotMachine: SlotMachine;
+    helpScreen: any; // Reference to help screen
+}
 
 export class IdleState extends State {
     private spinEventListener?: (data: SpinEventData) => void;
@@ -66,9 +68,6 @@ export class IdleState extends State {
 
         if (scene.gameData.freeSpins > 0) 
         {
-            if(scene.buttons.autoplay.remainingSpins > 0) {
-                scene.buttons.autoplay.remainingSpins = 0; // stop autoplay if doing free spins
-            }
             scene.gameData.freeSpins--;
             if (scene.gameData.freeSpins === 0) {
                 // End of bonus round
@@ -76,10 +75,6 @@ export class IdleState extends State {
                 scene.background.toggleBackground(scene);
                 scene.audioManager.changeBackgroundMusic(scene);
                 
-                // Stop autoplay when free spins are done
-                if (scene.buttons.autoplay.isAutoPlaying) {
-                    scene.buttons.autoplay.stop();
-                }
                 // Show bonus end summary after the last spin completes
                 const bonusWin = scene.gameData.totalBonusWin;
                 Events.emitter.once(Events.SPIN_ANIMATION_END, () => {
