@@ -14,6 +14,7 @@ export default defineConfig({
     },
     server: {
         port: 8080,
+        host: true,
         allowedHosts: ['minium.dev.fybtech.xyz']
     },
     plugins: [
