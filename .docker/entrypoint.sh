@@ -54,7 +54,8 @@ export default defineConfig({
     },
     server: {
         port: $PORT,
-        host: '0.0.0.0'
+        host: '0.0.0.0',
+        allowedHosts: ['minium.dev.fybtech.xyz']
     }
 });
 EOF
