@@ -22,6 +22,7 @@ interface GameScene extends Scene {
     buttons: Buttons;
     slotMachine: SlotMachine;
     helpScreen: any; // Reference to help screen
+    autoplay: any; // Add this property to match Buttons.ts
 }
 
 export class IdleState extends State {
@@ -38,6 +39,14 @@ export class IdleState extends State {
             currentRow: gameScene.gameData.currentRow
         });
         this.initEventListeners(gameScene);
+
+        // Add a single, reliable listener for SPIN_ANIMATION_END to reset isSpinning
+        Events.emitter.on(Events.SPIN_ANIMATION_END, () => {
+            gameScene.gameData.isSpinning = false;
+            if (gameScene.buttons && gameScene.buttons.enableButtonsVisually) {
+                gameScene.buttons.enableButtonsVisually(gameScene);
+            }
+        });
     }
 
     update(_scene: Scene, _time: number, _delta: number): void {
@@ -71,7 +80,6 @@ export class IdleState extends State {
             scene.gameData.freeSpins--;
             if (scene.gameData.freeSpins === 0) {
                 // End of bonus round
-                scene.gameData.isBonusRound = false;
                 scene.background.toggleBackground(scene);
                 scene.audioManager.changeBackgroundMusic(scene);
                 
@@ -80,7 +88,7 @@ export class IdleState extends State {
                 Events.emitter.once(Events.SPIN_ANIMATION_END, () => {
                     scene.slotMachine.showBonusWin(scene, bonusWin);
                     // Ensure spin button is enabled
-                    scene.gameData.isSpinning = false;
+                    scene.gameData.isSpinning = false; // Keep this for bonus end
                 });
             }
         } else {
@@ -88,12 +96,11 @@ export class IdleState extends State {
         }
 
         const slot = scene.gameData.slot;
-        const newRandomValues: number[][] = Array(Slot.ROWS).fill(null).map(() => Array(Slot.COLUMNS).fill(null));
+        const newRandomValues: number[][] = [];
         for (let i = 0; i < Slot.ROWS; i++) {
-            newRandomValues[i] = getRandomRows();
-        }
-        for (let i = 0; i < Slot.ROWS; i++) {
-            slot.setRows(newRandomValues[i], i);
+            const row = getRandomRows();
+            newRandomValues.push(row);
+            slot.setRows(row, i);
         }
         // Place scatters after the grid is built
         slot.placeScatters(scene.gameData.minScatter, scene.gameData.maxScatter, scene.gameData.scatterChance);
@@ -102,10 +109,7 @@ export class IdleState extends State {
             slot.placeBombs(scene.gameData.minBomb, scene.gameData.maxBomb, scene.gameData.bombChance, scene.gameData.isBonusRound);
             scene.gameData.minBomb = 0;
 
-            // Add listener to reset isSpinning when animation ends
-            Events.emitter.once(Events.SPIN_ANIMATION_END, () => {
-                scene.gameData.isSpinning = false;
-            });
+            // Remove redundant isSpinning = false assignments here
     
             Events.emitter.emit(Events.SPIN_ANIMATION_START, {
                 symbols: slot.values,

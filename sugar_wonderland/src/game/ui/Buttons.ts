@@ -60,6 +60,7 @@ export class Buttons {
 
     private mobile_buttons_x: number = 0;
     private mobile_buttons_y: number = 0;
+    private spinInProgress: boolean = false; // Add this flag to prevent spam
     
     constructor() {
         // Autoplay will be injected from the Game scene to ensure single instance
@@ -160,7 +161,7 @@ export class Buttons {
     }
 
     private createTurboButton(scene: GameScene): void {
-        const x = this.isMobile ? this.width * 0.866 : this.width * 0.88;
+        const x = this.isMobile ? this.width * 0.85 : this.width * 0.88;
         const y = this.isMobile ? this.height * 0.85 : this.height * 0.29;
         const container = scene.add.container(x, y) as ButtonContainer;
 
@@ -197,7 +198,8 @@ export class Buttons {
             this.mobile_buttons_y = container.y;
         }
         container.name = 'turboContainer';
-        container.setScale(this.isMobile ? 0.8 : 1);
+        container.setScale(this.isMobile ? 0.7 : 1);
+        this.turboOnButton.setScale(this.isMobile ? 0.9 : 1);
         this.buttonContainer.add(container);
 
         container.setInteractive(
@@ -337,11 +339,11 @@ export class Buttons {
         };
 
         const spinAction = () => {
-            // Don't allow spin if currently spinning or win overlay is active
-            if (scene.gameData.isSpinning || scene.slotMachine.activeWinOverlay || this.isVisuallyDisabled) {
+            // Don't allow spin if currently spinning or win overlay is active or local flag is set
+            if (this.spinInProgress || scene.gameData.isSpinning || scene.slotMachine.activeWinOverlay || this.isVisuallyDisabled) {
                 return;
             }
-
+            this.spinInProgress = true; // Set local flag immediately
             // IMMEDIATELY disable buttons visually for instant feedback (don't touch game logic)
             this.disableButtonsVisually(scene);
 
@@ -369,9 +371,9 @@ export class Buttons {
         };
 
         this.spinButton.on('pointerdown', () => {
-            
+            if (this.spinInProgress) return; // Double check
             scene.audioManager.SpinSFX.play();
-                spinAction();
+            spinAction();
         });
 
         this.freeSpinBtn.on('pointerdown', ()=>{});
@@ -408,6 +410,14 @@ export class Buttons {
         if (canIdleRotate()) {
             startIdleRotation();
         }
+
+        // Listen for spin state changes to re-enable the button
+        const resetSpinButton = () => {
+            this.spinInProgress = false;
+            this.enableButtonsVisually(scene);
+        };
+        Events.emitter.on(Events.SPIN_ANIMATION_END, resetSpinButton);
+        Events.emitter.on(Events.MATCHES_DONE, resetSpinButton);
     }
 
     private createAutoplay(scene: GameScene): void {
@@ -879,8 +889,9 @@ export class Buttons {
     }
 
     private createInfo(scene: GameScene): void {
-        const x = this.isMobile ? this.width * 0.115 : this.width * 0.88;
+        const x = this.isMobile ? this.width * 0.88 : this.width * 0.88;
         const y = this.isMobile ? this.height * 0.67 : this.height * 0.70;
+
 
         const container = scene.add.container(x, y) as ButtonContainer;
 
@@ -1964,8 +1975,10 @@ export class Buttons {
     }
 
     private createVolumeSettings(scene: GameScene): void {
-        const x = this.isMobile ? scene.scale.width * 0.88 : this.width * 0.05;
+        const x = this.isMobile ? scene.scale.width * 0.115 : this.width * 0.05;
         const y = this.isMobile ? scene.scale.height * 0.67 : this.height * 0.9;
+
+        
         const container = scene.add.container(x, y) as ButtonContainer;
 
         const widthSlider = 180;
