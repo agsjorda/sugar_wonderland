@@ -44,13 +44,13 @@ export class GameData {
         logUrlParameters();
         
         // Log debug mode status
-        if (this.debugged) {
+        if (this.debugged > 0) {
             console.log('🔧 Debug mode enabled');
         }
     }
 
     winamounts: number[][] = [
-            [100, 50, 25, 15, 12, 10, 8, 5, 0.4, 2, 100],
+            [100, 50, 25, 15, 12, 10, 8, 5, 4, 2, 100],
             [5, 25, 10, 5, 2, 1.5, 1.2, 1, 0.9, 0.75, 5],
             [3, 10, 2.5, 2, 1, 1, 0.8, 0.5, 0.4, 0.25, 3]
     ];
@@ -109,10 +109,13 @@ export class GameData {
     totalFreeSpins: number = 0;
 
     // Debug mode property - initialized from URL parameter
-    public debugged: boolean = (() => {
+    public debugged: number = (() => {
         const debugParam = getUrlParameter('debug');
-        return debugParam === '1';
+        console.log('debugParam', debugParam, parseInt(debugParam || '0'));
+        return debugParam ? parseInt(debugParam) : 0;
     })();
+
+    public demoMode: boolean = false;
 
     getDoubleFeaturePrice(): number {
         const doubleMultiplier = 1.25; // temporary multiplier
@@ -126,12 +129,12 @@ export class GameData {
 
     // Utility method to check if debug mode is enabled
     isDebugMode(): boolean {
-        return this.debugged;
+        return this.debugged > 0;
     }
 
     // Debug error logging method - only logs when debug mode is enabled
     debugError(message: string, ...args: any[]): void {
-        if (this.debugged) {
+        if (this.debugged > 0) {
             console.error(`%c[DEBUG ERROR] ${message}`, 'color: #ff0000', ...args);
         }
     }
@@ -139,17 +142,17 @@ export class GameData {
     
     // Debug logging method - only logs when debug mode is enabled
     debugLog(message: string, ...args: any[]): void {
-        if (this.debugged) {
+        if (this.debugged > 0) {
             console.log(`[DEBUG] ${message}`, ...args);
         }
     }
 }
 
 export class Slot {
-    static readonly TOGGLE_DIFFICULTY: boolean = true;
+    static TOGGLE_DIFFICULTY: boolean = true;
     static readonly TOGGLE_WIN_EFFECT: boolean = false;
 
-    static readonly DIFFICULTY_SYMBOLS: number = 1;
+    static DIFFICULTY_SYMBOLS: number = 1;
     static readonly SYMBOLS: number = 9;
     static readonly ROWS: number = 5;
     static readonly COLUMNS: number = 6;

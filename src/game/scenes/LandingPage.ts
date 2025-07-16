@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import { GameAPI } from './backend/GameAPI';
+import { getFontFamily, logFontStatus } from '../utils/fonts';
 
 export class LandingPage extends Scene {
     private spinButton!: Phaser.GameObjects.Image;
@@ -23,6 +24,10 @@ export class LandingPage extends Scene {
 
     create(): void {
         console.log(this.cameras.main.width, this.cameras.main.height);
+        
+        // Log font status for debugging
+        logFontStatus();
+        
         // Detect if mobile
         this.isMobile = this.isMobileDevice();
         
@@ -48,7 +53,7 @@ export class LandingPage extends Scene {
             fontSize: winTextSize,
             color: '#ffffff',
             fontStyle: 'bold',
-            fontFamily: 'Poppins',
+            fontFamily: getFontFamily(),
             stroke: '#379557',
             strokeThickness: this.isMobile ? 4 : 8,
             shadow: {
@@ -69,7 +74,7 @@ export class LandingPage extends Scene {
             fontSize: notifSize,
             color: '#ffffff',
             fontStyle: 'bold',
-            fontFamily: 'Poppins',
+            fontFamily: getFontFamily(),
             stroke: '#379557',
         }).setAlpha(0);
 
@@ -153,12 +158,12 @@ export class LandingPage extends Scene {
            tryLaunchGame();
 
            // Fade out the current scene
-          // this.cameras.main.fadeOut(1000, 0, 0, 0);
+           this.cameras.main.fadeOut(1000, 0, 0, 0);
 
            // When fade out is complete, start the Game scene
-          // this.cameras.main.once('camerafadeoutcomplete', () => {
-          //     this.scene.start('Game');
-          //     this.scene.remove('LoadingPage');
-          // });
+           this.cameras.main.once('camerafadeoutcomplete', () => {
+               this.scene.start('Game');
+               this.scene.remove('LoadingPage');
+           });
     }
-} 
+}                                                                                           

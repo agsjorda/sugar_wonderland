@@ -3,6 +3,7 @@ import { LandingPage } from './scenes/LandingPage';
 import { LoadingPage } from './scenes/LoadingPage';
 import { AUTO, Game, Scale, Types } from 'phaser';
 import { SpinePlugin } from '@esotericsoftware/spine-phaser-v3';
+import { setupAspectRatioReload } from './scenes/backend/aspect-ratio-reload';
 
 // Find out more information about the Game Config at:
 // https://docs.phaser.io/api-documentation/typedef/types-core#gameconfig
@@ -72,6 +73,7 @@ const isMobile = (): boolean => {
 
 const StartGame = (parent: string): Game => {
     const config = isMobile() ? mobileConfig : desktopConfig;
+    setupAspectRatioReload();
     return new Game({ ...config, parent });
 };
 
