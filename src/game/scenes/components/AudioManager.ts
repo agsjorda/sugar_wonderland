@@ -4,6 +4,11 @@ export class AudioManager {
     private musicVolume: number = 1.0; // Default music volume (0.0 - 1.0)
     private sfxVolume: number = 1.0;   // Default SFX volume (0.0 - 1.0)
 
+    public winIsPlaying: boolean = false;
+    private winSFXQueue: string[] = []; // Queue for win SFX
+    private isPlayingQueue: boolean = false; // Flag to track if we're currently playing from queue
+
+
     // Background Music
     public MainBG: Sound.WebAudioSound;
     public BonusBG: Sound.WebAudioSound;
@@ -154,17 +159,95 @@ export class AudioManager {
         }
     }
 
-    playWinSFX(multiplier: number, _scene: Scene): void {
-        if(multiplier === -1) {
+    /**
+     * Add a win SFX to the queue to be played sequentially
+     * @param winName - The name of the win SFX to queue
+     */
+    queueWinSFX(winNames: string[]): void {
+        winNames.forEach(winName => {
+            this.winSFXQueue.push(winName);
+            //console.log(winName);
+        });
+        
+        // If not currently playing from queue, start playing
+        if (!this.isPlayingQueue) {
+            this.playNextInQueue();
+        }
+    }
+
+    /**
+     * Play the next sound in the queue
+     */
+    private playNextInQueue(): void {
+        if (this.winSFXQueue.length === 0) {
+            this.isPlayingQueue = false;
+            this.winIsPlaying = false;
+            return;
+        }
+
+        this.isPlayingQueue = true;
+        this.winIsPlaying = true;
+        
+        const nextSound = this.winSFXQueue.shift()!;
+        this.playWinSFX(nextSound);
+    }
+
+    /**
+     * Clear the win SFX queue and stop any currently playing sounds
+     */
+    clearWinSFXQueue(scene?: Scene): void {
+        this.winSFXQueue = [];
+        this.isPlayingQueue = false;
+        this.winIsPlaying = false;
+        if (scene) {
+            this.stopWinSFX(scene);
+        } else {
+            // Stop sounds directly without scene reference
+            
+            this.BigW.stop();
+            this.MegaW.stop();
+            this.EpicW.stop();
+            this.SuperW.stop();
+            this.WinSkip.stop();
+
+            this.BGChecker.resume();
+            this.setMusicVolume(this.getMusicVolume() / 0.01);
+            if(this.getMusicVolume() > 1) {
+                this.setMusicVolume(1);
+            }
+        }
+    }
+
+    /**
+     * Get the current queue length
+     */
+    getQueueLength(): number {
+        return this.winSFXQueue.length;
+    }
+
+    /**
+     * Get the current queue contents (for debugging)
+     */
+    getQueueContents(): string[] {
+        return [...this.winSFXQueue];
+    }
+
+    playWinSFX(winName: string): void {
+        let winSound: Sound.WebAudioSound | undefined;
+        if(winName === 'FreeSpin') {
             this.BGChecker.pause();
-            this.setMusicVolume(this.getMusicVolume() * 0.01);
+            //this.setMusicVolume(this.getMusicVolume() * 0.01);
             let winSound: Sound.WebAudioSound | undefined;
             winSound = this.FreeSpinWon;
 
             if (winSound) {
                 winSound.once('complete', () => {
                     this.BGChecker.pause();
-                    this.setMusicVolume(this.getMusicVolume() * 0.01);
+                    //this.setMusicVolume(this.getMusicVolume() * 0.01);
+                    // Play next in queue if we're using the queue system
+                    if (this.isPlayingQueue) {
+                        this.playNextInQueue();
+                    }
                 });
                 winSound.play({ volume: this.sfxVolume });
             }
@@ -172,31 +255,35 @@ export class AudioManager {
         }
         else
         { 
-            if (multiplier < 15) {
-                return;
+            this.BGChecker.pause();
+            //this.setMusicVolume(this.getMusicVolume() * 0.01);
+
+            if (winName === 'BigWin') {
+                winSound = this.BigW;
+            } else if (winName === 'BigWinSkip') {
+                winSound = this.WinSkip;
+            } else if (winName === 'EpicWin') {
+                winSound = this.EpicW;
+            } else if (winName === 'EpicWinSkip') {
+                winSound = this.WinSkip;
+            } else if (winName === 'MegaWin') {
+                winSound = this.MegaW;
+            } else if (winName === 'MegaWinSkip') {
+                winSound = this.WinSkip;
+            } else if (winName === 'SuperWin') {
+                winSound = this.SuperW;
+            } else if (winName === 'SuperWinSkip') {
+                winSound = this.WinSkip;
             }
             
-            this.BGChecker.pause();
-            this.setMusicVolume(this.getMusicVolume() * 0.01);
-
-            let winSound: Sound.WebAudioSound | undefined;
-            if (multiplier >= 20 && multiplier < 30) {
-                winSound = this.EpicW;
-            } else if (multiplier >= 30 && multiplier < 50) {
-                winSound = this.MegaW;
-            } else if (multiplier >= 50 && multiplier < 100) {
-                winSound = this.SuperW;
-            } else if (multiplier >= 100) {
-                winSound = this.BigW;
-            }
-
             if (winSound) {
                 winSound.once('complete', () => {
-                    
+                    this.winIsPlaying = false;
                     this.BGChecker.resume();
-                    this.setMusicVolume(this.getMusicVolume() / 0.01);
-                    if(this.getMusicVolume() > 1) {
-                        this.setMusicVolume(1);
+                    // Play next in queue if we're using the queue system
+                    if (this.isPlayingQueue) {
+                        console.log('playing next in queue');
+                        this.playNextInQueue();
                     }
                 });
                 winSound.play({ volume: this.sfxVolume });
@@ -205,16 +292,28 @@ export class AudioManager {
     }
 
     stopWinSFX(_scene: Scene): void {   
-            this.BGChecker.resume();
-            this.setMusicVolume(this.getMusicVolume() / 0.01);
-            if(this.getMusicVolume() > 1) {
-                this.setMusicVolume(1);
-            }
+        this.BGChecker.resume();
+        this.setMusicVolume(this.getMusicVolume() / 0.01);
+        if(this.getMusicVolume() > 1) {
+            this.setMusicVolume(1);
+        }
         this.EpicW.stop();
         this.MegaW.stop();
         this.SuperW.stop();
         this.BigW.stop();
+        // Also clear the queue when stopping
+        this.winSFXQueue = [];
+        this.isPlayingQueue = false;
+        this.winIsPlaying = false;
     }
+
+    /**
+     * Check if the win SFX queue is currently playing
+     */
+    isQueuePlaying(): boolean {
+        return this.isPlayingQueue;
+    }
+
 
     update(_scene: Scene, _time: number, _delta: number): void {
         // Empty implementation

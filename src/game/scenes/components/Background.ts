@@ -1,9 +1,11 @@
 import { Scene, GameObjects } from 'phaser';
+import { Events } from './Events';
 
 export class Background {
     private initialLayerX: number = 0;
     private initialLayerY: number = 0;
     private isMobile: boolean = false;
+    private paused: boolean = false;
 
     private main_background: GameObjects.Image;
     private bonus_background: GameObjects.Image;
@@ -20,6 +22,8 @@ export class Background {
     private bonus_lantern1: GameObjects.Image;
     private bonus_lantern2: GameObjects.Image;
     private bonus_lantern3: GameObjects.Image;
+
+    private lanternTweens: Phaser.Tweens.Tween[] = [];
 
     private floatingSpeedX: number = 0.001;
     private floatingSpeedY: number = 0.0012;
@@ -66,11 +70,34 @@ export class Background {
             this.createLanterns(scene);
         }
 
-        scene.gameData.isBonusRound = false;
+		scene.gameData.isBonusRound = false;
+		console.log(`[BG] create: isBonusRound=${scene.gameData.isBonusRound}`);
         this.toggleBackground(scene);
+
+        // Pause/resume background animations when win overlay is shown/hidden
+        (scene as any).events?.on && (scene as any).events.on('shutdown', () => {
+            this.lanternTweens = [];
+        });
+
+        // Use global Events emitter to detect overlay state
+        Events.emitter.on(Events.WIN_OVERLAY_SHOW, () => {
+            this.paused = true;
+            this.pauseLanternTweens(scene);
+        });
+        Events.emitter.on(Events.WIN_OVERLAY_HIDE, () => {
+            this.paused = false;
+            this.resumeLanternTweens(scene);
+        });
+
+        // Pause background when session timeout occurs
+        Events.emitter.on(Events.SESSION_TIMEOUT, () => {
+            this.paused = true;
+            this.pauseLanternTweens(scene);
+        });
     }
 
-    toggleBackground(_scene: Scene): void {
+	toggleBackground(_scene: Scene): void {
+		console.log(`[BG] toggleBackground called. isBonusRound=${_scene.gameData.isBonusRound}`);
         let main_status = 0;
         let bonus_status = 0;
 
@@ -82,7 +109,7 @@ export class Background {
             bonus_status = 0;
         }
 
-        this.main_background.alpha = main_status;
+		this.main_background.alpha = main_status;
         this.bonus_background.alpha = bonus_status;
 
         // Only toggle other elements for desktop
@@ -170,6 +197,11 @@ export class Background {
             return;
         }
 
+        // Pause floating/parallax while overlays are active
+        if (this.paused || (_scene as any).slotMachine?.activeWinOverlay) {
+            return;
+        }
+
         const floatingOffsetX = Math.sin(_time * this.floatingSpeedX) * this.floatingAmplitudeX;
         const floatingOffsetY = Math.sin(_time * this.floatingSpeedY) * this.floatingAmplitudeY;
 
@@ -217,7 +249,8 @@ export class Background {
 			ease: 'Sine.easeInOut',
 			yoyo: true,
 			repeat: -1
-		});
+        });
+        this.captureTweensForTarget(scene, this.main_lantern1);
 
 		this.main_lantern2 = scene.add.image(width * 0.1825, height * 0.19, 'main_lantern');
 		this.main_lantern2.setScale(0.45);
@@ -232,6 +265,7 @@ export class Background {
 			yoyo: true,
 			repeat: -1
 		});
+        this.captureTweensForTarget(scene, this.main_lantern2);
 
 		this.main_lantern3 = scene.add.image(width * 0.94, height * 0.15, 'main_lantern');
 		this.main_lantern3.setScale(0.325);
@@ -246,6 +280,7 @@ export class Background {
 			yoyo: true,
 			repeat: -1
 		}); 
+        this.captureTweensForTarget(scene, this.main_lantern3);
 
 
 		// Bonus Lanterns
@@ -262,6 +297,7 @@ export class Background {
 			yoyo: true,
 			repeat: -1
 		});
+        this.captureTweensForTarget(scene, this.bonus_lantern1);
 
 		this.bonus_lantern2 = scene.add.image(width * 0.1825, height * 0.14, 'bonus_lantern');
 		this.bonus_lantern2.setScale(0.45);
@@ -276,6 +312,7 @@ export class Background {
 			yoyo: true,
 			repeat: -1
 		});
+        this.captureTweensForTarget(scene, this.bonus_lantern2);
 
 		this.bonus_lantern3 = scene.add.image(width * 0.94, height * 0.10, 'bonus_lantern');
 		this.bonus_lantern3.setScale(0.325);
@@ -290,5 +327,23 @@ export class Background {
 			yoyo: true,
 			repeat: -1
 		});
+        this.captureTweensForTarget(scene, this.bonus_lantern3);
 	}
+
+    private captureTweensForTarget(scene: Scene, target: Phaser.GameObjects.GameObject): void {
+        const tweens = (scene.tweens as any).getTweensOf ? (scene.tweens as any).getTweensOf(target) : [];
+        if (Array.isArray(tweens)) {
+            this.lanternTweens.push(...tweens);
+        }
+    }
+
+    private pauseLanternTweens(scene: Scene): void {
+        if (!scene || !scene.tweens) return;
+        this.lanternTweens.forEach(t => t.pause());
+    }
+
+    private resumeLanternTweens(scene: Scene): void {
+        if (!scene || !scene.tweens) return;
+        this.lanternTweens.forEach(t => t.resume());
+    }
 } 

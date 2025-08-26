@@ -10,6 +10,10 @@ import { AudioManager } from './components/AudioManager';
 import { Autoplay } from './components/Autoplay';
 import { HelpScreen } from './components/HelpScreen';
 import { GameAPI } from './backend/GameAPI';
+import { BuyFeaturePopup } from './components/BuyFeaturePopup';
+import { SessionTimeoutPopup } from './components/SessionTimeoutPopup';
+
+
 
 // Interface for component lifecycle management
 interface GameComponent {
@@ -30,6 +34,8 @@ export class Game extends Scene {
     public autoplay: Autoplay;
     public helpScreen: HelpScreen;
     public gameAPI: GameAPI;
+    public buyFeaturePopup: BuyFeaturePopup;
+    public sessionTimeoutPopup: SessionTimeoutPopup;
 
     private components: GameComponent[];
 
@@ -52,6 +58,8 @@ export class Game extends Scene {
         this.audioManager = new AudioManager();
         this.autoplay = new Autoplay();
         this.helpScreen = new HelpScreen();
+        this.buyFeaturePopup = new BuyFeaturePopup();
+        this.sessionTimeoutPopup = new SessionTimeoutPopup();
         
         // Inject the single autoplay instance into buttons
         this.buttons.autoplay = this.autoplay;
@@ -64,6 +72,8 @@ export class Game extends Scene {
             this.audioManager,
             this.autoplay,
             this.helpScreen,
+            this.buyFeaturePopup,
+            this.sessionTimeoutPopup,
         ];
     }
 
@@ -177,10 +187,10 @@ export class Game extends Scene {
     }
 
     showHelpScreen(): void {
-        this.helpScreen.show();
+        this.helpScreen.show(this);
     }
 
     hideHelpScreen(): void {
-        this.helpScreen.hide();
+        this.helpScreen.hide(this);
     }
 } 

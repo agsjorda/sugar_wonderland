@@ -64,12 +64,17 @@ export class GameData {
     maxBet: number = 150;
     minBet: number = 0.2;
 
-    balance: number = 0;
+    balance: number = 100000;
     
     totalBet: number = 0;
     totalWin: number = 0;
+
+    maxWin : number = 21000;
+
+    totalWinFreeSpin: number[] = [];
     totalBonusWin: number = 0; // Track bonus round wins separately
     doubleChanceEnabled: boolean = false;
+    buyFeatureEnabled: boolean = false;
     isSpinning: boolean = false;
     turbo: boolean = false;
     isBonusRound: boolean = false;
@@ -101,12 +106,21 @@ export class GameData {
     doubleChanceMultiplier: number = 2;
     
     winRank : number[] = [1, 10, 20, 30, 50];
+    //winRank : number[] = [1, 1, 2, 3, 5];
 
     public gameUrl: string = '';
     public gameToken: string = '';
 
     freeSpins: number = 0;
     totalFreeSpins: number = 0;
+
+    // API-driven free spins
+    public apiFreeSpins: any[] = [];
+    public apiFreeSpinsIndex: number = 0;
+    public useApiFreeSpins: boolean = false;
+
+    // Current free spin progress (1-based when in use)
+    public currentFreeSpinIndex: number = 0;
 
     // Debug mode property - initialized from URL parameter
     public debugged: number = (() => {
@@ -157,10 +171,10 @@ export class Slot {
     static readonly ROWS: number = 5;
     static readonly COLUMNS: number = 6;
     static readonly SCATTER_SYMBOL: number = 0;
-    static readonly SCATTER_SIZE: number = 1.25;
+    static readonly SCATTER_SIZE: number = 1.5;
     static readonly SYMBOL_SIZE: number = 1.5;
-    static readonly BOMB_SIZE_X: number = 1.25;
-    static readonly BOMB_SIZE_Y: number = 1.0;
+    static readonly BOMB_SIZE_X: number = 1.0;
+    static readonly BOMB_SIZE_Y: number = 0.9;
     static readonly BOMBS_MAX_COUNT: number = 3;
 
     values: number[][] = [];
