@@ -4,6 +4,7 @@ import { GameData } from './GameData';
 import { SlotMachine } from './SlotMachine';
 import { Buttons } from '../../ui/Buttons';
 import { AudioManager } from './AudioManager';
+import { BuyFeaturePopup } from './BuyFeaturePopup';
 
 interface GameScene extends Scene {
     gameData: GameData;
@@ -12,6 +13,7 @@ interface GameScene extends Scene {
     buttons: Buttons;
     helpScreen: any; // Reference to help screen
     autoplay: Autoplay; // Reference to autoplay
+    buyFeaturePopup: BuyFeaturePopup;
 }
 
 export class Autoplay {
@@ -26,6 +28,11 @@ export class Autoplay {
     private matchesDoneListener: () => void; // Store listener reference for proper cleanup
     private pollInterval: ReturnType<typeof setInterval> | null = null;
     private spinScheduled: boolean = false;
+	private awaitingSpinAnimationEnd: boolean = false;
+	private awaitingOverlayClose: boolean = false;
+	private onSpinAnimationEnd: (() => void) | null = null;
+	private onWinOverlayShow: (() => void) | null = null;
+	private onWinOverlayHide: (() => void) | null = null;
 
     preload(scene: GameScene): void {
         this.scene = scene;
@@ -41,33 +48,38 @@ export class Autoplay {
     create(scene: GameScene): void {
         this.scene = scene;
         
-        // Create the matches done listener once
-        this.matchesDoneListener = () => {
-            scene.gameData.debugLog("Autoplay MATCHES_DONE received");
-            scene.gameData.debugLog(`Autoplay state: isAutoPlaying=${this.isAutoPlaying}, isSpinning=${this.scene.gameData.isSpinning}`);
-            
-            if (this.isAutoPlaying && this.scene && !this.scene.gameData.isSpinning) {
-                // Clear any existing interval
-                if (this.spinInterval) {
-                    clearTimeout(this.spinInterval);
-                }
-                
-                scene.gameData.debugLog("Scheduling next autoplay spin");
-                // Add a small delay before next spin to ensure state is stable
-                this.spinInterval = setTimeout(() => {
-                    this.spin();
-                }, 100); // Increased delay for stability
-            } else {
-                scene.gameData.debugLog("Autoplay spin skipped - conditions not met");
-            }
-        };
+		// Create event-driven listeners to wait for animations and overlays
+		this.matchesDoneListener = () => {
+			// Deprecated for scheduling; kept for debugging only
+			scene.gameData.debugLog("Autoplay MATCHES_DONE received (no direct scheduling)");
+		};
+		this.onSpinAnimationEnd = () => {
+			if (!this.isAutoPlaying) return;
+			scene.gameData.debugLog("Autoplay detected SPIN_ANIMATION_END");
+			this.awaitingSpinAnimationEnd = false;
+			this.scheduleSpinIfReady();
+		};
+		this.onWinOverlayShow = () => {
+			if (!this.isAutoPlaying) return;
+			scene.gameData.debugLog("Autoplay detected WIN_OVERLAY_SHOW");
+			this.awaitingOverlayClose = true;
+		};
+		this.onWinOverlayHide = () => {
+			if (!this.isAutoPlaying) return;
+			scene.gameData.debugLog("Autoplay detected WIN_OVERLAY_HIDE");
+			this.awaitingOverlayClose = false;
+			this.scheduleSpinIfReady();
+		};
         
-        Events.emitter.on(Events.AUTOPLAY_START, (numSpins: number) => {
+		Events.emitter.on(Events.AUTOPLAY_START, (numSpins: number) => {
             this.start(scene, numSpins);
         });     
         Events.emitter.on(Events.AUTOPLAY_STOP, () => {
             this.stop();
         });
+		Events.emitter.on(Events.SPIN_ANIMATION_END, this.onSpinAnimationEnd);
+		Events.emitter.on(Events.WIN_OVERLAY_SHOW, this.onWinOverlayShow);
+		Events.emitter.on(Events.WIN_OVERLAY_HIDE, this.onWinOverlayHide);
     }
 
     destroy(): void {
@@ -77,6 +89,15 @@ export class Autoplay {
         if (this.matchesDoneListener) {
             Events.emitter.off(Events.MATCHES_DONE, this.matchesDoneListener);
         }
+			if (this.onSpinAnimationEnd) {
+				Events.emitter.off(Events.SPIN_ANIMATION_END, this.onSpinAnimationEnd);
+			}
+			if (this.onWinOverlayShow) {
+				Events.emitter.off(Events.WIN_OVERLAY_SHOW, this.onWinOverlayShow);
+			}
+			if (this.onWinOverlayHide) {
+				Events.emitter.off(Events.WIN_OVERLAY_HIDE, this.onWinOverlayHide);
+			}
     }
 
     addSpins(numSpins: number): void {
@@ -98,10 +119,10 @@ export class Autoplay {
         // Create remaining spins display
         this.createRemainingSpinsDisplay(scene);
         
-        // Add our specific listener for matches done
-        Events.emitter.on(Events.MATCHES_DONE, this.matchesDoneListener);
+		// Add lightweight listener for debugging (no scheduling)
+		Events.emitter.on(Events.MATCHES_DONE, this.matchesDoneListener);
         
-        // Start first spin with a small delay to ensure state is ready
+		// Start first spin with a small delay to ensure state is ready
         scene.gameData.debugLog("Starting autoplay - scheduling first spin");
         this.spinInterval = setTimeout(() => {
             scene.gameData.debugLog("Executing first autoplay spin");
@@ -154,6 +175,7 @@ export class Autoplay {
             scene.buttons.freeSpinBtn.visible = false;
             scene.buttons.autoplayIndicator.visible = true;
         }
+        console.log("createRemainingSpinsDisplay", scene.buttons.freeSpinBtn.visible);
 
         // Update the display
         this.updateRemainingSpinsDisplay();
@@ -163,25 +185,57 @@ export class Autoplay {
         if (!this.scene || !this.remainingSpinsText) return;
 
         this.scene.buttons.freeSpinBtn.visible = true;
-        
         // Determine which count to display
         const displayCount = this.scene.gameData.isBonusRound ? 
             this.scene.gameData.freeSpins : this.remainingSpins;
 
         // Update text position based on number of digits
         if (displayCount.toString().length === 3) {
-            this.remainingSpinsText.setFontSize('50px');
+            this.remainingSpinsText.setFontSize('40px');
             this.remainingSpinsText.setPosition(this.remainingSpinsText.x, this.isMobile ? this.spinsText_Y : this.spinsText_Y + 20);
         } else if (displayCount.toString().length === 2) {
-            this.remainingSpinsText.setFontSize('80px');
+            this.remainingSpinsText.setFontSize('70px');
             this.remainingSpinsText.setPosition(this.remainingSpinsText.x, this.isMobile ? this.spinsText_Y : this.spinsText_Y + 15);
         } else {
-            this.remainingSpinsText.setFontSize('110px');
+            this.remainingSpinsText.setFontSize('100px');
             this.remainingSpinsText.setPosition(this.remainingSpinsText.x, this.isMobile ? this.spinsText_Y : this.spinsText_Y + 10);
         }
 
         // Update the text
         this.remainingSpinsText.setText(displayCount.toString());
+    }
+
+    /**
+     * Ensures the remaining spins HUD (text near the spin button) exists and is updated.
+     * Useful for showing Free Spins count in desktop even when autoplay is not running.
+     */
+    public ensureRemainingSpinsDisplay(scene: GameScene): void {
+        this.scene = scene;
+        // Create the display if it does not exist yet
+        if (!this.remainingSpinsText) {
+            this.createRemainingSpinsDisplay(scene);
+        }
+        // Ensure correct button visibility for FS HUD
+        if (scene.gameData.freeSpins > 0) {
+            scene.buttons.freeSpinBtn.visible = true;
+            scene.buttons.autoplayIndicator.visible = false;
+        }
+        this.updateRemainingSpinsDisplay();
+    }
+
+    // Hide/destroy the remaining spins HUD (used when bonus ends on desktop)
+    public hideRemainingSpinsDisplay(): void {
+        if (this.remainingSpinsText) {
+            this.remainingSpinsText.destroy();
+            this.remainingSpinsText = undefined;
+        }
+        if (this.remainingSpinsBg) {
+            this.remainingSpinsBg.destroy();
+            this.remainingSpinsBg = undefined;
+        }
+        if (this.scene && this.scene.buttons) {
+            this.scene.buttons.freeSpinBtn.visible = false;
+        }
     }
 
     stop(): void {
@@ -202,6 +256,15 @@ export class Autoplay {
         if (this.matchesDoneListener) {
             Events.emitter.off(Events.MATCHES_DONE, this.matchesDoneListener);
         }
+		if (this.onSpinAnimationEnd) {
+			Events.emitter.off(Events.SPIN_ANIMATION_END, this.onSpinAnimationEnd);
+		}
+		if (this.onWinOverlayShow) {
+			Events.emitter.off(Events.WIN_OVERLAY_SHOW, this.onWinOverlayShow);
+		}
+		if (this.onWinOverlayHide) {
+			Events.emitter.off(Events.WIN_OVERLAY_HIDE, this.onWinOverlayHide);
+		}
         
         // Remove both text and background
         if (this.remainingSpinsText) {
@@ -234,8 +297,8 @@ export class Autoplay {
             return;
         }
 
-        // Don't spin if already spinning or if there's an active win overlay
-        if (this.scene.gameData.isSpinning || this.scene.slotMachine.activeWinOverlay) {
+		// Don't spin if already spinning or if there's an active win overlay
+		if (this.scene.gameData.isSpinning || this.scene.slotMachine.activeWinOverlay) {
             this.scene.gameData.debugLog("Skipping autoplay spin - game busy");
             // Retry after a short delay
             this.spinInterval = setTimeout(() => {
@@ -260,7 +323,7 @@ export class Autoplay {
             this.scene.gameData.debugLog("Free spin autoplay");
         }
 
-        // Reset total win for new spin
+		// Reset total win for new spin
         this.scene.gameData.totalWin = 0;
         Events.emitter.emit(Events.WIN, {});
 
@@ -274,7 +337,10 @@ export class Autoplay {
 
         this.scene.gameData.debugLog("Triggering autoplay spin via Events.SPIN");
 
-        // Trigger spin
+		// Mark expectations for gating next autoplay spin
+		this.awaitingSpinAnimationEnd = true;
+		this.awaitingOverlayClose = false;
+		// Trigger spin
         Events.emitter.emit(Events.SPIN, {
             currentRow: this.scene.gameData.currentRow,
             symbols: this.scene.gameData.slot.values
@@ -285,6 +351,20 @@ export class Autoplay {
         // Update remaining spins display
         this.updateRemainingSpinsDisplay();
     }
+
+	private scheduleSpinIfReady(): void {
+		if (!this.isAutoPlaying) return;
+		if (!this.scene) return;
+		if (this.scene.gameData.isSpinning) return;
+		if (this.scene.slotMachine.activeWinOverlay) return;
+		if (this.awaitingSpinAnimationEnd) return;
+		if (this.awaitingOverlayClose) return;
+		if (this.spinInterval) {
+			clearTimeout(this.spinInterval);
+		}
+		this.scene.gameData.debugLog("All conditions met. Scheduling next autoplay spin");
+		this.spinInterval = setTimeout(() => this.spin(), 50);
+	}
 
     update(_scene: GameScene, _time: number, _delta: number): void {
         // Empty implementation - can be used for future animations or updates

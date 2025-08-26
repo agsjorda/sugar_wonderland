@@ -66,12 +66,21 @@ export class Animation {
         if (symbolValue >= 0 && symbolValue <= Slot.SYMBOLS) {
             // Play the animation for matched symbols
             this.scene.gameData.debugLog("playing animation for symbol: " + symbolValue);
+            const originalDepth = symbolSprite.depth;
+            symbolSprite.setDepth(originalDepth + 10);
             symbolSprite.play(`symbol${symbolValue}_anim`);
-            symbolSprite.setDepth(symbolSprite.depth + 1000);
+            // Restore original depth once the symbol animation completes (if it wasn't destroyed elsewhere)
+            symbolSprite.once('animationcomplete', () => {
+                if (symbolSprite.active) {
+                    symbolSprite.setDepth(originalDepth);
+                }
+            });
             // Create and play explosion with delay
             const explosion = this.scene.add.sprite(0, 0, 'Explosion_SW');
-            explosion.setScale(0.7); // Match symbol scale
-            explosion.setDepth(symbolSprite.depth + 10); // Ensure explosion appears above symbol
+            // Match the symbol's current scale for better visual alignment
+            explosion.setScale(symbolSprite.scaleX, symbolSprite.scaleY);
+            // Ensure explosion appears above symbol
+            explosion.setDepth(symbolSprite.depth + 1);
             
             // Add explosion to the same container as the symbol
             if (symbolSprite.parentContainer) {

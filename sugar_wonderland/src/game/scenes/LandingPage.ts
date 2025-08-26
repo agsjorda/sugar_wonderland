@@ -108,6 +108,18 @@ export class LandingPage extends Scene {
             }
         });
 
+        // Version label bottom-right
+        const cfgVersion = (typeof window !== 'undefined' && window.APP_CONFIG) ? window.APP_CONFIG.version : undefined;
+        const versionText = `v${cfgVersion ?? (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev')}`;
+        const versionLabel = this.add.text(this.cameras.main.width - 10, this.cameras.main.height - 10, versionText, {
+            fontSize: this.isMobile ? '12px' : '14px',
+            color: '#ffffff',
+            fontFamily: getFontFamily(),
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        versionLabel.setOrigin(1, 1).setAlpha(0.85);
+
         this.scene.launch('LoadingPage');
     }
 
@@ -158,12 +170,12 @@ export class LandingPage extends Scene {
            tryLaunchGame();
 
            // Fade out the current scene
-           this.cameras.main.fadeOut(1000, 0, 0, 0);
+          // this.cameras.main.fadeOut(1000, 0, 0, 0);
 
            // When fade out is complete, start the Game scene
-           this.cameras.main.once('camerafadeoutcomplete', () => {
-               this.scene.start('Game');
-               this.scene.remove('LoadingPage');
-           });
+          // this.cameras.main.once('camerafadeoutcomplete', () => {
+          //      this.scene.start('Game');
+          //      this.scene.remove('LoadingPage');
+          //  });
     }
 }                                                                                           

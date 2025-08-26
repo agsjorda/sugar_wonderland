@@ -6,6 +6,7 @@ import { AudioManager } from './AudioManager';
 import { Background } from './Background';
 import { SlotMachine } from './SlotMachine';
 import { Buttons } from '../../ui/Buttons';
+import { BuyFeaturePopup } from './BuyFeaturePopup';
 
 // Event data interfaces
 interface SpinEventData {
@@ -23,6 +24,7 @@ interface GameScene extends Scene {
     slotMachine: SlotMachine;
     helpScreen: any; // Reference to help screen
     autoplay: any; // Add this property to match Buttons.ts
+    buyFeaturePopup: BuyFeaturePopup;
 }
 
 export class IdleState extends State {
@@ -34,19 +36,24 @@ export class IdleState extends State {
         gameScene.gameData.currentRow = 0;
         gameScene.gameData.isSpinning = false;
 
+        // future , display previous game data
+        
+        const startingSymbols  : number [][] = [
+            [1,1,3,3,2,2],
+            [1,0,3,5,0,2],
+            [0,6,6,5,5,0],
+            [8,0,6,7,0,4],
+            [8,8,7,7,4,4],
+        ];
+        
         Events.emitter.emit(Events.START, {
-            symbols: gameScene.gameData.slot.values,
+            symbols: startingSymbols,
+            //symbols: gameScene.gameData.slot.values,
             currentRow: gameScene.gameData.currentRow
         });
         this.initEventListeners(gameScene);
 
-        // Add a single, reliable listener for SPIN_ANIMATION_END to reset isSpinning
-        Events.emitter.on(Events.SPIN_ANIMATION_END, () => {
-            gameScene.gameData.isSpinning = false;
-            if (gameScene.buttons && gameScene.buttons.enableButtonsVisually) {
-                gameScene.buttons.enableButtonsVisually(gameScene);
-            }
-        });
+		// Keep isSpinning true until MATCHES_DONE to avoid autoplay advancing during tumbles/animations
     }
 
     update(_scene: Scene, _time: number, _delta: number): void {
@@ -68,6 +75,7 @@ export class IdleState extends State {
     private spin(scene: GameScene, data?: SpinEventData): void {
         if (scene.gameData.isSpinning) { return; }
         scene.gameData.isSpinning = true;
+		console.log(`[STATE] spin start: isBonusRound=${scene.gameData.isBonusRound}, freeSpins=${scene.gameData.freeSpins}, useApiFreeSpins=${scene.gameData.useApiFreeSpins}`);
 
         if(data?.isBuyFeature) {
             scene.gameData.balance -= scene.gameData.getBuyFeaturePrice();
@@ -75,11 +83,21 @@ export class IdleState extends State {
             scene.gameData.minScatter = 4;
         }
 
-        if (scene.gameData.freeSpins > 0) 
+		if (scene.gameData.freeSpins > 0) 
         {
-            scene.gameData.freeSpins--;
-            if (scene.gameData.freeSpins === 0) {
+            // When using API-driven free spins, do not decrement here; it is controlled by API spinsLeft.
+            if (!scene.gameData.useApiFreeSpins) {
+				scene.gameData.freeSpins--;
+				console.log(`[STATE] decremented freeSpins → ${scene.gameData.freeSpins} (isBonusRound=${scene.gameData.isBonusRound})`);
+            }
+			// Maintain currentFreeSpinIndex for local autoplay case (non-API)
+			if (!scene.gameData.useApiFreeSpins) {
+				scene.gameData.currentFreeSpinIndex = (scene.gameData.totalFreeSpins - scene.gameData.freeSpins);
+				console.log(`[STATE] currentFreeSpinIndex=${scene.gameData.currentFreeSpinIndex}/${scene.gameData.totalFreeSpins}`);
+			}
+            if (scene.gameData.freeSpins === 0 && !scene.gameData.useApiFreeSpins) {
                 // End of bonus round
+				console.log('[STATE] freeSpins ended, toggling back to base game');
                 scene.background.toggleBackground(scene);
                 scene.audioManager.changeBackgroundMusic(scene);
                 

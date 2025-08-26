@@ -19,6 +19,9 @@ const phasermsg = () => {
 export default defineConfig({
     base: './',
     logLevel: 'warning',
+    define: {
+        __APP_VERSION__: JSON.stringify(process.env.npm_package_version || 'prod')
+    },
     build: {
         rollupOptions: {
             output: {

@@ -8,11 +8,13 @@ export class Events {
     static readonly SPIN_BEFORE_ANIMATION_END: string = 'spinBeforeAnimationEnd';
     static readonly SPIN_ANIMATION_END: string = 'spin_animation_end';
     static readonly MATCHES_DONE: string = 'matches_done';
+    static readonly TUMBLE_SEQUENCE_DONE: string = 'tumble_sequence_done';
 
     static readonly WIN: string = 'win';
     static readonly CHANGE_LINE: string = 'changeLine';
     static readonly CHANGE_BET: string = 'change_bet';
     static readonly ENHANCE_BET_TOGGLE: string = 'enhance_bet_toggle';
+    static readonly REMOVE_ENHANCE_BET: string = 'remove_enhance_bet';
 
     // Autoplay events
     static readonly AUTOPLAY_START: string = 'autoplay_start';
@@ -31,5 +33,17 @@ export class Events {
     static readonly UPDATE_CURRENCY: string = 'updateCurrency';
     static readonly UPDATE_BALANCE: string = 'updateBalance';
 
+    // UI Y-axis toggle events for specific buttons
+    static readonly CREATE_TURBO_BUTTON: string = 'createTurboButton';
+    static readonly CREATE_AUTOPLAY: string = 'createAutoplay';
+    static readonly CREATE_SPIN_BUTTON: string = 'createSpinButton';
+    static readonly CREATE_DOUBLE_FEATURE: string = 'createDoubleFeature';
+    static readonly CREATE_INFO: string = 'createInfo';
+
     static readonly emitter: Phaser.Events.EventEmitter = new Phaser.Events.EventEmitter();
+
+    // Bomb visual events
+    static readonly BOMB_FLOAT_TEXT: string = 'bomb_float_text';
+
+    static readonly SESSION_TIMEOUT: string = 'session_timeout';
 } 
