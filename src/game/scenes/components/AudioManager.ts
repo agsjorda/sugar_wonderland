@@ -236,14 +236,16 @@ export class AudioManager {
         let winSound: Sound.WebAudioSound | undefined;
         if(winName === 'FreeSpin') {
             this.BGChecker.pause();
-            //this.setMusicVolume(this.getMusicVolume() * 0.01);
+            if(this.getMusicVolume() > 0.01){
+                this.setMusicVolume(this.getMusicVolume() * 0.01);
+            }
             let winSound: Sound.WebAudioSound | undefined;
             winSound = this.FreeSpinWon;
 
             if (winSound) {
                 winSound.once('complete', () => {
-                    this.BGChecker.pause();
-                    //this.setMusicVolume(this.getMusicVolume() * 0.01);
+                    this.BGChecker.resume();
+                    this.setMusicVolume(this.getMusicVolume() / 0.01);
                     // Play next in queue if we're using the queue system
                     if (this.isPlayingQueue) {
                         this.playNextInQueue();
@@ -294,6 +296,7 @@ export class AudioManager {
     stopWinSFX(_scene: Scene): void {   
         this.BGChecker.resume();
         this.setMusicVolume(this.getMusicVolume() / 0.01);
+        console.log(this.getMusicVolume());
         if(this.getMusicVolume() > 1) {
             this.setMusicVolume(1);
         }
@@ -301,6 +304,7 @@ export class AudioManager {
         this.MegaW.stop();
         this.SuperW.stop();
         this.BigW.stop();
+        this.WinSkip.stop();
         // Also clear the queue when stopping
         this.winSFXQueue = [];
         this.isPlayingQueue = false;

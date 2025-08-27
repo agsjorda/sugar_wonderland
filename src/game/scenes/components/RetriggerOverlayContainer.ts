@@ -81,7 +81,7 @@ export class RetriggerOverlayContainer {
 
 		// Brief pause before allowing skip
 		this.inputLocked = true;
-		this.scene.time.delayedCall(1000, () => {
+		this.scene.time.delayedCall(400, () => {
 			this.inputLocked = false;
 		});
 
@@ -97,7 +97,7 @@ export class RetriggerOverlayContainer {
 		// Auto-close in autoplay/API-driven scenarios after a short pause
 		const shouldAutoClose = (this.scene as any).buttons?.autoplay?.isAutoPlaying || (this.scene as any).gameData?.useApiFreeSpins;
 		if (shouldAutoClose) {
-			this.scene.time.delayedCall(1200, () => this.tryClose(onClose));
+			this.scene.time.delayedCall(400, () => this.tryClose(onClose));
 		}
 
 		// Notify overlay shown and block win overlay queue in slotMachine
