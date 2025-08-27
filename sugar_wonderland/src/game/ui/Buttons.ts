@@ -2085,9 +2085,7 @@ export class Buttons {
 
         // Price text (large, green)
         const price = scene.gameData.getBuyFeaturePrice();
-        const priceText = this.isMobile ? 
-        scene.gameData.currency + ' ' + price.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-        : price.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        const priceText = scene.gameData.currency + ' ' + price.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
         this.buyFeaturePriceText = scene.add.text(0, 24,  priceText, {
             fontSize: '42px',
             color: '#3FFF0D',
@@ -2159,9 +2157,7 @@ export class Buttons {
 
     updateBuyFeaturePrice(scene: GameScene, newPrice: number) {
 		if (this.buyFeaturePriceText) {
-			this.buyFeaturePriceText.setText(this.isMobile ? 
-            scene.gameData.currency + ' ' + newPrice.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-            : newPrice.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
+			this.buyFeaturePriceText.setText(scene.gameData.currency + ' ' + newPrice.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
 		}
 	}
 
