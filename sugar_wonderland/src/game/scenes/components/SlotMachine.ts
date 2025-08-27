@@ -385,8 +385,8 @@ export class SlotMachine {
                 // no-op: protective
             }
 
-            // After current spin concludes (animations done), animate scatters then enter bonus and show the free spins popup
-            Events.emitter.once(Events.MATCHES_DONE, async () => {
+            // After current spin concludes (entire tumble sequence done), animate scatters then enter bonus and show the free spins popup
+            Events.emitter.once(Events.TUMBLE_SEQUENCE_DONE, async () => {
                 // If any scatter symbols are present on the grid, animate them before showing the overlay
                 try {
                     const scatterSprites: Phaser.GameObjects.Sprite[] = [];
@@ -457,6 +457,8 @@ export class SlotMachine {
                 currentRow: 0
             });
             Events.emitter.emit(Events.MATCHES_DONE, { symbolGrid: newValues });
+            // Ensure tumble completion event also fires in the no-tumbles path
+            Events.emitter.emit(Events.TUMBLE_SEQUENCE_DONE, { symbolGrid: newValues });
             scene.gameData.isSpinning = false;
             if (scene.buttons && scene.buttons.enableButtonsVisually) {
                 scene.buttons.enableButtonsVisually(scene);
@@ -535,6 +537,8 @@ export class SlotMachine {
                 currentRow: 0
             });
             Events.emitter.emit(Events.MATCHES_DONE, { symbolGrid: newValues });
+            // Ensure tumble completion event also fires in the no-tumbles path (API-driven FS)
+            Events.emitter.emit(Events.TUMBLE_SEQUENCE_DONE, { symbolGrid: newValues });
             scene.gameData.isSpinning = false;
             if (scene.buttons && scene.buttons.enableButtonsVisually) {
                 scene.buttons.enableButtonsVisually(scene);
@@ -605,6 +609,7 @@ export class SlotMachine {
     // Visual-only scatter animation for API-driven spins (no rewards handling)
     private async animateScatterSymbolsForApi(scene: GameScene, scatterSprites: Phaser.GameObjects.Sprite[]): Promise<void> {
         if (scatterSprites.length === 0) return;
+        if (scatterSprites.length < 3) return;
         console.log(`[SCATTER] (API) Preparing to animate ${scatterSprites.length} scatter symbol(s)`);
         scene.audioManager.ScatterSFX.play();
         const animationPromises: Promise<void>[] = [];
