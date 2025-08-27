@@ -621,22 +621,12 @@ export class Buttons {
         });
 
         const startIdleRotation = () => {
-            if (this.idleTween) {
-                this.idleTween.stop();
-            }
-            this.idleTween = scene.tweens.add({
-                targets: this.spinButton,
-                angle: '+=360',
-                duration: 8000,
-                repeat: -1,
-                ease: 'Linear'
-            });
+            this.startIdleAnimation(scene);
         };
 
+        startIdleRotation();
         const stopIdleRotation = () => {
-            if (this.idleTween) {
-                this.idleTween.stop();
-            }
+            this.stopIdleAnimation();
         };
 
         const canIdleRotate = () => {
@@ -2135,6 +2125,8 @@ export class Buttons {
 
         // Show popup when buy feature is pressed
         const showBuyFeaturePopup = () => {
+            
+            scene.audioManager.UtilityButtonSFX.play();
             
             Events.emitter.emit(Events.REMOVE_ENHANCE_BET, {});
 

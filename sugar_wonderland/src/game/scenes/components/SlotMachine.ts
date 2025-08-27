@@ -575,6 +575,17 @@ export class SlotMachine {
             scene.gameData.debugError('Scatter animation (API) failed', e);
         }
 
+        // After all animations for this free spin, show Big/Mega/Epic/Super overlay
+        // based on this free spin's total win, if it meets the threshold
+        const betForFs = scene.gameData.bet || 1;
+        const fsReportedTotal = (fs as any)?.totalWin;
+        const thisFreeSpinTotal = typeof fsReportedTotal === 'number' ? fsReportedTotal : spinTotalWin;
+        const fsMultiplier = betForFs > 0 ? (thisFreeSpinTotal / betForFs) : 0;
+        if (fsMultiplier >= scene.gameData.winRank[1]) {
+            // Queue the overlay; the scheduler below will wait for it to close before proceeding
+            this.showWinOverlay(scene, thisFreeSpinTotal, betForFs);
+        }
+
         // Advance to next API free spin
         scene.gameData.apiFreeSpinsIndex = idx + 1;
         const next = fsList[idx + 1];
@@ -591,7 +602,7 @@ export class SlotMachine {
                 // Small delay to ensure any overlay animations finish
                 scene.time.delayedCall(300, () => this.playApiFreeSpin(scene));
             } else {
-                // End of bonus per API
+                // End of bonus per API — after the last FS overlay closes, show Congrats
                 await this.endApiBonus(scene);
             }
         };
@@ -869,16 +880,9 @@ export class SlotMachine {
         } catch (error) {
             scene.gameData.debugError("Error in match processing: " + error);
         } finally {
-            // Only show win overlay and deferred scatter at the end of all matches
-            const bet = scene.gameData.bet || 1;
-            const totalWin = scene.gameData.totalWin;
-            console.log(totalWin);
-            const multiplierWin = totalWin / bet;
-            const shouldShowWinOverlay = (
-                multiplierWin >= scene.gameData.winRank[1] &&
-                lastResult === "No more matches" &&
-                !this.bonusTriggeredThisSpin
-            );
+            // Only handle deferred scatter at the end of all matches
+            console.log(scene.gameData.totalWin);
+            // Big/Mega/Epic/Super overlays will be handled per-tumble during FreeSpins only
             // Ensure bomb animations complete before showing win overlay
             if (this.hadMatchThisSpin) {
                 // If there are bombs on the grid, explode them first
@@ -930,9 +934,6 @@ export class SlotMachine {
 
             // Emit tumble sequence completion event so UI can clear interim displays
             Events.emitter.emit(Events.TUMBLE_SEQUENCE_DONE, { symbolGrid });
-            if (shouldShowWinOverlay) {
-                this.showWinOverlay(scene, totalWin, bet);
-            }
             // Always ensure spinning state is reset
             scene.gameData.isSpinning = false;
             scene.gameData.debugLog("Spin sequence completed, isSpinning reset to false");

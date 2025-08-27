@@ -197,12 +197,14 @@ export class WinOverlayContainer {
 
         this.buttonZone.on('pointerdown', () => {
             this.handleSkipInput();
+            this.inputLocked=true;
         });
 
         // Desktop-only: allow spacebar to skip overlays
         if (!this.isMobile && this.scene.input.keyboard) {
             this.onSpaceDown = () => {
                 this.handleSkipInput();
+                this.inputLocked=true;
             };
             this.scene.input.keyboard.on('keydown-SPACE', this.onSpaceDown);
         }
@@ -219,7 +221,7 @@ export class WinOverlayContainer {
 
         // Lock input to prevent skipping too quickly (10s for FreeSpin, 1s otherwise)
         this.inputLocked = true;
-        const lockMs = (winType === 'FreeSpin') ? 3000 : 1000;
+        const lockMs = 333;//(winType === 'FreeSpin') ? 1000 : 1000;
         this.scene.time.delayedCall(lockMs, () => {
             this.inputLocked = false;
         });
@@ -419,7 +421,7 @@ export class WinOverlayContainer {
 		this.currentAnimationPhase = 'bigwin_idle';
 		this.winAnim.animationState.setAnimation(0, 'BigWin-Idle', true);
 		let incrementTo = this.finalBetTotal
-		if(this.finalBetTotal > this.scene.gameData.bet * this.scene.gameData.winRank[1]){
+		if(this.finalBetTotal - 0.01 > this.scene.gameData.bet * this.scene.gameData.winRank[1]){
 			incrementTo = this.scene.gameData.bet * this.scene.gameData.winRank[1];
 		}
 
@@ -475,7 +477,7 @@ export class WinOverlayContainer {
 		this.winAnim.animationState.setAnimation(0, 'MegaWin-Idle', true);
 
 		let incrementTo = this.finalBetTotal
-		if(this.finalBetTotal > this.scene.gameData.bet * this.scene.gameData.winRank[2]){
+		if(this.finalBetTotal - 0.01 > this.scene.gameData.bet * this.scene.gameData.winRank[2]){
 			incrementTo = this.scene.gameData.bet * this.scene.gameData.winRank[2];
 		}
 
@@ -530,7 +532,7 @@ export class WinOverlayContainer {
 		this.winAnim.animationState.setAnimation(0, 'EpicWin-Idle', true);
 
 		let incrementTo = this.finalBetTotal
-		if(this.finalBetTotal > this.scene.gameData.bet * this.scene.gameData.winRank[3]){
+            if(this.finalBetTotal - 0.01 > this.scene.gameData.bet * this.scene.gameData.winRank[3]){
 			incrementTo = this.scene.gameData.bet * this.scene.gameData.winRank[3];
 		}
 
