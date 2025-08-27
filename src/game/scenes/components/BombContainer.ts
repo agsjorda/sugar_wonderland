@@ -172,7 +172,6 @@ export class BombContainer extends GameObjects.Container {
             // Fallback: approximate scale if bounds are not available yet
             const approximateScale = Math.min(width, height) / 120;
             this.bombSprite.setScale(approximateScale);
-            console.log("approximateScale", approximateScale);
             this.bombSprite.setPosition(0, 0);
         }
 
@@ -311,6 +310,16 @@ export class BombContainer extends GameObjects.Container {
             // Match visual size of the original bomb sprite
             overlay.setScale(this.bombSprite.scaleX, this.bombSprite.scaleY);
             overlay.setAlpha(1);
+            // Scale down overlay from 100% to 50% at animation start
+            try {
+                this.scene.tweens.add({
+                    targets: overlay,
+                    scaleX: overlay.scaleX * 0.5,
+                    scaleY: overlay.scaleY * 0.5,
+                    duration: 800,
+                    ease: 'Power2'
+                });
+            } catch (_e) { /* no-op */ }
             // Place inside the same container (for masking) and bring to top
             if (parent && typeof parent.add === 'function') {
                 parent.add(overlay);
@@ -364,6 +373,16 @@ export class BombContainer extends GameObjects.Container {
             try {
                 this.bombSprite.animationState.timeScale = 1;
                 const fallbackEntry = this.bombSprite.animationState.setAnimation(0, animationName, false);
+                // Scale down internal sprite from 100% to 50% at animation start
+                try {
+                    this.scene.tweens.add({
+                        targets: this.bombSprite,
+                        scaleX: this.bombSprite.scaleX * 0.5,
+                        scaleY: this.bombSprite.scaleY * 0.5,
+                        duration: 400,
+                        ease: 'Power2'
+                    });
+                } catch (__e) { /* no-op */ }
                 // If asked to pause at a specific frame, pause the internal sprite as well
                 if (typeof pauseAtFrame === 'number' && pauseAtFrame >= 0 && frameRate > 0) {
                     const pauseMs = (pauseAtFrame / frameRate) * 1000;

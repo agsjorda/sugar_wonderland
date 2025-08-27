@@ -1539,7 +1539,7 @@ export class Buttons {
             if (isProcessingTotalWinQueue) return;
             isProcessingTotalWinQueue = true;
 
-            let reelSpeed = scene.gameData.turbo ? 220 : 1100;
+            let reelSpeed = scene.gameData.turbo ? 200 : 1000;
 
             const step = () => {
                 if (totalWinQueue.length === 0) {
@@ -2033,7 +2033,13 @@ export class Buttons {
         // Button background
         if(this.isMobile){
             this.buyFeatureButton = scene.add.image(0, 0, 'buyFeature') as ButtonImage;
-            this.buyFeatureButton.setInteractive();
+            console.log(this.buyFeatureButton.width, this.buyFeatureButton.height);
+            this.buyFeatureButton.setInteractive(new Geom.Rectangle(
+                this.buyFeatureButton.width/4,
+                this.buyFeatureButton.height/4,
+                this.buyFeatureButton.width * 0.6,
+                this.buyFeatureButton.height/2),
+                Geom.Rectangle.Contains);
             (this.buyFeatureButton as any).isButton = true;
             container.add(this.buyFeatureButton);
         } else {
@@ -2129,6 +2135,7 @@ export class Buttons {
 
         // Show popup when buy feature is pressed
         const showBuyFeaturePopup = () => {
+            
             Events.emitter.emit(Events.REMOVE_ENHANCE_BET, {});
 
             // Close autoplay settings if open
