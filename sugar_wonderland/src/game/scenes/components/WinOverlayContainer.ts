@@ -197,14 +197,12 @@ export class WinOverlayContainer {
 
         this.buttonZone.on('pointerdown', () => {
             this.handleSkipInput();
-            this.inputLocked=true;
         });
 
         // Desktop-only: allow spacebar to skip overlays
         if (!this.isMobile && this.scene.input.keyboard) {
             this.onSpaceDown = () => {
                 this.handleSkipInput();
-                this.inputLocked=true;
             };
             this.scene.input.keyboard.on('keydown-SPACE', this.onSpaceDown);
         }

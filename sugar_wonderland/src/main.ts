@@ -1,4 +1,5 @@
 import StartGame from './game/main';
+import chalk from 'chalk';
 
 // Declare the callback function on window for font loading
 declare global {
@@ -13,7 +14,7 @@ const initializeGame = (): void => {
     if (gameStarted) return;
     gameStarted = true;
     
-    console.log('Starting game...');
+    console.log(chalk.yellow.bold('Starting game...'));
     StartGame('game-container');
 };
 

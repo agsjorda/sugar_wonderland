@@ -1,5 +1,6 @@
 import { Scene, GameObjects } from 'phaser';
 import { Events } from './Events';
+import chalk from 'chalk';
 
 export class Background {
     private initialLayerX: number = 0;
@@ -71,7 +72,7 @@ export class Background {
         }
 
 		scene.gameData.isBonusRound = false;
-		console.log(`[BG] create: isBonusRound=${scene.gameData.isBonusRound}`);
+		console.log(chalk.green.bold(`[BG] create: isBonusRound=${scene.gameData.isBonusRound}`));
         this.toggleBackground(scene);
 
         // Pause/resume background animations when win overlay is shown/hidden
@@ -97,16 +98,17 @@ export class Background {
     }
 
 	toggleBackground(_scene: Scene): void {
-		console.log(`[BG] toggleBackground called. isBonusRound=${_scene.gameData.isBonusRound}`);
         let main_status = 0;
         let bonus_status = 0;
 
         if(_scene.gameData.isBonusRound){
             main_status = 0;
             bonus_status = 1;
+            console.log(chalk.redBright.bold(`[BG] toggleBackground called. isBonusRound=${_scene.gameData.isBonusRound}`));
         } else {
             main_status = 1;
             bonus_status = 0;
+            console.log(chalk.red.bold(`[BG] toggleBackground called. isBonusRound=${_scene.gameData.isBonusRound}`));
         }
 
 		this.main_background.alpha = main_status;

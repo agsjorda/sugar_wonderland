@@ -423,7 +423,7 @@ export class BombContainer extends GameObjects.Container {
      * Clean up the bomb container
      */
     destroy(): void {
-        console.log('Destroying bomb container');
+        // console.log('Destroying bomb container');
         
         if (this.orbitTimer) {
             try { this.orbitTimer.remove(false); } catch (_e) {}

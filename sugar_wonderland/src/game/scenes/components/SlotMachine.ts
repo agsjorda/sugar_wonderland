@@ -11,6 +11,7 @@ import { RetriggerOverlayContainer } from './RetriggerOverlayContainer';
 import { GameAPI } from '../backend/GameAPI';
 import { BombContainer } from './BombContainer';
 import { getRandomRows } from './IdleState';
+import chalk from 'chalk';
 
 // Extend Scene to include gameData and audioManager
 interface GameScene extends Scene {
@@ -350,7 +351,7 @@ export class SlotMachine {
         console.log("result", result);
         scene.gameData.debugLog("slotArea", result.slot.area);
         if(result.slot.freeSpin?.length > 0){
-            console.log('[BUY FEATURE] triggered freeSpin', result.slot.freeSpin);
+            console.log(chalk.bgGreenBright.black.bold(' [BUY FEATURE] triggered freeSpin '), result.slot.freeSpin);
         }
         
         // If backend returned free spin sequence, store it to drive the bonus round from API data
@@ -360,9 +361,12 @@ export class SlotMachine {
         if (Array.isArray(apiFs) && apiFs.length > 0) {
             // Suppress regular total-win overlay for this spin; show only FreeSpin overlay
             this.bonusTriggeredThisSpin = true;
+            scene.gameData.apiFreeSpins =  [];
             scene.gameData.apiFreeSpins = apiFs;
             scene.gameData.apiFreeSpinsIndex = 0;
             scene.gameData.useApiFreeSpins = true;
+            // Reset per-sequence FS totals to avoid leaking values across bonus rounds
+            scene.gameData.totalWinFreeSpin = [];
             // Rely on spinsLeft from the first API entry
             const currentSpinsLeft = apiFs[0]?.spinsLeft;
             scene.gameData.freeSpins = currentSpinsLeft;
@@ -370,7 +374,7 @@ export class SlotMachine {
             apiFs.forEach((v)=>{
                 scene.gameData.totalWinFreeSpin.push(v.totalWin);
             })
-            console.log(`[BONUS] API FS detected: deferring isBonusRound until after animations. freeSpins=${scene.gameData.freeSpins}, totalFreeSpins=${scene.gameData.totalFreeSpins}`);
+            console.log(chalk.bgRedBright.black.bold(` [BONUS] API FS detected: deferring isBonusRound until after animations. `) + chalk.white.bold(` freeSpins = ${scene.gameData.freeSpins}, totalFreeSpins = ${scene.gameData.totalFreeSpins}`));
 
             // If autoplay is running, stop it immediately to hand control to API-driven free spins
             try {
@@ -507,6 +511,7 @@ export class SlotMachine {
 
         // Set per-spin total win from tumbles sum for UI and aggregate bonus
         const spinTotalWin = Array.isArray(tumbles) ? tumbles.reduce((sum, t: any) => sum + (t?.win || 0), 0) : 0;
+        console.log("spinTotalWin", spinTotalWin.toFixed(2));
         // Sum total multiplier values for this free spin
         const multiplierSymbols: number[] = Array.isArray((fs as any)?.multipliers) ? (fs as any).multipliers as number[] : [];
         if (multiplierSymbols.length === 0) {
@@ -522,8 +527,8 @@ export class SlotMachine {
             scene.buttons.bonusMultiplier = totalMultiplier > 0 ? totalMultiplier : 1;
         }
 
-        scene.gameData.totalWin = spinTotalWin;
-        //scene.gameData.totalBonusWin += spinTotalWin;
+        // scene.gameData.totalWin = spinTotalWin;
+        // scene.gameData.totalBonusWin += spinTotalWin;
 
         // Play arrival animation and then process tumbles from API
         await this.playSpinAnimations(scene, newValues, { symbols: newValues, currentRow: 0, isBuyFeature: false, isEnhancedBet: false, betAmount: scene.gameData.bet });
@@ -578,8 +583,9 @@ export class SlotMachine {
         // After all animations for this free spin, show Big/Mega/Epic/Super overlay
         // based on this free spin's total win, if it meets the threshold
         const betForFs = scene.gameData.bet || 1;
-        const fsReportedTotal = (fs as any)?.totalWin;
+        const fsReportedTotal : number = fs?.totalWin;
         const thisFreeSpinTotal = typeof fsReportedTotal === 'number' ? fsReportedTotal : spinTotalWin;
+        console.log(chalk.green.bold(thisFreeSpinTotal.toFixed(2), fsReportedTotal.toFixed(2), spinTotalWin.toFixed(2)));
         const fsMultiplier = betForFs > 0 ? (thisFreeSpinTotal / betForFs) : 0;
         if (fsMultiplier >= scene.gameData.winRank[1]) {
             // Queue the overlay; the scheduler below will wait for it to close before proceeding
@@ -626,11 +632,11 @@ export class SlotMachine {
         const animationPromises: Promise<void>[] = [];
         scatterSprites.forEach((sprite, index) => {
             const animationPromise = new Promise<void>((resolve) => {
-                console.log(`[SCATTER] (API) Animating scatter symbol idx=${index}`);
+                console.log(chalk.grey(`[SCATTER] (API) Animating scatter symbol idx = `) + chalk.white.bold(index));
                 this.createWinParticles(scene, sprite.x, sprite.y, 0xFF0000);
                 this.animation.playSymbolAnimation(sprite, 0);
                 sprite.once('animationcomplete', () => {
-                    console.log(`[SCATTER] (API) Scatter animation complete idx=${index}`);
+                    console.log(chalk.grey(`[SCATTER] (API) Scatter animation complete idx = `) + chalk.white.bold(index));
                     resolve();
                 });
             });
@@ -653,6 +659,8 @@ export class SlotMachine {
         scene.gameData.useApiFreeSpins = false;
         scene.gameData.apiFreeSpins = [];
         scene.gameData.apiFreeSpinsIndex = 0;
+        // Clear FS totals at the end of the bonus to prevent reuse next spins
+        scene.gameData.totalWinFreeSpin = [];
         scene.buttons.freeSpinBtn.visible = false;
         // Show bottom controls again
         if (scene.buttons?.hideBottomControlsForBonus) {
@@ -856,7 +864,7 @@ export class SlotMachine {
     private async processMatchesSequentially(scene: GameScene, symbolGrid: number[][], SymbolsIn : Tumble[]): Promise<void> {
         let continueMatching = true;
         let lastResult: string | undefined = undefined;
-        console.log("SymbolsIn", SymbolsIn);
+        // console.log("SymbolsIn", SymbolsIn);
         try {
             while (continueMatching) {
                 const result = await this.checkMatchAsync(symbolGrid, scene, SymbolsIn[this.currentIndex]);
@@ -881,7 +889,7 @@ export class SlotMachine {
             scene.gameData.debugError("Error in match processing: " + error);
         } finally {
             // Only handle deferred scatter at the end of all matches
-            console.log(scene.gameData.totalWin);
+            console.log(chalk.green.bold('totalWin: ' + scene.gameData.totalWin.toFixed(2)));
             // Big/Mega/Epic/Super overlays will be handled per-tumble during FreeSpins only
             // Ensure bomb animations complete before showing win overlay
             if (this.hadMatchThisSpin) {
@@ -1295,13 +1303,13 @@ export class SlotMachine {
             // --- SCATTER CHECK (deferred to end of match-8s flow) ---
             if (!scene.gameData.useApiFreeSpins) {
                 const scatterCount = symbolCount[0] || 0;
-                console.log(`[SCATTER] No matches. scatterCount=${scatterCount}, isBonus=${scene.gameData.isBonusRound}, threshold=${scene.gameData.isBonusRound ? 3 : 4}`);
+                console.log(chalk.yellow(`[SCATTER] No matches. scatterCount = ${scatterCount}, isBonus = ${scene.gameData.isBonusRound}, threshold = ${scene.gameData.isBonusRound ? 3 : 4}`));
                 if (scatterCount >= 4 || (scene.gameData.isBonusRound && scatterCount >= 3)) {
                     // Defer scatter handling until after all match-8s/bomb animations
                     this.deferredScatterCount = scatterCount;
-                    console.log('[SCATTER] Threshold met, deferring scatter handling until end of tumble sequence');
+                    console.log(chalk.blueBright.bold('[SCATTER] Threshold met, deferring scatter handling until end of tumble sequence'));
                 } else {
-                    console.log('[SCATTER] Threshold not met, continuing normal flow');
+                    console.log(chalk.white.bold('[SCATTER] Threshold not met, continuing normal flow'));
                 }
             }
 
@@ -1841,7 +1849,7 @@ export class SlotMachine {
                 }
                 
                 if (!foundInGrid && child.parentContainer === this.container) {
-                    console.log("cleaning up Alone symbol");
+                    // console.log("cleaning up Alone symbol");
                     child.destroy();
                 }
             }
