@@ -175,7 +175,7 @@ export class Autoplay {
             scene.buttons.freeSpinBtn.visible = false;
             scene.buttons.autoplayIndicator.visible = true;
         }
-        console.log("createRemainingSpinsDisplay", scene.buttons.freeSpinBtn.visible);
+        // console.log("createRemainingSpinsDisplay", scene.buttons.freeSpinBtn.visible);
 
         // Update the display
         this.updateRemainingSpinsDisplay();
