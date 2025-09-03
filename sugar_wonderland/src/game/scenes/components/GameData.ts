@@ -69,8 +69,6 @@ export class GameData {
     totalBet: number = 0;
     totalWin: number = 0;
 
-    maxWin : number = 21000;
-
     totalWinFreeSpin: number[] = [];
     totalBonusWin: number = 0; // Track bonus round wins separately
     doubleChanceEnabled: boolean = false;
@@ -105,7 +103,7 @@ export class GameData {
     currentMatchingSymbols: number[] = [];
     doubleChanceMultiplier: number = 2;
     
-    winRank : number[] = [1, 10, 20, 30, 50];
+    winRank : number[] = [1, 10, 20, 30, 50, 21000];
 
     public gameUrl: string = '';
     public gameToken: string = '';
@@ -175,6 +173,8 @@ export class Slot {
     static readonly BOMB_SIZE_X: number = 1.0;
     static readonly BOMB_SIZE_Y: number = 0.9;
     static readonly BOMBS_MAX_COUNT: number = 3;
+
+    static readonly BOMB_SCALE: number = 1.5;
 
     values: number[][] = [];
     scatterCount: number = 0;

@@ -1,4 +1,5 @@
 import { Scene, Sound } from 'phaser';
+import chalk from 'chalk';
 
 export class AudioManager {
     private musicVolume: number = 1.0; // Default music volume (0.0 - 1.0)
@@ -51,35 +52,39 @@ export class AudioManager {
         // BGMusic
         scene.load.audio('BonusBG', `${prefixAudio}/bonusbg_sw${fileType}`);
         scene.load.audio('MainBG', `${prefixAudio}/mainbg_sw${fileType}`);
+
+        // dummy win sound 
         scene.load.audio('BGChecker', `${prefixAudio}/mainbg_sw${fileType}`);
 
 
         // SFX
         scene.load.audio('ClickSFX', `${prefixAudio}/click_sw${fileType}`);
-        scene.load.audio('ReelDrop', `${prefixAudio}/reeldrop_sw${fileType}`);
+        scene.load.audio('ReelDrop', `${prefixAudio}/Updated/reeldrop_SW${fileType}`);
         scene.load.audio('ReelStart', `${prefixAudio}/reelstarting_sw${fileType}`);
         scene.load.audio('TurboDrop', `${prefixAudio}/turbodrop_sw${fileType}`);
         scene.load.audio('SpinSFX', `${prefixAudio}/spin_sw${fileType}`);
         scene.load.audio('UtilityButtonSFX', `${prefixAudio}/ub${fileType}`);
-        scene.load.audio('ScatterSFX', `${prefixAudio}/scatter_sw${fileType}`);
-        scene.load.audio('TExplosion', `${prefixAudio}/texplosion_sw${fileType}`);
+        scene.load.audio('ScatterSFX', `${prefixAudio}/Updated/scatter_SW${fileType}`);
+        scene.load.audio('TExplosion', `${prefixAudio}/Updated/bomb_SW${fileType}`);
         
         // Wins
-        scene.load.audio('BigW', `${prefixAudio}/bigw_sw${fileType}`);
+        scene.load.audio('BigW', `${prefixAudio}/Updated/big_win_SW${fileType}`);
         scene.load.audio('BonusW', `${prefixAudio}/bonusw_sw${fileType}`);
-        scene.load.audio('SuperW', `${prefixAudio}/superw_sw${fileType}`);
-        scene.load.audio('MegaW', `${prefixAudio}/megaw_sw${fileType}`);
-        scene.load.audio('EpicW', `${prefixAudio}/epicw_sw${fileType}`);
+        scene.load.audio('SuperW', `${prefixAudio}/Updated/super_win_SW${fileType}`);
+        scene.load.audio('MegaW', `${prefixAudio}/Updated/mega_win_SW${fileType}`);
+        scene.load.audio('EpicW', `${prefixAudio}/Updated/epic_win_SW${fileType}`);
         scene.load.audio('FreeSpinWon', `${prefixAudio}/freespinwon${fileType}`);
-        scene.load.audio('WinSkip', `${prefixAudio}/wskip_sw${fileType}`);
-        scene.load.audio('Congrats', `${prefixAudio}/superw_sw${fileType}`);
-        scene.load.audio('FreeSpin', `${prefixAudio}/superw_sw${fileType}`);
+        scene.load.audio('WinSkip', `${prefixAudio}/Updated/end_win_SW${fileType}`);
+
+        // dummy win sounds
+        scene.load.audio('Congrats', `${prefixAudio}/Updated/super_win_SW${fileType}`);
+        scene.load.audio('FreeSpin', `${prefixAudio}/Updated/super_win_SW${fileType}`);
         
         // Tumble Wins
-        scene.load.audio('TW1Wins', `${prefixAudio}/tw1_sw${fileType}`);
-        scene.load.audio('TW2Wins', `${prefixAudio}/tw2_sw${fileType}`);
-        scene.load.audio('TW3Wins', `${prefixAudio}/tw3_sw${fileType}`);
-        scene.load.audio('TW4Wins', `${prefixAudio}/tw4_sw${fileType}`);
+        scene.load.audio('TW1Wins', `${prefixAudio}/Updated/tumblewin_1_SW${fileType}`);
+        scene.load.audio('TW2Wins', `${prefixAudio}/Updated/tumblewin_2_SW${fileType}`);
+        scene.load.audio('TW3Wins', `${prefixAudio}/Updated/tumblewin_3_SW${fileType}`);
+        scene.load.audio('TW4Wins', `${prefixAudio}/Updated/tumblewin_4_SW${fileType}`);
     }
 
     create(scene: Scene): void {
@@ -211,7 +216,7 @@ export class AudioManager {
             this.WinSkip.stop();
 
             this.BGChecker.resume();
-            this.setMusicVolume(this.getMusicVolume() / 0.01);
+            // this.setMusicVolume(this.getMusicVolume() / 0.01);
             if(this.getMusicVolume() > 1) {
                 this.setMusicVolume(1);
             }
@@ -235,17 +240,17 @@ export class AudioManager {
     playWinSFX(winName: string): void {
         let winSound: Sound.WebAudioSound | undefined;
         if(winName === 'FreeSpin') {
-            this.BGChecker.pause();
-            if(this.getMusicVolume() > 0.01){
-                this.setMusicVolume(this.getMusicVolume() * 0.01);
-            }
+            this.BGChecker.stop();
+            //if(this.getMusicVolume() > 0.01){
+            //    this.setMusicVolume(this.getMusicVolume() * 0.01);
+            //}
             let winSound: Sound.WebAudioSound | undefined;
             winSound = this.FreeSpinWon;
 
             if (winSound) {
                 winSound.once('complete', () => {
                     this.BGChecker.resume();
-                    this.setMusicVolume(this.getMusicVolume() / 0.01);
+                    //this.setMusicVolume(this.getMusicVolume() / 0.01);
                     // Play next in queue if we're using the queue system
                     if (this.isPlayingQueue) {
                         this.playNextInQueue();
@@ -257,31 +262,31 @@ export class AudioManager {
         }
         else
         { 
-            this.BGChecker.pause();
+            this.BGChecker.stop();
             //this.setMusicVolume(this.getMusicVolume() * 0.01);
 
             if (winName === 'BigWin') {
                 winSound = this.BigW;
             } else if (winName === 'BigWinSkip') {
-                winSound = this.WinSkip;
+                //winSound = this.WinSkip;
             } else if (winName === 'EpicWin') {
                 winSound = this.EpicW;
             } else if (winName === 'EpicWinSkip') {
-                winSound = this.WinSkip;
+                //winSound = this.WinSkip;
             } else if (winName === 'MegaWin') {
                 winSound = this.MegaW;
             } else if (winName === 'MegaWinSkip') {
-                winSound = this.WinSkip;
+                //winSound = this.WinSkip;
             } else if (winName === 'SuperWin') {
                 winSound = this.SuperW;
             } else if (winName === 'SuperWinSkip') {
-                winSound = this.WinSkip;
+                //winSound = this.WinSkip;
             }
             
             if (winSound) {
                 winSound.once('complete', () => {
                     this.winIsPlaying = false;
-                    this.BGChecker.resume();
+                    this.BGChecker.play();
                     // Play next in queue if we're using the queue system
                     if (this.isPlayingQueue) {
                         console.log('playing next in queue');
@@ -294,8 +299,8 @@ export class AudioManager {
     }
 
     stopWinSFX(_scene: Scene): void {   
-        this.BGChecker.resume();
-        this.setMusicVolume(this.getMusicVolume() / 0.01);
+        this.BGChecker.play();
+        // this.setMusicVolume(this.getMusicVolume() / 0.01);
         console.log(this.getMusicVolume());
         if(this.getMusicVolume() > 1) {
             this.setMusicVolume(1);
@@ -327,6 +332,7 @@ export class AudioManager {
         this.musicVolume = vol;
         if (this.MainBG) this.MainBG.setVolume(this.musicVolume);
         if (this.BonusBG) this.BonusBG.setVolume(this.musicVolume);
+        console.log(chalk.blueBright.bold("setMusicVolume" + this.musicVolume));
     }
 
     getMusicVolume(): number {

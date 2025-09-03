@@ -1,0 +1,4 @@
+Frame
+0-23 -> Animation
+23- 31 -> Stop at paint Frame
+31- 37 -> Fade out

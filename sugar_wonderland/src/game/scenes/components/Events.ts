@@ -46,4 +46,5 @@ export class Events {
     static readonly BOMB_FLOAT_TEXT: string = 'bomb_float_text';
 
     static readonly SESSION_TIMEOUT: string = 'session_timeout';
+    static readonly SHOW_INSUFFICIENT_BALANCE: string = 'show_insufficient_balance';
 } 

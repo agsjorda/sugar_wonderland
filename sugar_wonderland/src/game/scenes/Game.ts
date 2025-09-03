@@ -12,6 +12,7 @@ import { HelpScreen } from './components/HelpScreen';
 import { GameAPI } from './backend/GameAPI';
 import { BuyFeaturePopup } from './components/BuyFeaturePopup';
 import { SessionTimeoutPopup } from './components/SessionTimeoutPopup';
+import { InsufficientBalancePopup } from './components/InsufficientBalancePopup';
 
 
 
@@ -36,6 +37,7 @@ export class Game extends Scene {
     public gameAPI: GameAPI;
     public buyFeaturePopup: BuyFeaturePopup;
     public sessionTimeoutPopup: SessionTimeoutPopup;
+    public insufficientBalancePopup: InsufficientBalancePopup;
 
     private components: GameComponent[];
 
@@ -60,6 +62,7 @@ export class Game extends Scene {
         this.helpScreen = new HelpScreen();
         this.buyFeaturePopup = new BuyFeaturePopup();
         this.sessionTimeoutPopup = new SessionTimeoutPopup();
+        this.insufficientBalancePopup = new InsufficientBalancePopup();
         
         // Inject the single autoplay instance into buttons
         this.buttons.autoplay = this.autoplay;
@@ -74,6 +77,7 @@ export class Game extends Scene {
             this.helpScreen,
             this.buyFeaturePopup,
             this.sessionTimeoutPopup,
+            this.insufficientBalancePopup,
         ];
     }
 

@@ -85,6 +85,12 @@ export class LoadingPage extends Scene {
 
     // Function to detect if the device is mobile
     private isMobileDevice(): boolean {
+        const urlParams = new URLSearchParams(window.location.search);
+        if(urlParams.get('device') == 'mobile'){
+            return true;
+        }else if(urlParams.get('device') == 'desktop'){
+            return false;
+        }
         return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
                window.innerWidth <= 768;
     }

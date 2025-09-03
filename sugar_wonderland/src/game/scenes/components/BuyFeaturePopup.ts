@@ -35,6 +35,12 @@ export class BuyFeaturePopup {
 
     // Function to detect if the device is mobile
     private isMobileDevice(): boolean {
+        const urlParams = new URLSearchParams(window.location.search);
+        if(urlParams.get('device') == 'mobile'){
+            return true;
+        }else if(urlParams.get('device') == 'desktop'){
+            return false;
+        }
         return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
                window.innerWidth <= 768;
     }
@@ -134,6 +140,15 @@ export class BuyFeaturePopup {
 
             buyBtnBg.setInteractive().isButton = true;
             buyBtnBg.on('pointerdown', () => {
+                const cost = scene.gameData.getBuyFeaturePrice();
+                const balance = scene.gameData.balance;
+                const ok = balance >= cost;
+                console.log(`[BUY FEATURE] Clicked. balance=${balance}, cost=${cost}, ok=${ok}`);
+                if (!ok) {
+                    console.log('[BUY FEATURE] Blocked: insufficient balance, showing popup');
+                    Events.emitter.emit(Events.SHOW_INSUFFICIENT_BALANCE);
+                    return;
+                }
                 this.handleBuyFeature(scene);
             });
             // Make Close label clickable too
@@ -256,6 +271,15 @@ export class BuyFeaturePopup {
         // Set up button interactions
         buyBtnBg.setInteractive().isButton = true;
         buyBtnBg.on('pointerdown', () => {
+            const cost = scene.gameData.getBuyFeaturePrice();
+            const balance = scene.gameData.balance;
+            const ok = balance >= cost;
+            console.log(`[BUY FEATURE] Clicked. balance=${balance}, cost=${cost}, ok=${ok}`);
+            if (!ok) {
+                console.log('[BUY FEATURE] Blocked: insufficient balance, showing popup');
+                Events.emitter.emit(Events.SHOW_INSUFFICIENT_BALANCE);
+                return;
+            }
             this.handleBuyFeature(scene);
         });
 

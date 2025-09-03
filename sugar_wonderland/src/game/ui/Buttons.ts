@@ -80,8 +80,29 @@ export class Buttons {
         this.isMobile = this.isMobileDevice();
     }
 
+    // Returns true if local balance is sufficient for initiating a paid spin
+    private hasSufficientBalance(scene: GameScene): boolean {
+        // Free spins do not require balance
+        if (scene.gameData.freeSpins > 0) {
+            //console.log('[CHECK] Free spin active, skipping balance check');
+            return true;
+        }
+        const required = scene.gameData.doubleChanceEnabled
+            ? scene.gameData.getDoubleFeaturePrice()
+            : scene.gameData.bet;
+        const ok = scene.gameData.balance >= required;
+        //console.log(`[CHECK] Balance check before spin -> balance=${scene.gameData.balance}, required=${required}, ok=${ok}`);
+        return ok;
+    }
+
     // Function to detect if the device is mobile
     private isMobileDevice(): boolean {
+        const urlParams = new URLSearchParams(window.location.search);
+        if(urlParams.get('device') == 'mobile'){
+            return true;
+        }else if(urlParams.get('device') == 'desktop'){
+            return false;
+        }
         return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
                window.innerWidth <= 768;
     }
@@ -499,6 +520,13 @@ export class Buttons {
                 return;
             }
 
+            // Local check: ensure enough balance before initiating spin via keyboard
+            if (!this.hasSufficientBalance(scene)) {
+                console.log('[INPUT] Spacebar blocked: insufficient balance');
+                Events.emitter.emit(Events.SHOW_INSUFFICIENT_BALANCE);
+                return;
+            }
+
             // IMMEDIATELY disable buttons visually for instant feedback (don't touch game logic)
             this.disableButtonsVisually(scene);
 
@@ -653,6 +681,12 @@ export class Buttons {
             if (this.spinInProgress || scene.gameData.isSpinning || scene.slotMachine.activeWinOverlay || this.isVisuallyDisabled) {
                 return;
             }
+            // Guard again right before spin is emitted (keyboard path already checked too)
+            if (!this.hasSufficientBalance(scene)) {
+                console.log('[SPIN] Blocked in spinAction: insufficient balance');
+                Events.emitter.emit(Events.SHOW_INSUFFICIENT_BALANCE);
+                return;
+            }
             this.spinInProgress = true; // Set local flag immediately
             // IMMEDIATELY disable buttons visually for instant feedback (don't touch game logic)
             this.disableButtonsVisually(scene);
@@ -683,7 +717,12 @@ export class Buttons {
         this.spinButton.on('pointerdown', () => {
             if (this.spinInProgress) return; // Double check
             if(scene.gameData.isSpinning) return;
-            
+            // Local check: ensure enough balance before initiating spin
+            if (!this.hasSufficientBalance(scene)) {
+                console.log('[INPUT] Spin click blocked: insufficient balance');
+                Events.emitter.emit(Events.SHOW_INSUFFICIENT_BALANCE);
+                return;
+            }
             scene.audioManager.SpinSFX.play();
             this.spinAnimationOnce();
             spinAction();
@@ -1449,13 +1488,14 @@ export class Buttons {
             try{
                 scene.gameAPI.getBalance().then((data) => {
                     const balance = data.data.balance;
-                        text2.setText(scene.gameData.currency + " " + balance); 
+                        text2.setText(scene.gameData.currency + " " + balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })); 
                     scene.gameData.debugLog("update balance " + balance);
 
                     scene.gameData.balance = parseFloat(balance);
                 });
             } catch(error) {
                 scene.gameData.debugLog("error updating balance " + error);
+                text2.setText(scene.gameData.currency + " " + scene.gameData.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
             }
         });
 
@@ -1735,9 +1775,9 @@ export class Buttons {
 
         Events.emitter.on(Events.ENHANCE_BET_TOGGLE, (isBuy?:boolean) => {
             if(scene.gameData.doubleChanceEnabled) {
-                betValueText.setText(/*scene.gameData.currency +*/ (scene.gameData.bet * 1.25).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
+                betValueText.setText(scene.gameData.currency + (scene.gameData.bet * 1.25).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
             } else {
-                betValueText.setText(/*scene.gameData.currency +*/ (scene.gameData.bet).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
+                betValueText.setText(scene.gameData.currency + (scene.gameData.bet).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
             }
         });
 

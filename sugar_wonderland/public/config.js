@@ -1,6 +1,6 @@
 window.APP_CONFIG = {
   'game-url': 'https://game-launcher.torrospins.com',
-  'version': '0.0.2',
-  'demo': true
+  'version': '0.0.3',
+  'demo': false
 };
 
