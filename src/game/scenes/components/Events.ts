@@ -11,6 +11,8 @@ export class Events {
     static readonly TUMBLE_SEQUENCE_DONE: string = 'tumble_sequence_done';
 
     static readonly WIN: string = 'win';
+    static readonly RESET_WIN: string = 'resetWin';
+    
     static readonly CHANGE_LINE: string = 'changeLine';
     static readonly CHANGE_BET: string = 'change_bet';
     static readonly ENHANCE_BET_TOGGLE: string = 'enhance_bet_toggle';
@@ -32,6 +34,7 @@ export class Events {
     static readonly UPDATE_TOTAL_WIN: string = 'updateTotalWin';
     static readonly UPDATE_CURRENCY: string = 'updateCurrency';
     static readonly UPDATE_BALANCE: string = 'updateBalance';
+    static readonly GET_BALANCE: string = 'getBalance';
 
     // UI Y-axis toggle events for specific buttons
     static readonly CREATE_TURBO_BUTTON: string = 'createTurboButton';

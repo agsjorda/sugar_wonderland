@@ -8,6 +8,7 @@ import { HelpScreen } from '../scenes/components/HelpScreen';
 import { Menu } from './Menu';
 import { BuyFeaturePopup } from '../scenes/components/BuyFeaturePopup';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
+import chalk from 'chalk';
 // Custom button interfaces with proper type safety
 interface ButtonBase {
     isButton: boolean;
@@ -705,7 +706,7 @@ export class Buttons {
 
             // Reset total win for new spin
             scene.gameData.totalWin = 0;
-            Events.emitter.emit(Events.WIN, {});
+            Events.emitter.emit(Events.RESET_WIN, {});
 
             // Trigger spin (will be handled by the sequential system)
             Events.emitter.emit(Events.SPIN, {
@@ -1481,16 +1482,29 @@ export class Buttons {
         });
 
         Events.emitter.on(Events.WIN, () => {
-            Events.emitter.emit(Events.UPDATE_BALANCE);     
+            Events.emitter.emit(Events.UPDATE_BALANCE);
         });
 
-        Events.emitter.on(Events.UPDATE_BALANCE, () => {
+        Events.emitter.on(Events.FINAL_WIN_SHOW, () => {
+            Events.emitter.emit(Events.GET_BALANCE);
+        });
+
+        Events.emitter.on(Events.UPDATE_BALANCE, (totalWin?: number) => {
+            let balance = scene.gameData.balance;
+            if(totalWin){
+                balance += totalWin;
+            }
+            text2.setText(scene.gameData.currency + " " + balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+            scene.gameData.balance = balance;
+        });
+
+        Events.emitter.on(Events.GET_BALANCE, () => {
             try{
                 scene.gameAPI.getBalance().then((data) => {
                     const balance = data.data.balance;
                         text2.setText(scene.gameData.currency + " " + balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })); 
-                    scene.gameData.debugLog("update balance " + balance);
-
+                    
+                        console.log(chalk.yellowBright.bold("refreshing balance"), data.data.balance);
                     scene.gameData.balance = parseFloat(balance);
                 });
             } catch(error) {
@@ -1503,7 +1517,8 @@ export class Buttons {
         this.balanceContainer = container;
         this.buttonContainer.add(container);
 
-        Events.emitter.emit(Events.UPDATE_BALANCE);
+        
+        Events.emitter.emit(Events.GET_BALANCE);
     }
 
     private createTotalWin(scene: GameScene): void {
@@ -1607,6 +1622,14 @@ export class Buttons {
                 multiplierApplied = false;
                 text2.setText(`$ ${formatMoney(0)}`);
             }
+        });
+
+        Events.emitter.on(Events.RESET_WIN, () => {
+            totalWinCurrentTotal = 0;
+            totalWinQueue = [];
+            isProcessingTotalWinQueue = false;
+            multiplierApplied = false;
+            text2.setText(`$ ${formatMoney(0)}`);
         });
 
         // Incremental updates per match/tumble using queue

@@ -327,8 +327,8 @@ export class SlotMachine {
         Events.emitter.emit(Events.UPDATE_BALANCE);
 
         scene.gameAPI.getBalance().then((data) => {
-            scene.gameData.debugLog(data);
-            Events.emitter.emit(Events.UPDATE_BALANCE, data);
+            console.log(data);
+            Events.emitter.emit(Events.GET_BALANCE);
         });
 
         this.cleanupAloneSymbols();
@@ -680,6 +680,8 @@ export class SlotMachine {
                 scene.buttons.autoplay.hideRemainingSpinsDisplay();
             }
         } catch (_e) { /* no-op */ }
+        
+        Events.emitter.emit(Events.FINAL_WIN_SHOW, {});
     }
 
     private async playSpinAnimations(scene: GameScene, newValues: number[][], data: SpinData): Promise<void> {
@@ -953,6 +955,7 @@ export class SlotMachine {
             // Immediately re-enable buttons when spinning completes
             if (scene.buttons && scene.buttons.enableButtonsVisually) {
                 scene.buttons.enableButtonsVisually(scene);
+                Events.emitter.emit(Events.GET_BALANCE);
             }
         }
     }
@@ -1921,10 +1924,10 @@ export class SlotMachine {
         try {
             await gameScene.gameAPI.getBalance();
             // Optionally, emit an event to update UI or notify listeners
-            Events.emitter.emit(Events.UPDATE_CURRENCY, {
-                balance: gameScene.gameData.balance,
-                currency: gameScene.gameData.currency
-            });
+            // Events.emitter.emit(Events.UPDATE_CURRENCY, {
+            //     balance: gameScene.gameData.balance,
+            //     currency: gameScene.gameData.currency
+            // });
         } catch (error) {
             console.error('Failed to fetch balance:', error);
         }

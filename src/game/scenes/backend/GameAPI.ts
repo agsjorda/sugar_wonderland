@@ -59,7 +59,7 @@ export class GameAPI {
             "currency": "",
             "quit_link": "www.quit.com",
             "free_spin": "1",
-            "session": "zxc11asd1zyl",
+            "session": "042b5be8-7ca8-4f04-9624-7bdab79f6527",
             "player_name": "test"
         };
 
@@ -153,24 +153,16 @@ export class GameAPI {
         }
     }
     public async getBalance(): Promise<any> {
-        if(!localStorage.getItem('gameToken')){
-            return {
-                data: {
-                    balance: 1000
-                }
-            }
-        }
         try{
             const response = await fetch(`${getApiBaseUrl()}/api/v1/slots/balance`, {
-            //const response = await fetch('http://192.168.0.17:3000/api/v1/slots/balance', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('gameToken')}`
                 },
-                body: JSON.stringify({
-                    action: 'get_balance',
-                })
+                //body: JSON.stringify({
+                    //action: 'get_balance',
+                //})
             });
 
             if (!response.ok) {
@@ -178,6 +170,7 @@ export class GameAPI {
             }
 
             const data = await response.json();
+            //console.log('getbalance', data);
             return data;
         } catch (error) {
             this.gameData.debugError('Error in getBalance:', error);
@@ -237,6 +230,7 @@ export class GameAPI {
                     const data = {"playerId":"2","bet":"10","slot":{"area":[[1,2,3,4,6],[2,3,4,6,5],[3,4,6,5,7],[4,6,5,7,8],[5,7,8,9,0],[0,0,0,0,0]],"totalWin":210000,"tumbles":[],"freeSpin":[{"spinsLeft":1,"area":[[10,1,1,1,1],[1,2,19,2,1],[2,2,2,22,2],[4,4,20,4,4],[4,11,2,2,4],[4,1,1,21,4]],"totalWin":210000,"multipliers":[10,19,20,21,22,23],"tumbles":[{"symbols":{"in":[[1,2,3,4,5],[2,3,4,5,6],[3,4,5,6,7],[4,5,6,7,8],[5,6,7,8,9],[6,7,8,9,1]],"out":[{"symbol":1,"count":8,"win":525},{"symbol":2,"count":8,"win":525},{"symbol":3,"count":8,"win":0}]}}]}],"maxWin":210000}};
                     return data;
                 }
+               
 
             }
             // Treat HTTP 400 as session timeout

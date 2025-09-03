@@ -424,7 +424,7 @@ export class BuyFeaturePopup {
         // Reset any existing state
         scene.gameData.isSpinning = false;
         scene.gameData.totalWin = 0;
-        Events.emitter.emit(Events.WIN, {});
+        Events.emitter.emit(Events.RESET_WIN, {});
 
         // Hide the popup
         this.hide(scene);
