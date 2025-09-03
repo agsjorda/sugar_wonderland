@@ -1,5 +1,6 @@
 import StartGame from './game/main';
 import chalk from 'chalk';
+import { Events } from './game/scenes/components/Events';
 
 // Declare the callback function on window for font loading
 declare global {
@@ -30,3 +31,11 @@ document.addEventListener('DOMContentLoaded', (): void => {
         }
     }, 5000);
 }); 
+
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        Events.emitter.emit(Events.GET_BALANCE);
+    } else {
+        Events.emitter.emit(Events.GET_BALANCE);
+    }
+});

@@ -59,12 +59,12 @@ export class GameData {
     slot: Slot = new Slot();
     line: number = 0;
     currentRow: number = 0;
-    bet: number = 10;
+    bet: number = 1;
 
     maxBet: number = 150;
     minBet: number = 0.2;
 
-    balance: number = 100000;
+    balance: number = 0;
     
     totalBet: number = 0;
     totalWin: number = 0;
