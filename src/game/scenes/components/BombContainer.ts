@@ -20,6 +20,12 @@ export class BombContainer extends GameObjects.Container {
 
     // Function to detect if the device is mobile
     private isMobileDevice(): boolean {
+        const urlParams = new URLSearchParams(window.location.search);
+        if(urlParams.get('device') == 'mobile'){
+            return true;
+        }else if(urlParams.get('device') == 'desktop'){
+            return false;
+        }
         return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
                window.innerWidth <= 768;
     }
@@ -33,18 +39,41 @@ export class BombContainer extends GameObjects.Container {
         this.multiplier = this.getMultiplierFromBombValue(bombValue);
         this.bombType = this.getBombTypeFromMultiplier(this.multiplier);
 
-
         // Set the animation based on the bomb type
         // Create the bomb sprite
-        this.bombSprite = scene.add.spine(0, 0, 'Symbol10_SW', 'Symbol10_SW');
+        let bombKey = 'Symbols10_SW';
+        if(this.bombType == 'medium'){
+            bombKey = 'Symbols11_SW';
+        }
+        else if(this.bombType == 'high'){
+            bombKey = 'Symbols12_SW';
+        }
+        this.bombSprite = scene.add.spine(0, 0, 'Symbol10_SW','Symbol10_SW');
         this.bombSprite.setVisible(true);
-        // Keep internal sprite above its container contents
         this.bombSprite.setDepth(1);
+        this.bombSprite.animationState.setAnimation(0, bombKey, false);
+        // Pause the animation at frame 1 (i.e., after the first frame)
+        this.bombSprite.animationState.timeScale = 1;
+
+        const entry = this.bombSprite.animationState.getCurrent(0);
+        if (entry) {
+            // Calculate the time for frame 1 (assuming 30 FPS)
+            const frameRate = 30;
+            const pauseAtFrame = 1;
+            const pauseMs = (pauseAtFrame / frameRate) * 1000;
+            this.scene.time.delayedCall(pauseMs, () => {
+                try {
+                    this.bombSprite.animationState.timeScale = 0;
+                    entry.trackTime = pauseMs / 1000;
+                    this.bombSprite.animationState.update(0);
+                } catch (_e) {}
+            });
+        }
+
+        // Keep internal sprite above its container contents
         
         // Set the animation time scale to 1
         this.bombSprite.animationState.timeScale = 0;
-        // Set the animation based on the bomb type
-        this.bombSprite.animationState.setAnimation(0, 'animation', false);
         
         // Create the text overlay
         this.textOverlay = scene.add.text(0, 0, `${this.multiplier}X`, {
@@ -74,6 +103,7 @@ export class BombContainer extends GameObjects.Container {
         gradient.addColorStop(1, '#FFB400');
         this.textOverlay.setFill(gradient);
         
+    
         // Add both elements to the container
         this.add([this.bombSprite, this.textOverlay]);
         // Ensure the container itself renders above standard symbols
@@ -96,7 +126,7 @@ export class BombContainer extends GameObjects.Container {
         this.floatingText.setFill(gradient2);
 
         this.floatingText.setOrigin(0.5, 0.5);
-        // Place this floating text at an extremely high depth so it's above all overlays
+        // Place this floating text at an extrzemely high depth so it's above all overlays
         this.floatingText.setDepth(1000000);
         // Ensure it renders on top in the display list
         try { this.scene.children.bringToTop(this.floatingText); } catch (_e) {}
@@ -176,10 +206,10 @@ export class BombContainer extends GameObjects.Container {
         }
 
         // Center text within the container
-        this.textOverlay.setPosition(0, 0);
+        this.textOverlay.setPosition(width * 0.1, 0);
 
         // Adjust text size to be readable and centered inside the bomb
-        const baseTextSize = Math.floor(Math.min(width, height) * 0.28);
+        const baseTextSize = Math.floor(Math.min(width/2, height/2) * 0.28);
         this.textOverlay.setFontSize(baseTextSize);
 
         // Update container size so tweens and layout treat it like a symbol cell
@@ -196,10 +226,10 @@ export class BombContainer extends GameObjects.Container {
         
         // Set the appropriate animation based on bomb type
         setTimeout(() => {
-            try { this.scene.audioManager.TExplosion.play(); } catch (_e) {}
+            try { this.scene.audioManager.TExplosion.play({ volume: this.scene.audioManager.getSFXVolume() }); } catch (_e) {}
             // Spawn an overlay spine on top and animate that, so it renders above other symbols
             // Pause at the 22nd frame (assuming 30 FPS → ~733ms); extend duration so overlay persists
-            this.spawnOverlayBombAnimation('animation', 1500, 22, 30);
+            this.spawnOverlayBombAnimation('animation', 1500, 31, 30);
             // During active animation, lower other symbols (regular/scatter) so bomb visually dominates
             this.setOtherSymbolsDepth(0);
             // Move floating text from bomb center to top-quarter middle while animating
@@ -228,12 +258,11 @@ export class BombContainer extends GameObjects.Container {
                 const animationName = currentAnimation.animation.name;
                 // Check for both animation types: 'low-animation', 'medium-animation', 'high-animation'
                 // and also 'low-static', 'medium-static', 'high-static' (used by WinAnimation)
-                return animationName.includes('animation');
+                return animationName.includes('Symbols');
             }
         }
         return false;
     }
-
     /**
      * Get the bomb sprite for external animations
      */
@@ -279,7 +308,17 @@ export class BombContainer extends GameObjects.Container {
         // Use an overlay bomb so the animation sits above other symbols
         try { this.scene.audioManager.TExplosion.play(); } catch (_e) {}
         // Pause at the 22nd frame (assuming 30 FPS)
-        this.spawnOverlayBombAnimation('animation', 1500, 22, 30);
+        switch(this.bombType){
+            case 'low':
+                this.spawnOverlayBombAnimation('Symbols10_SW', 1500, 31, 30);
+                break;
+            case 'medium':
+                this.spawnOverlayBombAnimation('Symbols11_SW', 1500, 31, 30);
+                break;
+            case 'high':
+                this.spawnOverlayBombAnimation('Symbols12_SW', 1500, 31, 30);
+                break;
+        }
         // During explosion, lower other symbols (regular/scatter) so bomb visually dominates
         this.setOtherSymbolsDepth(0);
         
@@ -287,7 +326,7 @@ export class BombContainer extends GameObjects.Container {
         this.scene.tweens.add({
             targets: this.textOverlay,
             alpha: 1,
-            scale: 1,
+            
             duration: 500,
             ease: 'Power2',
         });
@@ -300,13 +339,15 @@ export class BombContainer extends GameObjects.Container {
      * Spawns a temporary overlay Spine bomb at the same visual position and plays an animation.
      * The overlay is added to the parent container (so masking applies) and brought to the top.
      */
-    private spawnOverlayBombAnimation(animationName: string = 'animation', durationMs: number = 650, pauseAtFrame?: number, frameRate: number = 30): void {
+    private spawnOverlayBombAnimation(animationName: string = '', durationMs: number = 650, pauseAtFrame?: number, frameRate: number = 30): void {
         try {
             const parent: any = (this as any).parentContainer;
             // Position overlay relative to parent container so it aligns under the same mask/transform
             const overlayX = this.x + this.bombSprite.x;
             const overlayY = this.y + this.bombSprite.y;
-            const overlay = this.scene.add.spine(overlayX, overlayY, 'Symbol10_SW', 'Symbol10_SW') as SpineGameObject;
+            let overlay: SpineGameObject = null!;
+            
+            overlay = this.scene.add.spine(overlayX, overlayY, animationName, animationName) as SpineGameObject;
             // Match visual size of the original bomb sprite
             overlay.setScale(this.bombSprite.scaleX, this.bombSprite.scaleY);
             overlay.setAlpha(1);
@@ -367,7 +408,7 @@ export class BombContainer extends GameObjects.Container {
                 // Ensure overlay lifetime exceeds pause time
                 durationMs = Math.max(durationMs, pauseMs + 500);
             }
-            // Do not auto-destroy; keep overlay frozen at frame 22 until the next spin clears the grid
+            // Do not auto-destroy; keep overlay frozen at frame 31 until the next spin clears the grid
         } catch (_e) {
             // If overlay fails, fall back to animating the internal sprite
             try {
@@ -377,8 +418,8 @@ export class BombContainer extends GameObjects.Container {
                 try {
                     this.scene.tweens.add({
                         targets: this.bombSprite,
-                        scaleX: this.bombSprite.scaleX * 0.5,
-                        scaleY: this.bombSprite.scaleY * 0.5,
+                        scaleX: this.bombSprite.scaleX * .75,
+                        scaleY: this.bombSprite.scaleY * .75,
                         duration: 400,
                         ease: 'Power2'
                     });
@@ -393,7 +434,6 @@ export class BombContainer extends GameObjects.Container {
                             if (current) {
                                 current.trackTime = pauseMs / 1000;
                             }
-                            this.bombSprite.animationState.update(0);
                             (this.bombSprite as any).skeleton?.updateWorldTransform?.();
                             // Keep sprite fully visible on paused frame
                             this.bombSprite.setAlpha(1);
@@ -410,8 +450,18 @@ export class BombContainer extends GameObjects.Container {
             if (!parent || !parent.list) return;
             parent.list.forEach((child: any) => {
                 if (!child || child === this) return;
-                if (child instanceof Phaser.GameObjects.Sprite) {
+                // Lower any sibling that supports setDepth (Sprites, Spine, Containers, etc.)
+                if (typeof child.setDepth === 'function') {
                     try { child.setDepth(depth); } catch (_e) {}
+                }
+                // If sibling is a Container, also lower its immediate children
+                if (Array.isArray(child?.list)) {
+                    child.list.forEach((grandChild: any) => {
+                        if (!grandChild || grandChild === this) return;
+                        if (typeof grandChild.setDepth === 'function') {
+                            try { grandChild.setDepth(depth); } catch (_e) {}
+                        }
+                    });
                 }
             });
         } catch (_e) {
@@ -434,8 +484,14 @@ export class BombContainer extends GameObjects.Container {
             this.floatingText = undefined;
         }
         
-        if (this.bombSprite) {
-            this.bombSprite.destroy();
+        if (this.bombSprite) {  
+            console.error('destroying bomb sprite', this.bombSprite);
+            this.bombSprite.animationState.timeScale = 1;
+            this.bombSprite.animationState.addListener({
+                complete: () => {
+                    console.error('destroying bomb sprite complete');
+                this.bombSprite.destroy();
+            }});
         }
         
         if (this.textOverlay) {
@@ -491,6 +547,7 @@ export class BombContainer extends GameObjects.Container {
         const view = cam.worldView;
         let targetX = this.isMobile ? view.x + view.width * 0.5 : view.x + view.width * 0.55;
         let targetY = this.isMobile ? view.y + view.height * 0.1875 : view.y + view.height * 0.90;
+        this.textOverlay.setText('');
 
         this.scene.tweens.add({
             targets: this.floatingText,

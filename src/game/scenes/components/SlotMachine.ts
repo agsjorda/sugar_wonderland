@@ -12,6 +12,7 @@ import { GameAPI } from '../backend/GameAPI';
 import { BombContainer } from './BombContainer';
 import { getRandomRows } from './IdleState';
 import chalk from 'chalk';
+import { MaxWinClaimPopup } from './MaxWinClaimPopup';
 
 // Extend Scene to include gameData and audioManager
 interface GameScene extends Scene {
@@ -89,6 +90,7 @@ export class SlotMachine {
     private hadMatchThisSpin: boolean = false;
     private deferredScatterCount: number = 0;
     private bonusTriggeredThisSpin: boolean = false;
+    private maxWinClaim?: MaxWinClaimPopup;
 
     constructor() {
         this.symbolDisplayWidth = 153.17;
@@ -134,17 +136,12 @@ export class SlotMachine {
         this.createBackground(scene as GameScene);
         this.createSlot(scene as GameScene);
         this.eventListeners(scene as GameScene);
+        this.maxWinClaim = new MaxWinClaimPopup();
         
         // Initialize animations
         this.animation.create();
         this.winAnimation.create();
         
-        // Set up bomb animation callbacks
-        this.winAnimation.setBombAnimationCallbacks(
-            () => this.setBombAnimationActive(true),  // On start
-            () => this.setBombAnimationActive(false)  // On end
-        );
-
         // Process queued overlays whenever one closes
         this.onOverlayHide = () => this.tryShowNextOverlay(scene as GameScene);
         Events.emitter.on(Events.WIN_OVERLAY_HIDE, this.onOverlayHide);
@@ -152,6 +149,12 @@ export class SlotMachine {
 
     // Function to detect if the device is mobile
     private isMobileDevice(): boolean {
+        const urlParams = new URLSearchParams(window.location.search);
+        if(urlParams.get('device') == 'mobile'){
+            return true;
+        }else if(urlParams.get('device') == 'desktop'){
+            return false;
+        }
         return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
                window.innerWidth <= 768;
     }
@@ -445,6 +448,8 @@ export class SlotMachine {
         }
 
         scene.gameData.totalWin = result.slot.totalWin;
+        // Flag for max win based on API, pass to scene for later use
+        try { (scene as any).lastSpinHadMaxWin = !!(result?.slot?.maxWin); } catch (_e) {}
         this.currentIndex = 0;
 
     await this.playSpinAnimations(scene, newValues, data)
@@ -742,7 +747,7 @@ export class SlotMachine {
                 } else if (symbolValue >= 10 && symbolValue <= 22) {
                     // Handle BombContainer display size — match regular symbol size
                     if (newSymbol instanceof BombContainer) {
-                        newSymbol.setBombDisplaySize(width * Slot.SYMBOL_SIZE, height * Slot.SYMBOL_SIZE);
+                        newSymbol.setBombDisplaySize(width * Slot.SYMBOL_SIZE * Slot.BOMB_SCALE, height * Slot.SYMBOL_SIZE * Slot.BOMB_SCALE);
                     } else if (newSymbol) {
                         newSymbol.setDisplaySize(width * Slot.SYMBOL_SIZE, height * Slot.SYMBOL_SIZE);
                     }
@@ -1133,7 +1138,21 @@ export class SlotMachine {
 
 
     public showBonusWin(scene: GameScene, totalWin: number): void {    
-        // Enqueue congrats overlay and let the queue handler display it safely
+        // If max win cap reached, show claim FIRST then proceed to congrats on claim
+        try {
+            const betAmt = scene.gameData.bet || 1;
+            const maxCap = (scene.gameData.winRank?.[5]) || 21000;
+            const reached = betAmt > 0 ? (totalWin / betAmt) >= maxCap : false;
+            if (reached && this.maxWinClaim) {
+                this.maxWinClaim.show(scene as any, maxCap, () => {
+                    this.enqueueWinOverlay(scene, totalWin, 'Congrats');
+                });
+                scene.buttons.freeSpinBtn.visible = false;
+                return;
+            }
+        } catch (_e) {}
+
+        // Otherwise, show congrats normally
         this.enqueueWinOverlay(scene, totalWin, 'Congrats');
         scene.buttons.freeSpinBtn.visible = false;
     }
@@ -1718,7 +1737,7 @@ export class SlotMachine {
                     // Create BombContainer for bomb
                     newSymbol = new BombContainer(scene, symbolX, startY, symbolValue, scene.gameData);
                     // Match the size of normal symbols
-                    newSymbol.setBombDisplaySize(width * Slot.SYMBOL_SIZE, height * Slot.SYMBOL_SIZE);
+                    newSymbol.setBombDisplaySize(width * Slot.SYMBOL_SIZE * Slot.BOMB_SCALE, height * Slot.SYMBOL_SIZE * Slot.BOMB_SCALE);
                     scene.gameData.debugLog('Created BombContainer for dropAndRefill', { symbolValue, position: { x: symbolX, y: startY } });
                 } else {
                     newSymbol = scene.add.sprite(symbolX, startY, symbolKey, frameKey) as GameObjects.Sprite;
@@ -1858,9 +1877,6 @@ export class SlotMachine {
 
     public destroy(): void {
         // Clean up win animation
-        if (this.winAnimation) {
-            this.winAnimation.destroy();
-        }
         
         // Clean up win overlay containers
         const overlays = [...this.winOverlayContainers]; // Create a copy to avoid mutation issues

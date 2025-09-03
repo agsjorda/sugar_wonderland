@@ -73,7 +73,7 @@ const isMobile = (): boolean => {
 
 const StartGame = (parent: string): Game => {
     const config = isMobile() ? mobileConfig : desktopConfig;
-    setupAspectRatioReload();
+    //setupAspectRatioReload();
     return new Game({ ...config, parent });
 };
 
