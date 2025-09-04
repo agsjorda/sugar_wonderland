@@ -223,6 +223,9 @@ export class WinOverlayContainer {
         this.isAnimating = true;
         this.currentWinType = winType;
 
+        // Reset counter to 0 for each new win overlay
+        this.currentCount = 0;
+
         // Lock input to prevent skipping too quickly (10s for FreeSpin, 1s otherwise)
         this.inputLocked = true;
         const lockMs = 333;//(winType === 'FreeSpin') ? 1000 : 1000;
@@ -340,7 +343,7 @@ export class WinOverlayContainer {
         }
     }
     
-	private currentCount: number = 10;
+	private currentCount: number = 0;
     //@ts-ignore
 	private targetCount: number = 0;
 	private countInterval?: Phaser.Time.TimerEvent;
@@ -357,13 +360,15 @@ export class WinOverlayContainer {
         }
         this.winAnim = winAnim;
         this.finalBetTotal = totalWin;
+        // Reset current count to 0 for proper counting from start
+        this.currentCount = 0;
 		//console.log('Starting win counting algorithm...', totalWin);
-		
+
 		// Play appropriate win sound based on total win amount (only for regular wins)
 		if (this.multiplier === 0) {
 		//	this.playWinSound(totalWin);
 		}
-		this.winText.setVisible(false); 
+		this.winText.setVisible(false);
         if(!this.isMobile){
             this.winAnim.setPosition(this.winAnim.x, this.scene.scale.height * 0.1);
         }
@@ -428,6 +433,7 @@ export class WinOverlayContainer {
 			incrementTo = this.scene.gameData.bet * this.scene.gameData.winRank[1];
 		}
 
+		// Ensure we start counting from current count (should be 0 initially)
 		this.startCountUp(incrementTo, 6000); // 6 seconds to count to bet * 10
 	}
 

@@ -2002,7 +2002,7 @@ export class Buttons {
                     y: { from:  this.betContainer_Y + 1000, to: this.betContainer_Y },
                     duration: 1000,
                     ease: "Expo.easeOut",
-                    onComplete: () => {
+                    onStart: () => {
                         const mask = scene.add.graphics();
                         mask.name = 'betMask';
                         mask.fillStyle(0x000000, 0.7); // Black with 0.7 opacity
