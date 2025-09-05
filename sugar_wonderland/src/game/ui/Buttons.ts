@@ -2517,17 +2517,21 @@ export class Buttons {
         // Title
         const youWonString = scene.gameData.totalWin.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
         const youWonLabel = scene.add.text(0, 0, 'YOU WON ', {
-            fontSize: '20px',
+            fontSize: '14px',
             color: '#FFFFFF', 
-            fontFamily: 'Poppins'
+            fontFamily: 'Poppins',
+            align: 'center'
         });
-        const youWonAmount = scene.add.text(youWonLabel.width, -youWonLabel.height/3, scene.gameData.currency + ' ' + youWonString, {
-            fontSize: '32px',
+        youWonLabel.setOrigin(0.5, 1);
+        const youWonAmount = scene.add.text(0, 0, scene.gameData.currency + ' ' + youWonString, {
+            fontSize: '20px',
             color: '#FFFFFF',
             fontFamily: 'Poppins',
-            fontStyle: 'bold'
+            fontStyle: 'bold',
+            align: 'center'
         });
-        const youWonText = scene.add.container(-youWonLabel.width/2 - youWonAmount.width/2, -youWonLabel.height/3, [youWonLabel, youWonAmount]);
+        youWonAmount.setOrigin(0.5, 0);
+        const youWonText = scene.add.container(0, 0, [youWonLabel, youWonAmount]);
         container.add(youWonText);
         
         // Marquee incremental addition queue (per-tumble)
@@ -2564,9 +2568,9 @@ export class Buttons {
                         marqueeCurrentTotal = scene.gameData.totalWinFreeSpin[scene.gameData.apiFreeSpinsIndex];
                     }
                     
-                    const formatted = marqueeCurrentTotal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+                    const formatted = marqueeCurrentTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                 
-                    youWonAmount.setText(scene.gameData.currency + ' ' + formatted);    
+                    youWonAmount.setText(scene.gameData.currency + ' ' + formatted);
                     
                     scheduleHide();
                     return;
@@ -2575,7 +2579,7 @@ export class Buttons {
                 marqueeCurrentTotal += increment || 0;
                 
 
-                const formatted = marqueeCurrentTotal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+                const formatted = marqueeCurrentTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                 
                 youWonAmount.setText(scene.gameData.currency + ' ' + formatted);
                 
@@ -2618,7 +2622,7 @@ export class Buttons {
 			marqueeQueue = [];
 			isProcessingQueue = false;
 			if (hideTimer) { hideTimer.remove(false); hideTimer = null; }
-			youWonAmount.setText(scene.gameData.currency + ' ' + (0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
+			youWonAmount.setText(scene.gameData.currency + ' ' + (0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 			hideMarquee();
 		});
 
@@ -2629,13 +2633,13 @@ export class Buttons {
 			marqueeQueue = [];
 			isProcessingQueue = false;
 			if (hideTimer) { hideTimer.remove(false); hideTimer = null; }
-			youWonAmount.setText(scene.gameData.currency + ' ' + (0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
+			youWonAmount.setText(scene.gameData.currency + ' ' + (0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 			hideMarquee();
 		});
 
         Events.emitter.on(Events.UPDATE_CURRENCY, () => {
             if(!this.isMobile) return;
-            youWonAmount.setText(scene.gameData.currency + ' ' + youWonString);
+            //youWonAmount.setText(scene.gameData.currency + ' ' + youWonString);
         });
     }
 

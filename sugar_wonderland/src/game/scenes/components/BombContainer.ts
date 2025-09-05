@@ -197,7 +197,7 @@ export class BombContainer extends GameObjects.Container {
             const scale = Math.min(scaleX, scaleY);
             this.bombSprite.setScale(scale);
             // Place at the center of the container; children are positioned relative to container center
-            this.bombSprite.setPosition(10, 0);
+            this.bombSprite.setPosition(-10, 0);
         } catch (_e) {
             // Fallback: approximate scale if bounds are not available yet
             const approximateScale = Math.min(width, height) / 120;
@@ -206,7 +206,7 @@ export class BombContainer extends GameObjects.Container {
         }
 
         // Center text within the container
-        this.textOverlay.setPosition(width * 0.1, 0);
+        this.textOverlay.setPosition(0, 0);
 
         // Adjust text size to be readable and centered inside the bomb
         const baseTextSize = Math.floor(Math.min(width/2, height/2) * 0.28);
