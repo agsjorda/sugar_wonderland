@@ -59,12 +59,12 @@ export class AudioManager {
 
         // SFX
         scene.load.audio('ClickSFX', `${prefixAudio}/click_sw${fileType}`);
-        scene.load.audio('ReelDrop', `${prefixAudio}/reeldrop_SW${fileType}`);
+        scene.load.audio('ReelDrop', `${prefixAudio}/reeldrop_SW2${fileType}`);
         scene.load.audio('ReelStart', `${prefixAudio}/reelstarting_sw${fileType}`);
         scene.load.audio('TurboDrop', `${prefixAudio}/turbodrop_sw${fileType}`);
         scene.load.audio('SpinSFX', `${prefixAudio}/spin_sw${fileType}`);
         scene.load.audio('UtilityButtonSFX', `${prefixAudio}/ub${fileType}`);
-        scene.load.audio('ScatterSFX', `${prefixAudio}/scatter_SW${fileType}`);
+        scene.load.audio('ScatterSFX', `${prefixAudio}/scatter_SW2${fileType}`);
         scene.load.audio('TExplosion', `${prefixAudio}/bomb_SW${fileType}`);
         
         // Wins
