@@ -226,7 +226,10 @@ export class BombContainer extends GameObjects.Container {
         
         // Set the appropriate animation based on bomb type
         setTimeout(() => {
-            try { this.scene.audioManager.TExplosion.play({ volume: this.scene.audioManager.getSFXVolume() }); } catch (_e) {}
+            try {
+                 this.scene.audioManager.TExplosion.play({ volume: this.scene.audioManager.getSFXVolume() });
+                 this.scene.audioManager.BonusBG.resume();
+                 } catch (_e) {}
             // Spawn an overlay spine on top and animate that, so it renders above other symbols
             // Pause at the 22nd frame (assuming 30 FPS → ~733ms); extend duration so overlay persists
             this.spawnOverlayBombAnimation('animation', 1500, 31, 30);
@@ -306,7 +309,10 @@ export class BombContainer extends GameObjects.Container {
         this.gameData.debugLog('Showing bomb explosion');
         
         // Use an overlay bomb so the animation sits above other symbols
-        try { this.scene.audioManager.TExplosion.play(); } catch (_e) {}
+        try {
+             this.scene.audioManager.TExplosion.play();
+             this.scene.audioManager.BonusBG.resume();
+             } catch (_e) {}
         // Pause at the 22nd frame (assuming 30 FPS)
         switch(this.bombType){
             case 'low':
@@ -485,7 +491,7 @@ export class BombContainer extends GameObjects.Container {
         }
         
         if (this.bombSprite) {  
-            console.error('destroying bomb sprite', this.bombSprite);
+            //console.error('destroying bomb sprite', this.bombSprite);
             this.bombSprite.animationState.timeScale = 1;
             this.bombSprite.animationState.addListener({
                 complete: () => {
