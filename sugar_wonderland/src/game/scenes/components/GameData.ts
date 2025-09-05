@@ -104,6 +104,7 @@ export class GameData {
     doubleChanceMultiplier: number = 2;
     
     winRank : number[] = [1, 10, 20, 30, 50, 21000];
+    // winRank : number[] = [1, 20, 30, 45, 60, 21000];
 
     public gameUrl: string = '';
     public gameToken: string = '';

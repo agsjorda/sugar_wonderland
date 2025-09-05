@@ -146,7 +146,7 @@ export class AudioManager {
         }
     }
 
-    playRandomQuickWin(): void {
+    playRandomQuickWin(scene: Scene): void {
         const randSFX = Math.floor(Math.random() * 4);
         switch (randSFX) {
             case 0:
@@ -161,6 +161,12 @@ export class AudioManager {
             case 3:
                 this.TW4Wins.play({ volume: this.sfxVolume });
                 break;
+        }
+        if(scene.gameData.isBonusRound) {
+            this.BonusBG.resume();
+        }
+        else {
+            this.MainBG.resume();
         }
     }
 

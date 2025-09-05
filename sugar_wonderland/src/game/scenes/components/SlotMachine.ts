@@ -733,7 +733,7 @@ export class SlotMachine {
                     newSymbol = scene.add.sprite(symbolX, startY, symbolKey, frameKey) as GameObjects.Sprite;
                 } else if (symbolValue >= 10 && symbolValue <= 22) {
                     // Create BombContainer for bomb
-                    newSymbol = new BombContainer(scene, symbolX - 10, startY, symbolValue, scene.gameData);
+                    newSymbol = new BombContainer(scene, symbolX, startY, symbolValue, scene.gameData);
                     // Size bombs similar to regular symbols so they visually align with the grid
                     newSymbol.setBombDisplaySize(width * Slot.SYMBOL_SIZE, height * Slot.SYMBOL_SIZE);
                     scene.gameData.debugLog('Created BombContainer for dropAndRefill', { symbolValue, position: { x: symbolX, y: startY } });
@@ -1608,7 +1608,7 @@ export class SlotMachine {
     }
 
     private async animateMatchedSymbols(scene: GameScene, matchedCells: { row: number; col: number; symbol: number }[]): Promise<void> {
-        scene.audioManager.playRandomQuickWin();
+        scene.audioManager.playRandomQuickWin(scene);
 
         const animationPromises: Promise<void>[] = [];
 
