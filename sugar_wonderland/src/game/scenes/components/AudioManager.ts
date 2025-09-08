@@ -265,9 +265,14 @@ export class AudioManager {
         }
         else
         { 
-            this.BGChecker.stop();  
-            this.BonusBG.pause();
-            this.MainBG.pause();
+            this.BGChecker.stop(); 
+            if(winName == 'TW1Wins' || winName == 'TW2Wins' || winName == 'TW3Wins' || winName == 'TW4Wins') {
+
+            }
+            else{
+                this.BonusBG.pause();
+                this.MainBG.pause();
+            }
             //this.setMusicVolume(this.getMusicVolume() * 0.01);
 
             if (winName === 'BigWin') {
@@ -288,6 +293,7 @@ export class AudioManager {
                     if (this.isPlayingQueue) {
                         console.log('playing next in queue');
                         this.playNextInQueue();
+                        
                     }
                 });
                 winSound.play({ volume: this.sfxVolume });
