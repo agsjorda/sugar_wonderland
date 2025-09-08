@@ -38,6 +38,7 @@ export class WinOverlayContainer {
     private onSpaceDown?: (event: KeyboardEvent) => void;
     private inputLocked: boolean = false; // Prevent skipping for a minimum display time
     private currentWinType?: string;
+    private delaySkipMS: number = 100;
 
     constructor(scene: GameScene, winAnimation: WinAnimation) {
         this.scene = scene;
@@ -134,8 +135,8 @@ export class WinOverlayContainer {
         contentContainer.add(this.freeSpinsText);
 
         // Add continue button
-        this.buttonText = this.scene.add.text(0, this.winText_y + 100, 'Press anywhere to continue', {
-            fontSize: '32px',
+        this.buttonText = this.scene.add.text(this.isMobile ? 0 : -50, this.winText_y + 150, 'Press anywhere to continue', {
+            fontSize: '40px',
             color: '#FFFFFF',
             fontFamily: 'Poppins',
             fontStyle: 'bold',
@@ -151,7 +152,7 @@ export class WinOverlayContainer {
                 fill: false
             }
         });
-        this.buttonText.setOrigin(0.5);
+        this.buttonText.setOrigin(0.5, 1);
         contentContainer.add(this.buttonText);
 
         // Make entire screen interactive
@@ -254,7 +255,7 @@ export class WinOverlayContainer {
             this.freeSpinsText.visible = true;
             this.freeSpinsText.setText(`${this.scene.gameData.totalFreeSpins.toFixed(0)}`);
             this.multiplier = -2;
-            this.playWinSound(totalWin);
+            this.playWinSound(-2);
             if(this.winAnim){
                 this.winAnimation.playWinAnimation(this.winAnim, totalWin, 'Congrats');
                 this.winAnim.setPosition(this.winAnim.x, this.winAnim.y + 150);
@@ -397,7 +398,9 @@ export class WinOverlayContainer {
 			// If skipping idle, queue both skip and win sounds
 		} else {
 			// Normal flow, just queue the win sound
-			this.scene.audioManager.queueWinSFX(['BigWin']);
+            setTimeout(() => {
+                this.scene.audioManager.queueWinSFX(['BigWin']);
+            }, 100);
 		}
 
 		setTimeout(() => {
@@ -409,7 +412,7 @@ export class WinOverlayContainer {
 			} else {
 				this.playBigwinIdle();
 			}
-		}, 500); // 0.5 second pause
+		}, this.delaySkipMS);
 	}
 
 	playBigwinIdle() {
@@ -447,10 +450,8 @@ export class WinOverlayContainer {
 			// If skipping idle, queue skip sound only (win sound will be queued based on target count)
 		} else {
 			// Normal flow, just queue the win sound
-            setTimeout(() => {  
                 this.scene.audioManager.clearWinSFXQueue();
                 this.scene.audioManager.queueWinSFX(['MegaWin']);
-            }, 1000);
 		}
 
 		setTimeout(() => {
@@ -462,7 +463,7 @@ export class WinOverlayContainer {
 			} else {
 				this.playMegawinIdle();
 			}
-		}, 1000); // 1 second pause
+		}, this.delaySkipMS);
 	}
 
 	playMegawinIdle() {
@@ -500,10 +501,8 @@ export class WinOverlayContainer {
 			// If skipping idle, queue skip sound only (win sound will be queued based on target count)
 		} else {
 			// Normal flow, just queue the win sound
-            setTimeout(() => {  
                 this.scene.audioManager.clearWinSFXQueue();
                 this.scene.audioManager.queueWinSFX(['EpicWin']);
-            }, 1000);
 		}
 
 		setTimeout(() => {
@@ -515,7 +514,7 @@ export class WinOverlayContainer {
 			} else {
 				this.playEpicwinIdle();
 			}
-		}, 1000); // 1 second pause
+		}, this.delaySkipMS);
 	}
 
 	playEpicwinIdle() {
@@ -553,10 +552,8 @@ export class WinOverlayContainer {
 			// If skipping idle, queue skip sound only (win sound will be queued based on target count)
 		} else {
 			// Normal flow, just queue the win sound
-            setTimeout(() => {
                 this.scene.audioManager.clearWinSFXQueue();
                 this.scene.audioManager.queueWinSFX(['SuperWin']);
-            }, 1000);
 		}
 
 		setTimeout(() => {
@@ -568,7 +565,7 @@ export class WinOverlayContainer {
 			} else {
 				this.playSuperwinIdle();
 			}
-		}, 1000); // 1 second pause
+		}, this.delaySkipMS);
 	}
     
 	playSuperwinIdle() {
@@ -591,7 +588,7 @@ export class WinOverlayContainer {
 			callback: () => {
 				if (!this.isCounting) return;
 
-				elapsed += 16;
+				elapsed += 8;
 
 				// Option 1: Use increment directly (stepwise)
 				// this.currentCount = Math.min(targetValue, this.currentCount + increment);
@@ -796,7 +793,7 @@ export class WinOverlayContainer {
             const currentWinAmount = this.currentCount;
             const nextTarget = this.calculateNextTarget(currentWinAmount);
             //console.log(`Continuing count from ${currentWinAmount} to ${nextTarget}`);
-            this.startCountUp(nextTarget, 6000); // 6 seconds to count to next target
+            this.startCountUp(nextTarget, 6000);
         }
     }
 
@@ -892,13 +889,11 @@ export class WinOverlayContainer {
         if (this.buttonZone) {
             this.buttonZone.disableInteractive(true);
         }
-        setTimeout(() => {
             if (this.isActive) {
                 this.endWinAnimation(() => {
                     this.destroy();
                 });
             }
-        }, 2000);
     }
 
     /**
@@ -933,7 +928,7 @@ export class WinOverlayContainer {
                     this.destroy();
                 });
             }
-        }, 1000); // 1 second delay to let the skip sound play
+        }, 100);
     }
 
     endWinAnimation(functionToCall: () => void){

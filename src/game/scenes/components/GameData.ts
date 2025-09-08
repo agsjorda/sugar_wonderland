@@ -59,7 +59,7 @@ export class GameData {
     slot: Slot = new Slot();
     line: number = 0;
     currentRow: number = 0;
-    bet: number = 1;
+    bet: number = 10;
 
     maxBet: number = 150;
     minBet: number = 0.2;
@@ -103,8 +103,7 @@ export class GameData {
     currentMatchingSymbols: number[] = [];
     doubleChanceMultiplier: number = 2;
     
-    winRank : number[] = [1, 10, 20, 30, 50, 21000];
-    // winRank : number[] = [1, 20, 30, 45, 60, 21000];
+    winRank : number[] = [1, 20, 30, 45, 60, 21000];
 
     public gameUrl: string = '';
     public gameToken: string = '';

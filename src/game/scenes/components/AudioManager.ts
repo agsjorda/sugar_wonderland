@@ -42,7 +42,6 @@ export class AudioManager {
 
     public BonusW: Sound.WebAudioSound;
     public FreeSpinWon: Sound.WebAudioSound;
-    public WinSkip: Sound.WebAudioSound;
 
 
     preload(scene: Scene): void {
@@ -74,10 +73,9 @@ export class AudioManager {
         scene.load.audio('MegaW', `${prefixAudio}/mega_win_SW${fileType}`);
         scene.load.audio('EpicW', `${prefixAudio}/epic_win_SW${fileType}`);
         scene.load.audio('FreeSpinWon', `${prefixAudio}/freespinwon${fileType}`);
-        scene.load.audio('WinSkip', `${prefixAudio}/end_win_SW${fileType}`);
+        scene.load.audio('CongratsW', `${prefixAudio}/end_win_SW${fileType}`);
 
         // dummy win sounds
-        scene.load.audio('Congrats', `${prefixAudio}/super_win_SW${fileType}`);
         scene.load.audio('FreeSpin', `${prefixAudio}/super_win_SW${fileType}`);
         
         // Tumble Wins
@@ -103,14 +101,13 @@ export class AudioManager {
         this.ScatterSFX = scene.sound.add('ScatterSFX', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.TExplosion = scene.sound.add('TExplosion', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.FreeSpinWon = scene.sound.add('FreeSpinWon', { volume: this.sfxVolume }) as Sound.WebAudioSound;
-        this.WinSkip = scene.sound.add('WinSkip', { volume: this.sfxVolume }) as Sound.WebAudioSound;
 
         this.EpicW = scene.sound.add('EpicW', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.MegaW = scene.sound.add('MegaW', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.BigW = scene.sound.add('BigW', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.SuperW = scene.sound.add('SuperW', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.BonusW = scene.sound.add('BonusW', { volume: this.sfxVolume }) as Sound.WebAudioSound;
-        this.CongratsW = scene.sound.add('Congrats', { volume: 0 }) as Sound.WebAudioSound;
+        this.CongratsW = scene.sound.add('CongratsW', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.FreeSpinW = scene.sound.add('FreeSpin', { volume: 0}) as Sound.WebAudioSound;
 
         this.BonusBG = scene.sound.add('BonusBG', { 
@@ -219,7 +216,7 @@ export class AudioManager {
             this.MegaW.stop();
             this.EpicW.stop();
             this.SuperW.stop();
-            this.WinSkip.stop();
+            this.CongratsW.stop();
 
             this.BGChecker.resume();
             // this.setMusicVolume(this.getMusicVolume() / 0.01);
@@ -314,7 +311,7 @@ export class AudioManager {
         this.MegaW.stop();
         this.SuperW.stop();
         this.BigW.stop();
-        this.WinSkip.stop();
+        this.CongratsW.stop();
         // Also clear the queue when stopping
         this.winSFXQueue = [];
         this.isPlayingQueue = false;
@@ -361,9 +358,8 @@ export class AudioManager {
         if (this.SuperW) this.SuperW.setVolume(this.sfxVolume);
         if (this.BonusW) this.BonusW.setVolume(this.sfxVolume);
         if (this.FreeSpinWon) this.FreeSpinWon.setVolume(this.sfxVolume);
-        if (this.WinSkip) this.WinSkip.setVolume(this.sfxVolume);
         if (this.TExplosion) this.TExplosion.setVolume(this.sfxVolume);
-        if (this.CongratsW) this.CongratsW.setVolume(0);
+        if (this.CongratsW) this.CongratsW.setVolume(this.sfxVolume);
         if (this.FreeSpinW) this.FreeSpinW.setVolume(0);
     }
 

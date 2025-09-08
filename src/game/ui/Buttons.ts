@@ -960,7 +960,7 @@ export class Buttons {
         selectedButton = buttons[0];
 
         // Total bet section
-        const betLabel = scene.add.text(padding, popupHeight / 2 + padding , 'Total Bet', {
+        const betLabel = scene.add.text(padding, popupHeight / 2 + padding , 'Bet Size', {
             fontSize: '24px',
             color: '#FFFFFF',
             fontFamily: 'Poppins'
@@ -975,7 +975,7 @@ export class Buttons {
         popup.add(minusBtn);
 
 
-        let bet = scene.gameData.bet * selectedSpins; // Initialize bet with selected spins
+        let bet = scene.gameData.bet// * selectedSpins; // Initialize bet with selected spins
         const betValue = scene.add.text(popupWidth / 2, betValueY, scene.gameData.currency + bet.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), {
             fontSize: '32px',
             color: '#FFFFFF',
@@ -998,7 +998,7 @@ export class Buttons {
             if (nextSpinOption) {
                 // Update selected spins and bet immediately
                 selectedSpins = nextSpinOption;
-                bet = scene.gameData.bet * selectedSpins;
+                bet = scene.gameData.bet// * selectedSpins;
                 
                 // Update button appearance
                 if (selectedButton) {
@@ -1029,7 +1029,7 @@ export class Buttons {
             if (prevSpinOption) {
                 // Update selected spins and bet immediately
                 selectedSpins = prevSpinOption;
-                bet = scene.gameData.bet * selectedSpins;
+                bet = scene.gameData.bet// * selectedSpins;
                 
                 // Update button appearance
                 if (selectedButton) {
@@ -1053,7 +1053,7 @@ export class Buttons {
         });
 
         function updateBetDisplay() {
-            const autoplayCost = scene.gameData.bet * selectedSpins;
+            const autoplayCost = scene.gameData.bet// * selectedSpins;
             betValue.setText(scene.gameData.currency + " " + autoplayCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
         }
         updateBetDisplay();
