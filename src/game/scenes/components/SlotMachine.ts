@@ -352,6 +352,7 @@ export class SlotMachine {
         }
         
         console.log("result", result);
+        scene.gameData.bet = result.bet;
         scene.gameData.debugLog("slotArea", result.slot.area);
         if(result.slot.freeSpin?.length > 0){
             console.log(chalk.bgGreenBright.black.bold(' [BUY FEATURE] triggered freeSpin '), result.slot.freeSpin);
