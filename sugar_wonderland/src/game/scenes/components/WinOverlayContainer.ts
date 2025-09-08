@@ -594,7 +594,7 @@ export class WinOverlayContainer {
 				// this.currentCount = Math.min(targetValue, this.currentCount + increment);
 
 				// Option 2: Use progress-based interpolation (smoother)
-				const progress = Math.min(elapsed / duration, this.scene.gameData.bet);
+				const progress = Math.min(elapsed / duration, this.scene.gameData.bet < 1 ? 1 : this.scene.gameData.bet);
 				this.currentCount = startValue + (this.targetCount - startValue) * progress;
 
 				this.updateWinText();
