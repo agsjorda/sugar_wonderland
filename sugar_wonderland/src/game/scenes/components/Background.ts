@@ -1,6 +1,7 @@
 import { Scene, GameObjects } from 'phaser';
 import { Events } from './Events';
 import chalk from 'chalk';
+import { getFontFamily } from '../../utils/fonts';
 
 export class Background {
     private initialLayerX: number = 0;
@@ -101,6 +102,31 @@ export class Background {
             this.paused = true;
             this.pauseLanternTweens(scene);
         });
+
+        // Version label bottom-right
+        const cfgVersion = (typeof window !== 'undefined' && (window as any).APP_CONFIG) ? (window as any).APP_CONFIG.version : undefined;
+        let versionText = cfgVersion ?? (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev');
+        if (versionText && !versionText.startsWith('v')) {
+            versionText = `v${versionText}`;
+        }
+        const width = scene.scale.width;
+        const height = scene.scale.height;
+        const isMobileish = width <= 500;
+        const versionLabel = scene.add.text(
+            width - 10,
+            height - 10,
+            versionText,
+            {
+                fontSize: isMobileish ? '12px' : '14px',
+                color: '#ffffff',
+                fontFamily: getFontFamily(),
+                stroke: '#000000',
+                strokeThickness: 2,
+            }
+        );
+        versionLabel.setOrigin(1, 1).setAlpha(0.2);
+        // Ensure above background/foreground but below UI; backgrounds use depths 0-2
+        versionLabel.setDepth(3);
     }
 
 	toggleBackground(_scene: Scene): void {
