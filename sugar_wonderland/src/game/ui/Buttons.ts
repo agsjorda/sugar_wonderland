@@ -37,6 +37,10 @@ export class Buttons {
     private turboButton: ButtonImage;
     private turboOnButton: ButtonImage;
     public buttonContainer: ButtonContainer;
+    private bombWinContainer: Phaser.GameObjects.Container;
+    private bombMarqueeContainer : Phaser.GameObjects.Container;
+    private bombWin: Phaser.GameObjects.Graphics;
+
     private width: number;
     private height: number;
     private isVisuallyDisabled: boolean = false; // Separate visual state for immediate feedback
@@ -176,13 +180,17 @@ export class Buttons {
         this.createInfo(scene);
         this.createBalance(scene);
         this.createTotalWin(scene);
+        this.createBombWin(scene);
+        
         this.createBet(scene);
         this.createBuyFeature(scene);
         this.createDoubleFeature(scene);
         this.createLogo(scene);
         this.createMarquee(scene);
+        this.createMarqueeBonus(scene);
         this.createSettings(scene);
         
+        Events.emitter.emit(Events.HIDE_BOMB_WIN);
         // Initialize buy feature popup
         if (!scene.buyFeaturePopup) {
             scene.buyFeaturePopup = new BuyFeaturePopup();
@@ -1521,6 +1529,75 @@ export class Buttons {
         Events.emitter.emit(Events.GET_BALANCE);
     }
 
+    createBombWin(scene: GameScene): void {
+        const width =  Buttons.PANEL_WIDTH * 1.5; 
+        const x = this.isMobile ? this.balanceContainer.x + width * 0.525 : this.balanceContainer.x + width + this.width * 0.01;
+        const y = this.isMobile ? this.balanceContainer.y : this.balanceContainer.y;
+        const cornerRadius = 10;
+
+        const container = scene.add.container(x, y) as ButtonContainer;
+        container.name = "bombWinContainer";
+        container.setDepth(4);
+
+        // Create a gradient texture for totalWin
+        const gradientTexture = scene.textures.createCanvas('totalWinGradient2', width, Buttons.PANEL_HEIGHT);
+        if (gradientTexture) {
+            const context = gradientTexture.getContext();
+            const gradient = context.createLinearGradient(0, 0, 0, Buttons.PANEL_HEIGHT);
+            gradient.addColorStop(0, 'rgba(0, 0, 0, 0.24)');
+            gradient.addColorStop(1, 'rgba(0, 0, 0, 0.24)');
+            context.fillStyle = gradient;
+            context.fillRect(0, 0, width, Buttons.PANEL_HEIGHT);
+            gradientTexture.refresh();
+        }
+
+        // Create the background with gradient and border
+        this.bombWin = scene.add.graphics();
+        this.bombWin.fillStyle(0x000000, 0.5);
+        this.bombWin.fillRoundedRect(0, 0, width, Buttons.PANEL_HEIGHT, cornerRadius);
+        this.bombWin.lineStyle(1, 0x66D449);
+        this.bombWin.strokeRoundedRect(0, 0, width, Buttons.PANEL_HEIGHT, cornerRadius);
+        container.add(this.bombWin);
+        
+        const text1 = scene.add.text(width * 0.5, Buttons.PANEL_HEIGHT * 0.3, 'WIN', {
+            fontSize: '25px',
+            color: '#3FFF0D',
+            align: 'center',
+            fontStyle: 'bold',
+            fontFamily: 'Poppins'
+        }) as ButtonText;
+        container.add(text1);
+        text1.setOrigin(0.5, 0.5);
+
+        let totalWin = scene.gameData.totalWinFreeSpin[scene.gameData.apiFreeSpinsIndex || 0]?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || 'XXX';
+
+        const text2 = scene.add.text(width * 0.5, Buttons.PANEL_HEIGHT * 0.65, `${scene.gameData.currency} ${totalWin}`, {
+            fontSize: '35px',
+            color: '#FFFFFF',
+            align: 'center',
+            fontStyle: 'bold',
+            fontFamily: 'Poppins'
+        }) as ButtonText;
+        container.add(text2);
+        text2.setOrigin(0.5, 0.5);
+
+        this.bombWinContainer = container;
+        this.bombWinContainer.setVisible(this.isMobile ? false : true);
+        
+        Events.emitter.on(Events.SHOW_BOMB_WIN, () => { 
+            this.bombWinContainer.setVisible(this.isMobile? false : true);
+            let multiplier = scene.gameData.totalBombWin;
+            let totalWin = scene.gameData.totalWinFreeSpinPerTumble[scene.gameData.apiFreeSpinsIndex].toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            text2.setText(`${scene.gameData.currency} ${totalWin} x ${multiplier}`);
+        });
+        Events.emitter.on(Events.HIDE_BOMB_WIN, () => { 
+            this.bombWinContainer.setVisible(false);
+        });
+    }
+
+
+
+
     private createTotalWin(scene: GameScene): void {
         const width =  Buttons.PANEL_WIDTH * 1.5; 
         const x = this.isMobile ? this.balanceContainer.x + width * 0.525 : this.balanceContainer.x + width + this.width * 0.01;
@@ -1550,7 +1627,7 @@ export class Buttons {
         this.totalWin.strokeRoundedRect(0, 0, width, Buttons.PANEL_HEIGHT, cornerRadius);
         container.add(this.totalWin);
 
-        const text1 = scene.add.text(width * 0.5, Buttons.PANEL_HEIGHT * 0.3, 'TOTAL WIN', {
+        const text1 = scene.add.text(width * 0.5, Buttons.PANEL_HEIGHT * 0.3, 'WIN', {
             fontSize: '25px',
             color: '#3FFF0D',
             align: 'center',
@@ -1562,7 +1639,7 @@ export class Buttons {
 
         let totalWin = scene.gameData.totalWin.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-        const text2 = scene.add.text(width * 0.5, Buttons.PANEL_HEIGHT * 0.65, `$ ${totalWin}`, {
+        const text2 = scene.add.text(width * 0.5, Buttons.PANEL_HEIGHT * 0.65, `${scene.gameData.currency} ${totalWin}`, {
             fontSize: '35px',
             color: '#FFFFFF',
             align: 'center',
@@ -1597,17 +1674,19 @@ export class Buttons {
                     }
 
                     if(totalWinCurrentTotal >= scene.gameData.totalBonusWin){
-                        text2.setText(`$ ${formatMoney(scene.gameData.totalBonusWin)}`);
+                        text1.setText('TOTAL WIN');
+                        text2.setText(`${scene.gameData.currency} ${formatMoney(scene.gameData.totalBonusWin)}`);
                     }
                     else{
-                        text2.setText(`$ ${formatMoney(totalWinCurrentTotal)}`);
+                        text1.setText('WIN');
+                        text2.setText(`${scene.gameData.currency} ${formatMoney(totalWinCurrentTotal)}`);
                     }
                     return;
                 }
                 const increment = totalWinQueue.shift() as number;
                 totalWinCurrentTotal += increment || 0;
                 
-                text2.setText(`$ ${formatMoney(totalWinCurrentTotal)}`);
+                text2.setText(`${scene.gameData.currency} ${formatMoney(totalWinCurrentTotal)}`);
                 scene.time.delayedCall(reelSpeed, step);
             };
             step();
@@ -1620,7 +1699,8 @@ export class Buttons {
                 totalWinQueue = [];
                 isProcessingTotalWinQueue = false;
                 multiplierApplied = false;
-                text2.setText(`$ ${formatMoney(0)}`);
+                text2.setText(`${scene.gameData.currency} ${formatMoney(0)}`);
+                text1.setText('WIN');
             }
         });
 
@@ -1629,7 +1709,7 @@ export class Buttons {
             totalWinQueue = [];
             isProcessingTotalWinQueue = false;
             multiplierApplied = false;
-            text2.setText(`$ ${formatMoney(0)}`);
+            text2.setText(`${scene.gameData.currency} ${formatMoney(0)}`);
         });
 
         // Incremental updates per match/tumble using queue
@@ -1651,17 +1731,26 @@ export class Buttons {
                 const activeMultiplier = (this.bonusMultiplier && this.bonusMultiplier > 1) ? this.bonusMultiplier : 1;
                 const display = totalWinCurrentTotal * activeMultiplier;
                 
-                text2.setText(`$ ${formatMoney(display)}`);
+                text2.setText(`${scene.gameData.currency} ${formatMoney(display)}`);
                 return;
             }
             if (!scene.gameData.isBonusRound && data && typeof data.win === 'number') {
-                text2.setText(`$ ${formatMoney(totalWinCurrentTotal)}`);
+                text2.setText(`${scene.gameData.currency} ${formatMoney(totalWinCurrentTotal)}`);
             }
         });
 
         container.setScale(this.isMobile ? 0.5 : 1);
         this.totalWinContainer = container;
         this.totalWinContainer.setVisible(this.isMobile ? false : true);
+        
+        Events.emitter.on(Events.SHOW_BOMB_WIN, () => { 
+            this.totalWinContainer.setVisible(this.isMobile? false : false);
+        });
+
+        Events.emitter.on(Events.HIDE_BOMB_WIN, () => { 
+            this.totalWinContainer.setVisible(this.isMobile? false : true);
+        });
+
         this.buttonContainer.add(container);
     }
 
@@ -2504,6 +2593,51 @@ export class Buttons {
     }
 
     public bonusMultiplier : number = 1;
+
+    private createMarqueeBonus(scene: GameScene): void {
+        if(!this.isMobile) return;
+        const x = this.width * 0.5;
+        const y = this.height * 0.175;
+        const container = scene.add.container(x, y);
+        container.setDepth(20);
+
+        const marquee = scene.add.image(0, 0, 'marquee');
+        container.add(marquee);
+
+        const youWonString = scene.gameData.totalWin.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        const youWonLabel = scene.add.text(0, 0, 'YOU WON ', {
+            fontSize: '14px',
+            color: '#FFFFFF', 
+            fontFamily: 'Poppins',
+            align: 'center'
+        });
+        youWonLabel.setOrigin(0.5, 1);
+        const youWonAmount = scene.add.text(0, 0, scene.gameData.currency + ' ' + youWonString, {
+            fontSize: '20px',
+            color: '#FFFFFF',
+            fontFamily: 'Poppins',
+            fontStyle: 'bold',
+            align: 'center'
+        });
+        youWonAmount.setOrigin(0.5, 0);
+        const youWonText = scene.add.container(0, 0, [youWonLabel, youWonAmount]);
+        container.add(youWonText);
+
+        this.bombMarqueeContainer = container;
+        this.bombMarqueeContainer.setVisible(false);
+        
+        Events.emitter.on(Events.SHOW_BOMB_WIN, () => { 
+            this.bombMarqueeContainer.setVisible(this.isMobile? true : false);
+            let multiplier = scene.gameData.totalBombWin;
+            let totalWin = scene.gameData.totalWinFreeSpinPerTumble[scene.gameData.apiFreeSpinsIndex].toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            youWonAmount.setText(`${scene.gameData.currency} ${totalWin} x ${multiplier}`);
+        });
+        Events.emitter.on(Events.HIDE_BOMB_WIN, () => { 
+            this.bombMarqueeContainer.setVisible(false);
+        });
+        
+    }
+
     private createMarquee(scene: GameScene): void {
         if(!this.isMobile) return;
         const x = this.width * 0.5;

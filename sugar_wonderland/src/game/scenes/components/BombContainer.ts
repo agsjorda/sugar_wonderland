@@ -70,7 +70,7 @@ export class BombContainer extends GameObjects.Container {
             });
         }
 
-        // Keep internal sprite above its container contents
+        scene.gameData.totalBombWin = 0;
         
         // Set the animation time scale to 1
         this.bombSprite.animationState.timeScale = 0;
@@ -572,6 +572,9 @@ export class BombContainer extends GameObjects.Container {
                     setTimeout(() => {
                         this.floatingText?.destroy();
                         // event call to update the total win text, multiply by the bomb multiplier amount
+                        this.scene.gameData.totalBombWin += this.getMultiplier();
+                        Events.emitter.emit(Events.SHOW_BOMB_WIN);
+                        // console.log(this.scene.gameData.totalWinFreeSpinPerTumble[this.scene.gameData.apiFreeSpinsIndex]);
                         Events.emitter.emit(Events.UPDATE_TOTAL_WIN, 0, true);
                     }, 50);
                  } catch (_e) {}

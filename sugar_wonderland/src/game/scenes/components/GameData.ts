@@ -70,6 +70,7 @@ export class GameData {
     totalWin: number = 0;
 
     totalWinFreeSpin: number[] = [];
+    totalWinFreeSpinPerTumble: number[] = [];
     totalBonusWin: number = 0; // Track bonus round wins separately
     doubleChanceEnabled: boolean = false;
     buyFeatureEnabled: boolean = false;
@@ -115,6 +116,7 @@ export class GameData {
     public apiFreeSpins: any[] = [];
     public apiFreeSpinsIndex: number = 0;
     public useApiFreeSpins: boolean = false;
+    public totalBombWin: number = 0;
 
     // Current free spin progress (1-based when in use)
     public currentFreeSpinIndex: number = 0;
