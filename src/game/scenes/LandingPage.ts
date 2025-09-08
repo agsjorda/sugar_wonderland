@@ -110,7 +110,10 @@ export class LandingPage extends Scene {
 
         // Version label bottom-right
         const cfgVersion = (typeof window !== 'undefined' && window.APP_CONFIG) ? window.APP_CONFIG.version : undefined;
-        const versionText = `v${cfgVersion ?? (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev')}`;
+        let versionText = cfgVersion ?? (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev');
+        if (versionText && !versionText.startsWith('v')) {
+            versionText = `v${versionText}`;
+        }
         const versionLabel = this.add.text(this.cameras.main.width - 10, this.cameras.main.height - 10, versionText, {
             fontSize: this.isMobile ? '12px' : '14px',
             color: '#ffffff',
@@ -118,7 +121,7 @@ export class LandingPage extends Scene {
             stroke: '#000000',
             strokeThickness: 2
         });
-        versionLabel.setOrigin(1, 1).setAlpha(0.85);
+        versionLabel.setOrigin(1, 1).setAlpha(0.2);
 
         this.scene.launch('LoadingPage');
     }
@@ -176,13 +179,13 @@ export class LandingPage extends Scene {
 
            tryLaunchGame();
 
-           // Fade out the current scene
-          // this.cameras.main.fadeOut(1000, 0, 0, 0);
+        //    // Fade out the current scene
+        //    this.cameras.main.fadeOut(1000, 0, 0, 0);
 
-           // When fade out is complete, start the Game scene
-          // this.cameras.main.once('camerafadeoutcomplete', () => {
-          //      this.scene.start('Game');
-          //      this.scene.remove('LoadingPage');
-          //  });
+        //    // When fade out is complete, start the Game scene
+        //    this.cameras.main.once('camerafadeoutcomplete', () => {
+        //         this.scene.start('Game');
+        //         this.scene.remove('LoadingPage');
+        //     });
     }
 }                                                                                           

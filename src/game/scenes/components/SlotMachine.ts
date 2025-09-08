@@ -377,9 +377,14 @@ export class SlotMachine {
             scene.gameData.totalFreeSpins = apiFs.length;
             apiFs.forEach((v)=>{
                 scene.gameData.totalWinFreeSpin.push(v.totalWin);
-            })
-            // console.log(chalk.bgRedBright.black.bold(` [BONUS] API FS detected: deferring isBonusRound until after animations. `) + chalk.white.bold(` freeSpins = ${scene.gameData.freeSpins}, totalFreeSpins = ${scene.gameData.totalFreeSpins}`));
+                let totalWinFreeSpinPerTumble = 0;
+                v.tumbles?.forEach((t: any)=>{
+                    totalWinFreeSpinPerTumble += t?.win;
+                });
 
+                scene.gameData.totalWinFreeSpinPerTumble.push(totalWinFreeSpinPerTumble);
+            });
+            
             // If autoplay is running, stop it immediately to hand control to API-driven free spins
             try {
                 if (scene.buttons?.autoplay?.isAutoPlaying) {
@@ -599,6 +604,9 @@ export class SlotMachine {
 
         // Advance to next API free spin
         scene.gameData.apiFreeSpinsIndex = idx + 1;
+        
+        Events.emitter.emit(Events.HIDE_BOMB_WIN);
+
         const next = fsList[idx + 1];
         const spinsLeft = Math.max(0, next?.spinsLeft ?? (fsList.length - (idx + 1)));
         scene.gameData.freeSpins = spinsLeft;

@@ -51,4 +51,7 @@ export class Events {
 
     static readonly SESSION_TIMEOUT: string = 'session_timeout';
     static readonly SHOW_INSUFFICIENT_BALANCE: string = 'show_insufficient_balance';
+    
+    static readonly SHOW_BOMB_WIN: string = 'show_bomb_win';
+    static readonly HIDE_BOMB_WIN: string = 'hide_bomb_win';
 } 
