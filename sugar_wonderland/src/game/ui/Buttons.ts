@@ -31,7 +31,7 @@ interface GameScene extends Scene {
 
 export class Buttons {
 
-    private spinButton: ButtonImage;
+    public spinButton: ButtonImage;
     public freeSpinBtn: ButtonImage;
     public autoplayIndicator: ButtonImage;
     private turboButton: ButtonImage;
@@ -76,6 +76,7 @@ export class Buttons {
 	private wasSpinEnabled: boolean = false;
 	private wasBuyFeatureEnabled: boolean = false;
     private remainingFsLabel: GameObjects.Text | null = null;
+    private remainingFsLabel_Count: GameObjects.Text | null = null;
     // Base Y positions for Y-axis toggle events
     private baseYPositions: { [key: string]: number } = {};
     
@@ -280,52 +281,78 @@ export class Buttons {
     }
 
     private createRemainingFreeSpinsLabel(scene: GameScene): void {
-        const labelText = 'Remaining Free Spins: 0';
-        const x = this.isMobile ? scene.scale.width * 0.5 : scene.scale.width * 0.88;
-        const y = this.isMobile ? scene.scale.height * 0.92 : scene.scale.height * 0.61;
+        const labelText = 'Remaining Free Spins:';
+        const x = this.isMobile ? scene.scale.width * 0.2 : scene.scale.width * 0.88;
+        const y = this.isMobile ? scene.scale.height * 0.855 : scene.scale.height * 0.4;
         const style = {
-            fontSize: this.isMobile ? '28px' : '20px',
+            fontSize: this.isMobile ? '32px' : '28px',
+            color: this.isMobile ? '#09FF5C' : '#FFFFFF',
+            fontFamily: 'Poppins',
+            fontStyle: 'bold',
+            align: 'left' as const,
+            wordWrap: { width: scene.scale.width * 0.5, useAdvancedWrap: true }
+        };
+        this.remainingFsLabel = scene.add.text(x, y, labelText, style);
+        this.remainingFsLabel.setOrigin(this.isMobile ? 0 : 0.5, this.isMobile ? 0 : 0.25);
+        this.remainingFsLabel.setDepth(1000);
+        this.remainingFsLabel.setVisible(false);
+        
+        const x_count = this.isMobile ? scene.scale.width * 0.65 : scene.scale.width * 0.88;
+        const y_count = this.isMobile ? scene.scale.height * 0.85 : scene.scale.height * 0.4;
+        const style2 = {
+            fontSize: this.isMobile ? '84px' : '128px',
             color: '#FFFFFF',
             fontFamily: 'Poppins',
             fontStyle: 'bold',
-            align: 'center' as const
+            align: 'left' as const,
         };
-        this.remainingFsLabel = scene.add.text(x, y, labelText, style);
-        this.remainingFsLabel.setOrigin(0.5, 0.5);
-        this.remainingFsLabel.setDepth(1000);
-        this.remainingFsLabel.setVisible(false);
+// remaining free spin label (mobile, desktop)
+        this.remainingFsLabel_Count = scene.add.text(x_count, y_count, '0', style2);
+        this.remainingFsLabel_Count.setOrigin(this.isMobile ? 0 : 0.5, this.isMobile ? 0 : 0);
+        this.remainingFsLabel_Count.setDepth(1000);
+        this.remainingFsLabel_Count.setVisible(false);
+
+
 
         const updateLabelVisibility = () => {
-            if (!this.remainingFsLabel) return;
+            if (!this.remainingFsLabel || !this.remainingFsLabel_Count) return;
             // Reposition in case of resize/orientation or platform switch
-            const newX = this.isMobile ? scene.scale.width * 0.5 : scene.scale.width * 0.88;
-            const newY = this.isMobile ? scene.scale.height * 0.92 : scene.scale.height * 0.61;
-            this.remainingFsLabel.setPosition(newX, newY);
-            this.remainingFsLabel.setFontSize(this.isMobile ? '28px' : '20px');
+
+            //const newX = this.isMobile ? scene.scale.width * 0.275 : scene.scale.width * 0.88;
+            //const newX_count = this.isMobile ? scene.scale.width * 0.7 : scene.scale.width * 0.88;
+            //const newY = this.isMobile ? scene.scale.height * 0.92 : scene.scale.height * 0.61;
+            //
+            //this.remainingFsLabel.setPosition(newX, newY);
+            //this.remainingFsLabel_Count.setPosition(newX_count, newY);
+            
+            this.remainingFsLabel.setFontSize(this.isMobile ? '32px' : '20px');
             const shouldShow = !!scene.gameData.isBonusRound && (scene.gameData.freeSpins ?? 0) > 0;
             const count = scene.gameData.freeSpins ?? 0;
             if(this.isMobile){
-                this.remainingFsLabel.setText(`Remaining Free Spins: ${count}`);
+                this.remainingFsLabel.setText(`Remaining Free Spins:`);
+                this.remainingFsLabel_Count.setText(`${count}`);
             }
             else {
-                this.remainingFsLabel.setText(``);
+                this.remainingFsLabel.setText(`Spins Left:`);
+                this.remainingFsLabel_Count.setText(`${count}`);
             }
             this.remainingFsLabel.setVisible(shouldShow);
+            this.remainingFsLabel_Count.setVisible(shouldShow);
 
             // Toggle bottom controls visibility and Y-axis positions based on free spins state
             // Desktop: keep controls visible; Mobile: hide while in bonus
             if (this.isMobile) {
-                if (shouldShow) {
-                    this.hideBottomControlsForBonus(scene, true);
-                } else {
-                    this.hideBottomControlsForBonus(scene, false);
-                }
+                    this.hideBottomControlsForBonus(scene, shouldShow);
+
+                    this.remainingFsLabel.setText(`Remaining Free Spins:`);
+                    this.remainingFsLabel_Count.setText(`${count}`);
+                
             } else {
                 // On desktop, keep controls visible and show/hide spins using the spin-button HUD like autoplay
                 if (shouldShow && this.autoplay?.ensureRemainingSpinsDisplay) {
                     this.autoplay.ensureRemainingSpinsDisplay(scene);
-                } else if (!shouldShow && this.autoplay?.hideRemainingSpinsDisplay) {
-                    this.autoplay.hideRemainingSpinsDisplay();
+                // } else if (!shouldShow && this.autoplay?.hideRemainingSpinsDisplay) {
+                //     this.autoplay.hideRemainingSpinsDisplay();
                 }
             }
         };
@@ -343,38 +370,47 @@ export class Buttons {
     }
 
     public showRemainingFreeSpinsLabel(scene: GameScene): void {
-        if (!this.remainingFsLabel) return;
+        if (!this.remainingFsLabel || !this.remainingFsLabel_Count) return;
         const count = scene.gameData.freeSpins ?? 0;
         if(this.isMobile){
-            this.remainingFsLabel.setText(`Remaining Free Spins: ${count}`);
+            this.remainingFsLabel.setText(`Remaining Free Spins:`);
+            this.remainingFsLabel_Count.setText(`${count}`);
         }
         else{
-            this.remainingFsLabel.setText(``);
+            this.remainingFsLabel.setText(`Spins Left:`);
+            this.remainingFsLabel_Count.setText(`${count}`);
         }
         // Mobile: show text label; Desktop: use autoplay HUD near spin button
-        this.remainingFsLabel.setVisible(this.isMobile);
+        //this.remainingFsLabel.setVisible(this.isMobile);
+        //this.remainingFsLabel_Count.setVisible(this.isMobile);
         if (!this.isMobile && this.autoplay?.ensureRemainingSpinsDisplay) {
             this.autoplay.ensureRemainingSpinsDisplay(scene);
         }
     }
 
     public updateRemainingFreeSpinsCount(scene: GameScene): void {
-        if (!this.remainingFsLabel) return;
+        if (!this.remainingFsLabel || !this.remainingFsLabel_Count) return;
         const count = scene.gameData.freeSpins ?? 0;
         if(this.isMobile){
-            this.remainingFsLabel.setText(`Remaining Free Spins: ${count}`);
+            this.remainingFsLabel.setText(`Remaining Free Spins:`);
+            this.remainingFsLabel_Count.setText(`${count}`);
         }
         else{
-            this.remainingFsLabel.setText(``);
+            this.remainingFsLabel.setText(`Spins Left:`);
+            this.remainingFsLabel_Count.setText(`${count}`);
         }
+        //this.remainingFsLabel_Count.setVisible(this.isMobile);
         if (!this.isMobile && this.autoplay?.ensureRemainingSpinsDisplay) {
             this.autoplay.ensureRemainingSpinsDisplay(scene);
         }
     }
 
     public hideRemainingFreeSpinsLabel(): void {
-        if (!this.remainingFsLabel) return;
+        if (!this.remainingFsLabel || !this.remainingFsLabel_Count) return;
         this.remainingFsLabel.setVisible(false);
+        this.remainingFsLabel_Count.setVisible(false);
+        this.remainingFsLabel_Count.setText(``);
+        this.remainingFsLabel_Count.setVisible(false);
     }
 
     public hideBottomControlsForBonus(scene: GameScene, hidden: boolean): void {
@@ -392,7 +428,7 @@ export class Buttons {
         setVisibleByName('doubleFeatureContainer', !hidden);
         setVisibleByName('autoplayContainer', !hidden);
         // Mobile: keep volume/settings visible even when hiding; Desktop: follow hidden flag
-        setVisibleByName('settingsContainer', this.isMobile && hidden ? true : !hidden);
+        setVisibleByName('settingsContainer', this.isMobile && hidden ? !hidden : true);
         // Desktop: also hide info button when hiding
         if (!this.isMobile) {
             setVisibleByName('infoContainer', !hidden);
@@ -609,6 +645,7 @@ export class Buttons {
         this.freeSpinBtn.displayWidth = widthgcb;
         this.freeSpinBtn.displayHeight = heightgcb;
         this.freeSpinBtn.setInteractive().isButton = true;
+
         this.autoplayIndicator.displayWidth = widthgcb;
         this.autoplayIndicator.displayHeight = heightgcb;
         this.autoplayIndicator.setInteractive().isButton = true;
@@ -740,6 +777,12 @@ export class Buttons {
         this.freeSpinBtn.on('pointerdown', ()=>{});
         this.freeSpinBtn.visible=false;
         this.autoplayIndicator.visible=false;
+        // Make autoplayIndicator act as a stop button during autoplay
+        this.autoplayIndicator.on('pointerdown', () => {
+            if (!this.autoplay || !this.autoplay.isAutoPlaying) return;
+            scene.audioManager.UtilityButtonSFX.play();
+            Events.emitter.emit(Events.AUTOPLAY_STOP);
+        });
 
         Events.emitter.on(Events.SPIN_ANIMATION_START, () => {
             stopIdleRotation();
@@ -834,11 +877,11 @@ export class Buttons {
         const popupWidth = this.isMobile ? scene.scale.width : 466 ;
         const popupHeight = 547;
         const popup = scene.add.container(
-            this.isMobile ? 0 : scene.scale.width / 2 - popupWidth / 2,
-            this.isMobile ? scene.scale.height / 2 - popupHeight * 0.42: scene.scale.height / 2 - popupHeight / 2);
+            this.isMobile ? 0  : scene.scale.width / 2 - popupWidth / 2,
+            this.isMobile ? scene.scale.height / 2 - popupHeight * 0.28: scene.scale.height / 2 - popupHeight / 2);
         popup.setDepth(1000);
         popup.setVisible(false);
-        popup.setScale(this.isMobile ? 0.99 : 1);
+        popup.setScale(this.isMobile ? 1 : 1);
 
         // Store popup reference for external access
         this.autoplayPopup = popup;
@@ -905,7 +948,7 @@ export class Buttons {
         const spinOptions = [10, 30, 50, 75, 100, 150, 500, 1000];
         const buttonWidth = 88.5 * 0.9;
         const buttonHeight = 60;
-        const spacing = 16;
+        const spacing = this.isMobile ? 16 : 28;
         let selectedSpins = spinOptions[0]; // Set default to first option
         let selectedButton: GameObjects.Container | null = null;
 
@@ -968,7 +1011,7 @@ export class Buttons {
         selectedButton = buttons[0];
 
         // Total bet section
-        const betLabel = scene.add.text(padding, popupHeight / 2 + padding , 'Bet Size', {
+        const betLabel = scene.add.text(padding, popupHeight / 2 + padding * 2 , 'Bet Size', {
             fontSize: '24px',
             color: '#FFFFFF',
             fontFamily: 'Poppins'
@@ -998,66 +1041,35 @@ export class Buttons {
         (plusBtn as any as ButtonImage).setInteractive().isButton = true;
         popup.add(plusBtn);
 
+        // Use same bet options as main bet controls
+        const betOptionsPopup = [0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.6, 2, 2.4, 2.8, 3.2, 3.6, 4, 5, 6, 8, 10, 14, 18, 24, 32 ,40, 60, 80, 100, 110 ,120, 130, 140, 150];
+        let selectedBetIndexPopup = betOptionsPopup.indexOf(scene.gameData.bet);
+        if (selectedBetIndexPopup === -1) {
+            selectedBetIndexPopup = 0;
+        }
+
         plusBtn.on('pointerdown', () => {
             scene.audioManager.UtilityButtonSFX.play();
-            
-            // Find the next higher spin option
-            const nextSpinOption = spinOptions.find(spins => spins > selectedSpins);
-            if (nextSpinOption) {
-                // Update selected spins and bet immediately
-                selectedSpins = nextSpinOption;
-                bet = scene.gameData.bet// * selectedSpins;
-                
-                // Update button appearance
-                if (selectedButton) {
-                    const prevBg = selectedButton.list[0] as GameObjects.Graphics;
-                    prevBg.clear();
-                    prevBg.fillStyle(0x181818, 1);
-                    prevBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
-                }
-                
-                // Select the next button
-                const nextButton = buttons[spinOptions.indexOf(nextSpinOption)];
-                const nextBg = nextButton.list[0] as GameObjects.Graphics;
-                nextBg.clear();
-                nextBg.fillStyle(0x66D449, 1);
-                nextBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
-                selectedButton = nextButton;
-                
-                // Update display
-                updateBetDisplay();
+            selectedBetIndexPopup++;
+            if (selectedBetIndexPopup >= betOptionsPopup.length) {
+                selectedBetIndexPopup = 0;
             }
+            scene.gameData.bet = betOptionsPopup[selectedBetIndexPopup];
+            updateBetDisplay();
+            Events.emitter.emit(Events.CHANGE_BET, {});
+            Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {});
         });
 
         minusBtn.on('pointerdown', () => {
             scene.audioManager.UtilityButtonSFX.play();
-            
-            // Find the next lower spin option
-            const prevSpinOption = [...spinOptions].reverse().find(spins => spins < selectedSpins);
-            if (prevSpinOption) {
-                // Update selected spins and bet immediately
-                selectedSpins = prevSpinOption;
-                bet = scene.gameData.bet// * selectedSpins;
-                
-                // Update button appearance
-                if (selectedButton) {
-                    const prevBg = selectedButton.list[0] as GameObjects.Graphics;
-                    prevBg.clear();
-                    prevBg.fillStyle(0x181818, 1);
-                    prevBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
-                }
-                
-                // Select the previous button
-                const prevButton = buttons[spinOptions.indexOf(prevSpinOption)];
-                const prevBg = prevButton.list[0] as GameObjects.Graphics;
-                prevBg.clear();
-                prevBg.fillStyle(0x66D449, 1);
-                prevBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
-                selectedButton = prevButton;
-                
-                // Update display
-                updateBetDisplay();
+            selectedBetIndexPopup--;
+            if (selectedBetIndexPopup < 0) {
+                selectedBetIndexPopup = betOptionsPopup.length - 1;
             }
+            scene.gameData.bet = betOptionsPopup[selectedBetIndexPopup];
+            updateBetDisplay();
+            Events.emitter.emit(Events.CHANGE_BET, {});
+            Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {});
         });
 
         function updateBetDisplay() {
@@ -1234,6 +1246,8 @@ export class Buttons {
     public updateButtonStates(scene: GameScene): void {
 		const gameLogicDisabled = scene.gameData.isSpinning || scene.slotMachine.activeWinOverlay;
 		const shouldDisable = this.isVisuallyDisabled || gameLogicDisabled;
+		// During free spins (bonus round), visually disable the spin button
+		const spinShouldDisable = shouldDisable || scene.gameData.isBonusRound;
 		
 		// Buy feature has additional logic - also disabled during autoplay and bonus round
 		const buyFeatureShouldDisable = shouldDisable || this.autoplay.isAutoPlaying || scene.gameData.isBonusRound;
@@ -1243,7 +1257,7 @@ export class Buttons {
 		const buyFeatureEnabledNow = !buyFeatureShouldDisable;
 		
 		// Update spin button
-		if (shouldDisable) {
+		if (spinShouldDisable) {
 			this.spinButton.setAlpha(0.5);
 			this.spinButton.disableInteractive();
 		} else {
@@ -1588,6 +1602,7 @@ export class Buttons {
             this.bombWinContainer.setVisible(this.isMobile? false : true);
             let multiplier = scene.gameData.totalBombWin;
             let totalWin = scene.gameData.totalWinFreeSpinPerTumble[scene.gameData.apiFreeSpinsIndex].toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            text1.setText('WIN');
             text2.setText(`${scene.gameData.currency} ${totalWin} x ${multiplier}`);
         });
         Events.emitter.on(Events.HIDE_BOMB_WIN, () => { 
@@ -1904,9 +1919,9 @@ export class Buttons {
         // Create bet background
         const betBg = scene.add.graphics();
         betBg.fillStyle(0x333333, 0.95);
-        betBg.fillRoundedRect(0, 0, 402 + padding * 2, 645 + padding * 2, 16);
+        betBg.fillRoundedRect(0, 0, 403 + padding * 1.5, 645 + padding * 2, 16);
         betBg.lineStyle(0, 0x66D449);
-        betBg.strokeRoundedRect(0, 0, 402 + padding * 2, 645 + padding * 2, 16);
+        betBg.strokeRoundedRect(0, 0, 403 + padding * 1.5, 645 + padding * 2, 16);
         betContainer.add(betBg);
 
         // Title
@@ -2070,7 +2085,7 @@ export class Buttons {
         // Position the container
         betContainer.setPosition(
             this.isMobile ? 0 : scene.scale.width * 0.5 - 720 / 3,
-            this.isMobile ? scene.scale.height * 0.1 : scene.scale.height * 0.5 - 420);
+            this.isMobile ? scene.scale.height * 0.2 : scene.scale.height * 0.5 - 420);
         betContainer.setScale(this.isMobile ? 0.95:1);
         betContainer.setVisible(false);
 
@@ -2605,7 +2620,7 @@ export class Buttons {
         container.add(marquee);
 
         const youWonString = scene.gameData.totalWin.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-        const youWonLabel = scene.add.text(0, 0, 'YOU WON ', {
+        const youWonLabel = scene.add.text(0, 0, 'WIN', {
             fontSize: '14px',
             color: '#FFFFFF', 
             fontFamily: 'Poppins',
@@ -2630,6 +2645,7 @@ export class Buttons {
             this.bombMarqueeContainer.setVisible(this.isMobile? true : false);
             let multiplier = scene.gameData.totalBombWin;
             let totalWin = scene.gameData.totalWinFreeSpinPerTumble[scene.gameData.apiFreeSpinsIndex].toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            youWonLabel.setText('WIN');
             youWonAmount.setText(`${scene.gameData.currency} ${totalWin} x ${multiplier}`);
         });
         Events.emitter.on(Events.HIDE_BOMB_WIN, () => { 
@@ -2650,7 +2666,7 @@ export class Buttons {
 
         // Title
         const youWonString = scene.gameData.totalWin.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-        const youWonLabel = scene.add.text(0, 0, 'YOU WON ', {
+        const youWonLabel = scene.add.text(0, 0, 'WIN', {
             fontSize: '14px',
             color: '#FFFFFF', 
             fontFamily: 'Poppins',
@@ -2672,18 +2688,18 @@ export class Buttons {
         let marqueeCurrentTotal = 0;
         let marqueeQueue: number[] = [];
         let isProcessingQueue = false;
-        let hideTimer: Phaser.Time.TimerEvent | null = null;
+        //let hideTimer: Phaser.Time.TimerEvent | null = null;
 
-        const scheduleHide = () => {
-            if (hideTimer) {
-                hideTimer.remove(false);
-                hideTimer = null;
-            }
+        // const scheduleHide = () => {
+        //     if (hideTimer) {
+        //         hideTimer.remove(false);
+        //         hideTimer = null;
+        //     }
             
-            //hideTimer = scene.time.delayedCall(5000, () => {
-                //hideMarquee();
-            //});
-        };
+        //     //hideTimer = scene.time.delayedCall(5000, () => {
+        //         //hideMarquee();
+        //     //});
+        // };
 
         const processQueue = (isBomb?:boolean) => {
             if (isProcessingQueue) return;
@@ -2695,28 +2711,26 @@ export class Buttons {
                 if (marqueeQueue.length === 0) {
                     isProcessingQueue = false;
                     
-                    if(isBomb){
-                        //const idx = Math.max(0, Math.min(scene.gameData.apiFreeSpinsIndex || 0, (scene.gameData.totalWinFreeSpin?.length || 1) - 1));
-                        //const arr = scene.gameData.totalWinFreeSpin || [];
-                        //marqueeCurrentTotal = arr.slice(0, idx + 1).reduce((sum, v) => sum + (v || 0), 0);
-                        marqueeCurrentTotal = scene.gameData.totalWinFreeSpin[scene.gameData.apiFreeSpinsIndex];
+                    if (isBomb) {
+                        const idx = Math.max(0, Math.min(scene.gameData.apiFreeSpinsIndex || 0, (scene.gameData.totalWinFreeSpin?.length || 1) - 1));
+                        const arr = scene.gameData.totalWinFreeSpin || [];
+                        marqueeCurrentTotal = arr.slice(0, idx + 1).reduce((sum, v) => sum + (v || 0), 0);
                     }
-                    
-                    const formatted = marqueeCurrentTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                
-                    youWonAmount.setText(scene.gameData.currency + ' ' + formatted);
-                    
-                    scheduleHide();
+
+                    if(marqueeCurrentTotal >= scene.gameData.totalBonusWin){
+                        youWonLabel.setText('TOTAL WIN');
+                        youWonAmount.setText(`${scene.gameData.currency} ${scene.gameData.totalBonusWin.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+                    }
+                    else{
+                        youWonLabel.setText('WIN');
+                        youWonAmount.setText(`${scene.gameData.currency} ${marqueeCurrentTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+                    }
                     return;
                 }
                 const increment = marqueeQueue.shift() as number;
                 marqueeCurrentTotal += increment || 0;
                 
-
-                const formatted = marqueeCurrentTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                
-                youWonAmount.setText(scene.gameData.currency + ' ' + formatted);
-                
+                youWonAmount.setText(`${scene.gameData.currency} ${marqueeCurrentTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
                 scene.time.delayedCall(reelSpeed, step);
             };
             step();
@@ -2737,7 +2751,7 @@ export class Buttons {
             if(!this.isMobile) return;
             
             showMarquee();
-            console.error(increment);
+            // console.error(increment);
             // Queue per-tumble increment (fallback to using totalWin if payload missing)
             if (typeof increment === 'number' && !isNaN(increment)) {
                 marqueeQueue.push(increment);
@@ -2755,9 +2769,9 @@ export class Buttons {
 			marqueeCurrentTotal = 0;
 			marqueeQueue = [];
 			isProcessingQueue = false;
-			if (hideTimer) { hideTimer.remove(false); hideTimer = null; }
+			//if (hideTimer) { hideTimer.remove(false); hideTimer = null; }
 			youWonAmount.setText(scene.gameData.currency + ' ' + (0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-			hideMarquee();
+			//hideMarquee();
 		});
 
 		// Also clear marquee when current tumble sequence finishes
@@ -2766,9 +2780,9 @@ export class Buttons {
 			marqueeCurrentTotal = 0;
 			marqueeQueue = [];
 			isProcessingQueue = false;
-			if (hideTimer) { hideTimer.remove(false); hideTimer = null; }
-			youWonAmount.setText(scene.gameData.currency + ' ' + (0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-			hideMarquee();
+			//if (hideTimer) { hideTimer.remove(false); hideTimer = null; }
+			//youWonAmount.setText(scene.gameData.currency + ' ' + (0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+			//hideMarquee();
 		});
 
         Events.emitter.on(Events.UPDATE_CURRENCY, () => {
@@ -2798,6 +2812,7 @@ export class Buttons {
         }
         container.add(volumeIcon);
 
+        container.name = 'settingsContainer';
         this.buttonContainer.add(container);
 
         // Make container interactive

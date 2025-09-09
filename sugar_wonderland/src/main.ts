@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', (): void => {
             console.warn('Font loading timeout, starting game with fallback fonts');
             initializeGame();
         }
-    }, 5000);
+    }, 1000);
 }); 
 
 document.addEventListener('visibilitychange', () => {
