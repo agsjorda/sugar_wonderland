@@ -161,9 +161,15 @@ export class AudioManager {
         }
         if(scene.gameData.isBonusRound) {
             this.BonusBG.resume();
+            if(!this.BonusBG.isPlaying) {
+                this.BonusBG.play();
+            }
         }
         else {
             this.MainBG.resume();
+            if(!this.MainBG.isPlaying) {
+                this.MainBG.play();
+            }
         }
     }
 
@@ -266,7 +272,7 @@ export class AudioManager {
         else
         { 
             this.BGChecker.stop(); 
-            if(winName == 'TW1Wins' || winName == 'TW2Wins' || winName == 'TW3Wins' || winName == 'TW4Wins') {
+            if(winName == 'tumble') {
 
             }
             else{
@@ -305,9 +311,11 @@ export class AudioManager {
         this.BGChecker.play();
         if(scene.gameData.isBonusRound) {
             this.BonusBG.play();
+            this.BonusBG.resume();
         }
         else {
             this.MainBG.play();
+            this.MainBG.resume();
         }
         // this.setMusicVolume(this.getMusicVolume() / 0.01);
         if(this.getMusicVolume() > 1) {

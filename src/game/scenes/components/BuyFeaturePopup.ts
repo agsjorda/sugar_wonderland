@@ -28,6 +28,7 @@ export class BuyFeaturePopup {
     private isMobile: boolean = false;
     private betOptions: number[] = [0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.6, 2, 2.4, 2.8, 3.2, 3.6, 4, 5, 6, 8, 10, 14, 18, 24, 32, 40, 60, 80, 100, 110, 120, 130, 140, 150];
     private currentBetIndex: number = 17; // Default to bet value 10
+    private popupY: number = 0;
 
     constructor() {
         this.isMobile = this.isMobileDevice();
@@ -55,7 +56,7 @@ export class BuyFeaturePopup {
         scene.load.image('greenLongBtn', 'assets/Buttons/greenLongBtn.png');
         scene.load.image('ekis', 'assets/Buttons/ekis.png');
         scene.load.image('ScatterLogo', 'assets/Logo/Scatter.png');
-        scene.load.image('ScatterBackground', 'assets/Mobile/Bonus_Background.png');
+        scene.load.image('ScatterBackground', 'assets/Mobile/Bonus-Setting.png');
         scene.load.image('plus', 'assets/Controllers/Plus.png');
         scene.load.image('minus', 'assets/Controllers/Minus.png');
     }
@@ -63,9 +64,10 @@ export class BuyFeaturePopup {
     create(scene: GameScene): void {
         // Create the popup container
         const popupWidth = this.isMobile ? scene.scale.width : 573;
-        const popupHeight = this.isMobile ? scene.scale.height * 0.8 : 369;
+        const popupHeight = this.isMobile ? scene.scale.height * 0.85 : 369;
         const popupX = this.isMobile ? scene.scale.width / 2 - popupWidth / 2 : scene.scale.width / 2 - popupWidth / 2;
         const popupY = this.isMobile ? scene.scale.height / 2 - popupHeight / 2 : scene.scale.height / 2 - popupHeight / 2;
+        this.popupY = popupY;
         // console.log(popupX, popupY, popupWidth, popupHeight);
 
         this.popupContainer = scene.add.container(popupX, popupY) as ButtonContainer;
@@ -382,18 +384,19 @@ export class BuyFeaturePopup {
         mask.fillStyle(0x000000, 0.7);
         mask.fillRect(0, 0, scene.scale.width, scene.scale.height);
         mask.setInteractive(new Geom.Rectangle(0, 0, scene.scale.width, scene.scale.height), Geom.Rectangle.Contains);
-        //mask.on('pointerdown', () => {this.hide(scene);});
+        mask.on('pointerdown', () => {this.hide(scene);});
 
         // Add mask to scene instead of popup container to cover entire screen
         scene.add.existing(mask);
         mask.setDepth(999); // Just below the popup
-
+        
         // Show popup with animation
         this.popupContainer.setVisible(true);
         this.popupContainer.alpha = 0;
         scene.tweens.add({
             targets: this.popupContainer,
             alpha: 1,
+            y: { from: this.popupY + scene.scale.height, to: this.popupY },
             duration: 200,
             ease: 'Cubic.easeOut'
         });
@@ -411,7 +414,8 @@ export class BuyFeaturePopup {
 
         scene.tweens.add({
             targets: this.popupContainer,
-            alpha: 0,
+            alpha: 1,
+            y: { from: this.popupY, to: this.popupY + scene.scale.height },
             duration: 200,
             ease: 'Cubic.easeIn',
             onComplete: () => {

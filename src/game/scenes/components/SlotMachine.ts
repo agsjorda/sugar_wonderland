@@ -689,6 +689,7 @@ export class SlotMachine {
         } catch (_e) { /* no-op */ }
         
         Events.emitter.emit(Events.FINAL_WIN_SHOW, {});
+        Events.emitter.emit(Events.WIN_OVERLAY_HIDE);
     }
 
     private async playSpinAnimations(scene: GameScene, newValues: number[][], data: SpinData): Promise<void> {
@@ -1515,7 +1516,7 @@ export class SlotMachine {
 
             //scene.gameData.totalFreeSpins += addFreeSpins;
             scene.gameData.freeSpins += addFreeSpins;
-            scene.buttons.autoplay.addSpins(addFreeSpins);
+            // scene.buttons.autoplay.addSpins(addFreeSpins);
             console.log(`[BONUS] Retrigger: +${addFreeSpins} FS → totalFS=${scene.gameData.totalFreeSpins}, remainingFS=${scene.gameData.freeSpins}`);
             
             // Update the remaining spins display
@@ -1808,7 +1809,7 @@ export class SlotMachine {
         await new Promise<void>((resolve) => {
             scene.time.delayedCall(1, () => {
                 // Play win audio (but do NOT show overlay here)
-                scene.audioManager.playWinSFX(multiplierWin.toString());
+                scene.audioManager.playWinSFX("tumble");
                 resolve();
             });
         });

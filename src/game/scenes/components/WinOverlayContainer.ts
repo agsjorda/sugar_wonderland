@@ -130,7 +130,7 @@ export class WinOverlayContainer {
         
         this.freeSpinsText.setOrigin(0.5);
         this.freeSpinsText.visible = false;
-        this.freeSpinsText.setPosition(this.isMobile ? -100 : -150, 95);
+        this.freeSpinsText.setPosition(this.isMobile ? -110 : -150, 95);
         
         contentContainer.add(this.freeSpinsText);
 
