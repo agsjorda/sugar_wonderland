@@ -375,6 +375,7 @@ export class SlotMachine {
             const currentSpinsLeft = apiFs[0]?.spinsLeft;
             scene.gameData.freeSpins = currentSpinsLeft;
             scene.gameData.totalFreeSpins = apiFs.length;
+            scene.gameData.totalWinFreeSpinPerTumble = [];
             apiFs.forEach((v)=>{
                 scene.gameData.totalWinFreeSpin.push(v.totalWin);
                 let totalWinFreeSpinPerTumble = 0;
