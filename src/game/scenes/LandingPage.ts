@@ -63,8 +63,13 @@ export class LandingPage extends Scene {
             }
         });
         const updateIcon = () => {
-            if (!this.fsButton) return;
-            this.fsButton.setTexture(this.scale.isFullscreen ? 'fs_min' : 'fs_max');
+            const btn = this.fsButton;
+            if (!btn || !(btn as any).scene || !(btn as any).scene.sys) return;
+            const key = this.scale.isFullscreen ? 'fs_min' : 'fs_max';
+            // Ensure texture exists before swapping
+            if (this.textures && this.textures.exists(key)) {
+                btn.setTexture(key);
+            }
         };
         this.onEnterFs = updateIcon;
         this.onLeaveFs = updateIcon;
@@ -84,6 +89,10 @@ export class LandingPage extends Scene {
         };
         this.onResize = reposition;
         this.scale.on('resize', this.onResize);
+        
+        // Cleanup on scene shutdown/remove
+        this.events.once('shutdown', () => this.cleanupFullscreenHandlers());
+        this.events.once('destroy', () => this.cleanupFullscreenHandlers());
         
         // Adjust logo position and scale based on device
         const logoScale = this.isMobile ? 0.25 : 0.4;
@@ -175,12 +184,12 @@ export class LandingPage extends Scene {
         this.scene.launch('LoadingPage');
     }
 
-    shutdown(): void {
+    private cleanupFullscreenHandlers(): void {
         if (this.onEnterFs) this.scale.off('enterfullscreen', this.onEnterFs);
         if (this.onLeaveFs) this.scale.off('leavefullscreen', this.onLeaveFs);
         if (this.onResize) this.scale.off('resize', this.onResize);
         if (this.onDomFsChange) {
-            document.removeEventListener('fullscreenchange', this.onDomFsChange);
+            document.removeEventListener('fullscreenchange', this.onDomFsChange as any);
             // @ts-ignore
             document.removeEventListener('webkitfullscreenchange', this.onDomFsChange);
         }
