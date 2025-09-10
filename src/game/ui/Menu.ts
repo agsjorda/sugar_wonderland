@@ -419,7 +419,14 @@ export class Menu {
 
         const musicSlider = scene.add.graphics();
         musicSlider.fillStyle(0xffffff, 1);
-        musicSlider.fillCircle(sliderStartX + 0.75 * widthSlider * scaleFactor, musicSliderY + 4, 12 * scaleFactor);
+        // Draw knob at local origin and position the graphics instead of drawing at world coords
+        musicSlider.fillCircle(0, 0, 12 * scaleFactor);
+        musicSlider.setPosition(sliderStartX + 0.75 * widthSlider * scaleFactor, musicSliderY + 4);
+        // Enlarge interactive hit area and keep it local to the graphics
+        musicSlider.setInteractive(
+            new Geom.Circle(0, 0, 22 * scaleFactor),
+            Geom.Circle.Contains
+        );
         contentArea.add(musicSlider);
 
         // Music value text
@@ -446,7 +453,14 @@ export class Menu {
 
         const sfxSlider = scene.add.graphics();
         sfxSlider.fillStyle(0xffffff, 1);
-        sfxSlider.fillCircle(sliderStartX + 0.75 * widthSlider * scaleFactor, sfxSliderY + 4, 12 * scaleFactor);
+        // Draw knob at local origin and position the graphics instead of drawing at world coords
+        sfxSlider.fillCircle(0, 0, 12 * scaleFactor);
+        sfxSlider.setPosition(sliderStartX + 0.75 * widthSlider * scaleFactor, sfxSliderY + 4);
+        // Enlarge interactive hit area and keep it local to the graphics
+        sfxSlider.setInteractive(
+            new Geom.Circle(0, 0, 22 * scaleFactor),
+            Geom.Circle.Contains
+        );
         contentArea.add(sfxSlider);
 
         // SFX value text
@@ -462,18 +476,20 @@ export class Menu {
             const sliderWidth = widthSlider * scaleFactor;
 
             const musicVol = musicX !== null ? 
-                Math.max(0, Math.min(1, (musicX - sliderStartX) / sliderWidth)) : 
+                Math.max(0, Math.min(1, musicX / sliderWidth)) : 
                 scene.audioManager.getMusicVolume();
             
             const sfxVol = sfxX !== null ? 
-                Math.max(0, Math.min(1, (sfxX - sliderStartX) / sliderWidth)) : 
+                Math.max(0, Math.min(1, sfxX / sliderWidth)) : 
                 scene.audioManager.getSFXVolume();
             
             // Update music slider
             musicSlider.clear();
             musicSlider.fillStyle(0xffffff, 1);
             const musicSliderX = sliderStartX + (musicVol * sliderWidth);
-            musicSlider.fillCircle(musicSliderX, musicSliderY + 4, 12 * scaleFactor);
+            // Keep drawing local and move the graphics to the new position
+            musicSlider.fillCircle(0, 0, 12 * scaleFactor);
+            musicSlider.setPosition(musicSliderX, musicSliderY + 4);
             musicSliderBg.clear();
             musicSliderBg.fillStyle(0x379557, 1);
             musicSliderBg.fillRoundedRect(sliderStartX, musicSliderY, sliderWidth * musicVol, 8 * scaleFactor, 4 * scaleFactor);
@@ -483,7 +499,9 @@ export class Menu {
             sfxSlider.clear();
             sfxSlider.fillStyle(0xffffff, 1);
             const sfxSliderX = sliderStartX + (sfxVol * sliderWidth);
-            sfxSlider.fillCircle(sfxSliderX, sfxSliderY + 4, 12 * scaleFactor);
+            // Keep drawing local and move the graphics to the new position
+            sfxSlider.fillCircle(0, 0, 12 * scaleFactor);
+            sfxSlider.setPosition(sfxSliderX, sfxSliderY + 4);
             sfxSliderBg.clear();
             sfxSliderBg.fillStyle(0x379557, 1);
             sfxSliderBg.fillRoundedRect(sliderStartX, sfxSliderY, sliderWidth * sfxVol, 8 * scaleFactor, 4 * scaleFactor);
@@ -493,13 +511,13 @@ export class Menu {
             if (musicX !== null) scene.audioManager.setMusicVolume(musicVol);
             if (sfxX !== null) scene.audioManager.setSFXVolume(sfxVol);
 
-            // Update interactive areas for sliders
+            // Update interactive areas for sliders (keep hit areas centered on the local origin)
             musicSlider.setInteractive(
-                new Geom.Circle(musicSliderX, musicSliderY + 4, 15 * scaleFactor),  
+                new Geom.Circle(0, 0, 22 * scaleFactor),  
                 Geom.Circle.Contains
             );
             sfxSlider.setInteractive(
-                new Geom.Circle(sfxSliderX, sfxSliderY + 4, 15 * scaleFactor),
+                new Geom.Circle(0, 0, 22 * scaleFactor),
                 Geom.Circle.Contains
             );
         };
@@ -539,12 +557,14 @@ export class Menu {
         const pointerMoveHandler = (pointer: Phaser.Input.Pointer) => {
             if (this.isDraggingMusic) {
                 const sliderWidth = widthSlider * scaleFactor;
-                const localX = pointer.x - contentArea.x - sliderStartX;
-                updateSliders(Math.max(0, Math.min(sliderWidth, localX)), null);
+                const p = (musicSliderTrack as any).getLocalPoint(pointer.x, pointer.y);
+                const localX = Math.max(0, Math.min(sliderWidth, p && typeof p.x === 'number' ? p.x : 0));
+                updateSliders(localX, null);
             } else if (this.isDraggingSFX) {
                 const sliderWidth = widthSlider * scaleFactor;
-                const localX = pointer.x - contentArea.x - sliderStartX;
-                updateSliders(null, Math.max(0, Math.min(sliderWidth, localX)));
+                const p = (sfxSliderTrack as any).getLocalPoint(pointer.x, pointer.y);
+                const localX = Math.max(0, Math.min(sliderWidth, p && typeof p.x === 'number' ? p.x : 0));
+                updateSliders(null, localX);
             }
         };
 
@@ -561,38 +581,44 @@ export class Menu {
 
         // Create clickable areas for the entire slider tracks
         const musicSliderTrack = scene.add.graphics();
+        musicSliderTrack.setPosition(sliderStartX, musicSliderY);
         musicSliderTrack.fillStyle(0x000000, 0); // Transparent
-        musicSliderTrack.fillRect(sliderStartX, musicSliderY - 10, widthSlider * scaleFactor, 28);
+        // Draw and set hit area in local coords for reliable input inside a container
+        musicSliderTrack.fillRect(0, -10, widthSlider * scaleFactor, 28);
         musicSliderTrack.setInteractive(
-            new Geom.Rectangle(sliderStartX, musicSliderY - 10, widthSlider * scaleFactor, 28),
+            new Geom.Rectangle(0, -10, widthSlider * scaleFactor, 28),
             Geom.Rectangle.Contains
         );
         contentArea.add(musicSliderTrack);
 
         const sfxSliderTrack = scene.add.graphics();
+        sfxSliderTrack.setPosition(sliderStartX, sfxSliderY);
         sfxSliderTrack.fillStyle(0x000000, 0); // Transparent
-        sfxSliderTrack.fillRect(sliderStartX, sfxSliderY - 10, widthSlider * scaleFactor, 28);
+        // Draw and set hit area in local coords for reliable input inside a container
+        sfxSliderTrack.fillRect(0, -10, widthSlider * scaleFactor, 28);
         sfxSliderTrack.setInteractive(
-            new Geom.Rectangle(sliderStartX, sfxSliderY - 10, widthSlider * scaleFactor, 28),
+            new Geom.Rectangle(0, -10, widthSlider * scaleFactor, 28),
             Geom.Rectangle.Contains
         );
         contentArea.add(sfxSliderTrack);
 
         // Music slider track click handler
-        musicSliderTrack.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-            const localX = pointer.x - contentArea.x - sliderStartX;
+        musicSliderTrack.on('pointerdown', (pointer: Phaser.Input.Pointer, localX: number) => {
             const sliderWidth = widthSlider * scaleFactor;
-            const newVolume = Math.max(0, Math.min(1, localX / sliderWidth));
+            localX = Math.max(0, Math.min(sliderWidth, localX));
+            const newVolume = localX / sliderWidth;
             scene.audioManager.setMusicVolume(newVolume);
+            this.isDraggingMusic = true; // allow click-and-drag on the track
             updateSliders();
         });
 
         // SFX slider track click handler
-        sfxSliderTrack.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-            const localX = pointer.x - contentArea.x - sliderStartX;
+        sfxSliderTrack.on('pointerdown', (pointer: Phaser.Input.Pointer, localX: number) => {
             const sliderWidth = widthSlider * scaleFactor;
-            const newVolume = Math.max(0, Math.min(1, localX / sliderWidth));
+            localX = Math.max(0, Math.min(sliderWidth, localX));
+            const newVolume = localX / sliderWidth;
             scene.audioManager.setSFXVolume(newVolume);
+            this.isDraggingSFX = true; // allow click-and-drag on the track
             updateSliders();
         });
 
