@@ -27,6 +27,11 @@ export class Background {
 
     private lanternTweens: Phaser.Tweens.Tween[] = [];
 
+    // Fullscreen button and handlers
+    private fsButton: Phaser.GameObjects.Image | null = null;
+    private onEnterFs?: () => void;
+    private onLeaveFs?: () => void;
+
     private floatingSpeedX: number = 0.001;
     private floatingSpeedY: number = 0.0012;
 
@@ -68,6 +73,10 @@ export class Background {
             scene.load.image('main_foreground', `${prefix}/Main_Foreground.png`);
             scene.load.image('main_lantern', `${prefix}/Main_Lantern.png`);
         }
+
+        // Fullscreen toggle icons
+        scene.load.image('fs_max', 'assets/Controllers/Maximize.png');
+        scene.load.image('fs_min', 'assets/Controllers/Minimize.png');
     }
 
     create(scene: Scene): void {
@@ -127,6 +136,9 @@ export class Background {
         versionLabel.setOrigin(1, 1).setAlpha(0.2);
         // Ensure above background/foreground but below UI; backgrounds use depths 0-2
         versionLabel.setDepth(3);
+
+        // Add fullscreen toggle button above backgrounds
+        this.createFullscreenToggle(scene);
     }
 
 	toggleBackground(_scene: Scene): void {
@@ -160,6 +172,53 @@ export class Background {
             this.bonus_lantern2.alpha = bonus_status;
             this.bonus_lantern3.alpha = bonus_status;
         }
+    }
+
+    private createFullscreenToggle(scene: Scene): void {
+        const width = scene.scale.width;
+        const height = scene.scale.height;
+        const padding = this.isMobile ? 10 : 12;
+
+        // Create button
+        const key = scene.scale.isFullscreen ? 'fs_min' : 'fs_max';
+        const btn = scene.add.image(width - padding, padding, key);
+        btn.setOrigin(1, 0);
+        const size = this.isMobile ? 28 : 32;
+        btn.setDisplaySize(size, size);
+        btn.setInteractive({ useHandCursor: true });
+        btn.setDepth(4); // Above backgrounds and version label
+        this.fsButton = btn;
+
+        // Toggle on click
+        btn.on('pointerup', () => {
+            if (scene.scale.isFullscreen) {
+                scene.scale.stopFullscreen();
+            } else {
+                scene.scale.startFullscreen();
+            }
+        });
+
+        // Update icon on fs change
+        const updateIcon = () => {
+            if (!this.fsButton) return;
+            this.fsButton.setTexture(scene.scale.isFullscreen ? 'fs_min' : 'fs_max');
+        };
+        this.onEnterFs = updateIcon;
+        this.onLeaveFs = updateIcon;
+        scene.scale.on('enterfullscreen', this.onEnterFs);
+        scene.scale.on('leavefullscreen', this.onLeaveFs);
+
+        // Cleanup on shutdown
+        (scene as any).events?.once && (scene as any).events.once('shutdown', () => {
+            if (this.onEnterFs) scene.scale.off('enterfullscreen', this.onEnterFs);
+            if (this.onLeaveFs) scene.scale.off('leavefullscreen', this.onLeaveFs);
+            this.onEnterFs = undefined;
+            this.onLeaveFs = undefined;
+            if (this.fsButton) {
+                this.fsButton.destroy();
+                this.fsButton = null;
+            }
+        });
     }
 
     private createBackground(scene: Scene): void {
