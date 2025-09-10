@@ -1760,7 +1760,7 @@ export class Buttons {
         
         Events.emitter.on(Events.SHOW_BOMB_WIN, () => { 
             this.totalWinContainer.setVisible(this.isMobile? false : false);
-            text1.setText('WIN');
+            text1.setText('TOTAL WIN');
         });
 
         Events.emitter.on(Events.HIDE_BOMB_WIN, () => { 
@@ -2738,7 +2738,7 @@ export class Buttons {
                         youWonAmount.setText(`${scene.gameData.currency} ${scene.gameData.totalBonusWin.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
                     }
                     else{
-                        youWonLabel.setText('WIN');
+                        youWonLabel.setText('TOTAL WIN');
                         youWonAmount.setText(`${scene.gameData.currency} ${marqueeCurrentTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
                     }
                     return;

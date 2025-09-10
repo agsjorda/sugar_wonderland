@@ -31,6 +31,10 @@ export class Background {
     private fsButton: Phaser.GameObjects.Image | null = null;
     private onEnterFs?: () => void;
     private onLeaveFs?: () => void;
+  
+    private onDomFsChange?: () => void;
+    private onResize?: () => void;
+    
 
     private floatingSpeedX: number = 0.001;
     private floatingSpeedY: number = 0.0012;
@@ -208,12 +212,37 @@ export class Background {
         scene.scale.on('enterfullscreen', this.onEnterFs);
         scene.scale.on('leavefullscreen', this.onLeaveFs);
 
+        // Also listen to DOM fullscreen changes for desktop browsers
+        this.onDomFsChange = updateIcon;
+        document.addEventListener('fullscreenchange', this.onDomFsChange);
+        // @ts-ignore - Safari prefix
+        document.addEventListener('webkitfullscreenchange', this.onDomFsChange);
+
+        // Reposition on resize (enter/exit fullscreen changes size)
+        const reposition = () => {
+            const w = scene.scale.width;
+            const p = padding;
+            if (this.fsButton) this.fsButton.setPosition(w - p, p);
+        };
+        this.onResize = reposition;
+        scene.scale.on('resize', this.onResize);
+
         // Cleanup on shutdown
         (scene as any).events?.once && (scene as any).events.once('shutdown', () => {
             if (this.onEnterFs) scene.scale.off('enterfullscreen', this.onEnterFs);
             if (this.onLeaveFs) scene.scale.off('leavefullscreen', this.onLeaveFs);
+          
+            if (this.onResize) scene.scale.off('resize', this.onResize);
+            if (this.onDomFsChange) {
+                document.removeEventListener('fullscreenchange', this.onDomFsChange);
+                // @ts-ignore
+                document.removeEventListener('webkitfullscreenchange', this.onDomFsChange);
+            }
             this.onEnterFs = undefined;
             this.onLeaveFs = undefined;
+            this.onResize = undefined;
+            this.onDomFsChange = undefined;
+          
             if (this.fsButton) {
                 this.fsButton.destroy();
                 this.fsButton = null;
