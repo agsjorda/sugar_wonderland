@@ -333,6 +333,26 @@ export class Autoplay {
         }
     }
 
+    /**
+     * Pause autoplay due to bonus/free spins trigger.
+     * - Persists remaining base-game autoplay spins in GameData
+     * - Stops the current autoplay loop without losing the saved count
+     */
+    public pauseForBonus(): void {
+        if (!this.scene) return;
+        try {
+            // Save remaining base-game spins for resumption after bonus
+            this.scene.gameData.autoplayRemainingSpins = Math.max(
+                0,
+                (this.scene.gameData.autoplayRemainingSpins || 0) + (this.remainingSpins || 0)
+            );
+            this.scene.gameData.autoplayWasPaused = this.scene.gameData.autoplayRemainingSpins > 0;
+        } catch (_e) { /* no-op */ }
+
+        // Stop current autoplay loop safely (this will reset this.remainingSpins visual only)
+        this.stop();
+    }
+
     private spin(): void {
         this.spinScheduled = false;
         this.scene.gameData.debugLog("=== AUTOPLAY SPIN ATTEMPT ===");

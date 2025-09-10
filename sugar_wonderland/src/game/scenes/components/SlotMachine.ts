@@ -387,10 +387,10 @@ export class SlotMachine {
                 scene.gameData.totalWinFreeSpinPerTumble.push(totalWinFreeSpinPerTumble);
             });
             
-            // If autoplay is running, stop it immediately to hand control to API-driven free spins
+            // If autoplay is running, pause it to hand control to API-driven free spins
             try {
                 if (scene.buttons?.autoplay?.isAutoPlaying) {
-                    scene.buttons.autoplay.stop();
+                    scene.buttons.autoplay.pauseForBonus();
                     // Refresh button visuals after stopping
                     if (scene.buttons?.updateButtonStates) {
                         scene.buttons.updateButtonStates(scene as GameScene);
@@ -1541,9 +1541,9 @@ export class SlotMachine {
 			scene.gameData.freeSpins = freeSpins;
 			scene.gameData.totalBonusWin = 0;
 
-            // Stop autoplay if active; sequence begins after Congrats overlay
+            // Pause autoplay if active; sequence begins after Congrats overlay
             if (scene.buttons.autoplay.isAutoPlaying) {
-                scene.buttons.autoplay.stop();
+                scene.buttons.autoplay.pauseForBonus();
             }
 
 			// After scatter animations complete (MATCHES_DONE), flip to bonus and show Congrats overlay

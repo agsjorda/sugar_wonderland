@@ -122,6 +122,10 @@ export class GameData {
     // Current free spin progress (1-based when in use)
     public currentFreeSpinIndex: number = 0;
 
+    // Base-game autoplay state (separate from bonus/free spins)
+    public autoplayRemainingSpins: number = 0; // persists when bonus starts
+    public autoplayWasPaused: boolean = false; // true when autoplay was paused due to bonus
+
     // Debug mode property - initialized from URL parameter
     public debugged: number = (() => {
         const debugParam = getUrlParameter('debug');

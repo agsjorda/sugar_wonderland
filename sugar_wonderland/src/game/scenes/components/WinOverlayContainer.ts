@@ -670,10 +670,21 @@ export class WinOverlayContainer {
                 this.scene.time.delayedCall(200, () => {
                     this.scene.background.toggleBackground(this.scene);
                     this.scene.audioManager.changeBackgroundMusic(this.scene);
-                    if (this.scene.gameData.useApiFreeSpins && this.scene.slotMachine?.startApiFreeSpins) {
-                        this.scene.slotMachine.startApiFreeSpins(this.scene);
-                    } else if (!this.scene.autoplay.isAutoPlaying) {
-                        Events.emitter.emit(Events.AUTOPLAY_START, this.scene.gameData.freeSpins);
+                    // Resume base-game autoplay if it was paused due to bonus
+                    const wasPaused = this.scene.gameData.autoplayWasPaused;
+                    const toResume = this.scene.gameData.autoplayRemainingSpins || 0;
+                    if (wasPaused && toResume > 0) {
+                        // Reset flags before starting to avoid re-entry issues
+                        this.scene.gameData.autoplayWasPaused = false;
+                        this.scene.gameData.autoplayRemainingSpins = 0;
+                        Events.emitter.emit(Events.AUTOPLAY_START, toResume);
+                    } else {
+                        // Fallback: legacy behavior (no-op if freeSpins is 0)
+                        if (this.scene.gameData.useApiFreeSpins && this.scene.slotMachine?.startApiFreeSpins) {
+                            this.scene.slotMachine.startApiFreeSpins(this.scene);
+                        } else if (!this.scene.autoplay.isAutoPlaying) {
+                            Events.emitter.emit(Events.AUTOPLAY_START, this.scene.gameData.freeSpins);
+                        }
                     }
                     this.destroy();
                 });
