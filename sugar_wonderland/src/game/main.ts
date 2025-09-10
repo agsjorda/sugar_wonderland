@@ -71,6 +71,12 @@ const isMobile = (): boolean => {
            window.innerWidth <= 768;
 };
 
+declare global {
+    interface Window {
+        phaserGame?: Game;
+    }
+}
+
 const StartGame = (parent: string): Game => {
     const config = isMobile() ? mobileConfig : desktopConfig;
     //setupAspectRatioReload();
@@ -79,12 +85,15 @@ const StartGame = (parent: string): Game => {
     if (game.canvas && !game.canvas.hasAttribute('tabindex')) {
         game.canvas.setAttribute('tabindex', '0');
     }
-    // Global: enter fullscreen on any user interaction if not already
-    game.canvas.addEventListener('pointerdown', () => {
-        if (!game.scale.isFullscreen) {
-            game.scale.startFullscreen();
-        }
-    });
+    // Expose game globally for UI overlay controls
+    window.phaserGame = game;
+    // Ensure the fullscreen element includes the HTML overlay controls
+    const appElement = document.getElementById('app');
+    if (appElement) {
+        // Phaser will request fullscreen on this element, so overlay stays visible
+        // @ts-ignore - property exists on Phaser 3 ScaleManager
+        game.scale.fullscreenTarget = appElement as unknown as HTMLElement;
+    }
     // Ensure ability to re-enter fullscreen after exiting
     game.scale.on('leavefullscreen', () => {
         // Refocus canvas so the next user gesture is captured
