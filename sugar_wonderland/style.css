@@ -46,3 +46,24 @@ canvas {
 
 /* Fullscreen toggle button overlay */
 /* Removed HTML overlay styles; button is now rendered inside Phaser */
+
+/* Disable tap highlight and focus outlines (prevents yellow border on tap) */
+* {
+	-webkit-tap-highlight-color: transparent;
+}
+
+*:focus,
+*:focus-visible {
+	outline: none !important;
+}
+
+/* Ensure main containers and canvas never show focus outline */
+html, body, #app, #game-container, canvas {
+	outline: none !important;
+}
+
+/* Firefox inner focus ring reset for buttons/inputs (just in case) */
+button::-moz-focus-inner,
+input::-moz-focus-inner {
+	border: 0;
+}
