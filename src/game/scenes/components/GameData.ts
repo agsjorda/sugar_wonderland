@@ -59,7 +59,7 @@ export class GameData {
     slot: Slot = new Slot();
     line: number = 0;
     currentRow: number = 0;
-    bet: number = 10;
+    bet: number = 1;
 
     maxBet: number = 150;
     minBet: number = 0.2;
@@ -113,6 +113,7 @@ export class GameData {
     totalFreeSpins: number = 0;
 
     // API-driven free spins
+    public apiBet : number = 1;
     public apiFreeSpins: any[] = [];
     public apiFreeSpinsIndex: number = 0;
     public useApiFreeSpins: boolean = false;
