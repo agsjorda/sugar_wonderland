@@ -28,6 +28,13 @@ export class LandingPage extends Scene {
         // Log font status for debugging
         logFontStatus();
         
+        // Ensure fullscreen on user interaction if not already in fullscreen
+        this.input.on('pointerdown', () => {
+            if (!this.scale.isFullscreen) {
+                this.scale.startFullscreen();
+            }
+        });
+        
         // Detect if mobile
         this.isMobile = this.isMobileDevice();
         
