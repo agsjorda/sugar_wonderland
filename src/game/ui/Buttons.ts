@@ -1642,7 +1642,7 @@ export class Buttons {
         this.totalWin.strokeRoundedRect(0, 0, width, Buttons.PANEL_HEIGHT, cornerRadius);
         container.add(this.totalWin);
 
-        const text1 = scene.add.text(width * 0.5, Buttons.PANEL_HEIGHT * 0.3, 'WIN', {
+        const text1 = scene.add.text(width * 0.5, Buttons.PANEL_HEIGHT * 0.3, 'TOTAL WIN', {
             fontSize: '25px',
             color: '#3FFF0D',
             align: 'center',
@@ -1693,7 +1693,7 @@ export class Buttons {
                         text2.setText(`${scene.gameData.currency} ${formatMoney(scene.gameData.totalBonusWin)}`);
                     }
                     else{
-                        text1.setText('WIN');
+                        text1.setText('TOTAL WIN');
                         text2.setText(`${scene.gameData.currency} ${formatMoney(totalWinCurrentTotal)}`);
                     }
                     return;
@@ -1715,7 +1715,7 @@ export class Buttons {
                 isProcessingTotalWinQueue = false;
                 multiplierApplied = false;
                 text2.setText(`${scene.gameData.currency} ${formatMoney(0)}`);
-                text1.setText('WIN');
+                text1.setText('TOTAL WIN');
             }
         });
 
@@ -1760,10 +1760,12 @@ export class Buttons {
         
         Events.emitter.on(Events.SHOW_BOMB_WIN, () => { 
             this.totalWinContainer.setVisible(this.isMobile? false : false);
+            text1.setText('WIN');
         });
 
         Events.emitter.on(Events.HIDE_BOMB_WIN, () => { 
             this.totalWinContainer.setVisible(this.isMobile? false : true);
+            text1.setText('TOTAL WIN');
         });
 
         this.buttonContainer.add(container);
@@ -2650,6 +2652,7 @@ export class Buttons {
         });
         Events.emitter.on(Events.HIDE_BOMB_WIN, () => { 
             this.bombMarqueeContainer.setVisible(false);
+            youWonLabel.setText('TOTAL WIN');
         });
         
     }
@@ -2666,7 +2669,7 @@ export class Buttons {
 
         // Title
         const youWonString = scene.gameData.totalWin.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-        const youWonLabel = scene.add.text(0, 0, 'WIN', {
+        const youWonLabel = scene.add.text(0, 0, 'TOTAL WIN', {
             fontSize: '14px',
             color: '#FFFFFF', 
             fontFamily: 'Poppins',
