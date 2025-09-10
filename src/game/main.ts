@@ -75,12 +75,30 @@ const StartGame = (parent: string): Game => {
     const config = isMobile() ? mobileConfig : desktopConfig;
     //setupAspectRatioReload();
     const game = new Game({ ...config, parent });
+    // Make canvas focusable to improve gesture handling after exiting fullscreen
+    if (game.canvas && !game.canvas.hasAttribute('tabindex')) {
+        game.canvas.setAttribute('tabindex', '0');
+    }
     // Global: enter fullscreen on any user interaction if not already
     game.canvas.addEventListener('pointerdown', () => {
         if (!game.scale.isFullscreen) {
             game.scale.startFullscreen();
         }
     });
+    // Ensure ability to re-enter fullscreen after exiting
+    game.scale.on('leavefullscreen', () => {
+        // Refocus canvas so the next user gesture is captured
+        game.canvas?.focus();
+    });
+    // Cross-browser: also listen for DOM fullscreen change
+    const onFsChange = () => {
+        if (!game.scale.isFullscreen) {
+            game.canvas?.focus();
+        }
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    // @ts-ignore - Safari legacy prefix
+    document.addEventListener('webkitfullscreenchange', onFsChange);
     return game;
 };
 
