@@ -74,7 +74,14 @@ const isMobile = (): boolean => {
 const StartGame = (parent: string): Game => {
     const config = isMobile() ? mobileConfig : desktopConfig;
     //setupAspectRatioReload();
-    return new Game({ ...config, parent });
+    const game = new Game({ ...config, parent });
+    // Global: enter fullscreen on any user interaction if not already
+    game.canvas.addEventListener('pointerdown', () => {
+        if (!game.scale.isFullscreen) {
+            game.scale.startFullscreen();
+        }
+    });
+    return game;
 };
 
 export default StartGame; 
