@@ -1792,11 +1792,9 @@ export class Buttons {
         const container = scene.add.container(x, y) as ButtonContainer;
         container.setDepth(4);
         const betOptions = [0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.6, 2, 2.4, 2.8, 3.2, 3.6, 4, 5, 6, 8, 10, 14, 18, 24, 32 ,40, 60, 80, 100, 110 ,120, 130, 140, 150];
-        let selectedBetIndex = betOptions.indexOf(scene.gameData.bet);
-        if (selectedBetIndex === -1) {
-            selectedBetIndex = 15; // fallback to default
-        }
-
+        const indexInit = localStorage.getItem('bet') ? betOptions.indexOf(parseFloat(localStorage.getItem('bet') || '1')) : 5;
+        let selectedBetIndex = indexInit;
+        
         // Create the background with gradient and border
         this.totalBet = scene.add.graphics();
         this.totalBet.fillStyle(0x000000, 0.5);
@@ -1869,6 +1867,7 @@ export class Buttons {
             if(scene.gameData.isBonusRound) return;
             scene.audioManager.UtilityButtonSFX.play();
 
+            selectedBetIndex = betOptions.indexOf(scene.gameData.bet);
             selectedBetIndex++;
             if(selectedBetIndex >= betOptions.length) {
                 selectedBetIndex = 0;
@@ -1885,6 +1884,7 @@ export class Buttons {
             if(scene.gameData.isBonusRound) return;
             scene.audioManager.UtilityButtonSFX.play();
 
+            selectedBetIndex = betOptions.indexOf(scene.gameData.bet);
             selectedBetIndex--;
             if(selectedBetIndex < 0) {
                 selectedBetIndex = betOptions.length - 1;
@@ -1900,6 +1900,7 @@ export class Buttons {
         Events.emitter.on(Events.CHANGE_BET, () => {
             const totalBet = (scene.gameData.bet).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
             betValueText.setText(/*scene.gameData.currency +*/ totalBet);
+            localStorage.setItem('bet', scene.gameData.bet.toString());
         });
 
         Events.emitter.on(Events.ENHANCE_BET_TOGGLE, (isBuy?:boolean) => {
@@ -1909,6 +1910,9 @@ export class Buttons {
                 betValueText.setText(scene.gameData.currency + (scene.gameData.bet).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
             }
         });
+
+        scene.gameData.bet = localStorage.getItem('bet') ? parseFloat(localStorage.getItem('bet') || '1') : 1;
+        localStorage.setItem('bet', scene.gameData.bet.toString());
 
         container.name = 'betContainer';
         //this.buttonContainer.add(container);
@@ -1950,6 +1954,7 @@ export class Buttons {
         // Close button click handler
         closeBtn.on('pointerdown', () => {
             scene.audioManager.UtilityButtonSFX.play();
+            betOptions[selectedBetIndex] = scene.gameData.bet;
             this.hideBetPopup(scene);
         });
 
@@ -2012,11 +2017,6 @@ export class Buttons {
                 buttonBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
                 selectedButton = buttonContainer;
                 selectedBetIndex = index;
-
-                // Update total bet display
-                scene.gameData.bet = betOptions[selectedBetIndex];
-                Events.emitter.emit(Events.CHANGE_BET, {});
-                Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {}); 
             });
 
             betContainer.add(buttonContainer);
@@ -2041,6 +2041,18 @@ export class Buttons {
 
         (betBtnBg as any as ButtonImage).setInteractive().isButton = true;
         betBtnBg.on('pointerdown', () => {
+
+            if(scene.gameData.isSpinning) {
+                scene.gameData.bet = scene.gameData.apiBet;
+                Events.emitter.emit(Events.CHANGE_BET, {});
+                Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {}); 
+            }
+            else{
+                // Update total bet display
+                scene.gameData.bet = betOptions[selectedBetIndex];
+                Events.emitter.emit(Events.CHANGE_BET, {});
+                Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {}); 
+            }
                 scene.audioManager.UtilityButtonSFX.play();
 
                 scene.tweens.add({
@@ -2049,6 +2061,7 @@ export class Buttons {
                     duration: 200,
                     ease: 'Cubic.easeIn',
                     onComplete: () => {
+                        
                         betContainer.setVisible(false);
                         betContainer.list.forEach(item => {
                             if(item instanceof GameObjects.Graphics && item.name === 'betMask') {
@@ -2109,24 +2122,24 @@ export class Buttons {
                     duration: 1000,
                     ease: "Expo.easeOut",
                     onStart: () => {
-                        const mask = scene.add.graphics();
-                        mask.name = 'betMask';
-                        mask.fillStyle(0x000000, 0.7); // Black with 0.7 opacity
-                        mask.fillRect(0, 0, scene.scale.width, scene.scale.height);
-                        mask.setInteractive(new Geom.Rectangle(0, 0, scene.scale.width, scene.scale.height), Geom.Rectangle.Contains);
-                        mask.on('pointerdown', () => this.hideBetPopup(scene));
-                        this.betContainer.add(mask);
+                        // const mask = scene.add.graphics();
+                        // mask.name = 'betMask';
+                        // mask.fillStyle(0x000000, 0.7); // Black with 0.7 opacity
+                        // mask.fillRect(0, 0, scene.scale.width, scene.scale.height);
+                        // mask.setInteractive(new Geom.Rectangle(0, 0, scene.scale.width, scene.scale.height), Geom.Rectangle.Contains);
+                        // mask.on('pointerdown', () => this.hideBetPopup(scene));
+                        // this.betContainer.add(mask);
                         
-                        mask.setScale(this.isMobile ? 2.25 : 1, this.isMobile ? 2.5 : 1);
-                        mask.setPosition(
-                            this.isMobile ? -scene.scale.width / 2 : -this.betContainer.x,
-                            this.isMobile ? -scene.scale.height : -this.betContainer_Y); // Adjust position relative to container
-                        this.betContainer.sendToBack(mask); // Ensure mask is behind other elements
-                        scene.tweens.add({
-                            targets: mask,
-                            alpha: {from: 0, to: 0.01},
-                            duration: 1000
-                        });
+                        // mask.setScale(this.isMobile ? 2.25 : 1, this.isMobile ? 2.5 : 1);
+                        // mask.setPosition(
+                        //     this.isMobile ? -scene.scale.width / 2 : -this.betContainer.x,
+                        //     this.isMobile ? -scene.scale.height : -this.betContainer_Y); // Adjust position relative to container
+                        // this.betContainer.sendToBack(mask); // Ensure mask is behind other elements
+                        // scene.tweens.add({
+                        //     targets: mask,
+                        //     alpha: {from: 0, to: 0.7},
+                        //     duration: 1000
+                        // });
                     }
                 });
             }
