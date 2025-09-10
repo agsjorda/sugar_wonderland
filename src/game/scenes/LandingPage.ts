@@ -12,6 +12,9 @@ export class LandingPage extends Scene {
     private fsButton: Phaser.GameObjects.Image | null = null;
     private onEnterFs?: () => void;
     private onLeaveFs?: () => void;
+    
+    private onDomFsChange?: () => void;
+    private onResize?: () => void;
 
     constructor() {
         super('LandingPage');
@@ -67,6 +70,20 @@ export class LandingPage extends Scene {
         this.onLeaveFs = updateIcon;
         this.scale.on('enterfullscreen', this.onEnterFs);
         this.scale.on('leavefullscreen', this.onLeaveFs);
+
+        // Also listen to DOM fullscreen changes for desktop
+        this.onDomFsChange = updateIcon;
+        document.addEventListener('fullscreenchange', this.onDomFsChange);
+        // @ts-ignore - Safari prefix
+        document.addEventListener('webkitfullscreenchange', this.onDomFsChange);
+
+        // Reposition on resize
+        const reposition = () => {
+            const p = padding;
+            if (this.fsButton) this.fsButton.setPosition(this.cameras.main.width - p, p);
+        };
+        this.onResize = reposition;
+        this.scale.on('resize', this.onResize);
         
         // Adjust logo position and scale based on device
         const logoScale = this.isMobile ? 0.25 : 0.4;
@@ -161,8 +178,16 @@ export class LandingPage extends Scene {
     shutdown(): void {
         if (this.onEnterFs) this.scale.off('enterfullscreen', this.onEnterFs);
         if (this.onLeaveFs) this.scale.off('leavefullscreen', this.onLeaveFs);
+        if (this.onResize) this.scale.off('resize', this.onResize);
+        if (this.onDomFsChange) {
+            document.removeEventListener('fullscreenchange', this.onDomFsChange);
+            // @ts-ignore
+            document.removeEventListener('webkitfullscreenchange', this.onDomFsChange);
+        }
         this.onEnterFs = undefined;
         this.onLeaveFs = undefined;
+        this.onResize = undefined;
+        this.onDomFsChange = undefined;
         if (this.fsButton) {
             this.fsButton.destroy();
             this.fsButton = null;
