@@ -175,20 +175,31 @@ export class Autoplay {
             strokeThickness: 6
         });
         this.remainingSpinsText.setOrigin(0.5, 0.5); // center align
-        this.remainingSpinsText.setDepth(1000);
+        // On mobile, ensure this HUD renders below the autoplay popup (popup depth is 1000)
+        this.remainingSpinsText.setDepth(this.isMobile ? 10 : 1000);
         this.remainingSpinsText.setScale(this.isMobile ? 0.5 : 1);
         if (spinContainer) {
             spinContainer.add(this.remainingSpinsText);
             try { (spinContainer as any).bringToTop(this.remainingSpinsText); } catch (_e) {}
         }
 
-        // Ensure the correct indicator is shown under the text
-        if (scene.gameData.freeSpins > 0) {
-            scene.buttons.freeSpinBtn.visible = true;
-            scene.buttons.autoplayIndicator.visible = false;
+        // Indicator visibility policy:
+        // - Keep autoplayIndicator visible during FreeSpin overlay
+        // - Hide autoplayIndicator only after FreeSpin overlay is closed and bonus begins
+        const overlayActive = (scene as any)?.slotMachine?.activeWinOverlay === true;
+        // During bonus, only show FS button together with the Spins Left label
+        const bonusLabelShouldShow = scene.gameData.isBonusRound && (scene.gameData.freeSpins ?? 0) > 0 && !overlayActive;
+        // In base game, still show FS button for autoplay remaining spins
+        const shouldShowFsBtn = bonusLabelShouldShow || (!scene.gameData.isBonusRound && this.isAutoPlaying && this.remainingSpins > 0 && !overlayActive);
+        if (scene.gameData.isBonusRound && !overlayActive) {
+            // We're in bonus (overlay closed) → hide autoplay indicator (always), obey FS button policy
+            try { scene.buttons.autoplayIndicator.visible = false; } catch (_e) {}
+            try { scene.buttons.freeSpinBtn.visible = shouldShowFsBtn; } catch (_e) {}
         } else {
-            scene.buttons.freeSpinBtn.visible = false;
-            scene.buttons.autoplayIndicator.visible = true;
+            // Base game or overlay active → autoplay indicator only when autoplay is active
+            try { scene.buttons.autoplayIndicator.visible = !!this.isAutoPlaying; } catch (_e) {}
+            // Show/hide FS badge only when not in overlay
+            try { scene.buttons.freeSpinBtn.visible = shouldShowFsBtn; } catch (_e) {}
         }
 
         // Update the display
@@ -208,13 +219,17 @@ export class Autoplay {
                 if (spinContainer && this.remainingSpinsText.parentContainer === spinContainer) {
                     this.remainingSpinsText.setPosition(0, 0);
                 } else if (spinContainer) {
-                    this.remainingSpinsText.setPosition(spinContainer.x, spinContainer.y);
+                    // Reparent to ensure correct layering under popup and align with spin button
+                    spinContainer.add(this.remainingSpinsText);
+                    this.remainingSpinsText.setPosition(0, 0);
                 } else if (this.isMobile) {
                     this.remainingSpinsText.setPosition(this.scene.scale.width * 0.5, this.scene.scale.height * 0.86);
                 } else {
                     this.remainingSpinsText.setPosition(this.scene.scale.width * 0.88, this.scene.scale.height * 0.443);
                 }
             } catch (_e) {}
+            // Maintain depth policy: keep below popup on mobile
+            try { this.remainingSpinsText.setDepth(this.isMobile ? 10 : 1000); } catch (_e) {}
             // Adjust font size based on digits
             const len = displayText.length;
             if (len >= 3) {
@@ -266,10 +281,13 @@ export class Autoplay {
         if (!this.remainingSpinsText) {
             this.createRemainingSpinsDisplay(scene);
         }
-        // Ensure correct button visibility for FS HUD
-        if (scene.gameData.freeSpins > 0) {
-            scene.buttons.freeSpinBtn.visible = true;
-            scene.buttons.autoplayIndicator.visible = false;
+        // Ensure correct button visibility for FS HUD (do not hide autoplayIndicator while overlay is active)
+        const overlayActive = (scene as any)?.slotMachine?.activeWinOverlay === true;
+        const bonusLabelShouldShow = scene.gameData.isBonusRound && (scene.gameData.freeSpins ?? 0) > 0 && !overlayActive;
+        const shouldShowFsBtn = bonusLabelShouldShow || (!scene.gameData.isBonusRound && this.isAutoPlaying && this.remainingSpins > 0 && !overlayActive);
+        if (shouldShowFsBtn) {
+            try { scene.buttons.freeSpinBtn.visible = true; } catch (_e) {}
+            try { scene.buttons.autoplayIndicator.visible = false; } catch (_e) {}
         }
         // this.updateRemainingSpinsDisplay();
     }
@@ -283,9 +301,6 @@ export class Autoplay {
         if (this.remainingSpinsBg) {
             this.remainingSpinsBg.destroy();
             this.remainingSpinsBg = undefined;
-        }
-        if (this.scene && this.scene.buttons) {
-            this.scene.buttons.freeSpinBtn.visible = false;
         }
     }
 
@@ -348,9 +363,21 @@ export class Autoplay {
             );
             this.scene.gameData.autoplayWasPaused = this.scene.gameData.autoplayRemainingSpins > 0;
         } catch (_e) { /* no-op */ }
-
-        // Stop current autoplay loop safely (this will reset this.remainingSpins visual only)
-        this.stop();
+        // Pause timers and scheduling without clearing UI or counters
+        if (this.spinInterval) {
+            clearTimeout(this.spinInterval);
+            this.spinInterval = 0 as any;
+        }
+        if (this.pollInterval) {
+            clearInterval(this.pollInterval);
+            this.pollInterval = null;
+        }
+        this.spinScheduled = false;
+        this.isAutoPlaying = false; // prevent any further spins
+        // Keep remainingSpins and its text visible until FreeSpin overlay is closed
+        if (this.scene && this.scene.buttons && this.scene.buttons.updateButtonStates) {
+            this.scene.buttons.updateButtonStates(this.scene);
+        }
     }
 
     private spin(): void {

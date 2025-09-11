@@ -66,7 +66,7 @@ export class BuyFeaturePopup {
         const popupWidth = this.isMobile ? scene.scale.width : 573;
         const popupHeight = this.isMobile ? scene.scale.height * 0.85 : 369;
         const popupX = this.isMobile ? scene.scale.width / 2 - popupWidth / 2 : scene.scale.width / 2 - popupWidth / 2;
-        const popupY = this.isMobile ? scene.scale.height / 2 - popupHeight / 2 : scene.scale.height / 2 - popupHeight / 2;
+        const popupY = this.isMobile ? scene.scale.height - popupHeight : scene.scale.height / 2 - popupHeight / 2;
         this.popupY = popupY;
         // console.log(popupX, popupY, popupWidth, popupHeight);
 
@@ -166,8 +166,6 @@ export class BuyFeaturePopup {
 
         // Popup background
         const bg = scene.add.image(0, 0, 'ScatterBackground');
-        bg.setCrop(0, 0, bg.width, bg.height * 2 / 3);
-        bg.setDisplaySize(popupWidth, popupHeight * 1.5);
         bg.setOrigin(0, 0);
         
         this.popupContainer.add(bg);

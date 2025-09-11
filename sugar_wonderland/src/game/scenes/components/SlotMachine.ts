@@ -351,7 +351,7 @@ export class SlotMachine {
             return;
         }
         
-        console.log("result", result);
+        // console.log("result", result);
         scene.gameData.apiBet = result.bet;
         scene.gameData.bet = result.bet;
         scene.gameData.debugLog("slotArea", result.slot.area);
@@ -432,7 +432,6 @@ export class SlotMachine {
                 if (scene.buttons?.hideBottomControlsForBonus) {
                     scene.buttons.hideBottomControlsForBonus(scene, true);
                 }
-                console.error(`[BONUS] API FS: animations done, setting isBonusRound=true and showing popup (FS=${currentSpinsLeft})`);
                 this.showFreeSpinsPopup(scene, currentSpinsLeft);
             });
         }
@@ -642,7 +641,6 @@ export class SlotMachine {
     private async animateScatterSymbolsForApi(scene: GameScene, scatterSprites: Phaser.GameObjects.Sprite[]): Promise<void> {
         if (scatterSprites.length === 0) return;
         if (scatterSprites.length < 3) return;
-        console.log(`[SCATTER] (API) Preparing to animate ${scatterSprites.length} scatter symbol(s)`);
         scene.audioManager.ScatterSFX.play();
         const animationPromises: Promise<void>[] = [];
         scatterSprites.forEach((sprite, index) => {
