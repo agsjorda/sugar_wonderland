@@ -1,4 +1,4 @@
-import { Scene, GameObjects } from 'phaser';
+import { Scene, GameObjects, Tweens } from 'phaser';
 import { GameData } from './GameData';
 import { Events } from './Events';
 
@@ -148,6 +148,18 @@ export class HelpScreen {
             }
         );
 
+        const closeArea = scene.add.graphics();
+        closeArea.fillStyle(0x111111, 0.8);
+        closeArea.fillRect(padding, -padding, scene.scale.width *  0.33, scene.scale.height);
+        closeButtonContainer.add(closeArea);
+        closeArea.setInteractive();
+        closeArea.on('pointerdown', () => {
+            scene.audioManager.UtilityButtonSFX.play();
+            this.hide(scene);
+            scene.gameData.isHelpScreenVisible = false;
+            Events.emitter.emit(Events.HELP_SCREEN_TOGGLE);
+        });
+
         this.container.add(closeButtonContainer);
         if(!this.isMobile){
             this.createContent(scene);
@@ -161,33 +173,36 @@ export class HelpScreen {
     }
 
     private createContent(scene: GameScene): void {
-        this.padding = 20;
+        this.padding = 32;
         this.contentWidth = 1200;
         this.yPosition = 0;
 
         // Game Rules Header
         this.addContent(scene, 'Game Rules', 'title');
-
+        this.yPosition -= this.padding / 2;
         // Game Rules Text
         this.addContent(scene, 'Win by landing 8 or more matching symbols anywhere on the screen.', 'text', true, this.contentWidth - this.padding * 2);
+        this.yPosition -= this.padding / 2;
         this.addContent(scene, 'The more matching symbols you get, the higher your payout.', 'text', true, this.contentWidth - this.padding * 4);
 
 
         // RTP Header
         this.addContent(scene, 'RTP', 'title');
 
+        this.yPosition -= this.padding / 2;
         // RTP Text
         this.addContent(scene, '96.49% - 96.6%', 'text');
 
+        this.yPosition += this.padding;
         // Payout Section
         this.addContent(scene, 'Payout', 'title');
-        this.yPosition += this.padding * 2;
+        this.yPosition += this.padding * 1.5;
 
         // Create 3x3 symbol grid with payouts
         const symbolSize = 153;
         const symbolScale = 0.5;
         const scaledSymbolSize = symbolSize * symbolScale;
-        const tableWidth = 250;  // Width for the 2x3 payout table
+        const tableWidth = 288;  // Width for the 2x3 payout table
         const cellSpacing = 10;
         const genericTableWidth = 1129;
         
@@ -200,7 +215,7 @@ export class HelpScreen {
         for (let row = 0; row < 3; row++) {
             for (let col = 0; col < 3; col++) {
                 const symbolIndex = row * 3 + col + 1;
-                const cellX = startX + col * (scaledSymbolSize + tableWidth + cellSpacing * 4);
+                const cellX = startX + col * (scaledSymbolSize + tableWidth + cellSpacing * 3.5);
                 const cellY = this.yPosition + cellSpacing;
 
                 // Create symbol container with white border
@@ -210,20 +225,29 @@ export class HelpScreen {
                     -this.padding, 
                     -scaledSymbolSize, 
                     scaledSymbolSize + tableWidth * 1.1, 
-                    scaledSymbolSize * 1.5
+                    scaledSymbolSize * 1.973856
                 );
 
                 // Add symbol
                 const symbol = scene.add.sprite(0, 0, `Symbol${symbolIndex}_SW`);
                 symbol.setFrame(`Symbol${symbolIndex}_SW-00000.png`);
-                symbol.setScale(symbolScale);
-                symbol.setOrigin(0, 0.7);
-                symbolContainer.add(symbol);
+                
+                switch(symbolIndex){
+                    case 6:
+                        symbol.setScale(symbolScale * 1.6);
+                        symbol.setOrigin(0.2, 0.45);
+                        break;
+                    default:
+                        symbol.setScale(symbolScale * 1.4);
+                        symbol.setOrigin(0.2, 0.5);
+                        break;
+                }
 
+                symbolContainer.add(symbol);
                 // Add payout table next to symbol
                 this.createPayoutTable(scene,
                     scaledSymbolSize + symbolSize/5,  // Position table right of symbol
-                    0,                      // Center vertically with symbol
+                    -this.padding,                      // Center vertically with symbol
                     symbolContainer,
                     symbolIndex
                 );
@@ -234,9 +258,7 @@ export class HelpScreen {
         }
 
 
-        this.yPosition += this.padding;
-
-        const content = scene.add.text(this.padding * 4, this.yPosition - this.padding * 2 , 'Scatter', {
+        const content = scene.add.text(this.padding * 2.5, this.yPosition - this.padding * 1.5, 'Scatter', {
             ...this.textStyle,
         });
         this.contentContainer.add(content);
@@ -248,20 +270,20 @@ export class HelpScreen {
         this.createBorder(scene, scatterContainer, 
             -this.padding / 2, 
             -scaledSymbolSize * 1.25, 
-            genericTableWidth * 0.96, 
-            scaledSymbolSize * 3
+            genericTableWidth * 1.0575, 
+            scaledSymbolSize * 3.228758
         );
         
         // Add scatter symbol
         const scatter = scene.add.sprite(this.padding, this.padding * 2, 'ScatterLabel');
-        scatter.setScale(0.20);
-        scatter.setOrigin(-1, 0.75);
+        scatter.setScale(0.28);
+        scatter.setOrigin(-0.66, 0.65);
         scatterContainer.add(scatter);
 
         // Add scatter payout table
         this.createPayoutTable(scene,
-            scaledSymbolSize + 200,
-            0,
+            scaledSymbolSize + tableWidth * 0.8,
+            this.padding,
             scatterContainer,
             0
         );
@@ -614,7 +636,7 @@ export class HelpScreen {
     };
 
     protected textStyle = {
-        fontSize: '20px',
+        fontSize: '24px',
         color: '#FFFFFF',
         fontFamily: 'Poppins',
         align: 'left',
@@ -626,7 +648,7 @@ export class HelpScreen {
         
 
         if(_type == 'title'){
-            const content = scene.add.text(this.padding / 2, this.yPosition, _text, this.titleStyle);
+            const content = scene.add.text(this.padding * 1.5, this.yPosition, _text, this.titleStyle);
             this.contentContainer.add(content);
             if(_text == 'Bonus Trigger'){
                 content.setPosition(content.x + this.padding * 2, content.y);
@@ -634,7 +656,7 @@ export class HelpScreen {
             this.yPosition += content.height + this.padding;
         }
         else if(_type == 'text'){
-                const content = scene.add.text(this.padding / 2, this.yPosition, _text, {
+                const content = scene.add.text(this.padding * 1.5, this.yPosition, _text, {
                 ...this.textStyle,
                 wordWrap: _wordWrap ? { width: _wordWrapWidth } : undefined
             });
@@ -759,7 +781,7 @@ export class HelpScreen {
                     cellWidth = cellWidth2 * 2;
                 }
                 const cellX = x + (col == 2 ? cellWidth1 + cellWidth2 + cellPadding * 2 : col * (cellWidth + cellPadding));
-                const cellY = tableY + row * (cellHeight + cellPadding);
+                const cellY = tableY + row * (cellHeight + cellPadding * 3);
 
                 // Draw cell border
                 graphics.strokeRect(cellX, cellY, cellWidth, cellHeight);
@@ -784,16 +806,16 @@ export class HelpScreen {
 
                         let textElement : GameObjects.Text;
                          if(col == 0){
-                            textElement = scene.add.text(cellX + cellWidth , cellY + cellHeight/2, text, {
-                                fontSize: '20px',
+                            textElement = scene.add.text(cellX + cellWidth , cellY + cellHeight * 2, text, {
+                                fontSize: '24px',
                                 color: '#FFFFFF',
                                 fontFamily: 'Poppins', 
-                                align: 'left'
+                                align: 'left',
                             });
                         }
                         else{
-                            textElement = scene.add.text(cellX + cellWidth , cellY + cellHeight/2, text, {
-                                fontSize: '20px',
+                            textElement = scene.add.text(cellX + cellWidth , cellY + cellHeight * 2, text, {
+                                fontSize: '24px',
                                 color: '#FFFFFF',
                                 fontFamily: 'Poppins', 
                                 align: 'right'
@@ -822,7 +844,7 @@ export class HelpScreen {
 
                     if(col == 0) {
                         const textElement = scene.add.text(cellX + cellWidth + this.padding, cellY + cellHeight/2, text, {
-                            fontSize: '20px',
+                            fontSize: '24px',
                             color: '#FFFFFF',
                             fontFamily: 'Poppins'
                         });
@@ -830,21 +852,21 @@ export class HelpScreen {
                         container.add(textElement);
                     } else if(col == 1) {
                         
-                        const textElement = scene.add.text(cellX + cellWidth , cellY + cellHeight/2, text, {
-                            fontSize: '20px',
+                        const textElement = scene.add.text(cellX + cellWidth * 1.5 , cellY + cellHeight/2, text, {
+                            fontSize: '24px',
                             color: '#FFFFFF',
-                            fontFamily: 'Poppins'
+                            fontFamily: 'Poppins',
                         });
                         textElement.setOrigin(0.5, 0.5);
                         container.add(textElement);
                     
                     } else {
                         const scatterTextCell = scene.add.text(
-                            cellX + cellWidth/2 + this.padding,
-                            cellY + cellHeight/2 - this.padding * 0.7,
+                            cellX + cellWidth + this.padding,
+                            cellY + cellHeight/2 - this.padding * 0.4,
                             scatterText[row], 
                             {
-                                fontSize: '20px',
+                                fontSize: '24px',
                                 color: '#FFFFFF',
                                 fontFamily: 'Poppins',
                             }
@@ -872,7 +894,8 @@ export class HelpScreen {
 
         // Make the scroll view interactive for the full width and height
         this.scrollView.setInteractive(new Phaser.Geom.Rectangle(
-            0, 0,
+            -scene.scale.width * 0.333,
+            0,
             scene.scale.width,
             scene.scale.height
         ), Phaser.Geom.Rectangle.Contains);

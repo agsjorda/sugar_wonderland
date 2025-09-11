@@ -342,6 +342,12 @@ export class Buttons {
             this.remainingFsLabel.setVisible(shouldShow);
             this.remainingFsLabel_Count.setVisible(shouldShow);
 
+            // Sync freeSpinBtn with the Spins Left label visibility
+            try { this.freeSpinBtn.visible = shouldShow; } catch (_e) {}
+            // Avoid overlap: hide autoplay indicator while Spins Left is shown
+            // Otherwise, only show it when autoplay is running
+            try { this.autoplayIndicator.visible = shouldShow ? false : !!this.autoplay?.isAutoPlaying; } catch (_e) {}
+
             // Toggle bottom controls visibility and Y-axis positions based on free spins state
             // Desktop: keep controls visible; Mobile: hide while in bonus
             if (this.isMobile) {
@@ -389,6 +395,9 @@ export class Buttons {
         if (!this.isMobile && this.autoplay?.ensureRemainingSpinsDisplay) {
             this.autoplay.ensureRemainingSpinsDisplay(scene);
         }
+        // Ensure button syncs when label is requested to show
+        try { this.freeSpinBtn.visible = true; } catch (_e) {}
+        try { this.autoplayIndicator.visible = false; } catch (_e) {}
     }
 
     public updateRemainingFreeSpinsCount(scene: GameScene): void {
@@ -414,6 +423,8 @@ export class Buttons {
         this.remainingFsLabel_Count.setVisible(false);
         this.remainingFsLabel_Count.setText(``);
         this.remainingFsLabel_Count.setVisible(false);
+        // Hide the button when the label is hidden
+        try { this.freeSpinBtn.visible = false; } catch (_e) {}
     }
 
     public hideBottomControlsForBonus(scene: GameScene, hidden: boolean): void {
@@ -626,7 +637,7 @@ export class Buttons {
         const width = this.isMobile ? this.spinButton.width / 3.25 : this.spinButton.width * 0.75;
         const height = this.isMobile ? this.spinButton.height / 3.25 : this.spinButton.height * 0.75;
 
-        this.freeSpinBtn = scene.add.image(x, y, 'greenCircBtn') as ButtonImage;
+        this.freeSpinBtn = scene.add.image(0, 0, 'greenCircBtn') as ButtonImage;
         this.autoplayIndicator = scene.add.image(0, 0, 'autoplayIndicator') as ButtonImage;
 
         const widthgcb = this.isMobile ? this.freeSpinBtn.width / 2.5 : this.freeSpinBtn.width * 0.9;
@@ -1268,9 +1279,10 @@ export class Buttons {
 			this.spinButton.setInteractive();
 		}
 		
-		// Update autoplay button
+		// Update autoplay button (disabled during bonus round)
 		if (this.autoplayButton) {
-			if (shouldDisable) {
+			const autoplayShouldDisable = shouldDisable || scene.gameData.isBonusRound;
+			if (autoplayShouldDisable) {
 				this.autoplayButton.setAlpha(0.5);
 				this.autoplayButton.disableInteractive();
 			} else {

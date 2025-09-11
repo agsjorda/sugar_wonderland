@@ -244,10 +244,12 @@ export class WinOverlayContainer {
             this.freeSpinsText.visible = false;
             this.multiplier = -1;
             this.playWinSound(totalWin);
+            // Hide remaining autoplay spins during the FreeSpin overlay (keep autoplayIndicator visible)
+            try { (this.scene as any)?.autoplay?.hideRemainingSpinsDisplay?.(); } catch (_e) {}
             if(this.winAnim){
                 this.winAnimation.playWinAnimation(this.winAnim, totalWin, 'FreeSpin');
                 this.winAnim.setPosition(this.winAnim.x, this.winAnim.y + 150);
-                this.buttonText.setPosition(this.buttonText.x, this.buttonText.y + 150);
+                this.buttonText.setPosition(this.buttonText.x, this.buttonText.y + 75);
             }
         } else if (winType === 'Congrats') {
             this.winText.setPosition(0, -60);
@@ -259,7 +261,7 @@ export class WinOverlayContainer {
             if(this.winAnim){
                 this.winAnimation.playWinAnimation(this.winAnim, totalWin, 'Congrats');
                 this.winAnim.setPosition(this.winAnim.x, this.winAnim.y + 150);
-                this.buttonText.setPosition(this.buttonText.x, this.buttonText.y + 150);
+                this.buttonText.setPosition(this.buttonText.x, this.buttonText.y + 75);
             }
             
         } else {
@@ -654,6 +656,8 @@ export class WinOverlayContainer {
             }
             this.endWinAnimation(() => {
                 this.scene.time.delayedCall(200, () => {
+                    // Now entering bonus round proper — hide base autoplay remaining display
+                    try { this.scene.autoplay?.hideRemainingSpinsDisplay?.(); } catch (_e) {}
                     if (this.scene.gameData.useApiFreeSpins && this.scene.slotMachine?.startApiFreeSpins) {
                         this.scene.slotMachine.startApiFreeSpins(this.scene);
                     } else if (!this.scene.autoplay.isAutoPlaying) {

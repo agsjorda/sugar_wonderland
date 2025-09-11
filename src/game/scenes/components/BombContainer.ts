@@ -74,20 +74,41 @@ export class BombContainer extends GameObjects.Container {
         
         // Set the animation time scale to 1
         this.bombSprite.animationState.timeScale = 0;
+        const colorIndex = this.multiplier >= 50 ? 0 : this.multiplier >= 12 ? 1 : 2;
+        const gradientColor: string[][] = [
+            // 🟡 Gold Bombs → Purple text
+            ['#A64DFF', '#DAB6FF'],  
+            // 🟢 Green Bombs → Magenta/Pink text
+            ['#FF4D94', '#FFB6C1'],  
+            // 🔵 Blue Bombs → Orange/Yellow text
+            ['#FF8C42', '#FFD700']   
+        ];
         
+        const shadowColor: string[] = [
+            '#4B0082',  // Deep indigo for gold bombs
+            '#8B004B',  // Dark magenta for green bombs
+            '#8B3A00'   // Burnt orange for blue bombs
+        ];
+        
+        const blur: number[] = [
+            0.7, // Gold bomb shadow opacity
+            0.6, // Green bomb shadow opacity
+            0.6  // Blue bomb shadow opacity
+        ];
+        let _gradientColor = gradientColor[colorIndex];
         // Create the text overlay
         this.textOverlay = scene.add.text(0, 0, `${this.multiplier}X`, {
-            fontSize: '32px',
-            color: '#FFD700',
+            fontSize: '36px',
+            color: _gradientColor[0],
             fontFamily: 'Poppins',
             fontStyle: 'bold',
             align: 'center',
-            stroke: '#FF0000',
+            stroke: shadowColor[colorIndex],
             strokeThickness: 4,
             shadow: {
                 offsetX: 0,
                 offsetY: 0,
-                color: '#FFFFFF',
+                color: 'rgba(0, 0, 0, ' + blur[colorIndex] + ')',
                 blur: 10,
                 stroke: true,
                 fill: false
@@ -96,14 +117,6 @@ export class BombContainer extends GameObjects.Container {
         this.textOverlay.setOrigin(0.5, 0.5);
         this.textOverlay.setDepth(2);
         
-        // Apply gradient to text
-        const gradient = this.textOverlay.context.createLinearGradient(0, 0, 0, this.textOverlay.height);
-        gradient.addColorStop(0, '#FFF15A');
-        gradient.addColorStop(0.5, '#FFD000');
-        gradient.addColorStop(1, '#FFB400');
-        this.textOverlay.setFill(gradient);
-        
-    
         // Add both elements to the container
         this.add([this.bombSprite, this.textOverlay]);
         // Ensure the container itself renders above standard symbols
@@ -111,20 +124,22 @@ export class BombContainer extends GameObjects.Container {
         
         // Create a floating text that will always render above everything else
         this.floatingText = scene.add.text(0, 0, `X ${this.multiplier}`, {
-            fontSize: '28px',
-            color: '#FFFFFF',
+            fontSize: '32px',
+            color: _gradientColor[0],
             fontFamily: 'Poppins',
             fontStyle: 'bold',
-            stroke: '#000000',
-            strokeThickness: 4
+            stroke: shadowColor[colorIndex],
+            strokeThickness: 4,
+            shadow: {
+                offsetX: 0,
+                offsetY: 0,
+                color: 'rgba(0, 0, 0, ' + blur[colorIndex] + ')',
+                blur: 10,
+                stroke: true,
+                fill: false
+            }
         });
         
-        const gradient2 = this.floatingText.context.createLinearGradient(0, 0, 0, this.floatingText.height);
-        gradient2.addColorStop(0, '#FFF15A');
-        gradient2.addColorStop(0.5, '#FFD000');
-        gradient2.addColorStop(1, '#FFB400');
-        this.floatingText.setFill(gradient2);
-
         this.floatingText.setOrigin(0.5, 0.5);
         // Place this floating text at an extrzemely high depth so it's above all overlays
         this.floatingText.setDepth(1000000);
@@ -134,17 +149,11 @@ export class BombContainer extends GameObjects.Container {
         this.updateFloatingTextPosition();
         
         // Set initial visibility
-        this.textOverlay.setAlpha(0.8);
+        this.textOverlay.setAlpha(1);
+        this.textOverlay.setScale(this.textOverlay.scale * 1.25);
         // Match other symbols' scaling; actual sizing is handled by setBombDisplaySize
         this.setScale(0.8);
         
-        // Debug logging
-        this.gameData.debugLog('BombContainer created', {
-            bombValue,
-            multiplier: this.multiplier,
-            bombType: this.bombType,
-            position: { x, y }
-        });
     }
 
     /**
@@ -197,7 +206,7 @@ export class BombContainer extends GameObjects.Container {
             const scale = Math.min(scaleX, scaleY);
             this.bombSprite.setScale(scale);
             // Place at the center of the container; children are positioned relative to container center
-            this.bombSprite.setPosition(-10, 0);
+            this.bombSprite.setPosition(0, -10);
         } catch (_e) {
             // Fallback: approximate scale if bounds are not available yet
             const approximateScale = Math.min(width, height) / 120;
@@ -206,7 +215,7 @@ export class BombContainer extends GameObjects.Container {
         }
 
         // Center text within the container
-        this.textOverlay.setPosition(0, 0);
+        this.textOverlay.setPosition(15, -7.5);
 
         // Adjust text size to be readable and centered inside the bomb
         const baseTextSize = Math.floor(Math.min(width/2, height/2) * 0.28);
@@ -214,8 +223,6 @@ export class BombContainer extends GameObjects.Container {
 
         // Update container size so tweens and layout treat it like a symbol cell
         this.setSize(width, height);
-
-        this.gameData.debugLog('Bomb display size set', { width, height });
     }
 
     /**
@@ -424,8 +431,8 @@ export class BombContainer extends GameObjects.Container {
                 try {
                     this.scene.tweens.add({
                         targets: this.bombSprite,
-                        scaleX: this.bombSprite.scaleX * .75,
-                        scaleY: this.bombSprite.scaleY * .75,
+                        scaleX: this.bombSprite.scaleX * .5,
+                        scaleY: this.bombSprite.scaleY * .5,
                         duration: 400,
                         ease: 'Power2'
                     });
