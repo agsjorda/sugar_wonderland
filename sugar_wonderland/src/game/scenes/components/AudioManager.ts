@@ -348,7 +348,6 @@ export class AudioManager {
         this.musicVolume = vol;
         if (this.MainBG) this.MainBG.setVolume(this.musicVolume);
         if (this.BonusBG) this.BonusBG.setVolume(this.musicVolume);
-        console.log(chalk.blueBright.bold("setMusicVolume" + this.musicVolume));
     }
 
     getMusicVolume(): number {

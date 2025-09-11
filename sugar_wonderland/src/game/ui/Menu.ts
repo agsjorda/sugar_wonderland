@@ -21,7 +21,7 @@ interface GameScene extends Scene {
 }
 
 export class Menu {
-    private menuContainer: ButtonContainer;
+    private menuContainer?: ButtonContainer;
     private contentArea: GameObjects.Container;
     private isMobile: boolean = false;
     private width: number = 0;
@@ -74,6 +74,7 @@ export class Menu {
         scene.load.image('menu_info', 'assets/Mobile/Menu/Info.png');
         scene.load.image('menu_history', 'assets/Mobile/Menu/History.png');
         scene.load.image('menu_settings', 'assets/Mobile/Menu/Settings.png');
+        scene.load.image('menu_close', 'assets/Buttons/ekis.png');
     }
 
     create(scene: GameScene){
@@ -137,6 +138,7 @@ export class Menu {
                 case 'info': return 'Rules';
                 case 'history': return 'History';
                 case 'settings': return 'Settings';
+                case 'close': return 'X';
                 default: return '';
             }
         };
@@ -144,11 +146,13 @@ export class Menu {
         const normalTabCount = baseIcons.length;
         const totalTabUnits = normalTabCount + smallTabScale;
         const normalTabWidth = panelWidth / totalTabUnits;
-        const smallTabWidth = normalTabWidth * smallTabScale;
+        // Calculate close width to cover any rounding remainder to the panel edge
+        const closeWidth = panelWidth - normalTabWidth * normalTabCount;
 
-        const tabConfigs = [
+        // Original spacing: no inter-tab gaps; close tab is smaller on the right
+        const tabConfigs: { text: string; width: number; x: number; icon: string }[] = [
             ...baseIcons.map((icon, i) => ({ text: getLabel(icon), width: normalTabWidth, x: normalTabWidth * i, icon })),
-            { text: 'X', width: smallTabWidth, x: normalTabWidth * normalTabCount, icon: 'close' }
+            { text: getLabel('close'), width: closeWidth, x: normalTabWidth * normalTabCount, icon: 'close' }
         ];
 
         const tabContainers: ButtonContainer[] = [];
@@ -156,9 +160,11 @@ export class Menu {
         tabConfigs.forEach((tabConfig, index) => {
             const tabContainer = scene.add.container(tabConfig.x, 0) as ButtonContainer;
             
-            // Tab background - black for all tabs initially
+            // Tab background
             const tabBg = scene.add.graphics();
-            tabBg.fillStyle(0x000000, 1);
+            const isClose = tabConfig.icon === 'close';
+
+            tabBg.fillStyle(isClose ? 0x1F1F1F : 0x000000, 1); // Close has dark gray bg
             tabBg.fillRect(0, 0, tabConfig.width, tabHeight);
             tabContainer.add(tabBg);
 
@@ -169,30 +175,40 @@ export class Menu {
             activeIndicator.setVisible(index === 0);
             tabContainer.add(activeIndicator);
 
-            // Tab icon (if not close button)
-            if (index < normalTabCount) {
-                let iconKey = '';
-                switch (tabConfig.icon) {
-                    case 'info':
-                        iconKey = 'menu_info';
-                        break;
-                    case 'history':
-                        iconKey = 'menu_history';
-                        break;
-                    case 'settings':
-                        iconKey = 'menu_settings';
-                        break;
-                }
+            // Tab icon for all (including close)
+            let iconKey = '';
+            switch (tabConfig.icon) {
+                case 'info':
+                    iconKey = 'menu_info';
+                    break;
+                case 'history':
+                    iconKey = 'menu_history';
+                    break;
+                case 'settings':
+                    iconKey = 'menu_settings';
+                    break;
+                case 'close':
+                    iconKey = 'menu_close';
+                    break;
+            }
 
-                if (iconKey) {
-                    const icon = scene.add.image(15, tabHeight / 2, iconKey) as ButtonImage;
-                    icon.setOrigin(0, 0.5);
-                    // Scale to a consistent height
-                    const targetHeight = this.isMobile ? 18 : 22;
-                    const scale = targetHeight / icon.height;
-                    icon.setScale(scale);
-                    tabContainer.add(icon);
+            if (iconKey) {
+                const icon = scene.add.image(0, tabHeight / 2, iconKey) as ButtonImage;
+                icon.setOrigin(0, 0.5);
+                // Scale to a consistent height
+                const targetHeight = this.isMobile ? 18 : 22;
+                const scale = targetHeight / icon.height;
+                icon.setScale(scale);
+                if (tabConfig.icon === 'close') {
+                    // Center the close icon on its dark background
+                    icon.setPosition(tabConfig.width / 3, tabHeight / 2);
+                    icon.clearTint();
+                } else {
+                    // Left align icon with padding and tint green
+                    icon.setPosition(12, tabHeight / 2);
+                    icon.setTint(0x379557);
                 }
+                tabContainer.add(icon);
             }
 
             // Tab text
@@ -205,6 +221,9 @@ export class Menu {
                 fontFamily: 'Poppins',
                 align: textAlign
             }) as ButtonText;
+            if(tabConfig.icon === 'close'){
+                text.setVisible(false);
+            }
             text.setOrigin(index < normalTabCount ? 0 : 0.5, 0.5);
             tabContainer.add(text);
 
@@ -322,7 +341,7 @@ export class Menu {
                 activeIndicator.setVisible(true);
             } else {
                 // Inactive tab: black background, no underline
-                tabBg.fillStyle(0x000000, 1);
+                tabBg.fillStyle(tabConfig.icon === 'close' ? 0x1F1F1F : 0x000000);
                 tabBg.fillRect(0, 0, tabConfig.width, 61);
                 activeIndicator.setVisible(false);
             }
@@ -379,29 +398,94 @@ export class Menu {
         const musicSliderY = startY + 100;
         const sfxSliderY = startY + 200;
 
-        // Music section
-        const musicIcon = scene.add.image(startX, startY + 80, 'volume') as ButtonImage;
-        musicIcon.setScale(0.5 * scaleFactor);
-        contentArea.add(musicIcon);
-
-        const musicLabel = scene.add.text(startX + 40, startY + 70, 'Background Music', {
+        // Music section (no icon)
+        const musicLabel = scene.add.text(startX + 0, startY + 70, 'Background Music', {
             fontSize: '18px',
             color: '#FFFFFF',
             fontFamily: 'Poppins'
         }) as ButtonText;
         contentArea.add(musicLabel);
 
-        // SFX section
-        const sfxIcon = scene.add.image(startX, startY + 180, 'volume') as ButtonImage;
-        sfxIcon.setScale(0.5 * scaleFactor);
-        contentArea.add(sfxIcon);
-
-        const sfxLabel = scene.add.text(startX + 40, startY + 170, 'Sound FX', {
+        // SFX section (no icon)
+        const sfxLabel = scene.add.text(startX + 0, startY + 170, 'Sound FX', {
             fontSize: '18px',
             color: '#FFFFFF',
             fontFamily: 'Poppins'
         }) as ButtonText;
         contentArea.add(sfxLabel);
+
+        // Toggle switches (right side)
+        const toggleWidth = 64;
+        const toggleHeight = 36;
+        const toggleRadius = 18;
+        const toggleX = sliderStartX + widthSlider * scaleFactor + 120;
+
+        const drawToggle = (bg: Phaser.GameObjects.Graphics, circle: Phaser.GameObjects.Graphics, x: number, yCenter: number, on: boolean) => {
+            const y = yCenter - toggleHeight / 2;
+            bg.clear();
+            circle.clear();
+            if (on) {
+                // ON: green track; white knob on RIGHT
+                bg.fillStyle(0x379557, 1);
+                bg.lineStyle(3, 0x2F6D49, 1);
+                bg.strokeRoundedRect(x, y, toggleWidth, toggleHeight, toggleRadius);
+                bg.fillRoundedRect(x, y, toggleWidth, toggleHeight, toggleRadius);
+                circle.fillStyle(0xFFFFFF, 1);
+                circle.fillCircle(x + toggleWidth - toggleRadius, y + toggleHeight / 2, toggleRadius - 4);
+            } else {
+                // OFF: dark gray track; white knob on LEFT
+                bg.fillStyle(0x1F2937, 1);
+                bg.lineStyle(3, 0x9CA3AF, 1);
+                bg.strokeRoundedRect(x, y, toggleWidth, toggleHeight, toggleRadius);
+                bg.fillRoundedRect(x, y, toggleWidth, toggleHeight, toggleRadius);
+                circle.fillStyle(0xFFFFFF, 1);
+                circle.fillCircle(x + toggleRadius, y + toggleHeight / 2, toggleRadius - 4);
+            }
+        };
+
+        // Music toggle
+        const musicToggleBg = scene.add.graphics();
+        const musicToggleCircle = scene.add.graphics();
+        contentArea.add(musicToggleBg);
+        contentArea.add(musicToggleCircle);
+        let musicOn = scene.audioManager.getMusicVolume() > 0;
+        if (!musicOn) {
+            // Default should be ON
+            musicOn = true;
+            scene.audioManager.setMusicVolume(1);
+        }
+        drawToggle(musicToggleBg, musicToggleCircle, toggleX, startY + 70, musicOn);
+        const musicToggleArea = scene.add.zone(toggleX, startY + 70 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
+        musicToggleArea.setInteractive();
+        musicToggleArea.on('pointerdown', () => {
+            musicOn = !musicOn;
+            scene.audioManager.setMusicVolume(musicOn ? 1 : 0);
+            drawToggle(musicToggleBg, musicToggleCircle, toggleX, startY + 70, musicOn);
+            updateSliders();
+        });
+        contentArea.add(musicToggleArea);
+
+        // SFX toggle
+        const sfxToggleBg = scene.add.graphics();
+        const sfxToggleCircle = scene.add.graphics();
+        contentArea.add(sfxToggleBg);
+        contentArea.add(sfxToggleCircle);
+        let sfxOn = scene.audioManager.getSFXVolume() > 0;
+        if (!sfxOn) {
+            // Default should be ON
+            sfxOn = true;
+            scene.audioManager.setSFXVolume(1);
+        }
+        drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 170, sfxOn);
+        const sfxToggleArea = scene.add.zone(toggleX, startY + 170 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
+        sfxToggleArea.setInteractive();
+        sfxToggleArea.on('pointerdown', () => {
+            sfxOn = !sfxOn;
+            scene.audioManager.setSFXVolume(sfxOn ? 1 : 0);
+            drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 170, sfxOn);
+            updateSliders();
+        });
+        contentArea.add(sfxToggleArea);
 
                 // Music slider background
         const musicSliderBg = scene.add.graphics();
@@ -437,39 +521,19 @@ export class Menu {
         }) as ButtonText;
         contentArea.add(musicValue);
 
-        // SFX slider
+        // SFX slider (hidden for now)
         const sfxSliderBg = scene.add.graphics();
-        sfxSliderBg.fillStyle(0x379557, 1);
-        sfxSliderBg.fillRoundedRect(sliderStartX, sfxSliderY, widthSlider * scaleFactor, 8 * scaleFactor, 4 * scaleFactor);
-        
         const sfxSliderBg2 = scene.add.graphics();
-        sfxSliderBg2.fillStyle(0x333333, 1);
-        sfxSliderBg2.lineStyle(1, 0x666666);
-        sfxSliderBg2.fillRoundedRect(sliderStartX, sfxSliderY, widthSlider * scaleFactor, 8 * scaleFactor, 4 * scaleFactor);
-        sfxSliderBg2.strokeRoundedRect(sliderStartX, sfxSliderY, widthSlider * scaleFactor, 8 * scaleFactor, 4 * scaleFactor);
-        
-        contentArea.add(sfxSliderBg2);
-        contentArea.add(sfxSliderBg);
-
         const sfxSlider = scene.add.graphics();
-        sfxSlider.fillStyle(0xffffff, 1);
-        // Draw knob at local origin and position the graphics instead of drawing at world coords
-        sfxSlider.fillCircle(0, 0, 12 * scaleFactor);
-        sfxSlider.setPosition(sliderStartX + 0.75 * widthSlider * scaleFactor, sfxSliderY + 4);
-        // Enlarge interactive hit area and keep it local to the graphics
-        sfxSlider.setInteractive(
-            new Geom.Circle(0, 0, 22 * scaleFactor),
-            Geom.Circle.Contains
-        );
-        contentArea.add(sfxSlider);
-
-        // SFX value text
         const sfxValue = scene.add.text(sliderStartX, sfxSliderY + 15, '75%', {
             fontSize: '16px',
             color: '#FFFFFF',
             fontFamily: 'Poppins'
         }) as ButtonText;
-        contentArea.add(sfxValue);
+        sfxSliderBg.setVisible(false);
+        sfxSliderBg2.setVisible(false);
+        sfxSlider.setVisible(false);
+        sfxValue.setVisible(false);
 
         // Helper to update slider positions and values
         const updateSliders = (musicX: number | null = null, sfxX: number | null = null) => {
@@ -495,11 +559,10 @@ export class Menu {
             musicSliderBg.fillRoundedRect(sliderStartX, musicSliderY, sliderWidth * musicVol, 8 * scaleFactor, 4 * scaleFactor);
             musicValue.setText(Math.round(musicVol * 100) + '%');
             
-            // Update SFX slider
+            // Update SFX slider (kept hidden)
+            const sfxSliderX = sliderStartX + (sfxVol * sliderWidth);
             sfxSlider.clear();
             sfxSlider.fillStyle(0xffffff, 1);
-            const sfxSliderX = sliderStartX + (sfxVol * sliderWidth);
-            // Keep drawing local and move the graphics to the new position
             sfxSlider.fillCircle(0, 0, 12 * scaleFactor);
             sfxSlider.setPosition(sfxSliderX, sfxSliderY + 4);
             sfxSliderBg.clear();
@@ -516,38 +579,13 @@ export class Menu {
                 new Geom.Circle(0, 0, 22 * scaleFactor),  
                 Geom.Circle.Contains
             );
-            sfxSlider.setInteractive(
-                new Geom.Circle(0, 0, 22 * scaleFactor),
-                Geom.Circle.Contains
-            );
+            // Keep SFX interactions disabled while hidden
+            sfxSlider.disableInteractive();
         };
 
         // Initial slider setup
         updateSliders();
-        
-                musicIcon.setInteractive();
-        musicIcon.on('pointerdown', () => {
-            if(scene.audioManager.getMusicVolume() === 0) {
-                scene.audioManager.setMusicVolume(1);
-                musicIcon.setTint(0xFFFFFF);
-            } else {
-                scene.audioManager.setMusicVolume(0);
-                musicIcon.setTint(0xFF0000);
-            }
-            updateSliders();
-        });
 
-        sfxIcon.setInteractive();
-        sfxIcon.on('pointerdown', () => {
-            if(scene.audioManager.getSFXVolume() === 0) {
-                scene.audioManager.setSFXVolume(1);
-                sfxIcon.setTint(0xFFFFFF);
-            } else {
-                scene.audioManager.setSFXVolume(0);
-                sfxIcon.setTint(0xFF0000);
-            }
-            updateSliders();
-        });
 
         // Make sliders draggable
         this.isDraggingMusic = false;
@@ -594,12 +632,8 @@ export class Menu {
         const sfxSliderTrack = scene.add.graphics();
         sfxSliderTrack.setPosition(sliderStartX, sfxSliderY);
         sfxSliderTrack.fillStyle(0x000000, 0); // Transparent
-        // Draw and set hit area in local coords for reliable input inside a container
-        sfxSliderTrack.fillRect(0, -10, widthSlider * scaleFactor, 28);
-        sfxSliderTrack.setInteractive(
-            new Geom.Rectangle(0, -10, widthSlider * scaleFactor, 28),
-            Geom.Rectangle.Contains
-        );
+        // Keep SFX track hidden and non-interactive for now
+        sfxSliderTrack.setVisible(false);
         contentArea.add(sfxSliderTrack);
 
         // Music slider track click handler
@@ -613,14 +647,7 @@ export class Menu {
         });
 
         // SFX slider track click handler
-        sfxSliderTrack.on('pointerdown', (pointer: Phaser.Input.Pointer, localX: number) => {
-            const sliderWidth = widthSlider * scaleFactor;
-            localX = Math.max(0, Math.min(sliderWidth, localX));
-            const newVolume = localX / sliderWidth;
-            scene.audioManager.setSFXVolume(newVolume);
-            this.isDraggingSFX = true; // allow click-and-drag on the track
-            updateSliders();
-        });
+        // SFX track interaction disabled while hidden
 
         // Music slider handle interaction
         musicSlider.on('pointerdown', () => {
@@ -640,14 +667,18 @@ export class Menu {
         else{
             this.settingsOnly = true;
         }
-        this.createMenu(scene);
+        // Ensure only one instance exists by destroying any previous menu
+        if (this.menuContainer) {
+            this.destroyMenu(scene);
+        }
+        const container = this.createMenu(scene);
 
-        this.menuContainer.setVisible(true);
-        this.menuContainer.setAlpha(0);
+        container.setVisible(true);
+        container.setAlpha(0);
         this.isVisible = true;
         
         scene.tweens.add({
-            targets: this.menuContainer,
+            targets: container,
             alpha: 1,
             duration: 300,
             ease: 'Power2'
@@ -678,6 +709,17 @@ export class Menu {
         // Reset dragging states
         this.isDraggingMusic = false;
         this.isDraggingSFX = false;
+    }
+
+    private destroyMenu(scene: GameScene): void {
+        // Hide and cleanup listeners first
+        this.hideMenu(scene);
+        // Destroy existing container to free resources
+        if (this.menuContainer) {
+            this.menuContainer.destroy(true);
+            this.menuContainer = undefined;
+        }
+        this.panel = undefined as any;
     }
 
 
