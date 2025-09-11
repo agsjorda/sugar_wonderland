@@ -894,8 +894,8 @@ export class Buttons {
         const bg = scene.add.graphics();
         bg.fillStyle(0x000000, 0.8);
         bg.lineStyle(0, 0x66D449, 1);
-        bg.strokeRoundedRect(0, 0, popupWidth, popupHeight * 2, 16);
-        bg.fillRoundedRect(0, 0, popupWidth, popupHeight * 2, 16);
+        bg.strokeRoundedRect(0, 0, popupWidth, this.isMobile ? popupHeight * 2 : popupHeight, 16);
+        bg.fillRoundedRect(0, 0, popupWidth, this.isMobile ? popupHeight * 2 : popupHeight, 16);
         popup.add(bg);
         
         // Add blur effect if available
@@ -1928,9 +1928,9 @@ export class Buttons {
         // Create bet background
         const betBg = scene.add.graphics();
         betBg.fillStyle(0x333333, 0.95);
-        betBg.fillRoundedRect(0, 0, 403 + padding * 1.5, 645 + padding * 10, 16);
+        betBg.fillRoundedRect(0, 0, 403 + padding * 1.5, this.isMobile ? 645 + padding * 10 : 645 + padding * 2, 16);
         betBg.lineStyle(0, 0x66D449);
-        betBg.strokeRoundedRect(0, 0, 403 + padding * 1.5, 645 + padding * 10, 16);
+        betBg.strokeRoundedRect(0, 0, 403 + padding * 1.5, this.isMobile ? 645 + padding * 10 : 645 + padding * 2, 16);
         betContainer.add(betBg);
 
         // Title
