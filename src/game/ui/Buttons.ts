@@ -9,6 +9,7 @@ import { Menu } from './Menu';
 import { BuyFeaturePopup } from '../scenes/components/BuyFeaturePopup';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import chalk from 'chalk';
+import { SystemSettingsPopup } from '../scenes/components/SystemSettingsPopup';
 // Custom button interfaces with proper type safety
 interface ButtonBase {
     isButton: boolean;
@@ -162,6 +163,8 @@ export class Buttons {
         menu.preload(scene);
         const buyFeaturePopup = new BuyFeaturePopup();
         buyFeaturePopup.preload(scene);
+        const systemSettingsPreloader = new SystemSettingsPopup();
+        systemSettingsPreloader.preload(scene as any);
     }
 
     create(scene: GameScene): void {
@@ -334,7 +337,7 @@ export class Buttons {
             }
             else {
                 this.remainingFsLabel.setText(`Spins Left:`);
-                this.remainingFsLabel_Count.setText(`${count}`);
+                this.remainingFsLabel_Count.setText(`${count - 1}`);
             }
             this.remainingFsLabel.setVisible(shouldShow);
             this.remainingFsLabel_Count.setVisible(shouldShow);
@@ -345,7 +348,7 @@ export class Buttons {
                     this.hideBottomControlsForBonus(scene, shouldShow);
 
                     this.remainingFsLabel.setText(`Remaining Free Spins:`);
-                    this.remainingFsLabel_Count.setText(`${count}`);
+                    this.remainingFsLabel_Count.setText(`${count - 1}`);
                 
             } else {
                 // On desktop, keep controls visible and show/hide spins using the spin-button HUD like autoplay
@@ -374,7 +377,7 @@ export class Buttons {
         const count = scene.gameData.freeSpins ?? 0;
         if(this.isMobile){
             this.remainingFsLabel.setText(`Remaining Free Spins:`);
-            this.remainingFsLabel_Count.setText(`${count}`);
+            this.remainingFsLabel_Count.setText(`${count - 1}`);
         }
         else{
             this.remainingFsLabel.setText(`Spins Left:`);
@@ -891,8 +894,8 @@ export class Buttons {
         const bg = scene.add.graphics();
         bg.fillStyle(0x000000, 0.8);
         bg.lineStyle(0, 0x66D449, 1);
-        bg.strokeRoundedRect(0, 0, popupWidth, popupHeight, 16);
-        bg.fillRoundedRect(0, 0, popupWidth, popupHeight, 16);
+        bg.strokeRoundedRect(0, 0, popupWidth, popupHeight * 2, 16);
+        bg.fillRoundedRect(0, 0, popupWidth, popupHeight * 2, 16);
         popup.add(bg);
         
         // Add blur effect if available
@@ -1925,9 +1928,9 @@ export class Buttons {
         // Create bet background
         const betBg = scene.add.graphics();
         betBg.fillStyle(0x333333, 0.95);
-        betBg.fillRoundedRect(0, 0, 403 + padding * 1.5, 645 + padding * 2, 16);
+        betBg.fillRoundedRect(0, 0, 403 + padding * 1.5, 645 + padding * 10, 16);
         betBg.lineStyle(0, 0x66D449);
-        betBg.strokeRoundedRect(0, 0, 403 + padding * 1.5, 645 + padding * 2, 16);
+        betBg.strokeRoundedRect(0, 0, 403 + padding * 1.5, 645 + padding * 10, 16);
         betContainer.add(betBg);
 
         // Title
@@ -2858,13 +2861,20 @@ export class Buttons {
             else{
                 this.menu = new Menu();
             }
-            this.menu.create(scene);
         }
-        // Toggle menu on settings button click
-        container.on('pointerdown', () => {
-            scene.audioManager.UtilityButtonSFX.play();
-                this.menu.toggleMenu(scene);
-        });
+        // Open menu on settings button click (destroy old, create new inside Menu)
+        container.on('pointerdown', () => { scene.audioManager.UtilityButtonSFX.play(); if (this.isMobile) { this.menu.toggleMenu(scene); } else { // Ensure a single instance: destroy previous if exists
+            scene.children.list.forEach((item: any) => {
+                if (item && item.name === 'systemSettingsContainer') {
+                    item.destroy(true);
+                }
+            });
+            const popup = new SystemSettingsPopup();
+            popup.create(scene as any);
+            // mark for future clean-up
+            (popup as any).container?.setName('systemSettingsContainer');
+            popup.show(scene as any);
+        } });
     }
 
    
