@@ -64,9 +64,9 @@ export class BuyFeaturePopup {
     create(scene: GameScene): void {
         // Create the popup container
         const popupWidth = this.isMobile ? scene.scale.width : 573;
-        const popupHeight = this.isMobile ? scene.scale.height * 0.85 : 369;
+        const popupHeight = this.isMobile ? scene.scale.height * 0.7 : 369;
         const popupX = this.isMobile ? scene.scale.width / 2 - popupWidth / 2 : scene.scale.width / 2 - popupWidth / 2;
-        const popupY = this.isMobile ? scene.scale.height - popupHeight : scene.scale.height / 2 - popupHeight / 2;
+        const popupY = this.isMobile ? scene.scale.height - popupHeight  : scene.scale.height / 2 - popupHeight / 2;
         this.popupY = popupY;
         // console.log(popupX, popupY, popupWidth, popupHeight);
 
