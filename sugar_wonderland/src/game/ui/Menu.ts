@@ -234,7 +234,7 @@ export class Menu {
             ).isButton = true;
 
             // Tab click handler
-            tabContainer.on('pointerdown', () => {
+            tabContainer.on('pointerup', () => {
                 scene.audioManager.UtilityButtonSFX.play();
                 this.switchTab(scene, tabContainers, index, tabConfigs);
             });
@@ -414,11 +414,22 @@ export class Menu {
         }) as ButtonText;
         contentArea.add(sfxLabel);
 
+        // Skip Intro section (UI only)
+        const skipLabelY = startY + 270;
+        const skipLabel = scene.add.text(startX + 0, skipLabelY, 'Skip Intro', {
+            fontSize: '18px',
+            color: '#FFFFFF',
+            fontFamily: 'Poppins'
+        }) as ButtonText;
+        contentArea.add(skipLabel);
+
         // Toggle switches (right side)
         const toggleWidth = 64;
         const toggleHeight = 36;
         const toggleRadius = 18;
-        const toggleX = sliderStartX + widthSlider * scaleFactor + 120;
+        // Place toggles within the visible content area width (panel width - 40 padding)
+        const contentAreaWidth = scene.scale.width - 40;
+        const toggleX = Math.max(sliderStartX + 200, contentAreaWidth - toggleWidth - 20);
 
         const drawToggle = (bg: Phaser.GameObjects.Graphics, circle: Phaser.GameObjects.Graphics, x: number, yCenter: number, on: boolean) => {
             const y = yCenter - toggleHeight / 2;
@@ -448,6 +459,8 @@ export class Menu {
         const musicToggleCircle = scene.add.graphics();
         contentArea.add(musicToggleBg);
         contentArea.add(musicToggleCircle);
+        musicToggleBg.setDepth(10);
+        musicToggleCircle.setDepth(11);
         let musicOn = scene.audioManager.getMusicVolume() > 0;
         if (!musicOn) {
             // Default should be ON
@@ -464,12 +477,15 @@ export class Menu {
             updateSliders();
         });
         contentArea.add(musicToggleArea);
+        musicToggleArea.setDepth(12);
 
         // SFX toggle
         const sfxToggleBg = scene.add.graphics();
         const sfxToggleCircle = scene.add.graphics();
         contentArea.add(sfxToggleBg);
         contentArea.add(sfxToggleCircle);
+        sfxToggleBg.setDepth(10);
+        sfxToggleCircle.setDepth(11);
         let sfxOn = scene.audioManager.getSFXVolume() > 0;
         if (!sfxOn) {
             // Default should be ON
@@ -486,6 +502,25 @@ export class Menu {
             updateSliders();
         });
         contentArea.add(sfxToggleArea);
+        sfxToggleArea.setDepth(12);
+
+        // Skip Intro toggle (no functionality yet)
+        const skipToggleBg = scene.add.graphics();
+        const skipToggleCircle = scene.add.graphics();
+        contentArea.add(skipToggleBg);
+        contentArea.add(skipToggleCircle);
+        skipToggleBg.setDepth(10);
+        skipToggleCircle.setDepth(11);
+        let skipOn = false; // UI-only state
+        drawToggle(skipToggleBg, skipToggleCircle, toggleX, skipLabelY + 2, skipOn);
+        const skipToggleArea = scene.add.zone(toggleX, skipLabelY + 2 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
+        skipToggleArea.setInteractive();
+        skipToggleArea.on('pointerdown', () => {
+            skipOn = !skipOn;
+            drawToggle(skipToggleBg, skipToggleCircle, toggleX, skipLabelY + 2, skipOn);
+        });
+        contentArea.add(skipToggleArea);
+        skipToggleArea.setDepth(12);
 
                 // Music slider background
         const musicSliderBg = scene.add.graphics();
@@ -558,6 +593,20 @@ export class Menu {
             musicSliderBg.fillStyle(0x379557, 1);
             musicSliderBg.fillRoundedRect(sliderStartX, musicSliderY, sliderWidth * musicVol, 8 * scaleFactor, 4 * scaleFactor);
             musicValue.setText(Math.round(musicVol * 100) + '%');
+
+            // Sync music toggle state with slider value
+            // If slider reaches 0%, force toggle OFF; if >0%, ensure toggle ON
+            if (musicVol === 0) {
+                if (musicOn) {
+                    musicOn = false;
+                    drawToggle(musicToggleBg, musicToggleCircle, toggleX, startY + 70, musicOn);
+                }
+            } else {
+                if (!musicOn) {
+                    musicOn = true;
+                    drawToggle(musicToggleBg, musicToggleCircle, toggleX, startY + 70, musicOn);
+                }
+            }
             
             // Update SFX slider (kept hidden)
             const sfxSliderX = sliderStartX + (sfxVol * sliderWidth);
