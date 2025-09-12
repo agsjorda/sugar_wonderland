@@ -1704,11 +1704,11 @@ export class Buttons {
                     }
 
                     if(totalWinCurrentTotal >= scene.gameData.totalBonusWin){
-                        text1.setText('TOTAL WIN');
+                        text1.setText('WIN');
                         text2.setText(`${scene.gameData.currency} ${formatMoney(scene.gameData.totalBonusWin)}`);
                     }
                     else{
-                        text1.setText('TOTAL WIN');
+                        text1.setText('WIN');
                         text2.setText(`${scene.gameData.currency} ${formatMoney(totalWinCurrentTotal)}`);
                     }
                     return;
@@ -1716,6 +1716,7 @@ export class Buttons {
                 const increment = totalWinQueue.shift() as number;
                 totalWinCurrentTotal += increment || 0;
                 
+                text1.setText('TOTAL WIN');
                 text2.setText(`${scene.gameData.currency} ${formatMoney(totalWinCurrentTotal)}`);
                 scene.time.delayedCall(reelSpeed, step);
             };
@@ -1728,9 +1729,9 @@ export class Buttons {
                 totalWinCurrentTotal = 0;
                 totalWinQueue = [];
                 isProcessingTotalWinQueue = false;
-                multiplierApplied = false;
-                text2.setText(`${scene.gameData.currency} ${formatMoney(0)}`);
-                text1.setText('TOTAL WIN');
+                multiplierApplied = false;  
+                text2.setText('');
+                text1.setText('');
             }
         });
 
@@ -2749,11 +2750,11 @@ export class Buttons {
                     }
 
                     if(marqueeCurrentTotal >= scene.gameData.totalBonusWin){
-                        youWonLabel.setText('TOTAL WIN');
+                        youWonLabel.setText('WIN');
                         youWonAmount.setText(`${scene.gameData.currency} ${scene.gameData.totalBonusWin.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
                     }
                     else{
-                        youWonLabel.setText('TOTAL WIN');
+                        youWonLabel.setText('WIN');
                         youWonAmount.setText(`${scene.gameData.currency} ${marqueeCurrentTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
                     }
                     return;
@@ -2761,6 +2762,7 @@ export class Buttons {
                 const increment = marqueeQueue.shift() as number;
                 marqueeCurrentTotal += increment || 0;
                 
+                youWonLabel.setText('TOTAL WIN');
                 youWonAmount.setText(`${scene.gameData.currency} ${marqueeCurrentTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
                 scene.time.delayedCall(reelSpeed, step);
             };
