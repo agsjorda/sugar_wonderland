@@ -729,7 +729,7 @@ export class Menu {
             const content = scene.add.text(this.padding / 2, this.yPosition, _text, this.titleStyle as Phaser.Types.GameObjects.Text.TextStyle);
             this.contentContainer.add(content);
             if (_text === 'Bonus Trigger') {
-                content.setPosition(content.x + this.padding * 2, content.y);
+                content.setPosition(0, content.y);
             }
             this.yPosition += content.height + this.padding;
         } else if (_type === 'text') {
@@ -852,20 +852,20 @@ export class Menu {
                 this.padding, 
                 0, 
                 this.contentWidth + this.padding * 3, 
-                scaledSymbolSize * 8.5
+                scaledSymbolSize * 8.75 
             );
             this.contentContainer.add(tumbleWinContainer);
             this.createHowToPlayEntry(scene, 20, 170, tumbleWinContainer, 'tumbleGame', 
                 'After each spin, winning symbols are paid and then removed from the screen. Remaining symbols drop down, and new ones fall from above to fill the empty spaces.\n\n' +
                 'Tumbles continue as long as new winning combinations appear — there\'s no limit to the number of tumbles per spin.\n\n' +
                 'All wins are credited to the player\'s balance after all tumbles from a base spin are completed.',
-            true, this.contentWidth + this.padding * 3);
+            true, this.contentWidth - this.padding * 2);
     
     
             const tumbleSymbolImage = scene.add.image(0, 0, 'tumbleSymbol');
             tumbleSymbolImage.setScale(0.5);
             tumbleSymbolImage.setOrigin(0.5, 0.5);
-            tumbleSymbolImage.setPosition(70, 85);
+            tumbleSymbolImage.setPosition(90, 65);
             tumbleWinContainer.add(tumbleSymbolImage);
             
     
@@ -875,23 +875,24 @@ export class Menu {
             tumbleWinImage.setPosition(tumbleSymbolImage.x - tumbleSymbolImage.displayWidth/2 + this.padding * 2, tumbleSymbolImage.y - tumbleWinImage.height/3);
             tumbleWinContainer.add(tumbleWinImage);
             
-            this.yPosition -= scaledSymbolSize * 9;
+            this.yPosition -= scaledSymbolSize * 10;
             this.addContent(scene, 'Free Spins Rules', 'title');
-    
-            this.yPosition += scaledSymbolSize  * 3;
+            this.yPosition += scaledSymbolSize  * 3.5;
             this.addContent(scene, 'Bonus Trigger', 'title');
-            this.yPosition -= scaledSymbolSize  * 3;
+            this.yPosition -= scaledSymbolSize  * 3.5;
     
             const freeSpinContainer = scene.add.container(-this.padding *1.5, this.yPosition-scaledSymbolSize * 0.5);
             this.yPosition += this.createBorder(scene, freeSpinContainer, 
                 this.padding, 
                 0, 
                 this.contentWidth + this.padding * 3, 
-                scaledSymbolSize * 6.75
+                scaledSymbolSize * 7
                 
             );
             this.contentContainer.add(freeSpinContainer);
             this.contentContainer.sendToBack(freeSpinContainer);
+
+            this.yPosition -= scaledSymbolSize * 0.25;
             
             this.createHowToPlayEntry(scene, 20, 120, freeSpinContainer, 'scatterGame', 
                 'Land 4 or more         SCATTER \nsymbols anywhere on the screen to trigger the free spins feature.\n\n' +
@@ -902,7 +903,7 @@ export class Menu {
             const scatterSymbolImage2 = scene.add.image(0, 0, 'scatterIcon');
             scatterSymbolImage2.setScale(0.25);
             scatterSymbolImage2.setOrigin(0.5, 0.5);
-            scatterSymbolImage2.setPosition(195, 300);
+            scatterSymbolImage2.setPosition(195, 320);
             freeSpinContainer.add(scatterSymbolImage2);
     
             const scatterSymbolImage = scene.add.image(0, 0, 'scatterIcon');
@@ -917,9 +918,10 @@ export class Menu {
             scatterWinImage.setPosition(scatterSymbolImage.x - scatterSymbolImage.displayWidth/2 + this.padding * 2, scatterSymbolImage.y * 3/4 - scatterWinImage.height/ 4);
             freeSpinContainer.add(scatterWinImage);
             
-            this.yPosition -= scaledSymbolSize * 4.5;
-            //this.addDivider(0x379557);
-    
+            this.yPosition -= scaledSymbolSize * 5.75;
+            // this.addDivider(scene, 0x379557);
+            
+
             //this.yPosition += scaledSymbolSize  * 4;
             this.addContent(scene, 'Multiplier', 'title');
             this.yPosition -= scaledSymbolSize  * 3.5;
@@ -936,7 +938,7 @@ export class Menu {
             this.contentContainer.sendToBack(multiplierContainer);
             
     
-            this.createHowToPlayEntry(scene, 20, 150, multiplierContainer, 'multiplierGame', 
+            this.createHowToPlayEntry(scene, 20, 120, multiplierContainer, 'multiplierGame', 
                 '\nThe         Multiplier symbol only appears during the FREE SPINS round and remains on the screen until the tumbling sequence ends.\n\n' +
                 'Each time a         symbol lands, it randomly takes a multiplier value: 2x, 3x, 4x, 5x, 6x, 8x, 10x, 12x, 15x, 20x, 25x, 50x, or even 100x!\n\n' +
                 'Once all tumbles are finished, the total of all           multipliers is added and applied to the total win of the that sequence.\n\n' +
@@ -966,11 +968,11 @@ export class Menu {
             const multiplierIcon = scene.add.image(0, 0, 'multiplierIcon');
             multiplierIcon.setScale(0.25);
             multiplierIcon.setOrigin(0.5, 0.5);
-            multiplierIcon.setPosition(40, 75);
+            multiplierIcon.setPosition(60, 42.5);
             multiplierContainer.add(multiplierIcon);
             this.contentContainer.bringToTop(multiplierIcon);
             
-            this.yPosition -= scaledSymbolSize * 16;
+            this.yPosition -= scaledSymbolSize * 17;
             this.addContent(scene, 'Game Settings', 'title');
     
             const gamesettingsContainer = scene.add.container(-this.padding * 1.5, this.yPosition);
@@ -1033,15 +1035,15 @@ export class Menu {
 
         this.createHeader(scene, commonPadding, this.isMobile ? commonPadding * 66 : commonPadding * 52, howToPlayContainer, 'Display & Stats', '#379557');
 
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 72 : commonPadding * 52, howToPlayContainer, 'howToPlay5', 'Shows your current available credits.', true, this.contentWidth + this.padding * 3);
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 81 : commonPadding * 59, howToPlayContainer, 'howToPlay6', 'Display your total winnings from the current round.', true, this.contentWidth + this.padding * 3);
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 91 : commonPadding * 66, howToPlayContainer, 'howToPlay7', 'Adjust your wager using the - and + buttons.', true, this.contentWidth + this.padding * 3);
+        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 72 : commonPadding * 52, howToPlayContainer, 'howToPlay5', 'Shows your current available credits.', true, this.contentWidth - this.padding * 2);
+        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 82 : commonPadding * 59, howToPlayContainer, 'howToPlay6', 'Display your total winnings from the current round.', true, this.contentWidth - this.padding * 2);
+        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 93 : commonPadding * 66, howToPlayContainer, 'howToPlay7', 'Adjust your wager using the - and + buttons.', true, this.contentWidth - this.padding * 2);
 
-        this.createHeader(scene, commonPadding, this.isMobile ? commonPadding * 98 : commonPadding * 71, howToPlayContainer, 'General Controls', '#379557');
+        this.createHeader(scene, commonPadding, this.isMobile ? commonPadding * 101 : commonPadding * 71, howToPlayContainer, 'General Controls', '#379557');
 
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 104 : commonPadding * 74, howToPlayContainer, this.isMobile ? 'howToPlay8Mobile' : 'howToPlay8', this.isMobile ? '' : 'Toggle game sounds on and off.');  
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 112.5 : commonPadding * 78, howToPlayContainer, this.isMobile ? 'howToPlay9Mobile' : 'howToPlay9', this.isMobile ? '' : 'Access gameplay preferences and system options.');
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 122 : commonPadding * 83, howToPlayContainer, this.isMobile ? 'howToPlay10Mobile' : 'howToPlay10', this.isMobile ? '' : 'View game rules, features, and paytable.');        
+        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 107 : commonPadding * 74, howToPlayContainer, this.isMobile ? 'howToPlay8Mobile' : 'howToPlay8', this.isMobile ? '' : 'Toggle game sounds on and off.');  
+        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 114.5 : commonPadding * 78, howToPlayContainer, this.isMobile ? 'howToPlay9Mobile' : 'howToPlay9', this.isMobile ? '' : 'Access gameplay preferences and system options.');
+        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 124 : commonPadding * 83, howToPlayContainer, this.isMobile ? 'howToPlay10Mobile' : 'howToPlay10', this.isMobile ? '' : 'View game rules, features, and paytable.');        
 
         this.yPosition -= scaledSymbolSize * 15;
     }
@@ -1190,7 +1192,7 @@ export class Menu {
         }
         if(imageElement != null){
             if(image == 'tumbleGame' || image == 'scatterGame' || image == 'multiplierGame'){
-                imageElement.setScale(0.5);
+                imageElement.setScale(0.63);
             }
             imageElement.setOrigin(0, 0.5);
         }
@@ -1310,7 +1312,8 @@ export class Menu {
                                 fontSize: '20px',
                                 color: '#FFFFFF',
                                 fontFamily: 'Poppins', 
-                                align: 'left'
+                                align: 'left',
+                                fontStyle: 'bold'
                             });
                         }
                         else{
@@ -1346,7 +1349,8 @@ export class Menu {
                         const textElement = scene.add.text(cellX + cellWidth + this.padding, cellY + cellHeight/2, text, {
                             fontSize: '20px',
                             color: '#FFFFFF',
-                            fontFamily: 'Poppins'
+                            fontFamily: 'Poppins',
+                            fontStyle: 'bold'
                         });
                         textElement.setOrigin(col == 0 ? 0 : 0.5, 0.5);
                         container.add(textElement);
@@ -1369,6 +1373,10 @@ export class Menu {
                                 fontSize: '20px',
                                 color: '#FFFFFF',
                                 fontFamily: 'Poppins',
+                                padding: {
+                                    left: this.padding,
+                                    right: this.padding
+                                }
                             }
                         );
                         scatterTextCell.setOrigin(0, 0);

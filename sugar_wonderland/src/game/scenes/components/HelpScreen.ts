@@ -101,8 +101,8 @@ export class HelpScreen {
         // Create background with blur effect
         const bg = scene.add.graphics();
         bg.fillStyle(0x000000, 0.8);
-        bg.fillRoundedRect(0, 0, this.viewWidth, screenHeight, 1);
-        bg.strokeRoundedRect(0, 0, this.viewWidth, screenHeight, 1);
+        bg.fillRoundedRect(0, 0, this.viewWidth * 0.975, screenHeight, 1);
+        bg.strokeRoundedRect(0, 0, this.viewWidth * 0.975, screenHeight, 1);
         this.container.add(bg);
 
         // Create scroll view container
@@ -123,12 +123,12 @@ export class HelpScreen {
 
         // Create close button
         const closeButtonContainer = scene.add.container(
-            this.isMobile ? this.viewWidth - padding * 6 : this.viewWidth - padding,  this.isMobile ? padding * 2 : padding);
+            this.isMobile ? this.viewWidth - padding * 6 : this.viewWidth - padding * 1.5,  this.isMobile ? padding * 2 : padding);
         const closeButton = scene.add.image(0, 0, 'greenRectBtn');
         closeButton.setScale(this.isMobile ? 0.125 : 0.25, this.isMobile ? 0.25 : 0.5);
         
         const closeText = scene.add.image(0, 0, 'ekis');
-        closeText.setOrigin(0.5);
+        closeText.setOrigin(0.5, 0.5);
         closeText.setScale(this.isMobile ? 0.5 : 1);
         
         closeButton.setPosition(closeButton.x + closeButton.width/4, closeButton.y);
@@ -137,30 +137,45 @@ export class HelpScreen {
         closeButtonContainer.add(closeButton);
         closeButtonContainer.add(closeText);
 
-        closeButton.setInteractive()
+        // Expand interactive geometry using the container with a larger hit area
+        const clickableWidth = closeButton.displayWidth * (this.isMobile ? 2.2 : 3);
+        const clickableHeight = closeButton.displayHeight * (this.isMobile ? 2.2 : 3);
+        const hitRect = new Phaser.Geom.Rectangle(
+            closeButton.x - clickableWidth / 2,
+            closeButton.y - clickableHeight / 2,
+            clickableWidth,
+            clickableHeight
+        );
+        closeButtonContainer
+            .setInteractive(hitRect, Phaser.Geom.Rectangle.Contains)
             .on('pointerover', () => closeButton.setTint(0x3FFF0D))
             .on('pointerout', () => closeButton.clearTint())
             .on('pointerdown', () => {
-            scene.audioManager.UtilityButtonSFX.play();
-            this.hide(scene);
-            scene.gameData.isHelpScreenVisible = false;
-            Events.emitter.emit(Events.HELP_SCREEN_TOGGLE);
-            }
-        );
+                scene.audioManager.UtilityButtonSFX.play();
+                this.hide(scene);
+                scene.gameData.isHelpScreenVisible = false;
+                Events.emitter.emit(Events.HELP_SCREEN_TOGGLE);
+            });
 
         const closeArea = scene.add.graphics();
-        closeArea.fillStyle(0x111111, 0.8);
-        closeArea.fillRect(padding, -padding, scene.scale.width *  0.33, scene.scale.height);
-        closeButtonContainer.add(closeArea);
-        closeArea.setInteractive();
+        closeArea.fillStyle(0x111111, 0.01);
+        // Right-side overlay area outside of the help panel
+        const rightOverlayX = this.viewWidth;
+        const rightOverlayWidth = Math.max(0, scene.scale.width - this.viewWidth);
+        closeArea.fillRect(0, 0, rightOverlayWidth, scene.scale.height);
+        // Make the overlay explicitly interactive over its drawn rectangle
+        closeArea.setInteractive(new Phaser.Geom.Rectangle(0, 0, rightOverlayWidth, scene.scale.height), Phaser.Geom.Rectangle.Contains);
         closeArea.on('pointerdown', () => {
             scene.audioManager.UtilityButtonSFX.play();
             this.hide(scene);
             scene.gameData.isHelpScreenVisible = false;
             Events.emitter.emit(Events.HELP_SCREEN_TOGGLE);
         });
-
+        
         this.container.add(closeButtonContainer);
+        this.container.add(closeArea);
+        // Position the overlay immediately to the right edge of the help panel
+        closeArea.setPosition(rightOverlayX, 0);
         if(!this.isMobile){
             this.createContent(scene);
         }
@@ -290,14 +305,14 @@ export class HelpScreen {
 
         this.contentContainer.add(scatterContainer);
         this.contentContainer.sendToBack(scatterContainer);
-        this.yPosition += scaledSymbolSize + this.padding * 5;
+        this.yPosition += scaledSymbolSize + this.padding * 4;
 
 
         this.addDivider(scene);
 
         this.addContent(scene, 'Tumble Win', 'title');
 
-        this.yPosition += this.padding;
+        this.yPosition += this.padding * 2;
 
         const tumbleWinContainer = scene.add.container(this.padding, this.yPosition);
 
@@ -311,7 +326,7 @@ export class HelpScreen {
         const tumbleSymbolImage = scene.add.image(0, 0, 'tumbleSymbol');
         tumbleSymbolImage.setScale(1);
         tumbleSymbolImage.setOrigin(0.5, 0.5);
-        tumbleSymbolImage.setPosition(tumbleGameImage.x - tumbleGameImage.displayWidth/2 - this.padding, tumbleSymbolImage.height*3/4 + this.padding);
+        tumbleSymbolImage.setPosition(tumbleGameImage.x - tumbleGameImage.displayWidth/2, tumbleSymbolImage.height * 0.75);
         tumbleWinContainer.add(tumbleSymbolImage);
         
 
@@ -328,7 +343,7 @@ export class HelpScreen {
             'All wins are credited to the player\'s balance after all tumbles from a base spin are completed.',
             {
                 ...this.textStyle,
-                wordWrap: { width: genericTableWidth - this.padding * 6 }
+                wordWrap: { width: genericTableWidth * 1.063773 - this.padding * 2 }
             }
         );
         
@@ -338,7 +353,7 @@ export class HelpScreen {
         this.yPosition += this.createBorder(scene, tumbleWinContainer, 
                 0, 
             0, 
-            genericTableWidth, 
+            genericTableWidth * 1.063773, 
             scaledSymbolSize * 9
         );
         this.contentContainer.add(tumbleWinContainer);
@@ -353,7 +368,7 @@ export class HelpScreen {
 
         const freeSpinContainer = scene.add.container(this.padding, this.yPosition);
 
-        //  game image scatte
+        //  game image scatter
         const scatterGameImage = scene.add.image(0, 0, 'scatterGame');
         scatterGameImage.setScale(1);
         scatterGameImage.setOrigin(0.5, 0.5);
@@ -364,7 +379,7 @@ export class HelpScreen {
         const scatterSymbolImage = scene.add.image(0, 0, 'scatterIcon');
         scatterSymbolImage.setScale(1);
         scatterSymbolImage.setOrigin(0.5, 0.5);
-        scatterSymbolImage.setPosition(scatterGameImage.x - scatterGameImage.displayWidth/2 - this.padding, scatterSymbolImage.height + this.padding);
+        scatterSymbolImage.setPosition(scatterGameImage.x - scatterGameImage.displayWidth/2 - this.padding * 2, scatterSymbolImage.height + this.padding);
         freeSpinContainer.add(scatterSymbolImage);
 
         // scatter 4 pieces
@@ -372,7 +387,7 @@ export class HelpScreen {
         scatterSymbolImage3.setScale(0.65);
         scatterSymbolImage3.setOrigin(0.5, 0.5);
         scatterSymbolImage3.setRotation(0.3);
-        scatterSymbolImage3.setPosition(scatterSymbolImage.x - this.padding * 2.5, scatterSymbolImage.y - this.padding * 2.5);
+        scatterSymbolImage3.setPosition(scatterSymbolImage.x - this.padding * 1.5, scatterSymbolImage.y - this.padding * 2.5);
         freeSpinContainer.add(scatterSymbolImage3);
 
         // scatter 4 pieces
@@ -380,15 +395,15 @@ export class HelpScreen {
         scatterSymbolImage4.setScale(0.7);
         scatterSymbolImage4.setOrigin(0.5, 0.5);    
         scatterSymbolImage4.setRotation(-0.3);
-        scatterSymbolImage4.setPosition(scatterSymbolImage.x - this.padding * 3.5, scatterSymbolImage.y + this.padding * 3.5);
+        scatterSymbolImage4.setPosition(scatterSymbolImage.x - this.padding * 1.5, scatterSymbolImage.y + this.padding * 2.5);
         freeSpinContainer.add(scatterSymbolImage4);
 
         // scatter 4 pieces
         const scatterSymbolImage5 = scene.add.image(0, 0, 'scatterIcon');
-        scatterSymbolImage5.setScale(0.5);
+        scatterSymbolImage5.setScale(0.55);
         scatterSymbolImage5.setOrigin(0.5, 0.5);
         scatterSymbolImage5.setRotation(0.3);
-        scatterSymbolImage5.setPosition(scatterSymbolImage.x + this.padding * 2.5, scatterSymbolImage.y + this.padding * 2.5);
+        scatterSymbolImage5.setPosition(scatterSymbolImage.x + this.padding * 1.5, scatterSymbolImage.y + this.padding * 1.5);
         freeSpinContainer.add(scatterSymbolImage5);
         freeSpinContainer.bringToTop(scatterSymbolImage);
         
@@ -405,8 +420,8 @@ export class HelpScreen {
         const scatterSymbolImage2 = scene.add.image(0, 0, 'scatterIcon');
         scatterSymbolImage2.setScale(0.25);
         scatterSymbolImage2.setOrigin(0.5, 0.5);
-        scatterSymbolImage2.setPosition(scatterGameImage.x - scatterGameImage.displayWidth / 2 - this.padding * 5.5, 
-                scatterSymbolImage.y + scatterSymbolImage.displayHeight + this.padding * 4.25);
+        scatterSymbolImage2.setPosition(scatterGameImage.x - scatterGameImage.displayWidth / 2 - this.padding * 2.5, 
+                scatterSymbolImage.y + scatterSymbolImage.displayHeight + this.padding * 2.75);
         freeSpinContainer.add(scatterSymbolImage2);
         
 
@@ -418,7 +433,7 @@ export class HelpScreen {
             'During the bonus round, hitting 3 or more SCATTER symbols awards 5 extra free spins',
             {
                 ...this.textStyle,
-                wordWrap: { width: genericTableWidth - this.padding * 6 }
+                wordWrap: { width: genericTableWidth * 1.063773 }
             }
         );
         
@@ -429,7 +444,7 @@ export class HelpScreen {
         this.yPosition += this.createBorder(scene, freeSpinContainer, 
             0, 
             0, 
-            genericTableWidth, 
+            genericTableWidth * 1.063773, 
             scaledSymbolSize * 9
         );
         this.contentContainer.add(freeSpinContainer);
@@ -450,7 +465,7 @@ export class HelpScreen {
         multiplierSymbolImage.setScale(0.75);
         multiplierSymbolImage.setOrigin(0.5, 0.5);
         multiplierSymbolImage.setPosition(
-            multiplierGameImage.x - multiplierGameImage.displayWidth/2 - this.padding * 3, 
+            multiplierGameImage.x - multiplierGameImage.displayWidth/2 - this.padding, 
             multiplierSymbolImage.height - this.padding * 2);
         multiplierContainer.add(multiplierSymbolImage);
         
@@ -458,16 +473,14 @@ export class HelpScreen {
         const multiplierText = scene.add.text(
             0, 0,
             'Multiplier\n\n' +
-            'The         Multiplier symbol appears only during the FREE SPINS round and remains on\n' +
-            'the screen until the tumbling sequence ends\n\n' +
-            'Each time a          lands, it randomly takes a multiplie value:\n' +
+            'The         Multiplier symbol appears only during the FREE SPINS round and remains on the screen until the tumbling sequence ends\n\n' +
+            'Each time a          lands, it randomly takes a multiplier value:\n' +
             '2x, 3x, 4x, 5x, 6x, 8x, 10x, 12x, 15x, 20x, 25x, 50x, or even 100x!\n\n' +
-            'Once all tumbles are finished, the total of all        multipliers is added and applied to\n' +
-            'the total win of that sequence\n\n' +
+            'Once all tumbles are finished, the total of all          multipliers are added and applied to the total win of that sequence\n\n' +
             'Special reels are used during the FREE SPINS round',
             {
                 ...this.textStyle,
-                wordWrap: { width: genericTableWidth - this.padding * 6 }
+                wordWrap: { width: genericTableWidth * 1.063773 - this.padding * 1.88}
             }
         );
         
@@ -476,8 +489,8 @@ export class HelpScreen {
         miniBomb1.setScale(0.15);
         miniBomb1.setOrigin(0.5, 0.5);
         miniBomb1.setPosition(
-            multiplierGameImage.x - multiplierGameImage.displayWidth * 3/4 - this.padding * 3.5, 
-            multiplierSymbolImage.height * 1.88);
+            multiplierGameImage.x - multiplierGameImage.displayWidth * 3/4 - this.padding * 2.25, 
+            multiplierSymbolImage.height * 1.95);
         multiplierContainer.add(miniBomb1);
         
         // bomb 2
@@ -485,8 +498,8 @@ export class HelpScreen {
         miniBomb2.setScale(0.15);
         miniBomb2.setOrigin(0.5, 0.5);
         miniBomb2.setPosition(
-            multiplierGameImage.x - multiplierGameImage.displayWidth * 3 / 5 + this.padding / 2 - this.padding * 4.5, 
-            multiplierSymbolImage.height * 7/3 - this.padding * 1.5);
+            multiplierGameImage.x - multiplierGameImage.displayWidth * 3 / 5 + this.padding / 2 - this.padding * 2.5, 
+            multiplierSymbolImage.height * 7/3 + this.padding * 0.1);
         multiplierContainer.add(miniBomb2);
         
         // bomb 3
@@ -494,8 +507,8 @@ export class HelpScreen {
         miniBomb3.setScale(0.15);
         miniBomb3.setOrigin(0.5, 0.5);
         miniBomb3.setPosition(
-            multiplierGameImage.x + multiplierGameImage.displayWidth * 0.06 - this.padding * 8,
-            multiplierSymbolImage.height * 8/3 - this.padding * 1.5);
+            multiplierGameImage.x + multiplierGameImage.displayWidth * 0.06 - this.padding * 2.25,
+            multiplierSymbolImage.height * 8/3 + this.padding * 0.1);
         multiplierContainer.add(miniBomb3);
         
         multiplierText.setPosition(this.padding, multiplierSymbolImage.displayHeight/2 + multiplierGameImage.displayHeight * 3/4 + this.padding);
@@ -505,7 +518,7 @@ export class HelpScreen {
         this.yPosition += this.createBorder(scene, multiplierContainer, 
                 0, 
             0, 
-            genericTableWidth, 
+            genericTableWidth * 1.063773, 
             scaledSymbolSize * 9.5
         );
         this.contentContainer.add(multiplierContainer);
@@ -525,7 +538,7 @@ export class HelpScreen {
             'Symbols can land anywhere on the screen.\n\n',
             {
                 ...this.textStyle,
-                wordWrap: { width: genericTableWidth - this.padding * 6 }
+                wordWrap: { width: genericTableWidth * 1.063773 }
             }
         );
         
@@ -558,7 +571,7 @@ export class HelpScreen {
             'Free spins rewards are granted after the round ends.',
             {
                 ...this.textStyle,
-                wordWrap: { width: genericTableWidth - this.padding * 6 }
+                wordWrap: { width: genericTableWidth * 1.063773 }
             }
         );
         
@@ -569,7 +582,7 @@ export class HelpScreen {
         this.yPosition += this.createBorder(scene, paylinesContainer, 
                     0, 
             0, 
-            genericTableWidth, 
+            genericTableWidth * 1.063773, 
             scaledSymbolSize * 9.5
         );
         this.contentContainer.add(paylinesContainer);
@@ -593,7 +606,7 @@ export class HelpScreen {
         this.yPosition += this.createBorder(scene, howToPlayContainer, 
             this.padding, 
             0, 
-            genericTableWidth, 
+            genericTableWidth * 1.063773, 
             scaledSymbolSize * 25
         );
         this.contentContainer.add(howToPlayContainer);
@@ -811,6 +824,7 @@ export class HelpScreen {
                                 color: '#FFFFFF',
                                 fontFamily: 'Poppins', 
                                 align: 'left',
+                                fontStyle: 'bold'
                             });
                         }
                         else{
@@ -846,7 +860,8 @@ export class HelpScreen {
                         const textElement = scene.add.text(cellX + cellWidth + this.padding, cellY + cellHeight/2, text, {
                             fontSize: '24px',
                             color: '#FFFFFF',
-                            fontFamily: 'Poppins'
+                            fontFamily: 'Poppins',
+                            fontStyle: 'bold'
                         });
                         textElement.setOrigin(col == 0 ? 0 : 0.5, 0.5);
                         container.add(textElement);
@@ -892,12 +907,13 @@ export class HelpScreen {
         let dragVelocity = 0;
         const minVelocity = 0.1;
 
-        // Make the scroll view interactive for the full width and height
+        // Make the scroll view interactive only over the help panel area
+        const padding = this.isMobile ? 16 : 64;
         this.scrollView.setInteractive(new Phaser.Geom.Rectangle(
-            -scene.scale.width * 0.333,
             0,
-            scene.scale.width,
-            scene.scale.height
+            0,
+            Math.max(0, this.viewWidth - padding * 2),
+            Math.max(0, scene.scale.height - padding * 2)
         ), Phaser.Geom.Rectangle.Contains);
 
         this.scrollView.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
