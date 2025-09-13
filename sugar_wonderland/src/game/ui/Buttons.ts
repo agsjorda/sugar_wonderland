@@ -78,6 +78,7 @@ export class Buttons {
 	private wasBuyFeatureEnabled: boolean = false;
     private remainingFsLabel: GameObjects.Text | null = null;
     private remainingFsLabel_Count: GameObjects.Text | null = null;
+    private forceSpinsLeftOverlay: boolean = false;
     // Base Y positions for Y-axis toggle events
     private baseYPositions: { [key: string]: number } = {};
     
@@ -330,14 +331,14 @@ export class Buttons {
             
             this.remainingFsLabel.setFontSize(this.isMobile ? '32px' : '20px');
             const shouldShow = !!scene.gameData.isBonusRound && (scene.gameData.freeSpins ?? 0) > 0;
-            const count = scene.gameData.freeSpins ?? 0;
+            const count = this.forceSpinsLeftOverlay ? 10 : (scene.gameData.freeSpins ?? 0);
             if(this.isMobile){
                 this.remainingFsLabel.setText(`Remaining Free Spins:`);
                 this.remainingFsLabel_Count.setText(`${count}`);
             }
             else {
                 this.remainingFsLabel.setText(`Spins Left:`);
-                this.remainingFsLabel_Count.setText(`${count - 1}`);
+                this.remainingFsLabel_Count.setText(`${this.forceSpinsLeftOverlay ? count : (count - 1)}`);
             }
             this.remainingFsLabel.setVisible(shouldShow);
             this.remainingFsLabel_Count.setVisible(shouldShow);
@@ -347,6 +348,8 @@ export class Buttons {
             // Avoid overlap: hide autoplay indicator while Spins Left is shown
             // Otherwise, only show it when autoplay is running
             try { this.autoplayIndicator.visible = shouldShow ? false : !!this.autoplay?.isAutoPlaying; } catch (_e) {}
+            // Ensure spin button alpha follows autoplay indicator visibility
+            try { this.updateButtonStates(scene); } catch (_e) {}
 
             // Toggle bottom controls visibility and Y-axis positions based on free spins state
             // Desktop: keep controls visible; Mobile: hide while in bonus
@@ -373,6 +376,24 @@ export class Buttons {
         Events.emitter.on(Events.UPDATE_TOTAL_WIN, updateLabelVisibility);
         Events.emitter.on(Events.AUTOPLAY_START, updateLabelVisibility);
         Events.emitter.on(Events.AUTOPLAY_STOP, updateLabelVisibility);
+
+        // Show immediate label when FreeSpin overlay appears
+        Events.emitter.on(Events.FREE_SPIN_OVERLAY_SHOW, () => {
+            this.forceSpinsLeftOverlay = true;
+            if (!this.remainingFsLabel || !this.remainingFsLabel_Count) return;
+            this.remainingFsLabel.setText(this.isMobile ? `Remaining Free Spins:` : `Spins Left:`);
+            this.remainingFsLabel_Count.setText(`10`);
+            this.remainingFsLabel.setVisible(true);
+            this.remainingFsLabel_Count.setVisible(true);
+            try { this.freeSpinBtn.visible = true; } catch (_e) {}
+            try { this.autoplayIndicator.visible = false; } catch (_e) {}
+            try { this.updateButtonStates(scene); } catch (_e) {}
+        });
+        // Re-sync to actual state when overlay hides
+        Events.emitter.on(Events.WIN_OVERLAY_HIDE, () => {
+            this.forceSpinsLeftOverlay = false;
+            try { updateLabelVisibility(); } catch (_e) {}
+        });
 
         // Initial evaluation
         updateLabelVisibility();
@@ -1062,28 +1083,50 @@ export class Buttons {
             selectedBetIndexPopup = 0;
         }
 
-        plusBtn.on('pointerdown', () => {
-            scene.audioManager.UtilityButtonSFX.play();
-            selectedBetIndexPopup++;
-            if (selectedBetIndexPopup >= betOptionsPopup.length) {
-                selectedBetIndexPopup = 0;
+        // helper to update +/- state at min/max
+        const updatePopupBetButtonsState = () => {
+            selectedBetIndexPopup = betOptionsPopup.indexOf(scene.gameData.bet);
+            if (selectedBetIndexPopup === -1) { selectedBetIndexPopup = 0; }
+            const atMin = selectedBetIndexPopup <= 0;
+            const atMax = selectedBetIndexPopup >= betOptionsPopup.length - 1;
+            if (atMin) {
+                (minusBtn as any).setAlpha?.(0.3);
+                (minusBtn as any).disableInteractive?.();
+            } else {
+                (minusBtn as any).setAlpha?.(0.8);
+                (minusBtn as any).setInteractive?.();
             }
-            scene.gameData.bet = betOptionsPopup[selectedBetIndexPopup];
-            updateBetDisplay();
-            Events.emitter.emit(Events.CHANGE_BET, {});
-            Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {});
+            if (atMax) {
+                (plusBtn as any).setAlpha?.(0.3);
+                (plusBtn as any).disableInteractive?.();
+            } else {
+                (plusBtn as any).setAlpha?.(0.8);
+                (plusBtn as any).setInteractive?.();
+            }
+        };
+
+        plusBtn.on('pointerdown', () => {
+            if (selectedBetIndexPopup < betOptionsPopup.length - 1) {
+                scene.audioManager.UtilityButtonSFX.play();
+                selectedBetIndexPopup++;
+                scene.gameData.bet = betOptionsPopup[selectedBetIndexPopup];
+                updateBetDisplay();
+                updatePopupBetButtonsState();
+                Events.emitter.emit(Events.CHANGE_BET, {});
+                Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {});
+            }
         });
 
         minusBtn.on('pointerdown', () => {
-            scene.audioManager.UtilityButtonSFX.play();
-            selectedBetIndexPopup--;
-            if (selectedBetIndexPopup < 0) {
-                selectedBetIndexPopup = betOptionsPopup.length - 1;
+            if (selectedBetIndexPopup > 0) {
+                scene.audioManager.UtilityButtonSFX.play();
+                selectedBetIndexPopup--;
+                scene.gameData.bet = betOptionsPopup[selectedBetIndexPopup];
+                updateBetDisplay();
+                updatePopupBetButtonsState();
+                Events.emitter.emit(Events.CHANGE_BET, {});
+                Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {});
             }
-            scene.gameData.bet = betOptionsPopup[selectedBetIndexPopup];
-            updateBetDisplay();
-            Events.emitter.emit(Events.CHANGE_BET, {});
-            Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {});
         });
 
         function updateBetDisplay() {
@@ -1091,6 +1134,7 @@ export class Buttons {
             betValue.setText(scene.gameData.currency + " " + autoplayCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
         }
         updateBetDisplay();
+        updatePopupBetButtonsState();
 
         // Start Autoplay button - moved down to avoid overlap
         const startBtnBg = scene.add.image(popupWidth / 2, 0, 'greenLongBtn');
@@ -1179,6 +1223,7 @@ export class Buttons {
             updateBalance();
             bet = scene.gameData.bet * selectedSpins;
             updateBetDisplay();
+            try { (updatePopupBetButtonsState as any)(); } catch (_e) {}
             
             const mask = scene.add.graphics();
             mask.name = 'betMask';
@@ -1254,6 +1299,7 @@ export class Buttons {
         this.autoplayOnButton.visible = false;
         this.freeSpinBtn.visible = false;
         this.autoplayIndicator.visible = false;
+        if (this.spinButton) { this.spinButton.setAlpha(1); }
     }
 
     // Centralized method to immediately update button states
@@ -1322,6 +1368,16 @@ export class Buttons {
 		}
 		this.wasSpinEnabled = spinEnabledNow;
 		this.wasBuyFeatureEnabled = buyFeatureEnabledNow;
+        // Override: if autoplay indicator is visible, hide spin visually via alpha
+        try {
+            if (this.autoplayIndicator?.visible && this.spinButton?.visible) {
+                this.spinButton.setAlpha(0);
+                if (this.freeSpinBtn) {
+                    this.freeSpinBtn.setAlpha(1);
+                    this.freeSpinBtn.visible = true;
+                }
+            }
+        } catch (_e) {}
     }
 
     // Method to immediately disable buttons visually (separate from game logic)
@@ -1730,8 +1786,8 @@ export class Buttons {
                 totalWinQueue = [];
                 isProcessingTotalWinQueue = false;
                 multiplierApplied = false;  
-                text2.setText('');
-                text1.setText('');
+                text2.setText(`${scene.gameData.currency} ${formatMoney(0)}`);
+                text1.setText('TOTAL WIN');
             }
         });
 
@@ -1874,6 +1930,46 @@ export class Buttons {
         minusBtn.setAlpha(0.8); 
         container.add(minusBtn);
 
+        // Helper to enable/disable bet nav buttons at min/max
+        const updateBetButtonsState = () => {
+            selectedBetIndex = betOptions.indexOf(scene.gameData.bet);
+            if (selectedBetIndex === -1) { selectedBetIndex = 0; }
+            const atMin = selectedBetIndex <= 0;
+            const atMax = selectedBetIndex >= betOptions.length - 1;
+
+            if (atMin) {
+                minusBtn.setAlpha(0.3);
+                (minusBtn as any).disableInteractive?.();
+            } else {
+                minusBtn.setAlpha(0.8);
+                (minusBtn as any).setInteractive?.();
+            }
+
+            if (atMax) {
+                plusBtn.setAlpha(0.3);
+                (plusBtn as any).disableInteractive?.();
+            } else {
+                plusBtn.setAlpha(0.8);
+                (plusBtn as any).setInteractive?.();
+            }
+        };
+
+        // Clickable middle area to open bet popup
+        const middleZone = scene.add.zone(width * 0.5, Buttons.PANEL_HEIGHT * 0.5, width * 0.5, Buttons.PANEL_HEIGHT * 0.6) as ButtonZone;
+        (middleZone as any).setInteractive().isButton = true;
+        middleZone.on('pointerdown', () => {
+            if(scene.gameData.isSpinning) return;
+            if(scene.gameData.isBonusRound) return;
+            scene.audioManager.UtilityButtonSFX.play();
+            selectedBetIndex = betOptions.indexOf(scene.gameData.bet);
+            if (selectedBetIndex === -1) { selectedBetIndex = 0; }
+            this.showBetPopup(scene, selectedBetIndex);
+        });
+        container.addAt(middleZone, 0);
+
+        // Initialize +/- button states
+        updateBetButtonsState();
+
         // bet container
         container.setScale(this.isMobile ? 0.5 : 1);
 
@@ -1881,35 +1977,31 @@ export class Buttons {
         plusBtn.on('pointerdown', () => {
             if(scene.gameData.isSpinning) return;
             if(scene.gameData.isBonusRound) return;
-            scene.audioManager.UtilityButtonSFX.play();
 
             selectedBetIndex = betOptions.indexOf(scene.gameData.bet);
-            selectedBetIndex++;
-            if(selectedBetIndex >= betOptions.length) {
-                selectedBetIndex = 0;
+            if (selectedBetIndex < betOptions.length - 1) {
+                scene.audioManager.UtilityButtonSFX.play();
+                selectedBetIndex++;
+                scene.gameData.bet = betOptions[selectedBetIndex];
+                updateBetButtonsState();
+                Events.emitter.emit(Events.CHANGE_BET, {});
+                Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {});
             }
-            scene.gameData.bet = betOptions[selectedBetIndex];
-
-            this.showBetPopup(scene, selectedBetIndex);
-            Events.emitter.emit(Events.CHANGE_BET, {});
-            Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {}); 
         });
 
         minusBtn.on('pointerdown', () => {
             if(scene.gameData.isSpinning) return;
             if(scene.gameData.isBonusRound) return;
-            scene.audioManager.UtilityButtonSFX.play();
 
             selectedBetIndex = betOptions.indexOf(scene.gameData.bet);
-            selectedBetIndex--;
-            if(selectedBetIndex < 0) {
-                selectedBetIndex = betOptions.length - 1;
+            if (selectedBetIndex > 0) {
+                scene.audioManager.UtilityButtonSFX.play();
+                selectedBetIndex--;
+                scene.gameData.bet = betOptions[selectedBetIndex];
+                updateBetButtonsState();
+                Events.emitter.emit(Events.CHANGE_BET, {});
+                Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {});
             }
-            scene.gameData.bet = betOptions[selectedBetIndex];
-
-            this.showBetPopup(scene, selectedBetIndex);
-            Events.emitter.emit(Events.CHANGE_BET, {});
-            Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {}); 
         });
 
         // Update bet value when it changes
@@ -1917,6 +2009,7 @@ export class Buttons {
             const totalBet = (scene.gameData.bet).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
             betValueText.setText(/*scene.gameData.currency +*/ totalBet);
             localStorage.setItem('bet', scene.gameData.bet.toString());
+            updateBetButtonsState();
         });
 
         Events.emitter.on(Events.ENHANCE_BET_TOGGLE, (isBuy?:boolean) => {
@@ -1929,6 +2022,7 @@ export class Buttons {
 
         scene.gameData.bet = localStorage.getItem('bet') ? parseFloat(localStorage.getItem('bet') || '1') : 1;
         localStorage.setItem('bet', scene.gameData.bet.toString());
+        try { (updateBetButtonsState as any)(); } catch (_e) {}
 
         container.name = 'betContainer';
         //this.buttonContainer.add(container);

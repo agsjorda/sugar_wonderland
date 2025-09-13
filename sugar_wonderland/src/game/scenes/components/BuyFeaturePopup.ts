@@ -29,9 +29,27 @@ export class BuyFeaturePopup {
     private betOptions: number[] = [0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.6, 2, 2.4, 2.8, 3.2, 3.6, 4, 5, 6, 8, 10, 14, 18, 24, 32, 40, 60, 80, 100, 110, 120, 130, 140, 150];
     private currentBetIndex: number = 17; // Default to bet value 10
     private popupY: number = 0;
+    private minusBtnRef: ButtonImage | null = null;
+    private plusBtnRef: ButtonImage | null = null;
 
     constructor() {
         this.isMobile = this.isMobileDevice();
+    }
+
+    // Enable/disable +/- at min/max and gray out accordingly
+    private updateBetButtonsState(): void {
+        try {
+            const atMin = this.currentBetIndex <= 0;
+            const atMax = this.currentBetIndex >= this.betOptions.length - 1;
+            if (this.minusBtnRef) {
+                this.minusBtnRef.setAlpha(atMin ? 0.3 : 0.8);
+                if (atMin) { (this.minusBtnRef as any).disableInteractive?.(); } else { (this.minusBtnRef as any).setInteractive?.(); }
+            }
+            if (this.plusBtnRef) {
+                this.plusBtnRef.setAlpha(atMax ? 0.3 : 0.8);
+                if (atMax) { (this.plusBtnRef as any).disableInteractive?.(); } else { (this.plusBtnRef as any).setInteractive?.(); }
+            }
+        } catch(_e) {}
     }
 
     // Function to detect if the device is mobile
@@ -238,6 +256,7 @@ export class BuyFeaturePopup {
         minusBtn.setInteractive().isButton = true;
         minusBtn.setAlpha(0.8);
         betControlsContainer.add(minusBtn);
+        this.minusBtnRef = minusBtn;
 
         // Plus button
         const plusBtn = scene.add.image(padding * 4, 0, 'plus') as ButtonImage;
@@ -245,6 +264,7 @@ export class BuyFeaturePopup {
         plusBtn.setInteractive().isButton = true;
         plusBtn.setAlpha(0.8);
         betControlsContainer.add(plusBtn);
+        this.plusBtnRef = plusBtn;
 
         // Buy Feature button
         const buyBtnBg = scene.add.image(padding * 2, popupHeight * 0.8, 'greenLongBtn') as ButtonImage;
@@ -291,30 +311,26 @@ export class BuyFeaturePopup {
         // Bet control interactions
         minusBtn.on('pointerdown', () => {
             if (scene.gameData.isSpinning) return;
-            scene.audioManager.UtilityButtonSFX.play();
-            
-            this.currentBetIndex--;
-            if (this.currentBetIndex < 0) {
-                this.currentBetIndex = this.betOptions.length - 1;
+            if (this.currentBetIndex > 0) {
+                scene.audioManager.UtilityButtonSFX.play();
+                this.currentBetIndex--;
+                scene.gameData.bet = this.betOptions[this.currentBetIndex];
+                this.updateBetDisplay(scene, betValueText, buyText);
+                this.updateBetButtonsState();
+                Events.emitter.emit(Events.CHANGE_BET, {});
             }
-            
-            scene.gameData.bet = this.betOptions[this.currentBetIndex];
-            this.updateBetDisplay(scene, betValueText, buyText);
-            Events.emitter.emit(Events.CHANGE_BET, {});
         });
 
         plusBtn.on('pointerdown', () => {
             if (scene.gameData.isSpinning) return;
-            scene.audioManager.UtilityButtonSFX.play();
-            
-            this.currentBetIndex++;
-            if (this.currentBetIndex >= this.betOptions.length) {
-                this.currentBetIndex = 0;
+            if (this.currentBetIndex < this.betOptions.length - 1) {
+                scene.audioManager.UtilityButtonSFX.play();
+                this.currentBetIndex++;
+                scene.gameData.bet = this.betOptions[this.currentBetIndex];
+                this.updateBetDisplay(scene, betValueText, buyText);
+                this.updateBetButtonsState();
+                Events.emitter.emit(Events.CHANGE_BET, {});
             }
-            
-            scene.gameData.bet = this.betOptions[this.currentBetIndex];
-            this.updateBetDisplay(scene, betValueText, buyText);
-            Events.emitter.emit(Events.CHANGE_BET, {});
         });
 
         // Store references for later use
@@ -322,6 +338,9 @@ export class BuyFeaturePopup {
         (this.popupContainer as any).buyBtnBg = buyBtnBg;
         (this.popupContainer as any).closeBtnBg = closeBtnBg;
         (this.popupContainer as any).betValueText = betValueText;
+        (this.popupContainer as any).minusBtnRef = minusBtn;
+        (this.popupContainer as any).plusBtnRef = plusBtn;
+        this.updateBetButtonsState();
     }
 
     private updateBetDisplay(scene: GameScene, betValueText: ButtonText, buyText: ButtonText): void {
@@ -362,6 +381,7 @@ export class BuyFeaturePopup {
         
         if (this.isMobile) {
             this.updateBetDisplay(scene, betValueText, buyText);
+            this.updateBetButtonsState();
         } else {
             const cost = scene.gameData.getBuyFeaturePrice();
             buyText.setText(`Buy 10 Free Spins\nAt the cost of $${cost}?`);
