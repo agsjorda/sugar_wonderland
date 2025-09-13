@@ -32,6 +32,9 @@ export class Events {
     static readonly WIN_OVERLAY_UPDATE_TOTAL_WIN: string = 'winOverlayUpdateTotalWin';
     static readonly WIN_OVERLAY_HIDE: string = 'winOverlayHide';
     
+    // New: emitted when FreeSpin win overlay is displayed
+    static readonly FREE_SPIN_OVERLAY_SHOW: string = 'free_spin_overlay_show';
+
     static readonly UPDATE_TOTAL_WIN: string = 'updateTotalWin';
     static readonly UPDATE_CURRENCY: string = 'updateCurrency';
     static readonly UPDATE_BALANCE: string = 'updateBalance';

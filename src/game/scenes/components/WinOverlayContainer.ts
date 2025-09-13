@@ -251,6 +251,8 @@ export class WinOverlayContainer {
                 this.winAnim.setPosition(this.winAnim.x, this.winAnim.y + 150);
                 this.buttonText.setPosition(this.buttonText.x, this.buttonText.y + 75);
             }
+            // Notify UI to show immediate spins-left display during FreeSpin overlay
+            try { Events.emitter.emit(Events.FREE_SPIN_OVERLAY_SHOW, totalWin); } catch (_e) {}
         } else if (winType === 'Congrats') {
             this.winText.setPosition(0, -60);
             this.winText.setText(`${totalWin.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
