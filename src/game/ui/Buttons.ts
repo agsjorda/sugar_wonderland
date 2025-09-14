@@ -2157,6 +2157,7 @@ export class Buttons {
                 buttonBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
                 selectedButton = buttonContainer;
                 selectedBetIndex = index;
+                try { (updatePopupBetUI as any)?.(); } catch (_e) {}
             });
 
                     betContainer.add(buttonContainer);
@@ -2224,7 +2225,7 @@ export class Buttons {
                 bg.fillStyle(0x66D449, 1);
                 bg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
             }
-            // Enable/disable +/- at bounds
+            // Enable/disable +/- at bounds (local selection only)
             const atMin = selectedBetIndex <= 0;
             const atMax = selectedBetIndex >= betOptions.length - 1;
             if (atMin) {
