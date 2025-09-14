@@ -31,6 +31,7 @@ export class BuyFeaturePopup {
     private popupY: number = 0;
     private minusBtnRef: ButtonImage | null = null;
     private plusBtnRef: ButtonImage | null = null;
+    private static readonly EPS = 1e-6;
 
     constructor() {
         this.isMobile = this.isMobileDevice();
@@ -39,8 +40,8 @@ export class BuyFeaturePopup {
     // Enable/disable +/- at min/max and gray out accordingly
     private updateBetButtonsState(): void {
         try {
-            const atMin = this.currentBetIndex <= 0;
-            const atMax = this.currentBetIndex >= this.betOptions.length - 1;
+            const atMin = this.isAtMinValue((window as any)?.currentScene?.gameData?.bet ?? this.betOptions[this.currentBetIndex]);
+            const atMax = this.isAtMaxValue((window as any)?.currentScene?.gameData?.bet ?? this.betOptions[this.currentBetIndex]);
             if (this.minusBtnRef) {
                 this.minusBtnRef.setAlpha(atMin ? 0.3 : 0.8);
                 if (atMin) { (this.minusBtnRef as any).disableInteractive?.(); } else { (this.minusBtnRef as any).setInteractive?.(); }
@@ -51,6 +52,13 @@ export class BuyFeaturePopup {
             }
         } catch(_e) {}
     }
+
+    private findBetIndexByValue(val: number): number {
+        return this.betOptions.findIndex(v => Math.abs(v - val) < BuyFeaturePopup.EPS);
+    }
+
+    private isAtMinValue(val: number): boolean { return val <= this.betOptions[0] + BuyFeaturePopup.EPS; }
+    private isAtMaxValue(val: number): boolean { return val >= this.betOptions[this.betOptions.length - 1] - BuyFeaturePopup.EPS; }
 
     // Function to detect if the device is mobile
     private isMobileDevice(): boolean {
@@ -82,7 +90,7 @@ export class BuyFeaturePopup {
     create(scene: GameScene): void {
         // Create the popup container
         const popupWidth = this.isMobile ? scene.scale.width : 573;
-        const popupHeight = this.isMobile ? scene.scale.height * 0.7 : 369;
+        const popupHeight = this.isMobile ? 736 : 369;
         const popupX = this.isMobile ? scene.scale.width / 2 - popupWidth / 2 : scene.scale.width / 2 - popupWidth / 2;
         const popupY = this.isMobile ? scene.scale.height - popupHeight  : scene.scale.height / 2 - popupHeight / 2;
         this.popupY = popupY;
@@ -252,17 +260,15 @@ export class BuyFeaturePopup {
 
         // Minus button
         const minusBtn = scene.add.image(-padding * 4, 0, 'minus') as ButtonImage;
-        minusBtn.setScale(this.isMobile ? 0.25 : 0.3);
+        //minusBtn.setScale(this.isMobile ? 0.25 : 0.3);
         minusBtn.setInteractive().isButton = true;
-        minusBtn.setAlpha(0.8);
         betControlsContainer.add(minusBtn);
         this.minusBtnRef = minusBtn;
 
         // Plus button
         const plusBtn = scene.add.image(padding * 4, 0, 'plus') as ButtonImage;
-        plusBtn.setScale(this.isMobile ? 0.25 : 0.3);
+        //plusBtn.setScale(this.isMobile ? 0.25 : 0.3);
         plusBtn.setInteractive().isButton = true;
-        plusBtn.setAlpha(0.8);
         betControlsContainer.add(plusBtn);
         this.plusBtnRef = plusBtn;
 
@@ -311,9 +317,10 @@ export class BuyFeaturePopup {
         // Bet control interactions
         minusBtn.on('pointerdown', () => {
             if (scene.gameData.isSpinning) return;
-            if (this.currentBetIndex > 0) {
+            const idx = this.findBetIndexByValue(scene.gameData.bet);
+            if (idx > 0) {
                 scene.audioManager.UtilityButtonSFX.play();
-                this.currentBetIndex--;
+                this.currentBetIndex = idx - 1;
                 scene.gameData.bet = this.betOptions[this.currentBetIndex];
                 this.updateBetDisplay(scene, betValueText, buyText);
                 this.updateBetButtonsState();
@@ -323,9 +330,10 @@ export class BuyFeaturePopup {
 
         plusBtn.on('pointerdown', () => {
             if (scene.gameData.isSpinning) return;
-            if (this.currentBetIndex < this.betOptions.length - 1) {
+            const idx = this.findBetIndexByValue(scene.gameData.bet);
+            if (idx >= 0 && idx < this.betOptions.length - 1) {
                 scene.audioManager.UtilityButtonSFX.play();
-                this.currentBetIndex++;
+                this.currentBetIndex = idx + 1;
                 scene.gameData.bet = this.betOptions[this.currentBetIndex];
                 this.updateBetDisplay(scene, betValueText, buyText);
                 this.updateBetButtonsState();
@@ -341,6 +349,22 @@ export class BuyFeaturePopup {
         (this.popupContainer as any).minusBtnRef = minusBtn;
         (this.popupContainer as any).plusBtnRef = plusBtn;
         this.updateBetButtonsState();
+
+        // Sync with global bet changes while popup exists
+        Events.emitter.on(Events.CHANGE_BET, () => {
+            if (!this.popupContainer) return;
+            this.currentBetIndex = this.findBetIndexByValue(scene.gameData.bet);
+            if (this.currentBetIndex < 0) this.currentBetIndex = 0;
+            this.updateBetButtonsState();
+            const buyTextRef = (this.popupContainer as any).buyText as ButtonText;
+            const betValueTextRef = (this.popupContainer as any).betValueText as ButtonText;
+            if (this.isMobile) {
+                this.updateBetDisplay(scene, betValueTextRef, buyTextRef);
+            } else {
+                const cost = scene.gameData.getBuyFeaturePrice();
+                buyTextRef.setText(`Buy 10 Free Spins\nAt the cost of $${cost}?`);
+            }
+        });
     }
 
     private updateBetDisplay(scene: GameScene, betValueText: ButtonText, buyText: ButtonText): void {
@@ -371,7 +395,7 @@ export class BuyFeaturePopup {
             scene.gameData.isBonusRound) return;
 
         // Find current bet index
-        this.currentBetIndex = this.betOptions.indexOf(scene.gameData.bet);
+        this.currentBetIndex = this.findBetIndexByValue(scene.gameData.bet);
         if (this.currentBetIndex === -1) {
             this.currentBetIndex = 17; // Default to 1 if not found
         }
