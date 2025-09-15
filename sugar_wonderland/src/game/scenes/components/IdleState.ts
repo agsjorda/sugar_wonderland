@@ -113,22 +113,6 @@ export class IdleState extends State {
             reduceBalance(scene);
         }
 
-        // Apply frontend-only initial scatter award at the very start of the first bonus spin
-        try {
-            if (scene.gameData.isBonusRound && !scene.gameData.hasAppliedInitialScatterAward) {
-                const award = scene.gameData.initialScatterAward || 0;
-                if (award > 0) {
-                    scene.gameData.totalWin += award;
-                    // Update bonus total as well
-                    scene.gameData.totalBonusWin += award;
-                    // Emit incremental update so UI counts it at spin start
-                    Events.emitter.emit(Events.WIN, { win: award });
-                    Events.emitter.emit(Events.UPDATE_TOTAL_WIN, award);
-                }
-                scene.gameData.hasAppliedInitialScatterAward = true;
-            }
-        } catch(_e) {}
-
         const slot = scene.gameData.slot;
         const newRandomValues: number[][] = [];
         for (let i = 0; i < Slot.ROWS; i++) {

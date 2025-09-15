@@ -690,7 +690,6 @@ export class SlotMachine {
         
         Events.emitter.emit(Events.FINAL_WIN_SHOW, {});
         Events.emitter.emit(Events.WIN_OVERLAY_HIDE);
-        Events.emitter.emit(Events.UPDATE_TOTAL_WIN, bonusWin);
     }
 
     private async playSpinAnimations(scene: GameScene, newValues: number[][], data: SpinData): Promise<void> {
@@ -1535,22 +1534,10 @@ export class SlotMachine {
             else if (scatterCount === 5) freeSpins += 10;
             else if (scatterCount === 6) freeSpins += 10;
 
-            // Record initial scatter info for frontend-only award at first bonus spin
-            try {
-                scene.gameData.initialScatterCount = scatterCount;
-                const bet = scene.gameData.bet || 1;
-                let initAward = 0;
-                if (scatterCount === 4) initAward = bet * 3;
-                else if (scatterCount === 5) initAward = bet * 5;
-                else if (scatterCount === 6) initAward = bet * 100;
-                scene.gameData.initialScatterAward = initAward;
-                scene.gameData.hasAppliedInitialScatterAward = false;
-            } catch (_e) { }
-
-            // Prepare bonus round state (set counters now; defer isBonusRound and visuals until after animations)
-            //scene.gameData.totalFreeSpins = freeSpins;
-            scene.gameData.freeSpins = freeSpins;
-            scene.gameData.totalBonusWin = 0;
+			// Prepare bonus round state (set counters now; defer isBonusRound and visuals until after animations)
+			//scene.gameData.totalFreeSpins = freeSpins;
+			scene.gameData.freeSpins = freeSpins;
+			scene.gameData.totalBonusWin = 0;
 
             // Pause autoplay if active; sequence begins after Congrats overlay
             if (scene.buttons.autoplay.isAutoPlaying) {
