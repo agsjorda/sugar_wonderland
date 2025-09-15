@@ -366,6 +366,12 @@ export class SlotMachine {
         if (Array.isArray(apiFs) && apiFs.length > 0) {
             // Suppress regular total-win overlay for this spin; show only FreeSpin overlay
             this.bonusTriggeredThisSpin = true;
+            // As soon as we know free spins will trigger, keep autoplay indicator and FS btn visible
+            try {
+                scene.buttons.autoplayIndicator.visible = true;
+                scene.buttons.freeSpinBtn.visible = true;
+                scene.buttons.updateButtonStates(scene as GameScene);
+            } catch (_e) {}
             scene.gameData.apiFreeSpins =  [];
             scene.gameData.apiFreeSpins = apiFs;
             scene.gameData.apiFreeSpinsIndex = 0;
@@ -660,6 +666,20 @@ export class SlotMachine {
     private async endApiBonus(scene: GameScene): Promise<void> {
         // Toggle back to base game and show summary
         scene.gameData.isBonusRound = false;
+        // Ensure totalBonusWin reflects the sum of the API-provided free spins if available
+        try {
+            const fsList: any[] = Array.isArray(scene.gameData.apiFreeSpins) ? scene.gameData.apiFreeSpins : [];
+            if (fsList.length > 0) {
+                const apiFsSum = fsList.reduce((sum, fs: any) => sum + (Number(fs?.totalWin) || 0), 0);
+                if (apiFsSum > 0) {
+                    scene.gameData.totalBonusWin = apiFsSum;
+                } else if (Array.isArray(scene.gameData.totalWinFreeSpin) && scene.gameData.totalWinFreeSpin.length > 0) {
+                    const arrSum = scene.gameData.totalWinFreeSpin.reduce((sum, v) => sum + (Number(v) || 0), 0);
+                    if (arrSum > 0) scene.gameData.totalBonusWin = arrSum;
+                }
+            }
+        } catch (_e) { /* ignore recompute errors */ }
+
         Events.emitter.emit(Events.FINAL_WIN_SHOW, {});
 
         
@@ -674,7 +694,8 @@ export class SlotMachine {
         scene.gameData.apiFreeSpinsIndex = 0;
         // Clear FS totals at the end of the bonus to prevent reuse next spins
         scene.gameData.totalWinFreeSpin = [];
-        scene.buttons.freeSpinBtn.visible = false;
+        // Hide freeSpinBtn at end of bonus only if autoplay indicator is not visible
+        try { if (!scene.buttons?.autoplayIndicator?.visible) { scene.buttons.freeSpinBtn.visible = true; } } catch (_e) {}
         // Show bottom controls again
         if (scene.buttons?.hideBottomControlsForBonus) {
             scene.buttons.hideBottomControlsForBonus(scene, false);
@@ -1158,14 +1179,14 @@ export class SlotMachine {
                 this.maxWinClaim.show(scene as any, maxCap, () => {
                     this.enqueueWinOverlay(scene, totalWin, 'Congrats');
                 });
-                scene.buttons.freeSpinBtn.visible = false;
+                try { if (!scene.buttons?.autoplayIndicator?.visible) { scene.buttons.freeSpinBtn.visible = false; } } catch (_e) {}
                 return;
             }
         } catch (_e) {}
 
         // Otherwise, show congrats normally
         this.enqueueWinOverlay(scene, totalWin, 'Congrats');
-        scene.buttons.freeSpinBtn.visible = false;
+        try { if (!scene.buttons?.autoplayIndicator?.visible) { scene.buttons.freeSpinBtn.visible = false; } } catch (_e) {}
     }
 
     public update(): void {
@@ -1530,6 +1551,12 @@ export class SlotMachine {
 		} else {
             // Initial bonus trigger
             this.bonusTriggeredThisSpin = true;
+            // As soon as free spins are known to trigger via scatter count, keep indicators visible
+            try {
+                (scene as any).buttons.autoplayIndicator.visible = true;
+                (scene as any).buttons.freeSpinBtn.visible = true;
+                (scene as any).buttons.updateButtonStates(scene as any);
+            } catch (_e) {}
             if (scatterCount === 4) freeSpins += 10;
             else if (scatterCount === 5) freeSpins += 10;
             else if (scatterCount === 6) freeSpins += 10;

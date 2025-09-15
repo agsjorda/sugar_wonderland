@@ -197,9 +197,11 @@ export class Autoplay {
             try { scene.buttons.freeSpinBtn.visible = shouldShowFsBtn; } catch (_e) {}
         } else {
             // Base game or overlay active → autoplay indicator only when autoplay is active
-            try { scene.buttons.autoplayIndicator.visible = !!this.isAutoPlaying; } catch (_e) {}
+            try { scene.buttons.autoplayIndicator.visible = !!this.isAutoPlaying || !!(scene as any)?.slotMachine?.bonusTriggeredThisSpin; } catch (_e) {}
             // Show/hide FS badge only when not in overlay
             try { scene.buttons.freeSpinBtn.visible = shouldShowFsBtn; } catch (_e) {}
+            // Enforcement: when autoplay indicator is visible, ensure freeSpinBtn stays visible
+            try { if (scene.buttons.autoplayIndicator?.visible) { scene.buttons.freeSpinBtn.visible = true; } } catch (_e) {}
         }
 
         // Update the display
@@ -289,6 +291,8 @@ export class Autoplay {
             try { scene.buttons.freeSpinBtn.visible = true; } catch (_e) {}
             try { scene.buttons.autoplayIndicator.visible = false; } catch (_e) {}
         }
+        // Global enforcement: if autoplay indicator is visible, freeSpinBtn must be visible too
+        try { if (scene.buttons.autoplayIndicator?.visible) { scene.buttons.freeSpinBtn.visible = true; } } catch (_e) {}
         // this.updateRemainingSpinsDisplay();
     }
 
