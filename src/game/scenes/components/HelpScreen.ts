@@ -312,7 +312,7 @@ export class HelpScreen {
 
         this.addContent(scene, 'Tumble Win', 'title');
 
-        this.yPosition += this.padding * 2;
+        this.yPosition -= this.padding /2 ;
 
         const tumbleWinContainer = scene.add.container(this.padding, this.yPosition);
 
@@ -358,13 +358,14 @@ export class HelpScreen {
         );
         this.contentContainer.add(tumbleWinContainer);
         
-        this.yPosition += this.padding * 3;
+        this.yPosition += this.padding * 2;
 
         this.addDivider(scene);
+        this.yPosition -= this.padding / 2;
 
         this.addContent(scene, 'Free Spins Rules', 'title');
 
-        this.yPosition += this.padding;
+        this.yPosition -= this.padding /2 ;
 
         const freeSpinContainer = scene.add.container(this.padding, this.yPosition);
 
@@ -527,7 +528,7 @@ export class HelpScreen {
         
         this.addContent(scene, 'Game Settings', 'title');
 
-        this.yPosition += this.padding;
+        this.yPosition -= this.padding / 2;
 
         
         const paylinesContainer = scene.add.container(this.padding, this.yPosition);
