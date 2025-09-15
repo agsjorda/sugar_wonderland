@@ -384,7 +384,7 @@ export class Menu {
 
     private createVolumeSettingsContent(scene: GameScene, contentArea: GameObjects.Container): void {
         const scaleFactor = 1;
-        const widthSlider = 300;
+        const widthSlider = 340;
 
         // Title - Settings in green color #379557
         const title = scene.add.text(15, 15, 'Settings', this.titleStyle) as ButtonText;
@@ -395,8 +395,8 @@ export class Menu {
         const startX = 15;
         const startY = 15;
         const sliderStartX = startX;
-        const musicSliderY = startY + 100;
-        const sfxSliderY = startY + 200;
+        const musicSliderY = startY + 115;
+        const sfxSliderY = startY + 230;
 
         // Music section (no icon)
         const musicLabel = scene.add.text(startX + 0, startY + 70, 'Background Music', {
@@ -1036,6 +1036,7 @@ export class Menu {
             //this.yPosition -= scaledSymbolSize * 9.75;
             this.yPosition -= scaledSymbolSize * 10
     
+            this.yPosition += this.padding;
             this.addContent(scene, 'Paylines', 'title');
     
             this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 0.75, gamesettingsContainer, '', 'Symbols can land anywhere on the screen.', true, this.contentWidth + this.padding * 3);

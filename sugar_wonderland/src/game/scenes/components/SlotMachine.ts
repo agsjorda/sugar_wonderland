@@ -660,6 +660,7 @@ export class SlotMachine {
     private async endApiBonus(scene: GameScene): Promise<void> {
         // Toggle back to base game and show summary
         scene.gameData.isBonusRound = false;
+        Events.emitter.emit(Events.FINAL_WIN_SHOW, {});
 
         
         scene.background.toggleBackground(scene);
@@ -688,7 +689,6 @@ export class SlotMachine {
             }
         } catch (_e) { /* no-op */ }
         
-        Events.emitter.emit(Events.FINAL_WIN_SHOW, {});
         Events.emitter.emit(Events.WIN_OVERLAY_HIDE);
     }
 
