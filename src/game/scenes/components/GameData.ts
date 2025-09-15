@@ -119,6 +119,11 @@ export class GameData {
     public useApiFreeSpins: boolean = false;
     public totalBombWin: number = 0;
 
+    // Initial bonus trigger info (frontend-only award based on triggering scatters)
+    public initialScatterCount: number = 0;
+    public initialScatterAward: number = 0;
+    public hasAppliedInitialScatterAward: boolean = false;
+
     // Current free spin progress (1-based when in use)
     public currentFreeSpinIndex: number = 0;
 

@@ -469,7 +469,7 @@ export class BuyFeaturePopup {
     private handleBuyFeature(scene: GameScene): void {
         // Reset any existing state
         scene.gameData.isSpinning = false;
-        scene.gameData.totalWin = 0;
+        scene.gameData.totalWin = 0 + (scene.gameData.initialScatterAward || 0);
         Events.emitter.emit(Events.RESET_WIN, {});
 
         // Hide the popup
