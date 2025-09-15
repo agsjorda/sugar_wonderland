@@ -346,8 +346,10 @@ export class Buttons {
             // Sync freeSpinBtn with the Spins Left label visibility
             try { this.freeSpinBtn.visible = shouldShow; } catch (_e) {}
             // Avoid overlap: hide autoplay indicator while Spins Left is shown
-            // Otherwise, only show it when autoplay is running
-            try { this.autoplayIndicator.visible = shouldShow ? false : !!this.autoplay?.isAutoPlaying; } catch (_e) {}
+            // Otherwise, only show it when autoplay is running or bonus was already detected this spin
+            try { this.autoplayIndicator.visible = shouldShow ? false : (!!this.autoplay?.isAutoPlaying || !!(scene as any).slotMachine?.bonusTriggeredThisSpin); } catch (_e) {}
+            // Enforcement: when autoplay indicator is visible, ensure freeSpinBtn stays visible
+            try { if (this.autoplayIndicator?.visible) { this.freeSpinBtn.visible = true; } } catch (_e) {}
             // Ensure spin button alpha follows autoplay indicator visibility
             try { this.updateButtonStates(scene); } catch (_e) {}
 
@@ -386,7 +388,8 @@ export class Buttons {
             this.remainingFsLabel.setVisible(true);
             this.remainingFsLabel_Count.setVisible(true);
             try { this.freeSpinBtn.visible = true; } catch (_e) {}
-            try { this.autoplayIndicator.visible = false; } catch (_e) {}
+            // Keep autoplay indicator visible as soon as we know FS trigger
+            try { this.autoplayIndicator.visible = true; } catch (_e) {}
             try { this.updateButtonStates(scene); } catch (_e) {}
         });
         // Re-sync to actual state when overlay hides
@@ -444,8 +447,8 @@ export class Buttons {
         this.remainingFsLabel_Count.setVisible(false);
         this.remainingFsLabel_Count.setText(``);
         this.remainingFsLabel_Count.setVisible(false);
-        // Hide the button when the label is hidden
-        try { this.freeSpinBtn.visible = false; } catch (_e) {}
+        // Hide the button when the label is hidden, unless autoplay indicator is visible
+        try { if (!this.autoplayIndicator?.visible) { this.freeSpinBtn.visible = false; } } catch (_e) {}
     }
 
     public hideBottomControlsForBonus(scene: GameScene, hidden: boolean): void {
@@ -1802,8 +1805,9 @@ export class Buttons {
                         text2.setText(`${scene.gameData.currency} ${formatMoney(totalWinCurrentTotal)}`);
                         return;
                     }
-                    const finalDisplay = (totalWinCurrentTotal >= scene.gameData.totalBonusWin)
-                        ? scene.gameData.totalBonusWin
+                    const capValue = scene.gameData.totalBonusWin || 0;
+                    const finalDisplay = (capValue > 0 && totalWinCurrentTotal >= capValue)
+                        ? capValue
                         : totalWinCurrentTotal;
                     totalWinFinalTimer = scene.time.delayedCall(250, () => {
                         text1.setText('TOTAL WIN');
@@ -1878,7 +1882,9 @@ export class Buttons {
                 if (multiplierApplied) return;
                 multiplierApplied = true;
                 const activeMultiplier = (this.bonusMultiplier && this.bonusMultiplier > 1) ? this.bonusMultiplier : 1;
-                const display = totalWinCurrentTotal * activeMultiplier;
+                const capValue = scene.gameData.totalBonusWin || 0;
+                const displayRaw = totalWinCurrentTotal * activeMultiplier;
+                const display = (capValue > 0 && displayRaw >= capValue) ? capValue : displayRaw;
                 
                 if (totalWinFinalTimer) {
                     scene.time.removeEvent(totalWinFinalTimer);
@@ -1907,12 +1913,24 @@ export class Buttons {
 
         Events.emitter.on(Events.HIDE_BOMB_WIN, () => { 
             this.totalWinContainer.setVisible(this.isMobile? false : true);
-            //text1.setText('TOTAL WIN');
+            // If API-driven FS and we've just finished the last FS (index moved past last), finalize display to TOTAL WIN
+            try {
+                const fsLen = (scene.gameData.totalWinFreeSpin?.length || 0);
+                if (scene.gameData.useApiFreeSpins && fsLen > 0 && (scene.gameData.apiFreeSpinsIndex >= fsLen)) {
+                    const finalTotal = (scene.gameData.totalBonusWin && scene.gameData.totalBonusWin > 0)
+                        ? scene.gameData.totalBonusWin
+                        : (scene.gameData.totalWinFreeSpin || []).reduce((s, v) => s + (Number(v) || 0), 0);
+                    text1.setText('TOTAL WIN');
+                    text2.setText(`${scene.gameData.currency} ${formatMoney(finalTotal)}`);
+                }
+            } catch (_e) {}
         });
         
         Events.emitter.on(Events.FINAL_WIN_SHOW, () => {
            text1.setText('TOTAL WIN');
            text2.setText(`${scene.gameData.currency} ${formatMoney(scene.gameData.totalBonusWin)}`);
+           // Ensure the TOTAL WIN panel is visible after bonus concludes
+           this.totalWinContainer.setVisible(this.isMobile ? false : true);
         });
 
         this.buttonContainer.add(container);
@@ -2985,6 +3003,17 @@ export class Buttons {
         });
         Events.emitter.on(Events.HIDE_BOMB_WIN, () => { 
             this.bombMarqueeContainer.setVisible(false);
+            // Finalize marquee display if last FS just finished on a bomb
+            try {
+                const fsLen = (scene.gameData.totalWinFreeSpin?.length || 0);
+                if (this.isMobile && scene.gameData.useApiFreeSpins && fsLen > 0 && (scene.gameData.apiFreeSpinsIndex >= fsLen)) {
+                    const finalTotal = (scene.gameData.totalBonusWin && scene.gameData.totalBonusWin > 0)
+                        ? scene.gameData.totalBonusWin
+                        : (scene.gameData.totalWinFreeSpin || []).reduce((s, v) => s + (Number(v) || 0), 0);
+                    youWonLabel.setText('TOTAL WIN');
+                    youWonAmount.setText(`${scene.gameData.currency} ${finalTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+                }
+            } catch (_e) {}
         });
     }
 
@@ -3059,8 +3088,9 @@ export class Buttons {
                         return;
                     }
 
-                    const finalDisplay = (marqueeCurrentTotal >= scene.gameData.totalBonusWin)
-                        ? scene.gameData.totalBonusWin
+                    const capValue = scene.gameData.totalBonusWin || 0;
+                    const finalDisplay = (capValue > 0 && marqueeCurrentTotal >= capValue)
+                        ? capValue
                         : marqueeCurrentTotal;
                     totalWinFinalTimer = scene.time.delayedCall(250, ()=>{
                         youWonLabel.setText('TOTAL WIN');
