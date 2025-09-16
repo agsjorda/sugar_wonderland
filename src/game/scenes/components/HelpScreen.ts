@@ -600,6 +600,7 @@ export class HelpScreen {
     private commonRules(scene: GameScene, genericTableWidth: number, scaledSymbolSize: number): void {
         
         this.addContent(scene, 'How to Play', 'title');
+        this.yPosition -= this.padding / 2;
         const commonPadding = 20;
         
         const howToPlayContainer = scene.add.container(0, this.yPosition);
@@ -612,29 +613,30 @@ export class HelpScreen {
         );
         this.contentContainer.add(howToPlayContainer);
 
-        this.createHeader(scene, commonPadding * 2, this.isMobile ? commonPadding : commonPadding * 1.5, howToPlayContainer, 'Bet Controls', '#379557');
+        this.createHeader(scene, commonPadding * 3, this.isMobile ? commonPadding : commonPadding * 1.5, howToPlayContainer, 'Bet Controls', '#379557');
 
-        this.createHowToPlayEntry(scene, commonPadding * 2, this.isMobile ? commonPadding * 5 : commonPadding * 6 , howToPlayContainer, this.isMobile ? 'howToPlay1Mobile' : 'howToPlay1', this.isMobile ? '' : 'Adjust your total bet.');
+        this.createHowToPlayEntry(scene, commonPadding * 3, this.isMobile ? commonPadding * 5 : commonPadding * 6 , howToPlayContainer, this.isMobile ? 'howToPlay1Mobile' : 'howToPlay1', this.isMobile ? '' : 'Adjust your total bet.');
 
-        this.createHeader(scene, commonPadding * 2, this.isMobile ? commonPadding * 10 : commonPadding * 9, howToPlayContainer, 'Game Actions', '#379557');
+        this.createHeader(scene, commonPadding * 3, this.isMobile ? commonPadding * 10 : commonPadding * 9, howToPlayContainer, 'Game Actions', '#379557');
         
-        this.createHowToPlayEntry(scene, commonPadding * 2, this.isMobile ? commonPadding * 15 : commonPadding * 14, howToPlayContainer, this.isMobile ? 'howToPlay2Mobile' : 'howToPlay2', this.isMobile ? '' : 'Start the game round.');
-        this.createHowToPlayEntry(scene, commonPadding * 2, this.isMobile ? commonPadding * 25 : commonPadding * 21, howToPlayContainer, this.isMobile ? 'howToPlay11Mobile' : 'BuyFeatHelp', this.isMobile ? '' : 'Lets you buy the free spins round for 100x your total bet.');
-        this.createHowToPlayEntry(scene, commonPadding * 2, this.isMobile ? commonPadding * 35 : commonPadding * 28, howToPlayContainer, this.isMobile ? 'howToPlay12Mobile' : 'DoubleHelp', this.isMobile ? '' : 'You\'re wagering 25% more per spin, but you also have better chances at hitting big features.');
-        this.createHowToPlayEntry(scene, commonPadding * 2, this.isMobile ? commonPadding * 45 : commonPadding * 35, howToPlayContainer, this.isMobile ? 'howToPlay3Mobile' : 'howToPlay3', this.isMobile ? '' : 'Open the autoplay menu. Tap again to stop autoplay.');
-        this.createHowToPlayEntry(scene, commonPadding * 2, this.isMobile ? commonPadding * 55 : commonPadding * 42, howToPlayContainer, this.isMobile ? 'howToPlay4Mobile' : 'howToPlay4', this.isMobile ? '' : 'Speeds up the game.');
+        this.createHowToPlayEntry(scene, commonPadding * 3, this.isMobile ? commonPadding * 15 : commonPadding * 14, howToPlayContainer, this.isMobile ? 'howToPlay2Mobile' : 'howToPlay2', this.isMobile ? '' : 'Start the game round.');
+        //this.createHowToPlayEntry(scene, commonPadding * 3, this.isMobile ? commonPadding * 25 : commonPadding * 21, howToPlayContainer, this.isMobile ? 'howToPlay11Mobile' : 'BuyFeatHelp', this.isMobile ? '' : 'Lets you buy the free spins round for 100x your total bet.');
+        //this.createHowToPlayEntry(scene, commonPadding * 3, this.isMobile ? commonPadding * 35 : commonPadding * 28, howToPlayContainer, this.isMobile ? 'howToPlay12Mobile' : 'DoubleHelp', this.isMobile ? '' : 'You\'re wagering 25% more per spin, but you also have better chances at hitting big features.');
+        let offset = 14;
+        this.createHowToPlayEntry(scene, commonPadding * 3, this.isMobile ? commonPadding * 45 : commonPadding * (offset + 7), howToPlayContainer, this.isMobile ? 'howToPlay3Mobile' : 'howToPlay3', this.isMobile ? '' : 'Open the autoplay menu. Tap again to stop autoplay.');
+        this.createHowToPlayEntry(scene, commonPadding * 3, this.isMobile ? commonPadding * 55 : commonPadding * (offset + 14), howToPlayContainer, this.isMobile ? 'howToPlay4Mobile' : 'howToPlay4', this.isMobile ? '' : 'Speeds up the game.');
 
-        this.createHeader(scene, commonPadding * 2, this.isMobile ? commonPadding * 52 : commonPadding * 47, howToPlayContainer, 'Display & Stats', '#379557');
+        this.createHeader(scene, commonPadding * 3, this.isMobile ? commonPadding * 52 : commonPadding * (33), howToPlayContainer, 'Display & Stats', '#379557');
 
-        this.createHowToPlayEntry(scene, commonPadding * 2, this.isMobile ? commonPadding * 57 : commonPadding * 52, howToPlayContainer, 'howToPlay5', 'Shows your current available credits.');
-        this.createHowToPlayEntry(scene, commonPadding * 2, this.isMobile ? commonPadding * 68 : commonPadding * 59, howToPlayContainer, 'howToPlay6', 'Display your total winnings from the current round.');
-        this.createHowToPlayEntry(scene, commonPadding * 2, this.isMobile ? commonPadding * 79 : commonPadding * 66, howToPlayContainer, 'howToPlay7', 'Adjust your wager using the - and + buttons.');
+        this.createHowToPlayEntry(scene, commonPadding * 3, this.isMobile ? commonPadding * 57 : commonPadding * (38), howToPlayContainer, 'howToPlay5', 'Shows your current available credits.');
+        this.createHowToPlayEntry(scene, commonPadding * 3, this.isMobile ? commonPadding * 68 : commonPadding * (45), howToPlayContainer, 'howToPlay6', 'Display your total winnings from the current round.');
+        this.createHowToPlayEntry(scene, commonPadding * 3, this.isMobile ? commonPadding * 79 : commonPadding * (52), howToPlayContainer, 'howToPlay7', 'Adjust your wager using the - and + buttons.');
 
-        this.createHeader(scene, commonPadding * 2, this.isMobile ? commonPadding * 87 : commonPadding * 71, howToPlayContainer, 'General Controls', '#379557');
+        this.createHeader(scene, commonPadding * 3, this.isMobile ? commonPadding * 87 : commonPadding * (57), howToPlayContainer, 'General Controls', '#379557');
 
-        this.createHowToPlayEntry(scene, commonPadding * 2, this.isMobile ? commonPadding * 90 : commonPadding * 74, howToPlayContainer, this.isMobile ? 'howToPlay8Mobile' : 'howToPlay8', this.isMobile ? '' : 'Toggle game sounds on and off.');  
-        this.createHowToPlayEntry(scene, commonPadding * 2, this.isMobile ? commonPadding * 98 : commonPadding * 78, howToPlayContainer, this.isMobile ? 'howToPlay9Mobile' : 'howToPlay9', this.isMobile ? '' : 'Access gameplay preferences and system options.');
-        this.createHowToPlayEntry(scene, commonPadding * 2, this.isMobile ? commonPadding * 108 : commonPadding * 83, howToPlayContainer, this.isMobile ? 'howToPlay10Mobile' : 'howToPlay10', this.isMobile ? '' : 'View game rules, features, and paytable.');        
+        this.createHowToPlayEntry(scene, commonPadding * 3, this.isMobile ? commonPadding * 90 : commonPadding * (60), howToPlayContainer, this.isMobile ? 'howToPlay8Mobile' : 'howToPlay8', this.isMobile ? '' : 'Toggle game sounds on and off.');  
+        this.createHowToPlayEntry(scene, commonPadding * 3, this.isMobile ? commonPadding * 98 : commonPadding * (64), howToPlayContainer, this.isMobile ? 'howToPlay9Mobile' : 'howToPlay9', this.isMobile ? '' : 'Access gameplay preferences and system options.');
+        this.createHowToPlayEntry(scene, commonPadding * 3, this.isMobile ? commonPadding * 108 : commonPadding * (69), howToPlayContainer, this.isMobile ? 'howToPlay10Mobile' : 'howToPlay10', this.isMobile ? '' : 'View game rules, features, and paytable.');        
     }
     
 

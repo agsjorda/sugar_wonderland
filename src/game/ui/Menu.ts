@@ -48,6 +48,11 @@ export class Menu {
     private settingsContent: GameObjects.Container;
     private activeTabIndex: number = 0;
 
+    // History pagination state
+    private historyCurrentPage: number = 1;
+    private historyTotalPages: number = 1;
+    private historyPageLimit: number = 11;
+
     protected titleStyle = {
         fontSize: '24px',
         color: '#379557',
@@ -75,6 +80,13 @@ export class Menu {
         scene.load.image('menu_history', 'assets/Mobile/Menu/History.png');
         scene.load.image('menu_settings', 'assets/Mobile/Menu/Settings.png');
         scene.load.image('menu_close', 'assets/Buttons/ekis.png');
+        // History pager icons
+        scene.load.image('icon_left', 'assets/Mobile/Menu/icon_left.png');
+        scene.load.image('icon_most_left', 'assets/Mobile/Menu/icon_most_left.png');
+        scene.load.image('icon_right', 'assets/Mobile/Menu/icon_right.png');
+        scene.load.image('icon_most_right', 'assets/Mobile/Menu/icon_most_right.png');
+
+        scene.load.image('loading_icon', 'assets/Mobile/Menu/loading.png');
     }
 
     create(scene: GameScene){
@@ -194,13 +206,14 @@ export class Menu {
 
             if (iconKey) {
                 const icon = scene.add.image(0, tabHeight / 2, iconKey) as ButtonImage;
-                icon.setOrigin(0, 0.5);
+                icon.setOrigin(-0.5, 0.5);
                 // Scale to a consistent height
                 const targetHeight = this.isMobile ? 18 : 22;
                 const scale = targetHeight / icon.height;
                 icon.setScale(scale);
                 if (tabConfig.icon === 'close') {
                     // Center the close icon on its dark background
+                    icon.setOrigin(0, 0.5);
                     icon.setPosition(tabConfig.width / 3, tabHeight / 2);
                     icon.clearTint();
                 } else {
@@ -288,7 +301,9 @@ export class Menu {
         
         // Initialize content for each tab
         this.setupScrollableRulesContent(scene);
-        this.showHistoryContent(scene, this.historyContent);
+        this.historyCurrentPage = 1;
+        this.historyPageLimit = 11;
+        this.showHistoryContent(scene, this.historyContent, this.historyCurrentPage, this.historyPageLimit);
         this.createVolumeSettingsContent(scene, this.settingsContent);
         
         // Initially hide all except rules
@@ -375,12 +390,219 @@ export class Menu {
 
 
 
-    private showHistoryContent(scene: GameScene, contentArea: GameObjects.Container): void {
+    private async showHistoryContent(scene: GameScene, contentArea: GameObjects.Container, page: number, limit: number): Promise<void> {
+        // Clear previous history content
+        contentArea.removeAll(true);
+
         // Create a simple history page with "HISTORY" text
         const historyText = scene.add.text(15, 15,'History', this.titleStyle) as ButtonText;
         historyText.setOrigin(0, 0);
         contentArea.add(historyText);
+
+        const historyHeaders : string[] = ['Spin', 'Currency', 'Bet', 'Win'];
+
+        // Show loading icon while fetching history (centered on screen)
+        const loaderX = scene.scale.width / 2;
+        const loaderY = scene.scale.height / 3;
+        const loader = scene.add.image(loaderX, loaderY, 'loading_icon') as ButtonImage;
+        loader.setOrigin(0.5, 0.5);
+        loader.setScale(0.25);
+        contentArea.add(loader);
+        const spinTween = scene.tweens.add({
+            targets: loader,
+            angle: 360,
+            duration: 800,
+            repeat: -1,
+            ease: 'Linear'
+        });
+
+        let result: any;
+        try{
+            result = await scene.gameAPI.getHistory(page, limit);
+        } finally {
+            spinTween.stop();
+            loader.destroy();
+        }
+        console.log(result);
+
+        // Update pagination state
+        this.historyCurrentPage = result?.meta?.page ?? page;
+        this.historyTotalPages = result?.meta?.pageCount ?? 1;
+        this.historyPageLimit = limit;
+        
+        // Display headers centered per column
+        const columnCenters = this.getHistoryColumnCenters(scene);
+        const headerY = 60;
+        historyHeaders.forEach((header, idx) => {
+            const headerText = scene.add.text(columnCenters[idx], headerY, header, {
+                fontSize: '14px',
+                color: '#FFFFFF',
+                fontFamily: 'Poppins',
+                fontStyle: 'bold',
+            }) as ButtonText;
+            headerText.setOrigin(0.5, 0);
+            contentArea.add(headerText);
+        });
+
+        let spinDate = '26/7/2025, 16:00';
+        let currency = 'usd';
+        let bet = '250.00';
+        let win = 250000000;
+
+        let contentY = 100;
+        result.data?.forEach((v?:any)=>{
+            spinDate = this.formatISOToDMYHM(v.created_at);
+            currency = v.currency == ''?'usd':v.currency;
+            bet = v.total_bet;
+            win = v.total_win;
+
+            contentY += 30;
+            // Create row centered per column
+            this.createHistoryEntry(contentY, scene, contentArea, spinDate, currency, bet, win.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), columnCenters);
+            this.addDividerHistory(scene, contentArea, contentY);
+            contentY += 20;
+        });
+        
+        // Add pagination buttons at bottom-center
+        this.addHistoryPagination(scene, contentArea, this.historyCurrentPage, this.historyTotalPages, this.historyPageLimit);
     }
+
+    private formatISOToDMYHM(iso: string, timeZone = 'Asia/Manila'): string {
+        const d = new Date(iso);
+        const parts = new Intl.DateTimeFormat('en-GB', {
+          day: 'numeric',        // no leading zero
+          month: 'numeric',      // no leading zero
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+          timeZone,
+        }).formatToParts(d);
+      
+        const map = Object.fromEntries(parts.map(p => [p.type, p.value]));
+        return `${map.day}/${map.month}/${map.year}, ${map.hour}:${map.minute}`;
+      }
+      
+
+    private createHistoryEntry(y: number, scene: GameScene, contentArea: GameObjects.Container, spinDate: string, currency: string, bet: string, win: string, columnCenters: number[]): void {
+        // Create separate text fields and center them per column
+        const values: string[] = [spinDate, currency, bet, win];
+        values.forEach((value, idx) => {
+            const text = scene.add.text(columnCenters[idx], y, value, {
+                fontSize: '14px',
+                color: '#FFFFFF',
+                fontFamily: 'Poppins',
+            }) as ButtonText;
+            text.setOrigin(0.5, 0);
+            contentArea.add(text);
+        });
+    }
+
+    // Compute four column centers within the content area bounds
+    private getHistoryColumnCenters(scene: GameScene): number[] {
+        const worldLeft = 20;
+        const worldRight = scene.scale.width - 20;
+        const parentOffsetX = this.contentArea ? this.contentArea.x : 0;
+        const localLeft = worldLeft - parentOffsetX;
+        const localRight = worldRight - parentOffsetX;
+        const totalWidth = localRight - localLeft;
+
+        // Define column center ratios across the available width (tuned for headers)
+        const ratios = [0.15, 0.40, 0.65, 0.88];
+        return ratios.map(r => localLeft + totalWidth * r);
+    }
+
+    private addDividerHistory(scene: GameScene, contentArea: GameObjects.Container, y: number): void {
+        const dividerY = y + 30;
+        const worldLeft = 20;
+        const worldRight = scene.scale.width - 20;
+        const parentOffsetX = this.contentArea ? this.contentArea.x : 0;
+        const localLeft = worldLeft - parentOffsetX;
+        const localWidth = worldRight - worldLeft;
+        const divider = scene.add.graphics();
+        divider.fillStyle(0xFFFFFF, 0.1);
+        divider.fillRect(localLeft, dividerY, localWidth, 1);
+        contentArea.add(divider);
+    }
+
+    private addHistoryPagination(scene: GameScene, contentArea: GameObjects.Container, page: number, totalPages: number, limit: number): void {
+        const buttonSpacing = 18;
+        const icons = ['icon_most_left', 'icon_left', 'icon_right', 'icon_most_right'];
+
+        // Use the actual content area dimensions (parent container) for placement
+        const areaWidth = this.contentArea ? this.contentArea.width : scene.scale.width;
+        const areaHeight = this.contentArea ? this.contentArea.height : scene.scale.height;
+
+        // Bottom within the visible content area
+        const bottomPadding = 80;
+        const y = areaHeight - bottomPadding;
+
+        // Measure total width for centering within the content area
+        const tempImages: Phaser.GameObjects.Image[] = icons.map(key => scene.add.image(0, 0, key) as ButtonImage);
+        const totalWidth = tempImages.reduce((sum, img, i) => sum + img.width + (i > 0 ? buttonSpacing : 0), 0);
+        tempImages.forEach(img => img.destroy());
+
+        // Start X so the row is centered inside the content area's local coordinates
+        let currentX = (areaWidth - totalWidth) / 2;
+
+        // Place interactive buttons into the history content container
+        icons.forEach((key) => {
+            const btn = scene.add.image(currentX, y, key) as ButtonImage;
+            btn.setOrigin(0, 1);
+
+            let targetPage = page;
+            let enabled = true;
+            switch (key) {
+                case 'icon_most_left':
+                    targetPage = 1;
+                    enabled = page > 1;
+                    break;
+                case 'icon_left':
+                    targetPage = Math.max(1, page - 1);
+                    enabled = page > 1;
+                    break;
+                case 'icon_right':
+                    targetPage = Math.min(totalPages, page + 1);
+                    enabled = page < totalPages;
+                    break;
+                case 'icon_most_right':
+                    targetPage = Math.max(1, totalPages);
+                    enabled = page < totalPages;
+                    break;
+            }
+
+            if (enabled) {
+                btn.setInteractive({ useHandCursor: true });
+                btn.on('pointerup', () => {
+                    scene.audioManager.UtilityButtonSFX.play();
+                    this.showHistoryContent(scene, contentArea, targetPage, limit);
+                });
+            } else {
+                btn.setAlpha(0.5);
+                btn.disableInteractive();
+            }
+
+            contentArea.add(btn);
+            currentX += btn.width + buttonSpacing;
+        });
+
+        // Page number display: "Page 1 of 10"
+        const pageNumberText = scene.add.text(
+            areaWidth / 2,
+            y + 40, // place below the pagination buttons
+            `Page ${page} of ${totalPages}`,
+            {
+                fontSize: '20px',
+                color: '#FFFFFF',
+                fontFamily: 'Poppins',
+                align: 'center'
+            }
+        ) as ButtonText;
+        pageNumberText.setOrigin(0.5, 0); // center horizontally
+        contentArea.add(pageNumberText);
+    }
+
+
 
     private createVolumeSettingsContent(scene: GameScene, contentArea: GameObjects.Container): void {
         const scaleFactor = 1;
@@ -549,7 +771,7 @@ export class Menu {
         contentArea.add(musicSlider);
 
         // Music value text
-        const musicValue = scene.add.text(sliderStartX , musicSliderY + 15, '75%', {
+        const musicValue = scene.add.text(sliderStartX , musicSliderY + 25, '75%', {
             fontSize: '16px',
             color: '#FFFFFF',
             fontFamily: 'Poppins'
@@ -560,7 +782,7 @@ export class Menu {
         const sfxSliderBg = scene.add.graphics();
         const sfxSliderBg2 = scene.add.graphics();
         const sfxSlider = scene.add.graphics();
-        const sfxValue = scene.add.text(sliderStartX, sfxSliderY + 15, '75%', {
+        const sfxValue = scene.add.text(sliderStartX, sfxSliderY + 25, '75%', {
             fontSize: '16px',
             color: '#FFFFFF',
             fontFamily: 'Poppins'
