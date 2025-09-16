@@ -14,6 +14,8 @@ export class SymbolGenerator {
 				let value = this.getValue(row, exclude)
 				rowValues.push(value);
 			}
+
+			//@ts-ignore
 			newValues.push(rowValues);
 		}
 
@@ -28,13 +30,16 @@ export class SymbolGenerator {
 		// Scatter only spawn at 0, 2, 4 indices
 		// The exclusion should match using array instead of single value
 		if (SymbolGenerator.SCATTER_ROWS.includes(row) && !this.hasMatched(Data.SCATTER, exclude)) {
+			//@ts-ignore
 			selection.push(...Data.SCATTER);
 		}
 
+			//@ts-ignore
 		selection.push(...Data.NORMAL_SYMBOLS);
 
 		// Wildcard only spawn at 1, 2, 3 indices
 		if (SymbolGenerator.WILDCARD_ROWS.includes(row)) {
+			//@ts-ignore
 			selection.push(...Data.WILDCARDS);
 		}
 

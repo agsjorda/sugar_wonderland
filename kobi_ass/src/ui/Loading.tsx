@@ -1,5 +1,5 @@
+import React, { useEffect, useState } from 'react';
 import * as Phaser from 'phaser';
-import { useEffect, useState } from 'react';
 import { EventBus } from '../game/EventBus';
 import styles from './Loading.module.scss';
 

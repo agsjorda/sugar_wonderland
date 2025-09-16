@@ -1,3 +1,4 @@
+import React from 'react';
 import * as Phaser from 'phaser';  // Import Phaser for type access
 import { Loading } from './Loading';
 // import { GameUI } from './Game';  // Commented out for future use

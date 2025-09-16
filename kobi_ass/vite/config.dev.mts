@@ -5,7 +5,7 @@ import path from 'path';
 
 function gameReloadPlugin(): Plugin {
   return {
-    name: 'game-reload-on-change',
+    name: 'phasermsg',
 
     configureServer(server: ViteDevServer) {
       const gameDirPath = path.resolve(__dirname, '../src/game');
@@ -33,13 +33,21 @@ function gameReloadPlugin(): Plugin {
 
 export default defineConfig({
     base: './',
-    plugins: [
-        react(),
-        gameReloadPlugin(),
-    ],
-    server: {
-        port: 3000,
-        hmr: true,
-        allowedHosts: ['minium.dev.fybtech.xyz']
+    define: {
+        __APP_VERSION__: JSON.stringify(process.env.npm_package_version || 'dev')
     },
+    build: {
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    phaser: ['phaser']
+                }
+            }
+        },
+    },
+    server: {
+        port: 8080,
+        host: true,
+        allowedHosts: ['minium.dev.fybtech.xyz']
+    }
 });
