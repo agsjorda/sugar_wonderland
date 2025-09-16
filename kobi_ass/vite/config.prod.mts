@@ -42,5 +42,10 @@ export default defineConfig({
                 comments: false
             }
         }
+    },
+    server: {
+        port: 8080,
+        host: true,
+        allowedHosts: ['minium.dev.fybtech.xyz']
     }
 });
