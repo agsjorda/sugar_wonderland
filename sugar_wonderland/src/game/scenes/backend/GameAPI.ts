@@ -59,7 +59,7 @@ export class GameAPI {
             "currency": "",
             "quit_link": "www.quit.com",
             "free_spin": "1",
-            "session": "042b5be8-7ca8-4f04-9624-7bdab79f6527",
+            "session": "83f78be3-8685-4142-aa4e-7b1a4d0a7415",
             "player_name": "test"
         };
 
@@ -205,6 +205,7 @@ export class GameAPI {
                 })
             });
 
+           
             // Treat HTTP 400 as session timeout
             if(response.status === 400){
                 try { Events.emitter.emit(Events.SESSION_TIMEOUT, {}); } catch (_e) {}
@@ -227,5 +228,20 @@ export class GameAPI {
             console.error(error);
             throw error;
         }
+    }
+
+    public async getHistory(page: number, limit: number): Promise<any> {
+        const apiUrl = `${getApiBaseUrl()}/api/v1/games/me/histories`;
+        
+        const response = await fetch(`${apiUrl}?limit=${limit}&page=${page}`,{
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('gameToken')}`
+            }
+        });
+        
+        const data = await response.json();
+        return data;
     }
 }   
