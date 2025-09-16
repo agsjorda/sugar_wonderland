@@ -472,6 +472,9 @@ export class BuyFeaturePopup {
         scene.gameData.totalWin = 0;
         Events.emitter.emit(Events.RESET_WIN, {});
 
+        // Ensure autoplay indicator is hidden when buying feature directly
+        try { (scene as any)?.buttons?.autoplayIndicator?.setAlpha?.(0); } catch (_e) {}
+
         // Hide the popup
         this.hide(scene);
 

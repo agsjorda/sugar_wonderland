@@ -52,6 +52,10 @@ export class Menu {
     private historyCurrentPage: number = 1;
     private historyTotalPages: number = 1;
     private historyPageLimit: number = 11;
+    private historyIsLoading: boolean = false;
+    private historyHeaderContainer?: GameObjects.Container;
+    private historyRowsContainer?: GameObjects.Container;
+    private historyPaginationContainer?: GameObjects.Container;
 
     protected titleStyle = {
         fontSize: '24px',
@@ -119,6 +123,10 @@ export class Menu {
         const bg = scene.add.graphics();
         bg.fillStyle(0x000000, 0.8);
         bg.fillRect(0, 0, this.width, this.height);
+        // Make overlay interactive to block pointer events from reaching the game underneath
+        bg.setInteractive(new Geom.Rectangle(0, 0, this.width, this.height), Geom.Rectangle.Contains);
+        bg.on('pointerdown', () => {});
+        bg.on('pointerup', () => {});
         menuContainer.add(bg);
 
         // Create menu panel - full screen
@@ -134,6 +142,10 @@ export class Menu {
         const panelBg = scene.add.graphics();
         panelBg.fillStyle(0x181818, 0.95);
         panelBg.fillRect(0, 0, panelWidth, panelHeight);
+        // Make panel capture input too
+        panelBg.setInteractive(new Geom.Rectangle(0, 0, panelWidth, panelHeight), Geom.Rectangle.Contains);
+        panelBg.on('pointerdown', () => {});
+        panelBg.on('pointerup', () => {});
         this.panel.add(panelBg);
 
         // Create tabs with different widths
@@ -391,19 +403,34 @@ export class Menu {
 
 
     private async showHistoryContent(scene: GameScene, contentArea: GameObjects.Container, page: number, limit: number): Promise<void> {
-        // Clear previous history content
-        contentArea.removeAll(true);
-
-        // Create a simple history page with "HISTORY" text
-        const historyText = scene.add.text(15, 15,'History', this.titleStyle) as ButtonText;
-        historyText.setOrigin(0, 0);
-        contentArea.add(historyText);
-
+        // Keep old rows until new data is ready; build containers on first run
         const historyHeaders : string[] = ['Spin', 'Currency', 'Bet', 'Win'];
+        if (!this.historyHeaderContainer) {
+            this.historyHeaderContainer = scene.add.container(0, 0);
+            contentArea.add(this.historyHeaderContainer);
+
+            const historyText = scene.add.text(15, 15,'History', this.titleStyle) as ButtonText;
+            historyText.setOrigin(0, 0);
+            this.historyHeaderContainer.add(historyText);
+        }
+        if (!this.historyRowsContainer) {
+            this.historyRowsContainer = scene.add.container(0, 0);
+            contentArea.add(this.historyRowsContainer);
+        }
+        if (!this.historyPaginationContainer) {
+            this.historyPaginationContainer = scene.add.container(0, 0);
+            contentArea.add(this.historyPaginationContainer);
+        }
+
+        // Prevent stacking requests
+        if (this.historyIsLoading) {
+            return;
+        }
+        this.historyIsLoading = true;
 
         // Show loading icon while fetching history (centered on screen)
-        const loaderX = scene.scale.width / 2;
-        const loaderY = scene.scale.height / 3;
+        const loaderX = scene.scale.width * 0.45;
+        const loaderY = scene.scale.height * 0.3;
         const loader = scene.add.image(loaderX, loaderY, 'loading_icon') as ButtonImage;
         loader.setOrigin(0.5, 0.5);
         loader.setScale(0.25);
@@ -422,6 +449,7 @@ export class Menu {
         } finally {
             spinTween.stop();
             loader.destroy();
+            this.historyIsLoading = false;
         }
         console.log(result);
 
@@ -430,19 +458,22 @@ export class Menu {
         this.historyTotalPages = result?.meta?.pageCount ?? 1;
         this.historyPageLimit = limit;
         
-        // Display headers centered per column
+        // Display headers centered per column (only once)
         const columnCenters = this.getHistoryColumnCenters(scene);
-        const headerY = 60;
-        historyHeaders.forEach((header, idx) => {
-            const headerText = scene.add.text(columnCenters[idx], headerY, header, {
-                fontSize: '14px',
-                color: '#FFFFFF',
-                fontFamily: 'Poppins',
-                fontStyle: 'bold',
-            }) as ButtonText;
-            headerText.setOrigin(0.5, 0);
-            contentArea.add(headerText);
-        });
+        const headerContainer = this.historyHeaderContainer as GameObjects.Container;
+        if (headerContainer.length <= 1) { // only title exists
+            const headerY = 60;
+            historyHeaders.forEach((header, idx) => {
+                const headerText = scene.add.text(columnCenters[idx], headerY, header, {
+                    fontSize: '14px',
+                    color: '#FFFFFF',
+                    fontFamily: 'Poppins',
+                    fontStyle: 'bold',
+                }) as ButtonText;
+                headerText.setOrigin(0.5, 0);
+                headerContainer.add(headerText);
+            });
+        }
 
         let spinDate = '26/7/2025, 16:00';
         let currency = 'usd';
@@ -450,6 +481,8 @@ export class Menu {
         let win = 250000000;
 
         let contentY = 100;
+        const rowsContainer = this.historyRowsContainer as GameObjects.Container;
+        rowsContainer.removeAll(true);
         result.data?.forEach((v?:any)=>{
             spinDate = this.formatISOToDMYHM(v.created_at);
             currency = v.currency == ''?'usd':v.currency;
@@ -458,13 +491,15 @@ export class Menu {
 
             contentY += 30;
             // Create row centered per column
-            this.createHistoryEntry(contentY, scene, contentArea, spinDate, currency, bet, win.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), columnCenters);
-            this.addDividerHistory(scene, contentArea, contentY);
+            this.createHistoryEntry(contentY, scene, rowsContainer, spinDate, currency, bet, win.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), columnCenters);
+            this.addDividerHistory(scene, rowsContainer, contentY);
             contentY += 20;
         });
         
         // Add pagination buttons at bottom-center
-        this.addHistoryPagination(scene, contentArea, this.historyCurrentPage, this.historyTotalPages, this.historyPageLimit);
+        const paginationContainer = this.historyPaginationContainer as GameObjects.Container;
+        paginationContainer.removeAll(true);
+        this.addHistoryPagination(scene, paginationContainer, this.historyCurrentPage, this.historyTotalPages, this.historyPageLimit);
     }
 
     private formatISOToDMYHM(iso: string, timeZone = 'Asia/Manila'): string {
@@ -574,7 +609,16 @@ export class Menu {
             if (enabled) {
                 btn.setInteractive({ useHandCursor: true });
                 btn.on('pointerup', () => {
+                    if (this.historyIsLoading) { return; }
                     scene.audioManager.UtilityButtonSFX.play();
+                    // Disable all pagination buttons during load
+                    contentArea.iterate((child: Phaser.GameObjects.GameObject) => {
+                        const img = child as Phaser.GameObjects.Image;
+                        if (img && (img as any).texture && icons.includes((img as any).texture.key)) {
+                            img.disableInteractive();
+                            img.setAlpha(0.5);
+                        }
+                    });
                     this.showHistoryContent(scene, contentArea, targetPage, limit);
                 });
             } else {
