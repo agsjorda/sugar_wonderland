@@ -1,22 +1,58 @@
 import { Scene } from 'phaser';
+import { EventBus } from '../EventBus';
+import { NetworkManager } from '../../managers/NetworkManager';
+import { ScreenModeManager } from '../../managers/ScreenModeManager';
+import { AssetConfig } from '../../config/AssetConfig';
+import { AssetLoader } from '../../utils/AssetLoader';
 
 export class Boot extends Scene
 {
-  constructor ()
-  {
-    super('Boot');
-  }
+	private networkManager: NetworkManager;
+	private screenModeManager: ScreenModeManager;
+	private assetConfig: AssetConfig;
+	private assetLoader: AssetLoader;
 
-  preload ()
-  {
-    //  The Boot Scene is typically used to load in any assets you require for your Preloader, such as a game logo or background.
-    //  The smaller the file size of the assets, the better, as the Boot Scene itself has no preloader.
+	constructor ()
+	{
+		super('Boot');
+		this.networkManager = new NetworkManager();
+		this.screenModeManager = new ScreenModeManager();
+		this.screenModeManager.forceOrientation('portrait');
+		
+		// Initialize asset configuration
+		this.assetConfig = new AssetConfig(this.networkManager, this.screenModeManager);
+		this.assetLoader = new AssetLoader(this.assetConfig);
+	}
 
-    // this.load.image('background', 'assets/bg.png');
-  }
+	init ()
+	{
+		console.log('Boot scene init');
+		EventBus.emit('current-scene-ready', this);
+	}
 
-  create ()
-  {
-    this.scene.start('Preloader');
-  }
+	preload ()
+	{
+		// Show debug info
+		this.assetConfig.getDebugInfo();
+		
+		console.log(`[Boot] Asset loading configuration:`);
+		console.log(`[Boot] - Asset scale: ${this.networkManager.getAssetScale()}x`);
+		console.log(`[Boot] - Asset prefix: ${this.assetConfig['getAssetPrefix']()}`);
+		
+		// Load loading assets using AssetLoader
+		this.assetLoader.loadLoadingAssets(this);
+		
+		console.log(`[Boot] Loading assets for Boot scene`);
+	}
+
+	create ()
+	{
+		// Emit the screen mode manager so UI components can access it
+		EventBus.emit('screen-mode-manager-ready', this.screenModeManager);
+		
+		this.scene.start('Preloader', { 
+			networkManager: this.networkManager, 
+			screenModeManager: this.screenModeManager 
+		});
+	}
 }
