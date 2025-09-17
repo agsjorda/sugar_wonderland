@@ -1933,6 +1933,9 @@ export class Buttons {
            // Ensure the TOTAL WIN panel is visible after bonus concludes
            this.totalWinContainer.setVisible(this.isMobile ? false : true);
         });
+        Events.emitter.on(Events.FREE_SPIN_TOTAL_WIN, ()=>{
+            text1.setText('TOTAL WIN');
+        });
 
         this.buttonContainer.add(container);
     }
@@ -3178,6 +3181,9 @@ export class Buttons {
         Events.emitter.on(Events.FINAL_WIN_SHOW, () => {
             youWonLabel.setText('TOTAL WIN');
             youWonAmount.setText(`${scene.gameData.currency} ${scene.gameData.totalBonusWin.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+        });
+        Events.emitter.on(Events.FREE_SPIN_TOTAL_WIN, ()=>{
+            youWonLabel.setText('TOTAL WIN');
         });
     }
 

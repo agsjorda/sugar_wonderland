@@ -350,7 +350,6 @@ export class SlotMachine {
             console.log('[BUY FEATURE] doSpin error', result);
             return;
         }
-        
         // console.log("result", result);
         scene.gameData.apiBet = result.bet;
         scene.gameData.bet = result.bet;
@@ -680,13 +679,18 @@ export class SlotMachine {
             }
         } catch (_e) { /* ignore recompute errors */ }
 
-        Events.emitter.emit(Events.FINAL_WIN_SHOW, {});
+        Events.emitter.emit(Events.FINAL_WIN_SHOW);
 
         
         scene.background.toggleBackground(scene);
         scene.audioManager.changeBackgroundMusic(scene);
         const bonusWin = scene.gameData.totalBonusWin;
-        console.log("endiAPIBonus", bonusWin);
+        console.log("endiAPIBonus", bonusWin);  
+        // para sure
+        setTimeout(() => {
+            Events.emitter.emit(Events.FINAL_WIN_SHOW);
+        }, 10);
+
 
         this.showBonusWin(scene, bonusWin);
         scene.gameData.useApiFreeSpins = false;
@@ -767,7 +771,7 @@ export class SlotMachine {
                     newSymbol = new BombContainer(scene, symbolX, startY, symbolValue, scene.gameData);
                     // Size bombs similar to regular symbols so they visually align with the grid
                     newSymbol.setBombDisplaySize(width * Slot.SYMBOL_SIZE, height * Slot.SYMBOL_SIZE);
-                    scene.gameData.debugLog('Created BombContainer for dropAndRefill', { symbolValue, position: { x: symbolX, y: startY } });
+                    console.log('Created BombContainer for dropAndRefill', { symbolValue, position: { x: symbolX, y: startY } });
                 } else {
                     newSymbol = scene.add.sprite(symbolX, startY, symbolKey, frameKey) as GameObjects.Sprite;
                 }
@@ -782,7 +786,7 @@ export class SlotMachine {
                     } else if (newSymbol) {
                         newSymbol.setDisplaySize(width * Slot.SYMBOL_SIZE, height * Slot.SYMBOL_SIZE);
                     }
-                    scene.gameData.debugLog("symbolValue", symbolValue);
+                    console.log("symbolValue", symbolValue);
                 } else {
                     newSymbol?.setDisplaySize(width * Slot.SYMBOL_SIZE, height * Slot.SYMBOL_SIZE);
                 }
@@ -904,8 +908,13 @@ export class SlotMachine {
         try {
             while (continueMatching) {
                 const result = await this.checkMatchAsync(symbolGrid, scene, SymbolsIn[this.currentIndex]);
-                scene.gameData.debugLog("Match result:", result);
+                console.log("Match result:", result);
                 lastResult = result;
+
+                if(scene.gameData.useApiFreeSpins){
+                    Events.emitter.emit(Events.FREE_SPIN_TOTAL_WIN);
+                }
+
                 if (result === "No more matches" || result === "free spins") {
                     continueMatching = false;
                 }
@@ -915,14 +924,14 @@ export class SlotMachine {
                         this.currentIndex++;
                     }
                     else{
-                        scene.gameData.debugLog("No more tumbles, stopping match");
+                        console.log("No more tumbles, stopping match");
                         continueMatching = false;
                     }
                 }
                 // If result is "continue match", the loop will continue
             }
         } catch (error) {
-            scene.gameData.debugError("Error in match processing: " + error);
+            console.error("Error in match processing: " + error);
         } finally {
             // Only handle deferred scatter at the end of all matches
             //  console.log(chalk.green.bold('totalWin: ' + scene.gameData.totalWin.toFixed(2)));
@@ -980,7 +989,7 @@ export class SlotMachine {
             Events.emitter.emit(Events.TUMBLE_SEQUENCE_DONE, { symbolGrid });
             // Always ensure spinning state is reset
             scene.gameData.isSpinning = false;
-            scene.gameData.debugLog("Spin sequence completed, isSpinning reset to false");
+            console.log("Spin sequence completed, isSpinning reset to false");
             // Immediately re-enable buttons when spinning completes
             if (scene.buttons && scene.buttons.enableButtonsVisually) {
                 scene.buttons.enableButtonsVisually(scene);
@@ -994,7 +1003,7 @@ export class SlotMachine {
             const currentTime = Date.now();
             // Immediate check to prevent overlapping spins
             if (scene.gameData.isSpinning) {
-                scene.gameData.debugLog("Spin already in progress, ignoring new spin request");
+                console.log("Spin already in progress, ignoring new spin request");
                 return;
             }
             // Reset per-spin match flag
@@ -1005,7 +1014,7 @@ export class SlotMachine {
             this.currentIndex = 0;
             // Rate limiting: prevent spins that are too close together
             if (currentTime - this.lastSpinTimestamp < this.MIN_SPIN_INTERVAL) {
-                scene.gameData.debugLog(`Spin rate limited, ${this.MIN_SPIN_INTERVAL}ms cooldown active`);
+                console.log(`Spin rate limited, ${this.MIN_SPIN_INTERVAL}ms cooldown active`);
                 return;
             }
             // Set spinning state immediately to block further spin attempts
@@ -1046,7 +1055,7 @@ export class SlotMachine {
                     await this.createReel(scene, data);
                 }
             } catch (error) {
-                scene.gameData.debugError("Error during spin: " + error);
+                console.error("Error during spin: " + error);
                 scene.gameData.isSpinning = false; // Reset state on error
                 // Re-enable buttons on error
                 if (scene.buttons && scene.buttons.enableButtonsVisually) {
