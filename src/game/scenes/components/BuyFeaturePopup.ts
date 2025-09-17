@@ -240,7 +240,7 @@ export class BuyFeaturePopup {
         const boxWidth = Math.max(padding * 9.5, 240);
         const boxHeight = this.isMobile ? 56 : 56;
         const betBox = scene.add.graphics();
-        betBox.fillStyle(0x333333, 0.95);
+        betBox.fillStyle(0xFFFFFF, 0.2);
         betBox.lineStyle(1, 0x66D449, 0);
         betBox.fillRoundedRect(-boxWidth * 0.5, -boxHeight * 0.5, boxWidth, boxHeight, 10);
         betBox.strokeRoundedRect(-boxWidth * 0.5, -boxHeight * 0.5, boxWidth, boxHeight, 10);

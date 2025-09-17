@@ -13,6 +13,7 @@ export class Events {
     static readonly WIN: string = 'win';
     static readonly RESET_WIN: string = 'resetWin';
     static readonly FINAL_WIN_SHOW: string = 'finalWinShow';
+    static readonly FREE_SPIN_TOTAL_WIN: string = 'freeSpinTotalWin';
     
     static readonly CHANGE_LINE: string = 'changeLine';
     static readonly CHANGE_BET: string = 'change_bet';
