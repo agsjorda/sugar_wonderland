@@ -790,6 +790,13 @@ export class Symbols {
       // Stop any existing tweens on the overlay
       this.scene.tweens.killTweensOf(this.overlayRect);
       
+      // If already visible, ensure full opacity and avoid re-tweening to prevent flicker
+      if (this.overlayRect.visible && this.overlayRect.alpha >= 1) {
+        this.overlayRect.setAlpha(1);
+        console.log('[Symbols] Winning overlay already visible - ensuring alpha 1');
+        return;
+      }
+      
       // Set initial state for fade in
       this.overlayRect.setVisible(true);
       this.overlayRect.setAlpha(0);
@@ -1762,7 +1769,7 @@ function createInitialSymbols(self: Symbols) {
   const startY = self.slotY - self.totalGridHeight * 0.5;
   
   for (let col = 0; col < symbols.length; col++) {
-    let rows = [];
+    let rows: any[] = [];
     for (let row = 0; row < symbols[col].length; row++) {
       const x = startX + row * symbolTotalWidth + symbolTotalWidth * 0.5;
       const y = startY + col * symbolTotalHeight + symbolTotalHeight * 0.5;
@@ -1942,6 +1949,18 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   if (scatterGrids.length >= 3) {
     console.log(`[Symbols] Scatter detected! Found ${scatterGrids.length} scatter symbols`);
     gameStateManager.isScatter = true;
+
+    // If there are no normal wins (no paylines), play scatter SFX now
+    try {
+      const hasWins = Array.isArray(spinData.slot?.paylines) && spinData.slot.paylines.length > 0;
+      if (!hasWins) {
+        const audio = (window as any)?.audioManager;
+        if (audio && typeof audio.playSoundEffect === 'function') {
+          audio.playSoundEffect(SoundEffectType.SCATTER);
+          console.log('[Symbols] Played scatter SFX for scatter-only hit');
+        }
+      }
+    } catch {}
     
     // Stop normal autoplay immediately when scatter is detected
     if (gameStateManager.isAutoPlaying) {
@@ -1956,11 +1975,9 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
       }
     }
     
-    // Show the winning overlay behind symbols for scatter (if not already shown)
-    if (!self.hasCurrentWins()) {
-      self.showWinningOverlay();
-      console.log('[Symbols] Showing winning overlay for scatter symbols');
-    }
+    // Always show the winning overlay behind symbols for scatter
+    self.showWinningOverlay();
+    console.log('[Symbols] Showing winning overlay for scatter symbols');
     
     // Animate the individual scatter symbols with their hit animations
     console.log('[Symbols] Starting scatter symbol hit animations...');
@@ -2115,7 +2132,7 @@ function createNewSymbols(self: Symbols, data: Data) {
   self.newSymbols = [];
 
   for (let col = 0; col < symbols.length; col++) {
-    let rows = [];
+    let rows: any[] = [];
     for (let row = 0; row < symbols[col].length; row++) {
 
       const x = startX + row * symbolTotalWidth + symbolTotalWidth * 0.5;
@@ -2447,6 +2464,15 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
                 const sfx = hasWildcardInWin ? SoundEffectType.WILD_MULTI : SoundEffectType.HIT_WIN;
                 audio.playSoundEffect(sfx);
                 hasPlayedWinSfx = true;
+                // If this spin triggered scatter, chain play scatter_ka after hit/wildmulti
+                try {
+                  if (gameStateManager.isScatter) {
+                    // short chain delay to ensure ordering
+                    this.scene.time.delayedCall(100, () => {
+                      try { audio.playSoundEffect(SoundEffectType.SCATTER); } catch {}
+                    });
+                  }
+                } catch {}
               }
             }
           } catch {}

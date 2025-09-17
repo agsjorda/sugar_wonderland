@@ -186,6 +186,7 @@ export class AssetConfig {
 				'turbo_on': `assets/controller/${screenMode}/${quality}/turbo_on.png`,
 				'amplify': `assets/controller/${screenMode}/${quality}/amplify.png`,
 				'feature': `assets/controller/${screenMode}/${quality}/feature.png`,
+				'long_button': `assets/controller/${screenMode}/${quality}/long_button.png`,
 			},
 			spine: {
 				'generic_UI_animation': {
@@ -199,6 +200,10 @@ export class AssetConfig {
 				'amplify_bet': {
 					atlas: `assets/portrait/high/amplify_bet/Amplify Bet.atlas`,
 					json: `assets/portrait/high/amplify_bet/Amplify Bet.json`
+				},
+				'turbo_animation': {
+					atlas: `assets/controller/${screenMode}/${quality}/turbo_animation/Turbo_Spin.atlas`,
+					json: `assets/controller/${screenMode}/${quality}/turbo_animation/Turbo_Spin.json`
 				}
 			}
 		};
@@ -339,16 +344,19 @@ export class AssetConfig {
 			audio: {
 				'mainbg_ka': 'assets/sounds/BG/mainbg_ka.ogg',
 				'bonusbg_ka': 'assets/sounds/BG/bonusbg_ka.ogg',
-				'freespinbg_ka': 'assets/sounds/BG/freespinbg_ka.ogg',
+				'freespinbg_ka': 'assets/sounds/Wins/freespin_ka.ogg',
 				'ambience_ka': 'assets/sounds/SFX/ambience_ka.ogg',
 				'spinb_ka': 'assets/sounds/SFX/spinb_ka.ogg',
 				'reeldrop_ka': 'assets/sounds/SFX/reeldrop_ka.ogg',
 				'turbodrop_ka': 'assets/sounds/SFX/turbodrop_ka.ogg',
 				'wheelspin_ka': 'assets/sounds/SFX/wheelspin_ka.ogg',
+				'coin_throw_ka': 'assets/sounds/SFX/coin_throw_ka.ogg',
+				'coin_drop_ka': 'assets/sounds/SFX/coin_drop_ka.ogg',
 				// Hit win SFX
 				'hitwin_ka': 'assets/sounds/SFX/hitwin_ka.ogg',
 				// Wild multi SFX
 				'wildmulti_ka': 'assets/sounds/SFX/wildmulti_ka.ogg',
+				'scatter_ka': 'assets/sounds/SFX/scatter_ka.ogg',
 				// Winline SFX
 				'winline_1_ka': 'assets/sounds/SFX/winline_1_ka.ogg',
 				'winline_2_ka': 'assets/sounds/SFX/winline_2_ka.ogg',
@@ -357,6 +365,8 @@ export class AssetConfig {
 				'megaw_ka': 'assets/sounds/Wins/megaw_ka.ogg',
 				'superw_ka': 'assets/sounds/Wins/superw_ka.ogg',
 				'epicw_ka': 'assets/sounds/Wins/epicw_ka.ogg',
+				'freespin_ka': 'assets/sounds/Wins/freespin_ka.ogg',
+				'congrats_ka': 'assets/sounds/Wins/congrats_ka.ogg',
 
 				// Win dialog SFX
 				'bigwskip_ka': 'assets/sounds/Wins/bigwskip_ka.ogg',

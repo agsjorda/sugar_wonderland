@@ -5,6 +5,7 @@ import { NumberDisplay, NumberDisplayConfig } from './NumberDisplay';
 import { IrisTransition } from './IrisTransition';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
+import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 
 export interface DialogConfig {
 	type: 'confetti_KA' | 'Congrats_KA' | 'Explosion_AK' | 'FreeSpinDialog_KA' | 'largeW_KA' | 'LargeW_KA' | 'MediumW_KA' | 'SmallW_KA' | 'SuperW_KA';
@@ -205,6 +206,19 @@ export class Dialogs {
 		
 		// Create the dialog content
 		this.createDialogContent(scene, config);
+
+		// Play dialog-specific SFX (FreeSpin/ Congrats) when shown
+		try {
+			const audioManager = (window as any).audioManager;
+			if (audioManager && typeof audioManager.playSoundEffect === 'function') {
+				const type = (this.currentDialogType || '').toLowerCase();
+				if (type === 'freespindialog_ka') {
+					audioManager.playSoundEffect('dialog_freespin');
+				} else if (type === 'congrats_ka') {
+					audioManager.playSoundEffect('dialog_congrats');
+				}
+			}
+		} catch {}
 		
 		// Play win dialog SFX if applicable
 		try {

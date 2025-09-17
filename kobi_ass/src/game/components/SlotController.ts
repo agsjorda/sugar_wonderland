@@ -11,6 +11,7 @@ import { SpinData, SpinDataUtils } from '../../backend/SpinData';
 import { BuyFeature } from './BuyFeature';
 import { Symbols } from './Symbols';
 import { SoundEffectType } from '../../managers/AudioManager';
+import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 
 export class SlotController {
 	private controllerContainer: Phaser.GameObjects.Container;
@@ -118,6 +119,8 @@ export class SlotController {
 		
 		// Create main container for all controller elements
 		this.controllerContainer = scene.add.container(0, 0);
+		// Ensure controller UI renders above coin animations (800) but below dialogs (1000)
+		this.controllerContainer.setDepth(900);
 		
 		const screenConfig = this.screenModeManager.getScreenConfig();
 		const assetScale = this.networkManager.getAssetScale();
@@ -193,7 +196,7 @@ export class SlotController {
 			// Set properties following the same pattern as kobi-ass
 			this.spinButtonAnimation.setOrigin(0.5, 0.5);
 			this.spinButtonAnimation.setScale(assetScale * 0.45); // Same scale as spin button
-			this.spinButtonAnimation.setDepth(11); // Above the spin button
+			this.spinButtonAnimation.setDepth(9); // Behind the spin button
 			
 			// Set animation speed to 1.3x
 			this.spinButtonAnimation.animationState.timeScale = 1.3;
@@ -201,8 +204,13 @@ export class SlotController {
 			// Initially hide the animation
 			this.spinButtonAnimation.setVisible(false);
 			
-			// Add to the controller container
-			this.controllerContainer.add(this.spinButtonAnimation);
+			// Add to the primary controllers container just below the spin button
+			if (this.primaryControllers) {
+				const spinIndex = this.primaryControllers.getIndex(spinButton);
+				this.primaryControllers.addAt(this.spinButtonAnimation, spinIndex);
+			} else {
+				this.controllerContainer.add(this.spinButtonAnimation);
+			}
 			
 			console.log('[SlotController] Spin button spine animation created successfully with 1.3x speed');
 		} catch (error) {
@@ -267,8 +275,8 @@ export class SlotController {
 	private createTurboButtonAnimation(scene: Scene, assetScale: number): void {
 		try {
 			// Check if the spine assets are loaded
-			if (!scene.cache.json.has('button_animation_idle')) {
-				console.warn('[SlotController] button_animation_idle spine assets not loaded yet, will retry later');
+			if (!scene.cache.json.has('turbo_animation')) {
+				console.warn('[SlotController] turbo_animation spine assets not loaded yet, will retry later');
 				// Set up a retry mechanism
 				scene.time.delayedCall(1000, () => {
 					this.createTurboButtonAnimation(scene, assetScale);
@@ -286,15 +294,15 @@ export class SlotController {
 			// Create spine animation at the same position as the turbo button
 			// Following the exact same pattern as kobi-ass animation in Header.ts
 			this.turboButtonAnimation = scene.add.spine(
-				turboButton.x - 3.5, 
-				turboButton.y - 23.5, 
-				"button_animation_idle", 
-				"button_animation_idle-atlas"
+				turboButton.x, 
+				turboButton.y + 7, 
+				"turbo_animation", 
+				"turbo_animation-atlas"
 			);
 			
 			// Set properties following the same pattern as kobi-ass
 			this.turboButtonAnimation.setOrigin(0.5, 0.5);
-			this.turboButtonAnimation.setScale(assetScale * 0.15); // Same scale as turbo button
+			this.turboButtonAnimation.setScale(assetScale * 1); // Same scale as turbo button
 			this.turboButtonAnimation.setDepth(11); // Above the turbo button
 			
 			// Set animation speed to 1.3x (same as spin button)
@@ -1441,10 +1449,7 @@ export class SlotController {
 			this.rotateSpinButton();
 			
 			
-			// Bounce the autoplay spins remaining text if autoplay is active
-			if (this.gameData?.isAutoPlaying && this.autoplaySpinsRemainingText?.visible) {
-				this.bounceAutoplaySpinsRemainingText();
-			}
+			// Removed pulsing of autoplay spins remaining text during spin
 			
 			// Log current GameData animation values to debug turbo mode
 			console.log('[SlotController] Spin started - GameData animation values:', this.getGameDataAnimationInfo());
@@ -1465,8 +1470,12 @@ export class SlotController {
 		gameEventManager.on(GameEventType.REELS_STOP, () => {
 			console.log('[SlotController] Reels stopped event received - updating spin button state');
 			
-			// Update balance from server every time reels stop
-			this.updateBalanceFromServer();
+			// Update balance from server every time reels stop (skip during scatter/bonus)
+			if (!gameStateManager.isScatter && !gameStateManager.isBonus) {
+				this.updateBalanceFromServer();
+			} else {
+				console.log('[SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)');
+			}
 			
 			// Apply pending balance update now that reels have stopped spinning
 			if (this.pendingBalanceUpdate) {
@@ -1494,6 +1503,20 @@ export class SlotController {
 			// If we're in bonus mode, check if free spins are finishing now
 			if (gameStateManager.isBonus) {
 				try {
+					// Frontend-only: increment balance by the current free spin subtotal win
+					if (this.gameAPI) {
+						const currentSpin = this.gameAPI.getCurrentSpinData();
+						if (currentSpin && currentSpin.slot && Array.isArray(currentSpin.slot.paylines)) {
+							const spinSubtotalWin = SpinDataUtils.getTotalWin(currentSpin);
+							if (spinSubtotalWin && spinSubtotalWin > 0) {
+								const oldBalanceVal = this.getBalanceAmount();
+								const newBalanceVal = oldBalanceVal + spinSubtotalWin;
+								this.updateBalanceAmount(newBalanceVal);
+								console.log(`[SlotController] Bonus mode: incremented balance by subtotalWin ${spinSubtotalWin}. ${oldBalanceVal} -> ${newBalanceVal}`);
+							}
+						}
+					}
+					
 					const gameScene: any = this.scene as any;
 					const symbolsComponent = gameScene?.symbols;
 					// Prefer Symbols' remaining counter if available
@@ -1909,8 +1932,7 @@ export class SlotController {
 		// Play autoplay button animation once per spin
 		this.playAutoplayAnimation();
 		
-		// Bounce the autoplay spins remaining text
-		this.bounceAutoplaySpinsRemainingText();
+		// Removed pulsing of autoplay spins remaining text during autoplay
 		
 		// Use the centralized spin handler
 		await this.handleSpin();
@@ -2096,7 +2118,7 @@ export class SlotController {
 	}
 
 	/**
-	 * Control the amplify bet pulsing based on toggle state
+	 * Control the amplify bet animation based on toggle state
 	 */
 	private controlAmplifyBetAnimation(): void {
 		const gameData = this.getGameData();
@@ -2104,11 +2126,8 @@ export class SlotController {
 			return;
 		}
 
-		if (gameData.isEnhancedBet) {
-			this.startAmplifyBetBouncing();
-		} else {
-			this.stopAmplifyBetBouncing();
-		}
+		// Remove pulsing/bouncing regardless of state; keep only color/tint change
+		this.stopAmplifyBetBouncing();
 	}
 
 

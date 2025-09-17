@@ -1,4 +1,5 @@
 import { Scene } from 'phaser';
+import { AudioManager, SoundEffectType } from '../../managers/AudioManager';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 
@@ -113,6 +114,24 @@ export class CoinAnimation {
 		coin.setVelocity(velX, velY);
 		coin.setAngularVelocity((Math.random() - 0.5) * 1000);
 		
+		// Play a soft drop sound when the coin hits the ground (first collision with world bounds)
+		try {
+			coin.setCollideWorldBounds(true);
+			coin.body.onWorldBounds = true as any;
+			let dropPlayed = false;
+			this.scene.physics.world.on('worldbounds', (body: any) => {
+				if (!dropPlayed && body && body.gameObject === coin) {
+					dropPlayed = true;
+					try {
+						const audio = (window as any).audioManager as AudioManager | undefined;
+						if (audio && typeof audio.playSoundEffect === 'function') {
+							audio.playSoundEffect(SoundEffectType.COIN_DROP);
+						}
+					} catch {}
+				}
+			});
+		} catch {}
+
 		// Remove coin after 5 seconds
 		this.scene.time.delayedCall(5000, () => {
 			if (coin && coin.active) {

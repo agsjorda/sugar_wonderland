@@ -34,7 +34,7 @@ import { IrisTransition } from '../components/IrisTransition';
 import { CoinAnimation } from '../components/CoinAnimation';
 import { GameAPI } from '../../backend/GameAPI';
 import { SpinData } from '../../backend/SpinData';
-import { AudioManager, MusicType } from '../../managers/AudioManager';
+import { AudioManager, MusicType, SoundEffectType } from '../../managers/AudioManager';
 
 export class Game extends Scene
 {
@@ -64,6 +64,7 @@ export class Game extends Scene
 	
 	// Queue for wins that occur while a dialog is already showing
 	private winQueue: Array<{ payout: number; bet: number }> = [];
+	private suppressWinDialogsUntilNextSpin: boolean = false;
 
 	public gameData: GameData;
 	private symbols: Symbols;
@@ -378,8 +379,12 @@ export class Game extends Scene
 				console.log('[Game] WIN_STOP: No current spin data available');
 			}
 			
-			// Update balance from server after WIN_STOP
-			this.updateBalanceAfterWinStop();
+			// Update balance from server after WIN_STOP (skip during scatter/bonus)
+			if (!gameStateManager.isScatter && !gameStateManager.isBonus) {
+				this.updateBalanceAfterWinStop();
+			} else {
+				console.log('[Game] Skipping balance update on WIN_STOP (scatter/bonus active)');
+			}
 		});
 
 		// Listen for reel completion to handle balance updates only
@@ -387,8 +392,12 @@ export class Game extends Scene
 			console.log('[Game] REELS_STOP event received');
 			
 			// Update balance from server after REELS_STOP (for no-wins scenarios)
-			// This ensures balance is updated even when WIN_STOP is not emitted
-			this.updateBalanceAfterWinStop();
+			// Skip during scatter/bonus; balance will be finalized after bonus ends
+			if (!gameStateManager.isScatter && !gameStateManager.isBonus) {
+				this.updateBalanceAfterWinStop();
+			} else {
+				console.log('[Game] Skipping balance update on REELS_STOP (scatter/bonus active)');
+			}
 			
 			// Request balance update to finalize the spin (add winnings to balance)
 			// This is needed to complete the spin cycle and update the final state
@@ -403,6 +412,8 @@ export class Game extends Scene
 		// Listen for dialog animations to complete
 		this.events.on('dialogAnimationsComplete', () => {
 			console.log('[Game] Dialog animations complete event received');
+			// Re-allow win dialogs after transitions complete
+			this.suppressWinDialogsUntilNextSpin = false;
 			
 			// Clear the win dialog state - autoplay can resume
 			gameStateManager.isShowingWinDialog = false;
@@ -423,6 +434,8 @@ export class Game extends Scene
 			console.log('[Game] SPIN event received - clearing win queue for new spin');
 			// Reset winlines tracking for the new spin
 			this.hasWinlinesThisSpin = false;
+			// Allow win dialogs again on the next spin
+			this.suppressWinDialogsUntilNextSpin = false;
 			
 			// CRITICAL: Block autoplay spins if win dialog is showing, but allow manual spins
 			// This fixes the timing issue where manual spins were blocked
@@ -451,6 +464,8 @@ export class Game extends Scene
 
 		// Listen for autoplay start to prevent it when win dialogs are showing
 		gameEventManager.on(GameEventType.AUTO_START, (eventData: any) => {
+			// When autoplay resumes, ensure win dialogs are allowed again
+			this.suppressWinDialogsUntilNextSpin = false;
 			if (gameStateManager.isShowingWinDialog) {
 				console.log('[Game] AUTO_START blocked - win dialog is showing');
 				// Don't allow autoplay to start while win dialog is showing
@@ -551,6 +566,11 @@ export class Game extends Scene
 	 * Check if payout reaches win dialog thresholds and show appropriate dialog
 	 */
 	private checkAndShowWinDialog(payout: number, bet: number): void {
+		// Suppress win dialogs if we're transitioning out of bonus back to base
+		if (this.suppressWinDialogsUntilNextSpin) {
+			console.log('[Game] Suppressing win dialog (transitioning from bonus to base)');
+			return;
+		}
 		console.log(`[Game] checkAndShowWinDialog called with payout: $${payout}, bet: $${bet}`);
 		console.log(`[Game] Current win queue length: ${this.winQueue.length}`);
 		console.log(`[Game] Current isShowingWinDialog state: ${gameStateManager.isShowingWinDialog}`);
@@ -604,6 +624,10 @@ export class Game extends Scene
 	 * Process the win queue to show the next win dialog
 	 */
 	private processWinQueue(): void {
+		if (this.suppressWinDialogsUntilNextSpin) {
+			console.log('[Game] Suppressing processing of win queue (transitioning from bonus to base)');
+			return;
+		}
 		console.log(`[Game] processWinQueue called. Queue length: ${this.winQueue.length}`);
 		console.log(`[Game] Current isShowingWinDialog state: ${gameStateManager.isShowingWinDialog}`);
 		console.log(`[Game] Current dialog showing state: ${this.dialogs.isDialogShowing()}`);
@@ -655,6 +679,13 @@ export class Game extends Scene
 	public spawnCoins(count: number = 3): void {
 		if (this.coinAnimation) {
 			this.coinAnimation.spawnCoins(count);
+			// Play coin throw SFX once when coins spawn
+			try {
+				const audio = (window as any).audioManager as AudioManager | undefined;
+				if (audio && typeof audio.playSoundEffect === 'function') {
+					audio.playSoundEffect(SoundEffectType.COIN_THROW);
+				}
+			} catch {}
 		}
 	}
 
@@ -692,9 +723,18 @@ export class Game extends Scene
 			coinCount = 5;
 			console.log(`[Game] Below threshold win! Spawning ${coinCount} coins for ${multiplier.toFixed(2)}x multiplier`);
 		}
-
-		// Spawn coins over 1 second
-		this.spawnCoinsOverTime(coinCount, 1500);
+		// Delay 1 second before spawning coins and playing SFX
+		this.time.delayedCall(500, () => {
+			// Play coin throw SFX once at start of win-based coin spawn
+			try {
+				const audio = (window as any).audioManager as AudioManager | undefined;
+				if (audio && typeof audio.playSoundEffect === 'function') {
+					audio.playSoundEffect(SoundEffectType.COIN_THROW);
+				}
+			} catch {}
+			// Spawn coins over 1.5 seconds
+			this.spawnCoinsOverTime(coinCount, 1500);
+		});
 	}
 
 	/**
@@ -795,6 +835,10 @@ export class Game extends Scene
 				this.gameStateManager.isAutoPlaySpinRequested = false;
 				this.gameStateManager.isShowingWinlines = false;
 				this.gameStateManager.isShowingWinDialog = false;
+				// Suppress any win dialogs that might be triggered during the transition back to base
+				this.suppressWinDialogsUntilNextSpin = true;
+				// Prevent re-showing any queued base-game win dialogs after bonus ends
+				this.clearWinQueue();
 				// Proactively reset visuals and symbols in case the dialog didn't emit them
 				this.events.emit('hideBonusBackground');
 				this.events.emit('hideBonusHeader');

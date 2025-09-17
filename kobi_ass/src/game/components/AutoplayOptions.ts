@@ -99,8 +99,8 @@ export class AutoplayOptions {
 		this.container.add(autoplayTitle);
 		
 		// Close button (X)
-		this.closeButton = scene.add.text(x + 180, headerY, 'X', {
-			fontSize: '20px',
+		this.closeButton = scene.add.text(x + 180, headerY, '×', {
+			fontSize: '30px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
 		});
@@ -306,58 +306,15 @@ export class AutoplayOptions {
 		const backgroundTop = screenHeight - backgroundHeight;
 		
 		const x = screenWidth * 0.5;
-		const y = backgroundTop + 580; // Position relative to background top
+		const y = backgroundTop + 580;
 		
-		// Button background with gradient effect
-		const buttonBg = scene.add.graphics();
+		// Use long_button image instead of gradient/mask
+		const buttonImage = scene.add.image(x, y, 'long_button');
+		buttonImage.setOrigin(0.5, 0.5);
+		buttonImage.setDisplaySize(364, 62);
+		this.container.add(buttonImage);
 		
-		// Create gradient effect by drawing multiple rectangles with different colors
-		const rectHeight = 62;
-		const segments = 25; // Increased from 10 to 25 for smoother gradient
-		const segmentHeight = rectHeight / segments;
-		
-		// Create gradient container
-		const gradientContainer = scene.add.container(x, y);
-		
-		// Create a mask for the rounded shape in a separate container
-		this.confirmButtonMask = scene.add.graphics();
-		this.confirmButtonMask.fillStyle(0xffffff, 1);
-		this.confirmButtonMask.fillRoundedRect(-182, -31, 364, 62, 31);
-		this.confirmButtonMask.setPosition(x, y);
-		this.confirmButtonMask.setVisible(false); // Start hidden
-		this.confirmButtonMask.setAlpha(0); // Set alpha to 0
-		this.container.add(this.confirmButtonMask);
-		
-		gradientContainer.setMask(this.confirmButtonMask.createGeometryMask());
-		
-		for (let i = 0; i < segments; i++) {
-			const y1 = -31 + (i * segmentHeight);
-			
-			// Interpolate between colors
-			const ratio = i / (segments - 1);
-			const r1 = 0x66, g1 = 0xD4, b1 = 0x49; // #66D449
-			const r2 = 0x37, g2 = 0x95, b2 = 0x57; // #379557
-			
-			const r = Math.round(r1 + (r2 - r1) * ratio);
-			const g = Math.round(g1 + (g2 - g1) * ratio);
-			const b = Math.round(b1 + (b2 - b1) * ratio);
-			
-			const color = (r << 16) | (g << 8) | b;
-			const segment = scene.add.graphics();
-			segment.fillStyle(color, 1);
-			segment.fillRect(-182, y1, 364, segmentHeight);
-			segment.setPosition(0, 0);
-			gradientContainer.add(segment);
-		}
-		
-		this.container.add(gradientContainer);
-		
-		buttonBg.lineStyle(2, 0x00cc00, 1);
-		buttonBg.strokeRoundedRect(-182, -31, 364, 62, 31);
-		buttonBg.setPosition(x, y);
-		this.container.add(buttonBg);
-		
-		// Button text
+		// Button label
 		this.confirmButton = scene.add.text(x, y, 'START AUTOPLAY', {
 			fontSize: '24px',
 			color: '#000000',
@@ -366,10 +323,8 @@ export class AutoplayOptions {
 		this.confirmButton.setOrigin(0.5, 0.5);
 		this.container.add(this.confirmButton);
 		
-		// Make the button background interactive instead of the text
-		buttonBg.setInteractive(new Phaser.Geom.Rectangle(-182, -31, 364, 62), Phaser.Geom.Rectangle.Contains);
-		buttonBg.on('pointerdown', () => {
-			// Create slide-down animation
+		buttonImage.setInteractive();
+		buttonImage.on('pointerdown', () => {
 			if (this.container.scene) {
 				this.container.scene.tweens.add({
 					targets: this.container,
@@ -408,33 +363,12 @@ export class AutoplayOptions {
 		this.selectedButtonIndex = index;
 		this.currentAutoplayCount = value;
 		
-		// Update selected button background to gradient
+		// Update selected button background to solid neon green
 		const selectedButton = this.autoplayButtons[index];
 		const selectedBg = (selectedButton as any).buttonBg;
 		selectedBg.clear();
-		
-		// Create gradient for selected button
-		const rectHeight = buttonHeight;
-		const segments = 25;
-		const segmentHeight = rectHeight / segments;
-		
-		for (let i = 0; i < segments; i++) {
-			const y1 = i * segmentHeight;
-			
-			// Interpolate between colors
-			const ratio = i / (segments - 1);
-			const r1 = 0x66, g1 = 0xD4, b1 = 0x49; // #66D449
-			const r2 = 0x37, g2 = 0x95, b2 = 0x57; // #379557
-			
-			const r = Math.round(r1 + (r2 - r1) * ratio);
-			const g = Math.round(g1 + (g2 - g1) * ratio);
-			const b = Math.round(b1 + (b2 - b1) * ratio);
-			
-			const color = (r << 16) | (g << 8) | b;
-			selectedBg.fillStyle(color, 1);
-			selectedBg.fillRect(0, y1, buttonWidth, segmentHeight);
-		}
-		
+		selectedBg.fillStyle(0x66D449, 1);
+		selectedBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 5);
 		selectedBg.lineStyle(0.5, 0xffffff, 1);
 		selectedBg.strokeRoundedRect(0, 0, buttonWidth, buttonHeight, 5);
 		
