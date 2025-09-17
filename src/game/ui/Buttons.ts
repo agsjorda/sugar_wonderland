@@ -2750,7 +2750,7 @@ export class Buttons {
         
         // Function to update text size based on content
         const updateTextSize = () => {
-            this.doubleFeaturePriceText.setStyle({ fontSize: `${this.isMobile ? '0px' : '36px'}` });
+            this.doubleFeaturePriceText.setStyle({ fontSize: `${this.isMobile ? '0px' : '28px'}` });
         };
 
         // Initial size update
