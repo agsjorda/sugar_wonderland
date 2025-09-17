@@ -1061,7 +1061,7 @@ export class Buttons {
         selectedButton = buttons[0];
 
         // Total bet section
-        const betLabel = scene.add.text(padding, popupHeight / 2 + padding, 'Bet', {
+        const betLabel = scene.add.text(padding, popupHeight / 2 + padding, 'BET', {
             fontSize: '24px',
             color: '#FFFFFF',
             fontFamily: 'Poppins'
@@ -1074,7 +1074,7 @@ export class Buttons {
         const betBoxWidth = popupWidth - padding * 2;
         const betBox = scene.add.graphics();
         betBox.fillStyle(0x333333, 0.8);
-        betBox.lineStyle(1, 0x333333, 0);
+        betBox.lineStyle(1, 0x66D449, 1);
         betBox.fillRoundedRect(padding, betBoxY, betBoxWidth, betBoxHeight, 10);
         betBox.strokeRoundedRect(padding, betBoxY, betBoxWidth, betBoxHeight, 10);
         popup.add(betBox);
@@ -2232,7 +2232,7 @@ export class Buttons {
 
         // Popup Bet control box (minus | value | plus)
         const gridBottomY = (buttons[buttons.length - 1] as any).y + buttonHeight;
-        const popupBetLabel = scene.add.text(padding, gridBottomY + spacing * 1.5, 'Bet', {
+        const popupBetLabel = scene.add.text(padding, gridBottomY + spacing * 1.5, 'BET', {
             fontSize: '24px',
             color: '#FFFFFF',
             fontFamily: 'Poppins'
@@ -2244,7 +2244,7 @@ export class Buttons {
         const popupBetBoxHeight = 60;
         const popupBetBox = scene.add.graphics();
         popupBetBox.fillStyle(0x333333, 0.95);
-        popupBetBox.lineStyle(1, 0x333333, 1);
+        popupBetBox.lineStyle(1, 0x66D449, 1);
         popupBetBox.fillRoundedRect(padding, popupBetBoxY, popupBetBoxWidth, popupBetBoxHeight, 10);
         popupBetBox.strokeRoundedRect(padding, popupBetBoxY, popupBetBoxWidth, popupBetBoxHeight, 10);
         betContainer.add(popupBetBox);

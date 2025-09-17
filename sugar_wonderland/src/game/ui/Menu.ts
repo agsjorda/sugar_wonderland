@@ -1142,7 +1142,7 @@ export class Menu {
                 // Add symbol
                 const symbol = scene.add.sprite(0, 0, 'ScatterLabel');
                 symbol.setScale(0.2);
-                symbol.setOrigin(0.5, 0.5);
+                symbol.setOrigin(0.3, 0.4);
                 symbolContainer.add(symbol);
                 symbol.setPosition(scene.scale.width * 0.4, this.padding);
     
@@ -1196,7 +1196,7 @@ export class Menu {
             this.addContent(scene, 'Bonus Trigger', 'title');
             this.yPosition -= scaledSymbolSize  * 3.5;
     
-            const freeSpinContainer = scene.add.container(-this.padding *1.5, this.yPosition-scaledSymbolSize * 0.5);
+            const freeSpinContainer = scene.add.container(-this.padding * 1.5, this.yPosition-scaledSymbolSize * 0.5);
             this.yPosition += this.createBorder(scene, freeSpinContainer, 
                 this.padding, 
                 0, 
@@ -1224,7 +1224,7 @@ export class Menu {
             const scatterSymbolImage = scene.add.image(0, 0, 'scatterIcon');
             scatterSymbolImage.setScale(0.5);
             scatterSymbolImage.setOrigin(0.5, 0.5);
-            scatterSymbolImage.setPosition(100, 60);
+            scatterSymbolImage.setPosition(100, 75);
             freeSpinContainer.add(scatterSymbolImage);
             
             const scatterWinImage = scene.add.image(0, 0, 'scatterWin');
@@ -1233,61 +1233,61 @@ export class Menu {
             scatterWinImage.setPosition(scatterSymbolImage.x - scatterSymbolImage.displayWidth/2 + this.padding * 2, scatterSymbolImage.y * 3/4 - scatterWinImage.height/ 4);
             freeSpinContainer.add(scatterWinImage);
             
-            this.yPosition -= scaledSymbolSize * 5.75;
+            this.yPosition -= scaledSymbolSize * 4.75;
             // this.addDivider(scene, 0x379557);
             
 
             //this.yPosition += scaledSymbolSize  * 4;
             this.addContent(scene, 'Multiplier', 'title');
-            this.yPosition -= scaledSymbolSize  * 3.5;
+            this.yPosition -= scaledSymbolSize  * 4.25;
             
             const multiplierContainer = scene.add.container(-this.padding * 1.5, this.yPosition);
             this.yPosition += this.createBorder(scene, multiplierContainer, 
                 this.padding, 
                 0, 
                 this.contentWidth + this.padding * 3, 
-                scaledSymbolSize * 9
+                scaledSymbolSize * 10
             );
-            this.yPosition += scaledSymbolSize *6;
+            this.yPosition += scaledSymbolSize * 6.5;
             this.contentContainer.add(multiplierContainer);
             this.contentContainer.sendToBack(multiplierContainer);
             
     
-            this.createHowToPlayEntry(scene, 20, 120, multiplierContainer, 'multiplierGame', 
+            this.createHowToPlayEntry(scene, 20, 170, multiplierContainer, 'multiplierGame', 
                 '\nThe         Multiplier symbol only appears during the FREE SPINS round and remains on the screen until the tumbling sequence ends.\n\n' +
                 'Each time a         symbol lands, it randomly takes a multiplier value: 2x, 3x, 4x, 5x, 6x, 8x, 10x, 12x, 15x, 20x, 25x, 50x, or even 100x!\n\n' +
                 'Once all tumbles are finished, the total of all           multipliers is added and applied to the total win of the that sequence.\n\n' +
                 'Special reels are used during the FREE SPINS round.',
             true, this.contentWidth + this.padding * 3);
     
-            
+            let multiplier_y = 50;
                 const multiplierIcon4 = scene.add.image(0, 0, 'multiplierIcon');
                 multiplierIcon4.setScale(0.15);
                 multiplierIcon4.setOrigin(0.5, 0.5);
-                multiplierIcon4.setPosition(80, 280);
+                multiplierIcon4.setPosition(80, 280 + multiplier_y);
                 multiplierContainer.add(multiplierIcon4);
             
                 const multiplierIcon3 = scene.add.image(0, 0, 'multiplierIcon');
                 multiplierIcon3.setScale(0.15);
                 multiplierIcon3.setOrigin(0.5, 0.5);
-                multiplierIcon3.setPosition(163, 405);
+                multiplierIcon3.setPosition(163, 405 + multiplier_y);
                 multiplierContainer.add(multiplierIcon3);
                 
             
                 const multiplierIcon2 = scene.add.image(0, 0, 'multiplierIcon');
                 multiplierIcon2.setScale(0.15);
                 multiplierIcon2.setOrigin(0.5, 0.5);
-                multiplierIcon2.setPosition(100, 550);
+                multiplierIcon2.setPosition(100, 550 + multiplier_y);
                 multiplierContainer.add(multiplierIcon2);
             
             const multiplierIcon = scene.add.image(0, 0, 'multiplierIcon');
-            multiplierIcon.setScale(0.25);
+            multiplierIcon.setScale(0.33);
             multiplierIcon.setOrigin(0.5, 0.5);
-            multiplierIcon.setPosition(60, 42.5);
+            multiplierIcon.setPosition(100, 50);
             multiplierContainer.add(multiplierIcon);
             this.contentContainer.bringToTop(multiplierIcon);
             
-            this.yPosition -= scaledSymbolSize * 17;
+            this.yPosition -= scaledSymbolSize * 17.75;
             this.addContent(scene, 'Game Settings', 'title');
     
             const gamesettingsContainer = scene.add.container(-this.padding * 1.5, this.yPosition);
@@ -1314,11 +1314,11 @@ export class Menu {
             this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 7.5, gamesettingsContainer, '', 'When multiple symbol wins occur, all values are combined into the total win.', true, this.contentWidth + this.padding * 3);
             this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 8.75, gamesettingsContainer, '', 'Free spins rewards are granted after the round ends.', true, this.contentWidth + this.padding * 3);
     
-            this.yPosition -= scaledSymbolSize * 3;
+            this.yPosition -= scaledSymbolSize * 3.5;
     
             this.commonRules(scene, this.contentWidth, 153);
     
-            this.yPosition -= scaledSymbolSize * 38;
+            this.yPosition -= scaledSymbolSize * 45;
             contentArea.add(this.contentContainer);
     }
     
@@ -1511,6 +1511,9 @@ export class Menu {
                 imageElement.setScale(0.63);
             }
             imageElement.setOrigin(0, 0.5);
+            if(image == 'scatterGame') {
+                imageElement.setOrigin(0, 0.33);
+            }
         }
         if(image == 'BuyFeatMobile'){
             imageElement?.setPosition(x - imageElement.displayWidth/5, y);
