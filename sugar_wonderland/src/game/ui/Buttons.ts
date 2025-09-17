@@ -1186,6 +1186,7 @@ export class Buttons {
         (startBtnBg as any as ButtonImage).setInteractive().isButton = true;
         startBtnBg.on('pointerdown', () => {
             if (selectedSpins > 0) {
+                this.autoplayIndicator.setAlpha(1);
                 scene.audioManager.UtilityButtonSFX.play();
 
                 this.autoplayButton.visible = false;
