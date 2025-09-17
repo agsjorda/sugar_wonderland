@@ -207,7 +207,7 @@ export class BuyFeaturePopup {
         BuyFeatureText.setOrigin(0, 0);
         this.popupContainer.add(BuyFeatureText);
 
-        const titleText = scene.add.text(popupWidth / 2, padding * 5, 'Sugar Bomb Bonus', {
+        const titleText = scene.add.text(popupWidth / 2, padding * 4, 'Sugar Bomb Bonus', {
             fontSize: this.isMobile ? '24px' : '32px',
             color: '#FFFFFF',
             fontFamily: 'Poppins',
@@ -218,12 +218,12 @@ export class BuyFeaturePopup {
         this.popupContainer.add(titleText);
 
         // Scatter symbol (symbol0) in the middle
-        const scatterSymbol = scene.add.image(popupWidth / 2, popupHeight * 0.4, 'ScatterLogo') as ButtonImage;
+        const scatterSymbol = scene.add.image(popupWidth / 2, popupHeight * 0.35, 'ScatterLogo') as ButtonImage;
         scatterSymbol.setOrigin(0.5, 0.5);
         this.popupContainer.add(scatterSymbol);
 
         // Main text
-        const buyText = scene.add.text(popupWidth / 2, popupHeight * 0.6, '', {
+        const buyText = scene.add.text(popupWidth / 2, popupHeight * 0.55, '', {
             color: '#FFFFFF',
             fontFamily: 'Poppins',
             fontStyle: 'bold',
@@ -236,20 +236,29 @@ export class BuyFeaturePopup {
         const betControlsContainer = scene.add.container(popupWidth / 2, popupHeight * 0.7);
         this.popupContainer.add(betControlsContainer);
 
-        // Bet label
-        const betLabel = scene.add.text(0, -30, 'BET', {
+        // Box around bet controls (minus | value | plus)
+        const boxWidth = Math.max(padding * 9.5, 240);
+        const boxHeight = this.isMobile ? 56 : 56;
+        const betBox = scene.add.graphics();
+        betBox.fillStyle(0x333333, 0.95);
+        betBox.lineStyle(1, 0x66D449, 0);
+        betBox.fillRoundedRect(-boxWidth * 0.5, -boxHeight * 0.5, boxWidth, boxHeight, 10);
+        betBox.strokeRoundedRect(-boxWidth * 0.5, -boxHeight * 0.5, boxWidth, boxHeight, 10);
+        betControlsContainer.add(betBox);
+
+        // Bet label outside box, upper-left
+        const betLabel = scene.add.text(-boxWidth * 0.5, -boxHeight * 0.5 - 8, 'Bet', {
             fontSize: this.isMobile ? '20px' : '24px',
             color: '#FFFFFF',
             fontFamily: 'Poppins',
-            fontStyle: 'bold',
-            align: 'center'
+            align: 'left'
         }) as ButtonText;
-        betLabel.setOrigin(0.5, 0.5);
+        betLabel.setOrigin(0, 1);
         betControlsContainer.add(betLabel);
 
-        // Bet value text
+        // Bet value text (centered inside box)
         const betValueText = scene.add.text(0, 0, '', {
-            fontSize: this.isMobile ? '28px' : '32px',
+            fontSize: '24px',
             color: '#FFFFFF',
             fontFamily: 'Poppins',
             fontStyle: 'bold',
@@ -259,14 +268,14 @@ export class BuyFeaturePopup {
         betControlsContainer.add(betValueText);
 
         // Minus button
-        const minusBtn = scene.add.image(-padding * 4, 0, 'minus') as ButtonImage;
+        const minusBtn = scene.add.image(-boxWidth * 0.5 + 30, 0, 'minus') as ButtonImage;
         //minusBtn.setScale(this.isMobile ? 0.25 : 0.3);
         minusBtn.setInteractive().isButton = true;
         betControlsContainer.add(minusBtn);
         this.minusBtnRef = minusBtn;
 
         // Plus button
-        const plusBtn = scene.add.image(padding * 4, 0, 'plus') as ButtonImage;
+        const plusBtn = scene.add.image(boxWidth * 0.5 - 30, 0, 'plus') as ButtonImage;
         //plusBtn.setScale(this.isMobile ? 0.25 : 0.3);
         plusBtn.setInteractive().isButton = true;
         betControlsContainer.add(plusBtn);
@@ -369,7 +378,7 @@ export class BuyFeaturePopup {
 
     private updateBetDisplay(scene: GameScene, betValueText: ButtonText, buyText: ButtonText): void {
         // Update bet value display
-        const betValue = scene.gameData.bet.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        const betValue = scene.gameData.currency + " " + scene.gameData.bet.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         betValueText.setText(betValue);
         
         // Update buy feature price
@@ -378,7 +387,7 @@ export class BuyFeaturePopup {
         buyText.setStyle({
             color: '#FFFFFF',
             fontFamily: 'Poppins',
-            fontSize: this.isMobile ? '42px' : '24px',
+            fontSize: '42px',
             fontStyle: 'bold',
             fontWeight: '700',
             align: 'center',

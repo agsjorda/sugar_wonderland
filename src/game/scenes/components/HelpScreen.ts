@@ -477,7 +477,7 @@ export class HelpScreen {
             'The         Multiplier symbol appears only during the FREE SPINS round and remains on the screen until the tumbling sequence ends\n\n' +
             'Each time a          lands, it randomly takes a multiplier value:\n' +
             '2x, 3x, 4x, 5x, 6x, 8x, 10x, 12x, 15x, 20x, 25x, 50x, or even 100x!\n\n' +
-            'Once all tumbles are finished, the total of all          multipliers are added and applied to the total win of that sequence\n\n' +
+            'Once all tumbles are finished , the total of all         multipliers are added and applied to the total win of that sequence\n\n' +
             'Special reels are used during the FREE SPINS round',
             {
                 ...this.textStyle,
@@ -505,7 +505,7 @@ export class HelpScreen {
         
         // bomb 3
         const miniBomb3= scene.add.image(0, 0, 'multiplierIcon');
-        miniBomb3.setScale(0.15);
+        miniBomb3.setScale(0.175);
         miniBomb3.setOrigin(0.5, 0.5);
         miniBomb3.setPosition(
             multiplierGameImage.x + multiplierGameImage.displayWidth * 0.06 - this.padding * 2.25,
@@ -524,7 +524,7 @@ export class HelpScreen {
         );
         this.contentContainer.add(multiplierContainer);
 
-        this.yPosition += this.padding*2;
+        this.yPosition += this.padding;
         
         this.addContent(scene, 'Game Settings', 'title');
 
