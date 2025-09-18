@@ -405,20 +405,26 @@ export class Menu {
     private async showHistoryContent(scene: GameScene, contentArea: GameObjects.Container, page: number, limit: number): Promise<void> {
         // Keep old rows until new data is ready; build containers on first run
         const historyHeaders : string[] = ['Spin', 'Currency', 'Bet', 'Win'];
-        if (!this.historyHeaderContainer) {
+        // Recreate or reparent containers if needed (handles menu reopen)
+        if (!this.historyHeaderContainer || !this.historyHeaderContainer.scene) {
             this.historyHeaderContainer = scene.add.container(0, 0);
-            contentArea.add(this.historyHeaderContainer);
-
             const historyText = scene.add.text(15, 15,'History', this.titleStyle) as ButtonText;
             historyText.setOrigin(0, 0);
             this.historyHeaderContainer.add(historyText);
         }
-        if (!this.historyRowsContainer) {
+        if (!this.historyRowsContainer || !this.historyRowsContainer.scene) {
             this.historyRowsContainer = scene.add.container(0, 0);
+        }
+        if (!this.historyPaginationContainer || !this.historyPaginationContainer.scene) {
+            this.historyPaginationContainer = scene.add.container(0, 0);
+        }
+        if ((this.historyHeaderContainer as any).parentContainer !== contentArea) {
+            contentArea.add(this.historyHeaderContainer);
+        }
+        if ((this.historyRowsContainer as any).parentContainer !== contentArea) {
             contentArea.add(this.historyRowsContainer);
         }
-        if (!this.historyPaginationContainer) {
-            this.historyPaginationContainer = scene.add.container(0, 0);
+        if ((this.historyPaginationContainer as any).parentContainer !== contentArea) {
             contentArea.add(this.historyPaginationContainer);
         }
 
@@ -461,6 +467,7 @@ export class Menu {
         // Display headers centered per column (only once)
         const columnCenters = this.getHistoryColumnCenters(scene);
         const headerContainer = this.historyHeaderContainer as GameObjects.Container;
+        // When reopening, header could have been destroyed; rebuild if empty or missing headers
         if (headerContainer.length <= 1) { // only title exists
             const headerY = 60;
             historyHeaders.forEach((header, idx) => {
