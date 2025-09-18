@@ -28,9 +28,9 @@
 		"build-nolog": "vite build --config vite/config.prod.mts"
 	},
 	"dependencies": {
-		"@esotericsoftware/spine-core": "^4.2.91",
-		"@esotericsoftware/spine-phaser": "^4.1.55",
-		"@esotericsoftware/spine-phaser-v3": "^4.2.87",
+		"@esotericsoftware/spine-core": "4.2.82",
+		"@esotericsoftware/spine-phaser": "4.1.55",
+		"@esotericsoftware/spine-phaser-v3": "4.2.82",
 		"phaser": "^3.90.0",
 		"phaser3-rex-plugins": "^1.80.16",
 		"react": "^19.0.0",
