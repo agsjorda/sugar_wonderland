@@ -5,6 +5,8 @@ import { Data } from "../../tmp_backend/Data";
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { PaylineData } from '../../backend/SpinData';
+import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 
 
 export class Header {
@@ -84,6 +86,10 @@ export class Header {
 
 	private createCharacterSpineAnimation(scene: Scene, assetScale: number): void {
 		try {
+			if (!ensureSpineFactory(scene, '[Header] createCharacterSpineAnimation')) {
+				console.warn('[Header] Spine factory unavailable. Skipping character spine creation.');
+				return;
+			}
 			const width = scene.scale.width;
 			const height = scene.scale.height;
 
@@ -104,6 +110,10 @@ export class Header {
 
 	private createCatSpineAnimation(scene: Scene, assetScale: number): void {
 		try {
+			if (!ensureSpineFactory(scene, '[Header] createCatSpineAnimation')) {
+				console.warn('[Header] Spine factory unavailable. Skipping cat spine creation.');
+				return;
+			}
 			const width = scene.scale.width;
 			const height = scene.scale.height;
 

@@ -19,6 +19,9 @@ const phasermsg = () => {
 export default defineConfig({
     base: './',
     logLevel: 'warning',
+    resolve: {
+        dedupe: ['phaser']
+    },
     build: {
         rollupOptions: {
             output: {

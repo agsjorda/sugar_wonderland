@@ -1,5 +1,6 @@
 import { Scene } from "phaser";
 import { AssetConfig, AssetGroup } from "../config/AssetConfig";
+import { ensureSpineLoader } from "./SpineGuard";
 
 export class AssetLoader {
 	private assetConfig: AssetConfig;
@@ -19,11 +20,16 @@ export class AssetLoader {
 
 		// Load Spine animations
 		if (assetGroup.spine) {
-			Object.entries(assetGroup.spine).forEach(([key, spineData]) => {
-				console.log(`[AssetLoader] Loading spine: ${key} from ${spineData.json}`);
-				scene.load.spineAtlas(`${key}-atlas`, spineData.atlas);
-				scene.load.spineJson(key, spineData.json);
-			});
+			const hasLoader = ensureSpineLoader(scene, '[AssetLoader] loadAssetGroup');
+			if (!hasLoader) {
+				console.warn('[AssetLoader] Spine loader not available. Skipping spine asset group.');
+			} else {
+				Object.entries(assetGroup.spine).forEach(([key, spineData]) => {
+					console.log(`[AssetLoader] Loading spine: ${key} from ${spineData.json}`);
+					scene.load.spineAtlas(`${key}-atlas`, spineData.atlas);
+					scene.load.spineJson(key, spineData.json);
+				});
+			}
 		}
 
 		// Load audio files

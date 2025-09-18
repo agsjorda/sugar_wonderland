@@ -1,4 +1,5 @@
 import { Scene } from "phaser";
+import { ensureSpineFactory } from "../../utils/SpineGuard";
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 
@@ -44,6 +45,10 @@ export class BonusBackground {
 
 	private createMobileDiscoLights(scene: Scene, assetScale: number): void {
 		try {
+			if (!ensureSpineFactory(scene, '[BonusBackground] createMobileDiscoLights')) {
+				console.warn('[BonusBackground] Spine factory unavailable. Skipping disco lights spine.');
+				return;
+			}
 			const width = scene.scale.width;
 			const height = scene.scale.height;
 			
