@@ -346,10 +346,10 @@ export class Buttons {
             // Sync freeSpinBtn with the Spins Left label visibility
             try { this.freeSpinBtn.visible = shouldShow; } catch (_e) {}
             // Avoid overlap: hide autoplay indicator while Spins Left is shown
-            // Otherwise, only show it when autoplay is running or bonus was already detected this spin
-            try { this.autoplayIndicator.visible = shouldShow ? false : (!!this.autoplay?.isAutoPlaying || !!(scene as any).slotMachine?.bonusTriggeredThisSpin); } catch (_e) {}
-            // Enforcement: when autoplay indicator is visible, ensure freeSpinBtn stays visible
-            try { if (this.autoplayIndicator?.visible) { this.freeSpinBtn.visible = true; } } catch (_e) {}
+            // Only show autoplay indicator when autoplay is actively running
+            try { this.autoplayIndicator.visible = shouldShow ? false : !!this.autoplay?.isAutoPlaying; } catch (_e) {}
+			// Enforcement: only during active bonus ensure freeSpinBtn stays visible
+			try { if (scene.gameData.isBonusRound && this.autoplayIndicator?.visible) { this.freeSpinBtn.visible = true; } } catch (_e) {}
             // Ensure spin button alpha follows autoplay indicator visibility
             try { this.updateButtonStates(scene); } catch (_e) {}
 
@@ -388,8 +388,8 @@ export class Buttons {
             this.remainingFsLabel.setVisible(true);
             this.remainingFsLabel_Count.setVisible(true);
             try { this.freeSpinBtn.visible = true; } catch (_e) {}
-            // Keep autoplay indicator visible as soon as we know FS trigger
-            try { this.autoplayIndicator.visible = true; } catch (_e) {}
+            // Do not force autoplay indicator here; it should only reflect active autoplay state
+            try { this.autoplayIndicator.visible = !!this.autoplay?.isAutoPlaying; } catch (_e) {}
             try { this.updateButtonStates(scene); } catch (_e) {}
         });
         // Re-sync to actual state when overlay hides
@@ -762,7 +762,15 @@ export class Buttons {
 
         const spinAction = () => {
             // Don't allow spin if currently spinning or win overlay is active or local flag is set
-            if (this.spinInProgress || scene.gameData.isSpinning || scene.slotMachine.activeWinOverlay || this.isVisuallyDisabled) {
+            const now = Date.now();
+            const lockActive = now < ((scene as any).gameData?.freeSpinLockUntilMs || 0);
+            if (lockActive) {
+                try {
+                    this.spinButton.setAlpha(0.5);
+                    this.spinButton.disableInteractive();
+                } catch (_e) {}
+            }
+            if (lockActive || this.spinInProgress || scene.gameData.isSpinning || scene.slotMachine.activeWinOverlay || this.isVisuallyDisabled) {
                 return;
             }
             // Guard again right before spin is emitted (keyboard path already checked too)
@@ -856,7 +864,15 @@ export class Buttons {
         // Listen for spin state changes to re-enable the button
         const resetSpinButton = () => {
             this.spinInProgress = false;
+            const transitioningToFreeSpins = !!((scene as any)?.slotMachine?.bonusTriggeredThisSpin) && !scene.gameData.isBonusRound;
+            // Re-enable other controls, but keep spin visually disabled during FS transition window
             this.enableButtonsVisually(scene);
+            if (transitioningToFreeSpins) {
+                try {
+                    this.spinButton.setAlpha(0.5);
+                    this.spinButton.disableInteractive();
+                } catch (_e) {}
+            }
         };
         // Only re-enable after the entire spin (including tumbles) is done
         Events.emitter.on(Events.MATCHES_DONE, resetSpinButton);
@@ -1335,7 +1351,9 @@ export class Buttons {
 
     // Centralized method to immediately update button states
     public updateButtonStates(scene: GameScene): void {
-		const gameLogicDisabled = scene.gameData.isSpinning || scene.slotMachine.activeWinOverlay;
+			const now = Date.now();
+			const lockActive = now < ((scene as any).gameData?.freeSpinLockUntilMs || 0);
+			const gameLogicDisabled = scene.gameData.isSpinning || scene.slotMachine.activeWinOverlay || lockActive;
 		const shouldDisable = this.isVisuallyDisabled || gameLogicDisabled;
 		// During free spins (bonus round), visually disable the spin button
 		const spinShouldDisable = shouldDisable || scene.gameData.isBonusRound;
@@ -1399,16 +1417,12 @@ export class Buttons {
 		}
 		this.wasSpinEnabled = spinEnabledNow;
 		this.wasBuyFeatureEnabled = buyFeatureEnabledNow;
-        // Override: if autoplay indicator is visible, hide spin visually via alpha
-        try {
-            if (this.autoplayIndicator?.visible && this.spinButton?.visible) {
-                this.spinButton.setAlpha(0);
-                if (this.freeSpinBtn) {
-                    this.freeSpinBtn.setAlpha(1);
-                    this.freeSpinBtn.visible = true;
-                }
-            }
-        } catch (_e) {}
+		// Override: Only hide spin visually when bonus round is active
+		try {
+			if (scene.gameData.isBonusRound && this.autoplayIndicator?.visible && this.spinButton?.visible) {
+				this.spinButton.setAlpha(0);
+			}
+		} catch (_e) {}
     }
 
     // Method to immediately disable buttons visually (separate from game logic)
@@ -1703,9 +1717,19 @@ export class Buttons {
         Events.emitter.on(Events.SHOW_BOMB_WIN, () => { 
             this.bombWinContainer.setVisible(this.isMobile? false : true);
             let multiplier = scene.gameData.totalBombWin;
-            let totalWin = scene.gameData.totalWinFreeSpinPerTumble[scene.gameData.apiFreeSpinsIndex].toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            //text1.setText('WIN');
-            text2.setText(`${scene.gameData.currency} ${totalWin} x ${multiplier}`);
+            let totalWin = scene.gameData.totalWinFreeSpinPerTumble[scene.gameData.apiFreeSpinsIndex].toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+            
+            const totalProduct = scene.gameData.totalWinFreeSpinPerTumble[scene.gameData.apiFreeSpinsIndex] * scene.gameData.totalBombWin;
+            const totalProductString = totalProduct.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+            
+            text2.setText(`${scene.gameData.currency} ${totalWin} x ${multiplier} = ${totalProductString}`);
+            
+            if(text2.text.length > 20){
+                text2.setFontSize('25px');
+            }
+            else{
+                text2.setFontSize('35px');
+            }
         });
         Events.emitter.on(Events.HIDE_BOMB_WIN, () => { 
             this.bombWinContainer.setVisible(false);
@@ -3001,9 +3025,11 @@ export class Buttons {
         Events.emitter.on(Events.SHOW_BOMB_WIN, () => { 
             this.bombMarqueeContainer.setVisible(this.isMobile? true : false);
             let multiplier = scene.gameData.totalBombWin;
-            let totalWin = scene.gameData.totalWinFreeSpinPerTumble[scene.gameData.apiFreeSpinsIndex].toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            let totalWin = scene.gameData.totalWinFreeSpinPerTumble[scene.gameData.apiFreeSpinsIndex].toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+            const totalProduct = scene.gameData.totalWinFreeSpinPerTumble[scene.gameData.apiFreeSpinsIndex] * scene.gameData.totalBombWin;
+            const totalProductString = totalProduct.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
             //youWonLabel.setText('WIN');
-            youWonAmount.setText(`${scene.gameData.currency} ${totalWin} x ${multiplier}`);
+            youWonAmount.setText(`${scene.gameData.currency} ${totalWin} x ${multiplier} = ${totalProductString}`);
         });
         Events.emitter.on(Events.HIDE_BOMB_WIN, () => { 
             this.bombMarqueeContainer.setVisible(false);

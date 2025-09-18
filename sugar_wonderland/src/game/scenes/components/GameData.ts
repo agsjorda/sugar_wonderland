@@ -78,6 +78,9 @@ export class GameData {
     turbo: boolean = false;
     isBonusRound: boolean = false;
 
+    // Timestamp (ms) until which manual spins are locked after a free spin trigger
+    freeSpinLockUntilMs: number = 0;
+
     scatterCount: number = 0;
     scatterChance: number = 0.025;
     maxScatter: number = 6;
