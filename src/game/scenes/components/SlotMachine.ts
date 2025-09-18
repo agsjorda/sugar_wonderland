@@ -365,10 +365,11 @@ export class SlotMachine {
         if (Array.isArray(apiFs) && apiFs.length > 0) {
             // Suppress regular total-win overlay for this spin; show only FreeSpin overlay
             this.bonusTriggeredThisSpin = true;
-            // As soon as we know free spins will trigger, keep autoplay indicator and FS btn visible
+            // As soon as we know free spins will trigger during this spin (tumbling state),
+            // keep the spin button present and hide the FreeSpin button until bonus actually starts
             try {
-                scene.buttons.autoplayIndicator.visible = true;
-                scene.buttons.freeSpinBtn.visible = true;
+                scene.buttons.autoplayIndicator.visible = !!scene.buttons?.autoplay?.isAutoPlaying;
+                scene.buttons.freeSpinBtn.visible = false;
                 scene.buttons.updateButtonStates(scene as GameScene);
             } catch (_e) {}
             scene.gameData.apiFreeSpins =  [];
@@ -404,6 +405,14 @@ export class SlotMachine {
             } catch (_e) {
                 // no-op: protective
             }
+
+            // Apply a manual spin lockout for 5 seconds after free spins are triggered
+            try {
+                (scene as any).gameData.freeSpinLockUntilMs = Date.now() + 5000;
+                (scene as any).time?.delayedCall?.(5000, () => {
+                    try { (scene as any).buttons?.updateButtonStates?.(scene as any); } catch (_e) {}
+                });
+            } catch (_e) {}
 
             // After current spin concludes (entire tumble sequence done), animate scatters then enter bonus and show the free spins popup
             Events.emitter.once(Events.TUMBLE_SEQUENCE_DONE, async () => {
@@ -1001,6 +1010,11 @@ export class SlotMachine {
     private eventListeners(scene: GameScene): void {
         Events.emitter.on(Events.SPIN, async (data: SpinData) => {
             const currentTime = Date.now();
+            // Enforce manual spin lockout after free spin trigger
+            if (currentTime < (scene.gameData.freeSpinLockUntilMs || 0)) {
+                console.log(`Spin blocked: free spin lockout active for ${scene.gameData.freeSpinLockUntilMs - currentTime}ms`);
+                return;
+            }
             // Immediate check to prevent overlapping spins
             if (scene.gameData.isSpinning) {
                 console.log("Spin already in progress, ignoring new spin request");
@@ -1469,6 +1483,8 @@ export class SlotMachine {
     private async handleScatterMatch(scene: GameScene, symbolGrid: number[][], scatterCount: number): Promise<string> {
         // Prevent new spins during scatter sequence
         scene.gameData.isSpinning = true;
+        // Visually disable spin button during scatter animation window
+        try { (scene as any).buttons?.disableButtonsVisually?.(scene as any); } catch (_e) {}
         console.log(`[SCATTER] handleScatterMatch start, scatterCount=${scatterCount}`);
         // Play animation for all scatter symbols
         let scatterSprites: GameObjects.Sprite[] = [];
@@ -1562,7 +1578,7 @@ export class SlotMachine {
             this.bonusTriggeredThisSpin = true;
             // As soon as free spins are known to trigger via scatter count, keep indicators visible
             try {
-                (scene as any).buttons.autoplayIndicator.visible = true;
+                (scene as any).buttons.autoplayIndicator.visible = !!(scene as any).buttons?.autoplay?.isAutoPlaying;
                 (scene as any).buttons.freeSpinBtn.visible = true;
                 (scene as any).buttons.updateButtonStates(scene as any);
             } catch (_e) {}
@@ -1579,6 +1595,14 @@ export class SlotMachine {
             if (scene.buttons.autoplay.isAutoPlaying) {
                 scene.buttons.autoplay.pauseForBonus();
             }
+
+            // Apply a manual spin lockout for 5 seconds after free spins are triggered (local flow)
+            try {
+                (scene as any).gameData.freeSpinLockUntilMs = Date.now() + 5000;
+                (scene as any).time?.delayedCall?.(5000, () => {
+                    try { (scene as any).buttons?.updateButtonStates?.(scene as any); } catch (_e) {}
+                });
+            } catch (_e) {}
 
 			// After scatter animations complete (MATCHES_DONE), flip to bonus and show Congrats overlay
             Events.emitter.once(Events.MATCHES_DONE, () => {
