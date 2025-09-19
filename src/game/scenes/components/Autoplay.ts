@@ -118,6 +118,12 @@ export class Autoplay {
         
         // Create remaining spins display
         this.createRemainingSpinsDisplay(scene);
+        // During autoplay, hide spin via alpha and show FS button under overlay
+        try {
+            scene.buttons.spinButton.setAlpha(0);
+            scene.buttons.freeSpinBtn.setAlpha(1);
+            scene.buttons.freeSpinBtn.visible = true;
+        } catch (_e) {}
         
 		// Add lightweight listener for debugging (no scheduling)
 		Events.emitter.on(Events.MATCHES_DONE, this.matchesDoneListener);
@@ -198,8 +204,14 @@ export class Autoplay {
         } else {
             // Base game or overlay active → autoplay indicator only when autoplay is active
             try { scene.buttons.autoplayIndicator.visible = !!this.isAutoPlaying; } catch (_e) {}
-            // Show/hide FS badge only when not in overlay
-            try { scene.buttons.freeSpinBtn.visible = shouldShowFsBtn; } catch (_e) {}
+            // During autoplay, keep FS button visible even if label not showing yet
+            try {
+                if (this.isAutoPlaying) {
+                    scene.buttons.freeSpinBtn.visible = true;
+                } else {
+                    scene.buttons.freeSpinBtn.visible = shouldShowFsBtn;
+                }
+            } catch (_e) {}
             // Enforcement: when autoplay indicator is visible, ensure freeSpinBtn stays visible
             try { if (scene.buttons.autoplayIndicator?.visible) { scene.buttons.freeSpinBtn.visible = true; } } catch (_e) {}
         }
@@ -321,6 +333,12 @@ export class Autoplay {
         this.scene.buttons.resetAutoplayButtons();
         this.isAutoPlaying = false;
         this.remainingSpins = 0;
+        // Restore button alphas on stop
+        try {
+            this.scene.buttons.spinButton.setAlpha(1);
+            this.scene.buttons.freeSpinBtn.setAlpha(0);
+            this.scene.buttons.autoplayIndicator.visible = false;
+        } catch (_e) {}
         
         // Remove only our specific listener
         if (this.matchesDoneListener) {
@@ -457,6 +475,17 @@ export class Autoplay {
 
         // Update remaining spins display
         // this.updateRemainingSpinsDisplay();
+
+        // If bonus was triggered during autoplay, maintain button/indicator states until overlay
+        try {
+            if (this.scene.gameData.isBonusRound) {
+                this.scene.buttons.spinButton.setAlpha(0);
+                this.scene.buttons.freeSpinBtn.setAlpha(1);
+                this.scene.buttons.freeSpinBtn.visible = true;
+                // Keep autoplay indicator reflecting active autoplay pre-overlay
+                this.scene.buttons.autoplayIndicator.visible = true;
+            }
+        } catch (_e) {}
     }
 
 	private scheduleSpinIfReady(): void {

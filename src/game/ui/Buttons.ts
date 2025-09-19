@@ -79,6 +79,7 @@ export class Buttons {
     private remainingFsLabel: GameObjects.Text | null = null;
     private remainingFsLabel_Count: GameObjects.Text | null = null;
     private forceSpinsLeftOverlay: boolean = false;
+    private freeSpinTriggered: boolean = false;
     // Base Y positions for Y-axis toggle events
     private baseYPositions: { [key: string]: number } = {};
     
@@ -343,11 +344,11 @@ export class Buttons {
             this.remainingFsLabel.setVisible(shouldShow);
             this.remainingFsLabel_Count.setVisible(shouldShow);
 
-            // Sync freeSpinBtn with the Spins Left label visibility
-            try { this.freeSpinBtn.visible = shouldShow; } catch (_e) {}
+            // Sync freeSpinBtn with the Spins Left label visibility or active/paused autoplay
+            try { this.freeSpinBtn.visible = shouldShow || !!this.autoplay?.isAutoPlaying || !!scene.gameData.autoplayWasPaused; } catch (_e) {}
             // Avoid overlap: hide autoplay indicator while Spins Left is shown
             // Only show autoplay indicator when autoplay is actively running
-            try { this.autoplayIndicator.visible = shouldShow ? false : !!this.autoplay?.isAutoPlaying; } catch (_e) {}
+            try { this.autoplayIndicator.visible = shouldShow ? false : (!!this.autoplay?.isAutoPlaying || !!scene.gameData.autoplayWasPaused); } catch (_e) {}
 			// Enforcement: only during active bonus ensure freeSpinBtn stays visible
 			try { if (scene.gameData.isBonusRound && this.autoplayIndicator?.visible) { this.freeSpinBtn.visible = true; } } catch (_e) {}
             // Ensure spin button alpha follows autoplay indicator visibility
@@ -387,9 +388,10 @@ export class Buttons {
             this.remainingFsLabel_Count.setText(`10`);
             this.remainingFsLabel.setVisible(true);
             this.remainingFsLabel_Count.setVisible(true);
-            try { this.freeSpinBtn.visible = true; } catch (_e) {}
-            // Do not force autoplay indicator here; it should only reflect active autoplay state
-            try { this.autoplayIndicator.visible = !!this.autoplay?.isAutoPlaying; } catch (_e) {}
+            // On entering FS overlay: ensure FS button is shown, spin hidden, and autoplay indicator hidden
+            try { this.freeSpinBtn.visible = true; this.freeSpinBtn.setAlpha(1); } catch (_e) {}
+            try { this.spinButton.setAlpha(0); } catch (_e) {}
+            try { this.autoplayIndicator.visible = false; } catch (_e) {}
             try { this.updateButtonStates(scene); } catch (_e) {}
         });
         // Re-sync to actual state when overlay hides
@@ -441,14 +443,19 @@ export class Buttons {
         }
     }
 
-    public hideRemainingFreeSpinsLabel(): void {
+    public hideRemainingFreeSpinsLabel(scene?: GameScene): void {
         if (!this.remainingFsLabel || !this.remainingFsLabel_Count) return;
         this.remainingFsLabel.setVisible(false);
         this.remainingFsLabel_Count.setVisible(false);
         this.remainingFsLabel_Count.setText(``);
         this.remainingFsLabel_Count.setVisible(false);
-        // Hide the button when the label is hidden, unless autoplay indicator is visible
-        try { if (!this.autoplayIndicator?.visible) { this.freeSpinBtn.visible = false; } } catch (_e) {}
+        // Hide the button when the label is hidden, unless autoplay indicator is visible or autoplay is running/paused for bonus
+        try {
+            const paused = scene ? !!(scene as any).gameData?.autoplayWasPaused : false;
+            if (!this.autoplayIndicator?.visible && !this.autoplay?.isAutoPlaying && !paused) {
+                this.freeSpinBtn.visible = false;
+            }
+        } catch (_e) {}
     }
 
     public hideBottomControlsForBonus(scene: GameScene, hidden: boolean): void {
@@ -857,6 +864,9 @@ export class Buttons {
 
         // Initial state
         updateSpinButtonState();
+        // Ensure initial alpha pairing: spin shown, FS hidden
+        try { this.spinButton.setAlpha(1); } catch (_e) {}
+        try { this.freeSpinBtn.setAlpha(0); } catch (_e) {}
         if (canIdleRotate()) {
             startIdleRotation();
         }
@@ -1316,6 +1326,10 @@ export class Buttons {
         });
 
         this.autoplayOnButton.on('pointerdown', () => {
+            // If bonus is triggered and autoplay is paused for bonus, ignore stop clicks
+            if ((scene as any).gameData?.autoplayWasPaused) {
+                return;
+            }
             scene.audioManager.UtilityButtonSFX.play();
             Events.emitter.emit(Events.AUTOPLAY_STOP);
         });
@@ -1374,15 +1388,27 @@ export class Buttons {
 			this.spinButton.setInteractive();
 		}
 		
-		// Update autoplay button (disabled during bonus round)
+		// Update autoplay button (disable only when free spins are triggered)
 		if (this.autoplayButton) {
-			const autoplayShouldDisable = shouldDisable || scene.gameData.isBonusRound;
+			const autoplayShouldDisable = !!this.freeSpinTriggered;
 			if (autoplayShouldDisable) {
 				this.autoplayButton.setAlpha(0.5);
 				this.autoplayButton.disableInteractive();
 			} else {
 				this.autoplayButton.setAlpha(1);
 				this.autoplayButton.setInteractive();
+			}
+		}
+
+		// Update autoplay ON-state button similarly (only disable when free spins are triggered)
+		if (this.autoplayOnButton) {
+			const autoplayOnShouldDisable = !!this.freeSpinTriggered;
+			if (autoplayOnShouldDisable) {
+				this.autoplayOnButton.setAlpha(0.5);
+				(this.autoplayOnButton as any).disableInteractive?.();
+			} else {
+				this.autoplayOnButton.setAlpha(1);
+				(this.autoplayOnButton as any).setInteractive?.();
 			}
 		}
 		
@@ -1417,12 +1443,18 @@ export class Buttons {
 		}
 		this.wasSpinEnabled = spinEnabledNow;
 		this.wasBuyFeatureEnabled = buyFeatureEnabledNow;
-		// Override: Only hide spin visually when bonus round is active
-		try {
-			if (scene.gameData.isBonusRound && this.autoplayIndicator?.visible && this.spinButton?.visible) {
-				this.spinButton.setAlpha(0);
-			}
-		} catch (_e) {}
+			// Override:
+			// - If autoplay is running, keep spin hidden (alpha 0) and ensure freeSpin button is shown
+			// - During bonus, also keep spin hidden when autoplay indicator was visible earlier
+			try {
+				if (this.autoplay?.isAutoPlaying) {
+					this.spinButton.setAlpha(0);
+					this.freeSpinBtn.visible = true;
+					this.freeSpinBtn.setAlpha(1);
+				} else if (scene.gameData.isBonusRound && this.autoplayIndicator?.visible && this.spinButton?.visible) {
+					this.spinButton.setAlpha(0);
+				}
+			} catch (_e) {}
     }
 
     // Method to immediately disable buttons visually (separate from game logic)
