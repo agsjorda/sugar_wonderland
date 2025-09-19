@@ -365,11 +365,20 @@ export class SlotMachine {
         if (Array.isArray(apiFs) && apiFs.length > 0) {
             // Suppress regular total-win overlay for this spin; show only FreeSpin overlay
             this.bonusTriggeredThisSpin = true;
+            // Mark UI that free spins are now triggered (used to disable autoplay stop button only now)
+            try {
+                (scene as any).buttons.freeSpinTriggered = true;
+                // Disable autoplay buttons only when FS is actually triggered
+                scene.buttons.updateButtonStates(scene as GameScene);
+            } catch (_e) {}
             // As soon as we know free spins will trigger during this spin (tumbling state),
             // keep the spin button present and hide the FreeSpin button until bonus actually starts
             try {
                 scene.buttons.autoplayIndicator.visible = !!scene.buttons?.autoplay?.isAutoPlaying;
-                scene.buttons.freeSpinBtn.visible = false;
+                // Do not hide FS button during autoplay; preserve if autoplay is active
+                if (!scene.buttons?.autoplay?.isAutoPlaying) {
+                    scene.buttons.freeSpinBtn.visible = false;
+                }
                 scene.buttons.updateButtonStates(scene as GameScene);
             } catch (_e) {}
             scene.gameData.apiFreeSpins =  [];
@@ -446,6 +455,8 @@ export class SlotMachine {
                 if (scene.buttons?.hideBottomControlsForBonus) {
                     scene.buttons.hideBottomControlsForBonus(scene, true);
                 }
+                // Disable autoplay stop buttons only now that FS is triggered
+                try { (scene as any).buttons.freeSpinTriggered = true; (scene as any).buttons.updateButtonStates(scene as any); } catch (_e) {}
                 this.showFreeSpinsPopup(scene, currentSpinsLeft);
             });
         }
@@ -1606,6 +1617,7 @@ export class SlotMachine {
 
 			// After scatter animations complete (MATCHES_DONE), flip to bonus and show Congrats overlay
             Events.emitter.once(Events.MATCHES_DONE, () => {
+                try { (scene as any).buttons.freeSpinTriggered = true; (scene as any).buttons.updateButtonStates(scene as any); } catch (_e) {}
                 scene.gameData.isBonusRound = true;
                 console.log(`[BONUS] Initial trigger: animations done → set isBonusRound=true; showing Congrats overlay for FS=${freeSpins}`);
                 this.showFreeSpinsPopup(scene, freeSpins);
