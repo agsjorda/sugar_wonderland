@@ -154,7 +154,7 @@ const StartGame = (parent: string): Game => {
                         // Try primary path, then fallback
                         overlayImage.style.display = 'block';
                         const primarySrc = '/rotatedDevice.jpg';
-                        const fallbackSrc = '/assets/rotatedDevice.jpg';
+                        const fallbackSrc = '/rotatedDevice.jpg';
                         if (overlayImage.getAttribute('src') !== primarySrc && overlayImage.getAttribute('src') !== fallbackSrc) {
                             overlayImage.src = primarySrc;
                         }
