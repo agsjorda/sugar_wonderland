@@ -70,8 +70,12 @@ const mobileConfig: Types.Core.GameConfig = {
     }
 };
 
-// Function to detect if the device is mobile
+// Function to detect if the device is mobile (honors ?device=mobile/desktop override)
 const isMobile = (): boolean => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const deviceParam = urlParams.get('device');
+    if (deviceParam === 'desktop') return false;
+    if (deviceParam === 'mobile') return true;
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
            window.innerWidth <= 768;
 };
@@ -86,6 +90,115 @@ const StartGame = (parent: string): Game => {
     const config = isMobile() ? mobileConfig : desktopConfig;
     //setupAspectRatioReload();
     const game = new Game({ ...config, parent });
+    // Enforce portrait on mobile: show overlay and block play in landscape
+    try {
+        const overlay = document.getElementById('orientation-overlay') as HTMLElement | null;
+        const overlayImage = overlay ? (overlay.querySelector('#orientation-image') as HTMLImageElement | null) : null;
+        const gameContainer = (document.getElementById(parent) || document.getElementById('game-container')) as HTMLElement | null;
+        const deviceParam = new URLSearchParams(window.location.search).get('device');
+        const forceMobile = deviceParam === 'mobile';
+        const forceDesktop = deviceParam === 'desktop';
+        const pausedSceneKeys = new Set<string>();
+        const updateOrientationLock = () => {
+            // If explicitly desktop via URL or general desktop, ensure overlay hidden and resume
+            if (!isMobile()) {
+                if (overlay) {
+                    overlay.style.display = 'none';
+                    overlay.setAttribute('aria-hidden', 'true');
+                    const content = overlay.querySelector('.orientation-overlay-content') as HTMLElement | null;
+                    if (content) content.style.display = '';
+                    if (overlayImage) overlayImage.style.display = 'none';
+                    overlay.style.backgroundImage = '';
+                }
+                if (gameContainer) gameContainer.style.visibility = 'visible';
+                // Re-enable input and resume any paused scenes
+                if (game.input) game.input.enabled = true;
+                pausedSceneKeys.forEach((key) => {
+                    try {
+                        // @ts-ignore accessing by key
+                        if (game.scene.isPaused(key)) game.scene.resume(key);
+                    } catch (_e) { /* no-op */ }
+                });
+                pausedSceneKeys.clear();
+                return;
+            }
+
+            const portraitMedia = (window.matchMedia && window.matchMedia('(orientation: portrait)').matches);
+            const isPortrait = portraitMedia || (window.innerHeight >= window.innerWidth);
+            if (isPortrait) {
+                if (overlay) {
+                    overlay.style.display = 'none';
+                    overlay.setAttribute('aria-hidden', 'true');
+                    const content = overlay.querySelector('.orientation-overlay-content') as HTMLElement | null;
+                    if (content) content.style.display = '';
+                    if (overlayImage) overlayImage.style.display = 'none';
+                    overlay.style.backgroundImage = '';
+                }
+                if (gameContainer) gameContainer.style.visibility = 'visible';
+                if (game.input) game.input.enabled = true;
+                // Resume paused scenes
+                pausedSceneKeys.forEach((key) => {
+                    try {
+                        // @ts-ignore
+                        if (game.scene.isPaused(key)) game.scene.resume(key);
+                    } catch (_e) { /* no-op */ }
+                });
+                pausedSceneKeys.clear();
+            } else {
+                if (overlay) {
+                    overlay.style.display = 'block';
+                    overlay.setAttribute('aria-hidden', 'false');
+                    const content = overlay.querySelector('.orientation-overlay-content') as HTMLElement | null;
+                    if (content) content.style.display = 'none';
+                    if (overlayImage) {
+                        // Try primary path, then fallback
+                        overlayImage.style.display = 'block';
+                        const primarySrc = '/rotatedDevice.jpg';
+                        const fallbackSrc = '/assets/rotatedDevice.jpg';
+                        if (overlayImage.getAttribute('src') !== primarySrc && overlayImage.getAttribute('src') !== fallbackSrc) {
+                            overlayImage.src = primarySrc;
+                        }
+                        overlayImage.onerror = () => {
+                            overlayImage.onerror = null;
+                            overlayImage.src = fallbackSrc;
+                            // If fallback also fails, show text as last resort
+                            overlayImage.onerror = () => {
+                                overlayImage.style.display = 'none';
+                                if (content) content.style.display = '';
+                            };
+                        };
+                    }
+                    // Clear any background image usage
+                    overlay.style.backgroundImage = '';
+                }
+                // If device=mobile in URL, hide the game completely under the text
+                if (forceMobile && gameContainer) {
+                    gameContainer.style.visibility = 'hidden';
+                } else if (gameContainer) {
+                    gameContainer.style.visibility = 'visible';
+                }
+                // Disable input and pause running scenes
+                if (game.input) game.input.enabled = false;
+                try {
+                    // @ts-ignore Phaser typing
+                    const runningScenes = game.scene.getScenes(true) as any[];
+                    runningScenes.forEach((s: any) => {
+                        const key = (s && s.sys && s.sys.settings && s.sys.settings.key) as string;
+                        if (key && !pausedSceneKeys.has(key)) {
+                            try { game.scene.pause(key); } catch (_e) { /* no-op */ }
+                            pausedSceneKeys.add(key);
+                        }
+                    });
+                } catch (_e) { /* no-op */ }
+            }
+        };
+        window.addEventListener('resize', updateOrientationLock);
+        // Some devices fire orientationchange more reliably
+        // @ts-ignore legacy event exists on some platforms
+        window.addEventListener('orientationchange', updateOrientationLock);
+        // Initial check
+        updateOrientationLock();
+    } catch (_e) { /* no-op */ }
     // Harden input reliability on mobile Safari/Chrome by setting runtime styles
     try {
         const appElement = document.getElementById('app');
@@ -148,4 +261,4 @@ const StartGame = (parent: string): Game => {
     return game;
 };
 
-export default StartGame; 
+export default StartGame;   
