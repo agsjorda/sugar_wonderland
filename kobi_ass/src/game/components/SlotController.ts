@@ -26,6 +26,8 @@ export class SlotController {
 	private betDollarText: Phaser.GameObjects.Text;
 	private balanceAmountText: Phaser.GameObjects.Text;
 	private balanceDollarText: Phaser.GameObjects.Text;
+	private featureAmountText: Phaser.GameObjects.Text;
+	private featureDollarText: Phaser.GameObjects.Text;
 	private primaryControllers: Phaser.GameObjects.Container;
 	private controllerTexts: Phaser.GameObjects.Text[] = [];
 	private amplifyDescriptionContainer: Phaser.GameObjects.Container;
@@ -46,6 +48,16 @@ export class SlotController {
 	
 	// Spine animation for turbo button (looping when active)
 	private turboButtonAnimation: any = null;
+	
+	// Spin icon overlay and its tween
+	private spinIcon: Phaser.GameObjects.Image | null = null;
+	private spinIconTween: Phaser.Tweens.Tween | null = null;
+	
+	// Autoplay stop icon overlay
+	private autoplayStopIcon: Phaser.GameObjects.Image | null = null;
+
+	// Guard to ensure we decrement autoplay counter once per spin at REELS_START
+	private hasDecrementedAutoplayForCurrentSpin: boolean = false;
 	
 	// Buy feature drawer component
 	private buyFeature: BuyFeature | null = null;
@@ -244,14 +256,14 @@ export class SlotController {
 			// Following the exact same pattern as kobi-ass animation in Header.ts
 			this.autoplayButtonAnimation = scene.add.spine(
 				autoplayButton.x - 4, 
-				autoplayButton.y - 33, 
+				autoplayButton.y - 26, 
 				"button_animation_idle", 
 				"button_animation_idle-atlas"
 			);
 			
 			// Set properties following the same pattern as kobi-ass
 			this.autoplayButtonAnimation.setOrigin(0.5, 0.5);
-			this.autoplayButtonAnimation.setScale(assetScale * 0.21); // Same scale as autoplay button
+			this.autoplayButtonAnimation.setScale(assetScale * 0.16); // Same scale as autoplay button
 			this.autoplayButtonAnimation.setDepth(11); // Above the autoplay button
 			
 			// Set animation speed to 1.3x (same as spin button)
@@ -337,7 +349,7 @@ export class SlotController {
 			spinButton.y,
 			'0',
 			{
-				fontSize: '35px',
+				fontSize: '24px',
 				color: '#ffffff',
 				fontFamily: 'poppins-regular',
 				stroke: '#379557',
@@ -347,13 +359,15 @@ export class SlotController {
 		
 		// Set properties
 		this.autoplaySpinsRemainingText.setOrigin(0.5, 0.5);
-		this.autoplaySpinsRemainingText.setDepth(12); // Above the spin button and animations
+		this.autoplaySpinsRemainingText.setDepth(20); // Ensure above spin button, spin icon, and stop icon
 		
 		// Initially hide the text (only show when autoplay is active)
 		this.autoplaySpinsRemainingText.setVisible(false);
 		
 		// Add to the primary controllers container so it gets disabled/enabled with other controls
 		this.primaryControllers.add(this.autoplaySpinsRemainingText);
+		// Ensure it's on top within the container ordering
+		this.primaryControllers.bringToTop(this.autoplaySpinsRemainingText);
 		
 		console.log('[SlotController] Autoplay spins remaining text created successfully');
 	}
@@ -364,6 +378,9 @@ export class SlotController {
 	private showAutoplaySpinsRemainingText(): void {
 		if (this.autoplaySpinsRemainingText) {
 			this.autoplaySpinsRemainingText.setVisible(true);
+			if (this.primaryControllers) {
+				this.primaryControllers.bringToTop(this.autoplaySpinsRemainingText);
+			}
 			console.log('[SlotController] Autoplay spins remaining text shown');
 		}
 	}
@@ -455,6 +472,9 @@ export class SlotController {
 	private updateAutoplaySpinsRemainingText(spinsRemaining: number): void {
 		if (this.autoplaySpinsRemainingText) {
 			this.autoplaySpinsRemainingText.setText(spinsRemaining.toString());
+			if (this.primaryControllers) {
+				this.primaryControllers.bringToTop(this.autoplaySpinsRemainingText);
+			}
 			console.log(`[SlotController] Autoplay spins remaining text updated to: ${spinsRemaining}`);
 		}
 	}
@@ -671,12 +691,40 @@ export class SlotController {
 			middleRef,
 			'spin'
 		).setOrigin(0.5, 0.5).setScale(assetScale * 1.2).setDepth(10);
+
+
+		// Spin icon overlay in front of and aligned with the spin button
+		this.spinIcon = scene.add.image(
+			spinButton.x,
+			spinButton.y,
+			'spin_icon'
+		).setOrigin(0.5, 0.5).setScale(assetScale * 1.2).setDepth(11);
+		this.primaryControllers.add(this.spinIcon);
+
+		// Gentle rotation animation for the icon
+		this.spinIconTween = scene.tweens.add({
+			targets: this.spinIcon,
+			angle: 360,
+			duration: 4000,
+			repeat: -1,
+			ease: 'Linear'
+		});
+
+		// Autoplay stop icon overlay (hidden by default), same position as spin
+		this.autoplayStopIcon = scene.add.image(
+			spinButton.x,
+			spinButton.y,
+			'autoplay_stop_icon'
+		).setOrigin(0.5, 0.5).setScale(assetScale * 0.45).setDepth(12).setVisible(false);
+		this.primaryControllers.add(this.autoplayStopIcon);
+
 		spinButton.setInteractive();
 		spinButton.on('pointerdown', async () => {
 			console.log('[SlotController] Spin button clicked');
-			// Priority: Check autoplay first, then spinning state
+			// If autoplay is active, clicking spin will stop autoplay instead
 			if (gameStateManager.isAutoPlaying) {
-				console.log('[SlotController] Spin blocked - autoplay is active');
+				console.log('[SlotController] Stopping autoplay via spin button click');
+				this.stopAutoplay();
 				return;
 			}
 			if (gameStateManager.isReelSpinning) {
@@ -696,6 +744,18 @@ export class SlotController {
 		});
 		this.buttons.set('spin', spinButton);
 		this.primaryControllers.add(spinButton);
+
+		// Ensure icon is positioned exactly and rendered above the spin button
+		if (this.spinIcon) {
+			this.spinIcon.setPosition(spinButton.x, spinButton.y);
+			this.primaryControllers.bringToTop(this.spinIcon);
+		}
+
+		// Ensure icon is positioned exactly and rendered above the spin button
+		if (this.spinIcon) {
+			this.spinIcon.setPosition(spinButton.x, spinButton.y);
+			this.primaryControllers.bringToTop(this.spinIcon);
+		}
 
 		// Turbo button
 		const turboButton = scene.add.image(
@@ -1113,37 +1173,40 @@ export class SlotController {
 			'BUY FEATURE',
 			{
 				fontSize: '12px',
-				color: '#ffffff', // White color
+				color: '#ffffff',
 				fontFamily: 'poppins-regular'
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(featureLabel1);
 
-		// "10,000" amount (2nd line, right part)
-		const featureAmount = scene.add.text(
+		// Amount (2nd line, right part) - bound to current bet x100
+		this.featureAmountText = scene.add.text(
 			featureX + 5,
 			featureY + 8,
-			'10,000',
+			'0',
 			{
 				fontSize: '14px',
-				color: '#ffffff', // White color
+				color: '#ffffff',
 				fontFamily: 'poppins-bold'
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
-		this.controllerContainer.add(featureAmount);
+		this.controllerContainer.add(this.featureAmountText);
 
 		// "$" symbol (2nd line, left part) - positioned dynamically
-		const featureDollar = scene.add.text(
-			featureX - (featureAmount.width / 2) - 3,
+		this.featureDollarText = scene.add.text(
+			featureX - (this.featureAmountText.width / 2) - 3,
 			featureY + 8,
 			'$',
 			{
 				fontSize: '14px',
-				color: '#ffffff', // White color
+				color: '#ffffff',
 				fontFamily: 'poppins-regular'
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
-		this.controllerContainer.add(featureDollar);
+		this.controllerContainer.add(this.featureDollarText);
+
+		// Initialize amount from current bet
+		this.updateFeatureAmountFromCurrentBet();
 	}
 
 	private createLandscapeController(scene: Scene, assetScale: number): void {
@@ -1163,12 +1226,41 @@ export class SlotController {
 			middleRef,
 			'spin'
 		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(10);
+
+		// Spin icon overlay in front of and aligned with the spin button (landscape)
+		if (!this.spinIcon) {
+			this.spinIcon = scene.add.image(
+				spinButton.x,
+				spinButton.y,
+				'spin_icon'
+			).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(11);
+			this.primaryControllers.add(this.spinIcon);
+			this.spinIconTween = scene.tweens.add({
+				targets: this.spinIcon,
+				angle: 360,
+				duration: 4000,
+				repeat: -1,
+				ease: 'Linear'
+			});
+		}
+
+		// Autoplay stop icon overlay (hidden by default), same position as spin (landscape)
+		if (!this.autoplayStopIcon) {
+			this.autoplayStopIcon = scene.add.image(
+				spinButton.x,
+				spinButton.y,
+				'autoplay_stop_icon'
+			).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(12).setVisible(false);
+			this.primaryControllers.add(this.autoplayStopIcon);
+		}
+
 		spinButton.setInteractive();
 		spinButton.on('pointerdown', async () => {
 			console.log('[SlotController] Spin button clicked');
-			// Priority: Check autoplay first, then spinning state
+			// If autoplay is active, clicking spin will stop autoplay instead
 			if (gameStateManager.isAutoPlaying) {
-				console.log('[SlotController] Spin blocked - autoplay is active');
+				console.log('[SlotController] Stopping autoplay via spin button click');
+				this.stopAutoplay();
 				return;
 			}
 			if (gameStateManager.isReelSpinning) {
@@ -1323,12 +1415,39 @@ export class SlotController {
 			}
 		}
 		
+		// Keep the Buy Feature amount synced with current base bet
+		this.updateFeatureAmountFromCurrentBet();
+		
 		// Update base bet amount when changed externally (not by amplify bet)
 		if (!this.isInternalBetChange) {
 			this.baseBetAmount = betAmount;
 			// Reset amplify bet state when bet amount is changed externally
 			this.resetAmplifyBetOnBetChange();
 		}
+	}
+
+	/**
+	 * Update the Buy Feature button amount to current base bet x100
+	 */
+	private updateFeatureAmountFromCurrentBet(): void {
+		if (!this.featureAmountText || !this.featureDollarText) {
+			return;
+		}
+		// Prefer displayed bet (reflects amplify), fallback to base bet
+		let displayedBet = 0;
+		if (this.betAmountText) {
+			displayedBet = parseFloat(this.betAmountText.text) || 0;
+		}
+		if (displayedBet === 0) {
+			displayedBet = this.getBaseBetAmount() || 0;
+		}
+		const price = displayedBet * 100;
+		// Format with thousands separators and 2 decimals
+		this.featureAmountText.setText(price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+		// Reposition dollar sign based on updated width
+		const x = this.featureAmountText.x;
+		const y = this.featureAmountText.y;
+		this.featureDollarText.setPosition(x - (this.featureAmountText.width / 2) - 3, y);
 	}
 
 	getBetAmountText(): string | null {
@@ -1439,8 +1558,10 @@ export class SlotController {
 				return;
 			}
 			
-			// No need to update button state here - will be handled when reels finish
-			this.disableSpinButton();
+			// For manual spins, disable spin. Keep enabled during autoplay to allow stopping autoplay
+			if (!gameStateManager.isAutoPlaying) {
+				this.disableSpinButton();
+			}
 			
 			// Play the spin button spine animation for all spins (manual and autoplay)
 			this.playSpinButtonAnimation();
@@ -1465,10 +1586,21 @@ export class SlotController {
 		gameEventManager.on(GameEventType.REELS_START, () => {
 			console.log('[SlotController] Reels started - disabling amplify button');
 			this.disableAmplifyButton();
+			// Decrement normal autoplay spins at start of reels
+			if (this.autoplaySpinsRemaining > 0 && gameStateManager.isAutoPlaying && !gameStateManager.isBonus) {
+				if (!this.hasDecrementedAutoplayForCurrentSpin) {
+					this.autoplaySpinsRemaining = Math.max(0, this.autoplaySpinsRemaining - 1);
+					this.updateAutoplaySpinsRemainingText(this.autoplaySpinsRemaining);
+					this.hasDecrementedAutoplayForCurrentSpin = true;
+					console.log(`[SlotController] Autoplay decremented on REELS_START. Remaining: ${this.autoplaySpinsRemaining}`);
+				}
+			}
 		});
 
 		gameEventManager.on(GameEventType.REELS_STOP, () => {
 			console.log('[SlotController] Reels stopped event received - updating spin button state');
+			// Reset decrement guard for next spin
+			this.hasDecrementedAutoplayForCurrentSpin = false;
 			
 			// Update balance from server every time reels stop (skip during scatter/bonus)
 			if (!gameStateManager.isScatter && !gameStateManager.isBonus) {
@@ -1612,7 +1744,22 @@ export class SlotController {
 			}
 			
 			this.setAutoplayButtonState(true);
-			this.disableSpinButton();
+			// Keep spin button enabled during autoplay (allow stopping autoplay)
+			// Hide and pause spin icon completely during autoplay, show stop icon
+			if (this.spinIcon) {
+				this.spinIcon.setVisible(false);
+			}
+			if (this.spinIconTween) {
+				this.spinIconTween.pause();
+			}
+			if (this.autoplayStopIcon) {
+				this.autoplayStopIcon.setVisible(true);
+				this.primaryControllers.bringToTop(this.autoplayStopIcon);
+			}
+			// Keep spins text above all
+			if (this.autoplaySpinsRemainingText && this.primaryControllers) {
+				this.primaryControllers.bringToTop(this.autoplaySpinsRemainingText);
+			}
 			// No need to update spin button state here - will be handled when reels finish
 		});
 
@@ -1640,6 +1787,20 @@ export class SlotController {
 			this.enableBetButtons();
 			this.enableFeatureButton();
 			this.enableAmplifyButton();
+		// Show and resume spin icon after autoplay stops, hide stop icon
+			if (this.spinIcon) {
+				this.spinIcon.setVisible(true);
+			}
+			if (this.spinIconTween) {
+				this.spinIconTween.resume();
+			}
+			if (this.autoplayStopIcon) {
+				this.autoplayStopIcon.setVisible(false);
+			}
+			// Keep spins text above all
+			if (this.autoplaySpinsRemainingText && this.primaryControllers) {
+				this.primaryControllers.bringToTop(this.autoplaySpinsRemainingText);
+			}
 			console.log('[SlotController] Spin, autoplay, bet, feature, and amplify buttons enabled');
 			
 			console.log('[SlotController] Autoplay UI reset completed');
@@ -1671,12 +1832,7 @@ export class SlotController {
 				console.log('[SlotController] Autoplay spin completed, checking for next spin');
 				console.log(`[SlotController] Autoplay state: spinsRemaining=${this.autoplaySpinsRemaining}, isAutoPlaying=${gameStateManager.isAutoPlaying}`);
 				
-				// Decrement autoplay spins remaining for autoplay spins
-				if (this.autoplaySpinsRemaining > 0) {
-					this.autoplaySpinsRemaining--;
-					this.updateAutoplaySpinsRemainingText(this.autoplaySpinsRemaining);
-					console.log(`[SlotController] Autoplay spin completed, decremented spins. ${this.autoplaySpinsRemaining} spins remaining`);
-				}
+				// Decrement now handled at REELS_START for normal autoplay
 				
 				// Check if a win dialog is showing - pause autoplay if so
 				if (gameStateManager.isShowingWinDialog) {
@@ -1865,9 +2021,19 @@ export class SlotController {
 		this.setAutoplayButtonState(true);
 		this.showAutoplaySpinsRemainingText();
 		this.updateAutoplaySpinsRemainingText(spins);
+		// Hide and pause spin icon completely during autoplay, show stop icon
+		if (this.spinIcon) {
+			this.spinIcon.setVisible(false);
+		}
+		if (this.spinIconTween) {
+			this.spinIconTween.pause();
+		}
+		if (this.autoplayStopIcon) {
+			this.autoplayStopIcon.setVisible(true);
+			if (this.primaryControllers) this.primaryControllers.bringToTop(this.autoplayStopIcon);
+		}
 		
-		// Disable spin button, bet buttons, and feature button
-		this.disableSpinButton();
+		// Keep spin button enabled during autoplay (allow stopping autoplay)
 		this.disableBetButtons();
 		this.disableFeatureButton();
 		
@@ -1902,6 +2068,24 @@ export class SlotController {
 		// Update UI
 		this.setAutoplayButtonState(false);
 		this.hideAutoplaySpinsRemainingText();
+		// Show and resume spin icon after autoplay stops, hide stop icon
+		if (this.spinIcon) {
+			this.spinIcon.setVisible(true);
+		}
+		if (this.spinIconTween) {
+			this.spinIconTween.resume();
+		}
+		if (this.autoplayStopIcon) {
+			this.autoplayStopIcon.setVisible(false);
+		}
+		
+		// If scatter/bonus active, keep controls disabled
+		if (gameStateManager.isScatter || gameStateManager.isBonus) {
+			this.disableSpinButton();
+			this.disableAutoplayButton();
+			this.disableAmplifyButton();
+			return;
+		}
 		
 		// Re-enable spin button if not spinning
 		if (!gameStateManager.isReelSpinning) {
@@ -1920,8 +2104,7 @@ export class SlotController {
 
 		console.log(`[SlotController] Performing autoplay spin. ${this.autoplaySpinsRemaining} spins remaining`);
 		
-		// Disable spin button, bet buttons, and feature button
-		this.disableSpinButton();
+		// During autoplay spins, keep spin button enabled to allow stopping autoplay
 		this.disableBetButtons();
 		this.disableFeatureButton();
 		
@@ -2317,6 +2500,9 @@ export class SlotController {
 			}
 		}
 		
+		// Even though base bet doesn't change, price uses base bet x100
+		this.updateFeatureAmountFromCurrentBet();
+		
 		console.log(`[SlotController] Amplify bet applied: $${currentBet} -> $${increasedBet.toFixed(2)} (+25%) - Base bet for API: $${this.baseBetAmount}`);
 	}
 
@@ -2335,6 +2521,9 @@ export class SlotController {
 				this.betDollarText.setPosition(betX - (this.betAmountText.width / 2) - 5, betY);
 			}
 		}
+		
+		// Keep Buy Feature price in sync
+		this.updateFeatureAmountFromCurrentBet();
 		
 		console.log(`[SlotController] Amplify bet removed: Display restored to base bet: $${this.baseBetAmount}`);
 	}
@@ -2355,6 +2544,8 @@ export class SlotController {
 		this.setAmplifyButtonState(false);
 		this.hideAmplifyBetAnimation();
 		this.stopAmplifyBetBouncing();
+		// Price still reflects base bet x100, so refresh it
+		this.updateFeatureAmountFromCurrentBet();
 		
 		console.log('[SlotController] Amplify bet state reset due to bet change');
 	}
@@ -2575,7 +2766,7 @@ export class SlotController {
 		
 		// Create free spin number display
 		this.freeSpinNumber = scene.add.text(
-			freeSpinX + 105, // Positioned to the right of the label
+			freeSpinX + 110, // Positioned to the right of the label
 			freeSpinY + 5, // Centered vertically between the two lines
 			'3', // Default value, will be updated dynamically
 			{
@@ -3059,6 +3250,11 @@ public updateAutoplayButtonState(): void {
 				this.stopAutoplay();
 			}
 			
+			// Keep controls disabled/greyed out while scatter/bonus sequence proceeds
+			this.disableSpinButton();
+			this.disableAutoplayButton();
+			this.disableAmplifyButton();
+			
 			console.log(`[SlotController] Scatter bonus activated with index ${data.scatterIndex} and ${data.actualFreeSpins} free spins - hiding primary controller, free spin display will appear after dialog closes`);
 			this.hidePrimaryControllerWithScatter(data.scatterIndex);
 			// Store the free spins data for later display after dialog closes
@@ -3225,6 +3421,13 @@ public updateAutoplayButtonState(): void {
 		if (spinButton) {
 			spinButton.setTint(0x666666); // Gray out the button
 			spinButton.disableInteractive();
+			// Dim and pause icon animation
+			if (this.spinIcon) {
+				this.spinIcon.setAlpha(0.5);
+			}
+			if (this.spinIconTween) {
+				this.spinIconTween.pause();
+			}
 		}
 	}
 
@@ -3237,6 +3440,13 @@ public updateAutoplayButtonState(): void {
 			spinButton.clearTint(); // Remove gray tint
 			spinButton.setInteractive();
 			console.log('[SlotController] Spin button enabled');
+			// Restore icon animation
+			if (this.spinIcon) {
+				this.spinIcon.setAlpha(1);
+			}
+			if (this.spinIconTween) {
+				this.spinIconTween.resume();
+			}
 		}
 	}
 

@@ -101,10 +101,28 @@ export class AssetLoader {
 		console.log('[AssetLoader] Spinner assets loaded');
 	}
 
+	loadMenuAssets(scene: Scene): void {
+		console.log('[AssetLoader] Loading menu assets...');
+		this.loadAssetGroup(scene, this.assetConfig.getMenuAssets());
+		console.log('[AssetLoader] Menu assets loaded');
+	}
+
+	loadHelpScreenAssets(scene: Scene): void {
+		console.log('[AssetLoader] Loading help screen assets...');
+		this.loadAssetGroup(scene, this.assetConfig.getHelpScreenAssets());
+		console.log('[AssetLoader] Help screen assets loaded');
+	}
+
 	loadDialogAssets(scene: Scene): void {
 		console.log('[AssetLoader] Loading dialog assets...');
 		this.loadAssetGroup(scene, this.assetConfig.getDialogAssets());
 		console.log('[AssetLoader] Dialog assets loaded');
+	}
+
+	loadScatterAnticipationAssets(scene: Scene): void {
+		console.log('[AssetLoader] Loading scatter anticipation assets...');
+		this.loadAssetGroup(scene, this.assetConfig.getScatterAnticipationAssets());
+		console.log('[AssetLoader] Scatter anticipation assets loaded');
 	}
 
 	loadNumberAssets(scene: Scene): void {

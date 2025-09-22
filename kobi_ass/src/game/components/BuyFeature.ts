@@ -228,66 +228,24 @@ export class BuyFeature {
 		const backgroundTop = screenHeight - 736;
 		const x = screenWidth / 2;
 		const y = backgroundTop + 560;
-		const rectWidth = 364; // Updated width
-		const rectHeight = 62; // Updated height
 		
-		// Create gradient segments (same as BetOptions)
-		const segments = 25;
-		const segmentHeight = rectHeight / segments;
+		// Use long_button image to match other confirm buttons
+		const buttonImage = scene.add.image(x, y, 'long_button');
+		buttonImage.setOrigin(0.5, 0.5);
+		buttonImage.setDisplaySize(364, 62);
+		this.container.add(buttonImage);
 		
-		// Create gradient container
-		const gradientContainer = scene.add.container(x, y);
-		
-		// Create a mask for the rounded shape
-		this.confirmButtonMask = scene.add.graphics();
-		this.confirmButtonMask.fillStyle(0xffffff, 1);
-		this.confirmButtonMask.fillRoundedRect(-182, -31, rectWidth, rectHeight, 31);
-		this.confirmButtonMask.setPosition(x, y);
-		this.confirmButtonMask.setVisible(false); // Start hidden
-		this.confirmButtonMask.setAlpha(0); // Set alpha to 0
-		this.container.add(this.confirmButtonMask);
-		
-		gradientContainer.setMask(this.confirmButtonMask.createGeometryMask());
-		
-		for (let i = 0; i < segments; i++) {
-			const y1 = -31 + (i * segmentHeight);
-			
-			// Interpolate between colors (exact same as BetOptions)
-			const ratio = i / (segments - 1);
-			const r1 = 0x66, g1 = 0xD4, b1 = 0x49; // #66D449
-			const r2 = 0x37, g2 = 0x95, b2 = 0x57; // #379557
-			
-			const r = Math.round(r1 + (r2 - r1) * ratio);
-			const g = Math.round(g1 + (g2 - g1) * ratio);
-			const b = Math.round(b1 + (b2 - b1) * ratio);
-			
-			const color = (r << 16) | (g << 8) | b;
-			const segment = scene.add.graphics();
-			segment.fillStyle(color, 1);
-			segment.fillRect(-182, y1, rectWidth, segmentHeight);
-			segment.setPosition(0, 0);
-			gradientContainer.add(segment);
-		}
-		
-		this.container.add(gradientContainer);
-		
-		// Button border
-		const buttonBg = scene.add.graphics();
-		buttonBg.lineStyle(2, 0x00cc00, 1);
-		buttonBg.strokeRoundedRect(-182, -31, rectWidth, rectHeight, 31);
-		buttonBg.setPosition(x, y);
-		this.container.add(buttonBg);
-		
-		// Button text (same style as BetOptions)
+		// Button label
 		this.confirmButton = scene.add.text(x, y, 'BUY FEATURE', {
 			fontSize: '24px',
 			fontFamily: 'Poppins-Bold',
 			color: '#000000'
 		});
 		this.confirmButton.setOrigin(0.5);
-		this.confirmButton.setInteractive();
-		this.confirmButton.on('pointerdown', () => this.confirmPurchase());
 		this.container.add(this.confirmButton);
+		
+		buttonImage.setInteractive();
+		buttonImage.on('pointerdown', () => this.confirmPurchase());
 	}
 
 	private createCloseButton(scene: Scene): void {

@@ -24,8 +24,17 @@ export class AutoplayOptions {
 	private autoplayOptions: number[] = [
 		10, 30, 50, 75, 100, 150, 500, 1000
 	];
+	private betOptions: number[] = [
+		0.2, 0.4, 0.6, 0.8, 1,
+		1.2, 1.6, 2, 2.4, 2.8,
+		3.2, 3.6, 4, 5, 6,
+		8, 10, 14, 18, 24,
+		32, 40, 60, 80, 100,
+		110, 120, 130, 140, 150
+	];
 	private autoplayButtons: Phaser.GameObjects.Container[] = [];
 	private selectedButtonIndex: number = -1;
+	private selectedBetIndex: number = -1;
 	private closeButton: Phaser.GameObjects.Text;
 	private confirmButton: Phaser.GameObjects.Text;
 	private autoplayDisplay: Phaser.GameObjects.Text;
@@ -271,13 +280,12 @@ export class AutoplayOptions {
 		this.minusButton.setOrigin(0.5, 0.5);
 		this.minusButton.setInteractive();
 		this.minusButton.on('pointerdown', () => {
-			this.selectPreviousAutoplay();
+			this.selectPreviousBet();
 		});
 		this.container.add(this.minusButton);
 		
-		// Autoplay display - show total cost (bet × spins)
-		const totalCost = this.currentBet * this.currentAutoplayCount;
-		this.autoplayDisplay = scene.add.text(x, y, `$${totalCost.toFixed(2)}`, {
+		// Bet display
+		this.autoplayDisplay = scene.add.text(x, y, `$${this.currentBet.toFixed(2)}` , {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
@@ -294,7 +302,7 @@ export class AutoplayOptions {
 		this.plusButton.setOrigin(0.5, 0.5);
 		this.plusButton.setInteractive();
 		this.plusButton.on('pointerdown', () => {
-			this.selectNextAutoplay();
+			this.selectNextBet();
 		});
 		this.container.add(this.plusButton);
 	}
@@ -377,8 +385,7 @@ export class AutoplayOptions {
 
 	private updateAutoplayDisplay(): void {
 		if (this.autoplayDisplay) {
-			const totalCost = this.currentBet * this.currentAutoplayCount;
-			this.autoplayDisplay.setText(`$${totalCost.toFixed(2)}`);
+			this.autoplayDisplay.setText(`$${this.currentBet.toFixed(2)}`);
 		}
 	}
 
@@ -397,6 +404,24 @@ export class AutoplayOptions {
 	private selectNextAutoplay(): void {
 		if (this.selectedButtonIndex < this.autoplayOptions.length - 1) {
 			this.selectButton(this.selectedButtonIndex + 1, this.autoplayOptions[this.selectedButtonIndex + 1]);
+		}
+	}
+
+	private selectBet(index: number, value: number): void {
+		this.selectedBetIndex = index;
+		this.currentBet = value;
+		this.updateAutoplayDisplay();
+	}
+
+	private selectPreviousBet(): void {
+		if (this.selectedBetIndex > 0) {
+			this.selectBet(this.selectedBetIndex - 1, this.betOptions[this.selectedBetIndex - 1]);
+		}
+	}
+
+	private selectNextBet(): void {
+		if (this.selectedBetIndex < this.betOptions.length - 1) {
+			this.selectBet(this.selectedBetIndex + 1, this.betOptions[this.selectedBetIndex + 1]);
 		}
 	}
 
@@ -437,6 +462,23 @@ export class AutoplayOptions {
 			this.selectButton(closestIndex, this.autoplayOptions[closestIndex]);
 		}
 		
+		// Initialize bet selector to match current bet (closest option)
+		const betMatchingIndex = this.betOptions.findIndex(option => Math.abs(option - this.currentBet) < 0.01);
+		if (betMatchingIndex !== -1) {
+			this.selectBet(betMatchingIndex, this.betOptions[betMatchingIndex]);
+		} else {
+			let closestBetIndex = 0;
+			let closestBetDifference = Math.abs(this.betOptions[0] - this.currentBet);
+			for (let i = 1; i < this.betOptions.length; i++) {
+				const difference = Math.abs(this.betOptions[i] - this.currentBet);
+				if (difference < closestBetDifference) {
+					closestBetDifference = difference;
+					closestBetIndex = i;
+				}
+			}
+			this.selectBet(closestBetIndex, this.betOptions[closestBetIndex]);
+		}
+
 		this.updateAutoplayDisplay();
 		
 		// Start positioned below the screen for slide-up effect

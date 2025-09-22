@@ -181,12 +181,16 @@ export class AssetConfig {
 				'decrease_bet': `assets/controller/${screenMode}/${quality}/decrease_bet.png`,
 				'increase_bet': `assets/controller/${screenMode}/${quality}/increase_bet.png`,
 				'menu': `assets/controller/${screenMode}/${quality}/menu.png`,
-				'spin': `assets/controller/${screenMode}/${quality}/spin.png`,
+				'spin': `assets/controller/${screenMode}/${quality}/spin_bg.png`,
+				'spin_icon': `assets/controller/${screenMode}/${quality}/spin_icon.png`,
+				'autoplay_stop_icon': `assets/controller/${screenMode}/${quality}/autoplay_stop_icon.png`,
 				'turbo_off': `assets/controller/${screenMode}/${quality}/turbo_off.png`,
 				'turbo_on': `assets/controller/${screenMode}/${quality}/turbo_on.png`,
 				'amplify': `assets/controller/${screenMode}/${quality}/amplify.png`,
 				'feature': `assets/controller/${screenMode}/${quality}/feature.png`,
 				'long_button': `assets/controller/${screenMode}/${quality}/long_button.png`,
+				'maximize': `assets/controller/${screenMode}/${quality}/maximize.png`,
+				'minimize': `assets/controller/${screenMode}/${quality}/minimize.png`,
 			},
 			spine: {
 				'generic_UI_animation': {
@@ -237,6 +241,69 @@ export class AssetConfig {
 		};
 	}
 
+	getMenuAssets(): AssetGroup {
+		const prefix = this.getAssetPrefix();
+		return {
+			images: {
+				// Menu tab icons
+				'menu_info': `${prefix}/menu/Info.png`,
+				'menu_history': `${prefix}/menu/History.png`,
+				'menu_settings': `${prefix}/menu/Settings.png`,
+				// Pagination and loading
+				'icon_left': `${prefix}/menu/icon_left.png`,
+				'icon_most_left': `${prefix}/menu/icon_most_left.png`,
+				'icon_right': `${prefix}/menu/icon_right.png`,
+				'icon_most_right': `${prefix}/menu/icon_most_right.png`,
+				'loading_icon': `${prefix}/menu/loading.png`
+			}
+		};
+	}
+
+	getHelpScreenAssets(): AssetGroup {
+		const prefix = this.getAssetPrefix();
+		return {
+			images: {
+				// HowToPlay images
+				'howToPlay1': `${prefix}/help_screen/HowToPlay1.png`,
+				'howToPlay1Mobile': `${prefix}/help_screen/HowToPlay1Mobile.png`,
+				'howToPlay2': `${prefix}/help_screen/HowToPlay2.png`,
+				'howToPlay2Mobile': `${prefix}/help_screen/HowToPlay2Mobile.png`,
+				'howToPlay3': `${prefix}/help_screen/HowToPlay3.png`,
+				'howToPlay3Mobile': `${prefix}/help_screen/HowToPlay3Mobile.png`,
+				'howToPlay4': `${prefix}/help_screen/HowToPlay4.png`,
+				'howToPlay4Mobile': `${prefix}/help_screen/HowToPlay4Mobile.png`,
+				'howToPlay5': `${prefix}/help_screen/HowToPlay5.png`,
+				'howToPlay6': `${prefix}/help_screen/HowToPlay6.png`,
+				'howToPlay7': `${prefix}/help_screen/HowToPlay7.png`,
+				'howToPlay8': `${prefix}/help_screen/HowToPlay8.png`,
+				'howToPlay8Mobile': `${prefix}/help_screen/HowToPlay8Mobile.png`,
+				'howToPlay9': `${prefix}/help_screen/HowToPlay9.png`,
+				'howToPlay9Mobile': `${prefix}/help_screen/HowToPlay9Mobile.png`,
+				'howToPlay10': `${prefix}/help_screen/HowToPlay10.png`,
+				'howToPlay10Mobile': `${prefix}/help_screen/HowToPlay10Mobile.png`,
+				// Feature help
+				'BuyFeatHelp': `${prefix}/help_screen/BuyFeatHelp.png`,
+				'BuyFeatMobile': `${prefix}/help_screen/BuyFeatMobile.png`,
+				'DoubleHelp': `${prefix}/help_screen/DoubleHelp.png`,
+				'DoubleHelpMobile': `${prefix}/help_screen/DoubleHelpMobile.png`,
+				// Payline visuals
+				'paylineMobileWin': `${prefix}/help_screen/paylineMobileWin.png`,
+				'paylineMobileNoWin': `${prefix}/help_screen/paylineMobileNoWin.png`,
+				// Scatter / Tumble / Multiplier visuals
+				'scatterGame': `${prefix}/help_screen/scatterGame.png`,
+				'scatterIcon': `${prefix}/help_screen/scatterIcon.png`,
+				'scatterWin': `${prefix}/help_screen/scatterWin.png`,
+				'ScatterLabel': `${prefix}/help_screen/ScatterSymbol.png`,
+				'wheelSpin_helper': `assets/portrait/high/help_screen/wheelSpin_helper.png`,
+				'freeSpin_round': `assets/portrait/high/help_screen/freeSpin_round.png`,
+				'tumbleIcon': `${prefix}/help_screen/tumbleIcon.png`,
+				'tumbleWin': `${prefix}/help_screen/tumbleWin.png`,
+				'multiplierGame': `${prefix}/help_screen/multiplierGame.png`,
+				'multiplierIcon': `${prefix}/help_screen/multiplierIcon.png`
+			}
+		};
+	}
+
 	getDialogAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix();
 		
@@ -279,6 +346,22 @@ export class AssetConfig {
 				'FreeSpinDialog_KA': {
 					atlas: `${prefix}/dialogs/FreeSpinDialog_KA.atlas`,
 					json: `${prefix}/dialogs/FreeSpinDialog_KA.json`
+				}
+			}
+		};
+	}
+
+	/**
+	 * Scatter Anticipation assets – only available in portrait/high for now.
+	 * We intentionally do not use getAssetPrefix() to avoid missing assets on low quality.
+	 */
+	getScatterAnticipationAssets(): AssetGroup {
+		console.log('[AssetConfig] Loading Scatter Anticipation assets');
+		return {
+			spine: {
+				'reelanim_KA': {
+					atlas: `assets/portrait/high/scatterAnticipation/reelanim_KA.atlas`,
+					json: `assets/portrait/high/scatterAnticipation/reelanim_KA.json`
 				}
 			}
 		};

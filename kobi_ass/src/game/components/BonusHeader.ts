@@ -2,6 +2,7 @@ import { Scene } from "phaser";
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { gameEventManager, GameEventType } from '../../event/EventManager';
+import { gameStateManager } from '../../managers/GameStateManager';
 
 export class BonusHeader {
 	private bonusHeaderContainer: Phaser.GameObjects.Container;
@@ -17,6 +18,9 @@ export class BonusHeader {
 	private amountText: Phaser.GameObjects.Text;
 	private youWonText: Phaser.GameObjects.Text;
 	private currentWinnings: number = 0;
+	// Tracks cumulative total during bonus mode by incrementing each spin's subtotal
+	private cumulativeBonusWin: number = 0;
+	private hasStartedBonusTracking: boolean = false;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -398,13 +402,38 @@ export class BonusHeader {
 
 		// Listen for reels start to hide winnings display
 		gameEventManager.on(GameEventType.REELS_START, () => {
-			console.log('[BonusHeader] Reels started - hiding winnings display');
-			this.hideWinningsDisplay();
+			console.log('[BonusHeader] Reels started');
+			// During bonus mode, display TOTAL WIN accumulated so far at the start of the spin
+			if (gameStateManager.isBonus) {
+				// Initialize tracking on first spin in bonus mode
+				if (!this.hasStartedBonusTracking) {
+					this.cumulativeBonusWin = 0;
+					this.hasStartedBonusTracking = true;
+				}
+				const totalWinSoFar = this.cumulativeBonusWin;
+				console.log(`[BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $${totalWinSoFar}`);
+				
+				if (this.youWonText) {
+					this.youWonText.setText('TOTAL WIN');
+				}
+				this.showWinningsDisplay(totalWinSoFar);
+			} else {
+				// Normal mode behavior: hide winnings at the start of the spin
+				this.hasStartedBonusTracking = false;
+				this.cumulativeBonusWin = 0;
+				this.hideWinningsDisplay();
+			}
 		});
 
 		// Listen for reel done events to show winnings display (like regular header)
 		gameEventManager.on(GameEventType.REELS_STOP, (data: any) => {
 			console.log(`[BonusHeader] REELS_STOP received - checking for wins`);
+
+			// In bonus mode, per-spin display is handled on WIN_STOP; skip here to avoid label mismatch
+			if (gameStateManager.isBonus) {
+				console.log('[BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)');
+				return;
+			}
 			
 			// Get the current spin data from the Symbols component
 			const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
@@ -430,6 +459,46 @@ export class BonusHeader {
 				console.log('[BonusHeader] No current spin data available - hiding winnings display');
 				this.hideWinningsDisplay();
 			}
+		});
+
+		// On WIN_START during bonus, show per-spin win with "YOU WON"
+		gameEventManager.on(GameEventType.WIN_START, () => {
+			if (!gameStateManager.isBonus) {
+				return;
+			}
+			const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
+			const spinData = symbolsComponent?.currentSpinData;
+			let spinWin = 0;
+			if (spinData?.slot?.paylines && spinData.slot.paylines.length > 0) {
+				spinWin = this.calculateTotalWinFromPaylines(spinData.slot.paylines);
+			}
+			if (this.youWonText) {
+				this.youWonText.setText('YOU WIN');
+			}
+			if (spinWin > 0) {
+				this.showWinningsDisplay(spinWin);
+			} else {
+				this.hideWinningsDisplay();
+			}
+		});
+
+		// On WIN_STOP during bonus, only accumulate subtotal for next REELS_START display
+		gameEventManager.on(GameEventType.WIN_STOP, () => {
+			if (!gameStateManager.isBonus) {
+				return;
+			}
+			const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
+			const spinData = symbolsComponent?.currentSpinData;
+			let spinWin = 0;
+			if (spinData?.slot?.paylines && spinData.slot.paylines.length > 0) {
+				spinWin = this.calculateTotalWinFromPaylines(spinData.slot.paylines);
+			}
+			if (!this.hasStartedBonusTracking) {
+				this.cumulativeBonusWin = 0;
+				this.hasStartedBonusTracking = true;
+			}
+			this.cumulativeBonusWin += (spinWin || 0);
+			console.log(`[BonusHeader] WIN_STOP (bonus): accumulated spinWin=$${spinWin}, cumulativeBonusWin=$${this.cumulativeBonusWin}`);
 		});
 	}
 

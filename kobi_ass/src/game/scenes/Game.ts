@@ -35,6 +35,9 @@ import { CoinAnimation } from '../components/CoinAnimation';
 import { GameAPI } from '../../backend/GameAPI';
 import { SpinData } from '../../backend/SpinData';
 import { AudioManager, MusicType, SoundEffectType } from '../../managers/AudioManager';
+import { Menu } from '../components/Menu';
+import { FullScreenManager } from '../../managers/FullScreenManager';
+import { ScatterAnticipation } from '../components/ScatterAnticipation';
 
 export class Game extends Scene
 {
@@ -56,7 +59,9 @@ export class Game extends Scene
 	private irisTransition: IrisTransition;
 	private coinAnimation: CoinAnimation;
 	private gameAPI: GameAPI;
-	private audioManager: AudioManager;
+	public audioManager: AudioManager;
+	private menu: Menu;
+	private scatterAnticipation: ScatterAnticipation;
 	
 	// Note: Payout data now calculated directly from paylines in WIN_STOP handler
 	// Track whether this spin has winlines to animate
@@ -75,6 +80,8 @@ export class Game extends Scene
 
 		this.gameData = new GameData();
 		this.symbols = new Symbols();
+		this.menu = new Menu();
+		this.scatterAnticipation = new ScatterAnticipation();
 	}
 
 	init (data: any)
@@ -102,6 +109,9 @@ export class Game extends Scene
 		// Assets are now loaded in Preloader scene
 		console.log(`[Game] Assets already loaded in Preloader scene`);
 		console.log(`[Game] Backend service initialized via GameStateManager`);
+
+		// Preload Menu assets specific to the Game scene
+		this.menu.preload(this);
 	}
 
 	create ()
@@ -201,6 +211,11 @@ export class Game extends Scene
 		// Create coin animation component
 		this.coinAnimation = new CoinAnimation(this.networkManager, this.screenModeManager);
 		this.coinAnimation.create(this);
+
+		// Create scatter anticipation component inside background container to avoid symbol mask and stay behind symbols
+		this.scatterAnticipation.create(this, this.background.getContainer());
+		this.scatterAnticipation.hide();
+		(this as any).scatterAnticipation = this.scatterAnticipation;
 		
 		// Zoom out the iris transition after 0.5 seconds
 		this.time.delayedCall(500, () => {
@@ -283,6 +298,12 @@ export class Game extends Scene
 			this.spin();
 		});
 
+		// Listen for menu button click
+		EventBus.on('menu', () => {
+			console.log('[Game] Menu button clicked - toggling menu');
+			this.menu.toggleMenu(this);
+		});
+
 		EventBus.on('show-bet-options', () => {
 			console.log('[Game] Showing bet options with fade-in effect');
 			
@@ -326,7 +347,14 @@ export class Game extends Scene
 				},
 				onConfirm: (autoplayCount: number) => {
 					console.log(`[Game] Autoplay confirmed: ${autoplayCount} spins`);
-					console.log(`[Game] Total cost: $${(currentBet * autoplayCount).toFixed(2)}`);
+					// Read the bet selected within the autoplay panel
+					const selectedBet = this.autoplayOptions.getCurrentBet();
+					// If bet changed, update UI and backend
+					if (Math.abs(selectedBet - currentBet) > 0.0001) {
+						this.slotController.updateBetAmount(selectedBet);
+						gameEventManager.emit(GameEventType.BET_UPDATE, { newBet: selectedBet, previousBet: currentBet });
+					}
+					console.log(`[Game] Total cost: $${(selectedBet * autoplayCount).toFixed(2)}`);
 					
 					// Start autoplay using the new SlotController method
 					this.slotController.startAutoplay(autoplayCount);
@@ -973,6 +1001,16 @@ export class Game extends Scene
 
 		console.log('[Game] Bonus mode event listeners setup complete');
 		
+		// Add fullscreen toggle button (top-right) using shared manager
+		const assetScale = this.networkManager.getAssetScale();
+		FullScreenManager.addToggle(this, {
+			margin: 16 * assetScale,
+			iconScale: 1.5 * assetScale,
+			depth: 1500,
+			maximizeKey: 'maximize',
+			minimizeKey: 'minimize'
+		});
+
 		// Add a test method to manually trigger bonus mode (for debugging)
 		(window as any).testBonusMode = () => {
 			console.log('[Game] TEST: Manually triggering bonus mode');

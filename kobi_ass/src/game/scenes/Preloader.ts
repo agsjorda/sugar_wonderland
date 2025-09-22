@@ -6,6 +6,7 @@ import { AssetConfig } from '../../config/AssetConfig';
 import { AssetLoader } from '../../utils/AssetLoader';
 import { GameAPI } from '../../backend/GameAPI';
 import { GameData } from '../components/GameData';
+import { FullScreenManager } from '../../managers/FullScreenManager';
 
 export class Preloader extends Scene
 {
@@ -14,6 +15,22 @@ export class Preloader extends Scene
 	private assetConfig: AssetConfig;
 	private assetLoader: AssetLoader;
 	private gameAPI: GameAPI;
+
+	// Loading bar graphics
+	private progressBarBg?: Phaser.GameObjects.Graphics;
+	private progressBarFill?: Phaser.GameObjects.Graphics;
+	private progressText?: Phaser.GameObjects.Text;
+	private progressBarX?: number;
+	private progressBarY?: number;
+	private progressBarWidth?: number;
+	private progressBarHeight?: number;
+	private progressBarPadding: number = 3;
+
+	// UI elements we need after load
+	private buttonSpin?: Phaser.GameObjects.Image;
+	private buttonBg?: Phaser.GameObjects.Image;
+	private pressToPlayText?: Phaser.GameObjects.Text;
+	private fullscreenBtn?: Phaser.GameObjects.Image;
 
 	constructor ()
 	{
@@ -66,17 +83,22 @@ export class Preloader extends Scene
 			const buttonY = this.scale.height * 0.8;
 			
 			// Scale buttons based on quality (low quality assets need 2x scaling)
-			const buttonBg = this.add.image(
+			this.buttonBg = this.add.image(
 				this.scale.width * 0.5, 
 				buttonY, 
 				"button_bg"
 			).setOrigin(0.5, 0.5).setScale(assetScale);
 
-			const buttonSpin = this.add.image(
+			this.buttonSpin = this.add.image(
 				this.scale.width * 0.5, 
 				buttonY, 
 				"button_spin"
 			).setOrigin(0.5, 0.5).setScale(assetScale);
+
+			// Grey out and disable the spin button and background until load completes
+			this.buttonSpin.setTint(0x777777).setAlpha(0.9);
+			this.buttonBg.setTint(0x777777).setAlpha(0.9);
+			this.buttonSpin.disableInteractive();
 
 			console.log(`[Preloader] Button scaling: ${assetScale}x`);
 
@@ -90,15 +112,76 @@ export class Preloader extends Scene
 			console.log(`[Preloader] Added kobi_logo_loading at scale: ${assetScale}x`);
 
 			this.tweens.add({
-				targets: buttonSpin,
+				targets: this.buttonSpin,
 				rotation: Math.PI * 2,
 				duration: 5000,
 				repeat: -1,
 			});
+
+			// Progress bar below the spinning button
+			const barWidth = this.scale.width * 0.5;
+			const barHeight = Math.max(18, 30 * assetScale);
+			const barX = this.scale.width * 0.5;
+			const barY = buttonY + (this.buttonBg.displayHeight * 0.5) + Math.max(20, 24 * assetScale) + 50;
+
+			this.progressBarBg = this.add.graphics();
+			this.progressBarBg.fillStyle(0x000000, 0.5);
+			this.progressBarBg.fillRoundedRect(barX - barWidth * 0.5, barY - barHeight * 0.5, barWidth, barHeight, barHeight * 0.5);
+
+			this.progressBarFill = this.add.graphics();
+			this.progressBarFill.fillStyle(0x66D449, 1);
+			this.progressBarFill.fillRoundedRect(barX - barWidth * 0.5 + this.progressBarPadding, barY - barHeight * 0.5 + this.progressBarPadding, 0, barHeight - this.progressBarPadding * 2, (barHeight - this.progressBarPadding * 2) * 0.5);
+
+			// Save geometry for updates
+			this.progressBarX = barX;
+			this.progressBarY = barY;
+			this.progressBarWidth = barWidth;
+			this.progressBarHeight = barHeight;
+
+			this.progressText = this.add.text(barX, barY, '0%', {
+				fontFamily: 'poppins-bold',
+				fontSize: `${Math.round(18 * assetScale)}px`,
+				color: '#FFFFFF',
+			})
+			.setOrigin(0.5, 0.5)
+			.setShadow(0, 3, '#000000', 6, true, true);
+
+			// "Press Play To Continue" text (initially hidden)
+			this.pressToPlayText = this.add.text(barX, barY - (barHeight * 1), 'Press Play To Continue', {
+				fontFamily: 'Poppins-Regular',
+				fontSize: `${Math.round(22 * assetScale)}px`,
+				color: '#FFFFFF',
+				align: 'center'
+			})
+			.setOrigin(0.5, 1)
+			.setAlpha(0)
+			.setShadow(0, 3, '#000000', 6, true, true);
+
 		}
 
 		// Set up progress event listener
 		this.load.on('progress', (progress: number) => {
+			// Update in-scene progress bar
+			if (this.progressBarFill && this.progressBarX !== undefined && this.progressBarY !== undefined && this.progressBarWidth !== undefined && this.progressBarHeight !== undefined) {
+				const innerX = this.progressBarX - this.progressBarWidth * 0.5 + this.progressBarPadding;
+				const innerY = this.progressBarY - this.progressBarHeight * 0.5 + this.progressBarPadding;
+				const innerWidth = this.progressBarWidth - this.progressBarPadding * 2;
+				const innerHeight = this.progressBarHeight - this.progressBarPadding * 2;
+				this.progressBarFill.clear();
+				this.progressBarFill.fillStyle(0x66D449, 1);
+				this.progressBarFill.fillRoundedRect(
+					innerX,
+					innerY,
+					Math.max(0.0001, innerWidth * progress),
+					innerHeight,
+					innerHeight * 0.5
+				);
+			}
+			if (this.progressText) {
+				this.progressText.setText(`${Math.round(progress * 100)}%`);
+			}
+
+			// Keep emitting for React overlay listeners if any
 			EventBus.emit('progress', progress);
 		});
 		
@@ -120,10 +203,14 @@ export class Preloader extends Scene
 		this.assetLoader.loadFontAssets(this);
 		this.assetLoader.loadSpinnerAssets(this);
 		this.assetLoader.loadDialogAssets(this);
+		// Load Scatter Anticipation spine (portrait/high only asset paths)
+		this.assetLoader.loadScatterAnticipationAssets(this);
 		this.assetLoader.loadBonusBackgroundAssets(this);
 		this.assetLoader.loadNumberAssets(this);
 		this.assetLoader.loadCoinAssets(this);
 		this.assetLoader.loadBuyFeatureAssets(this);
+		this.assetLoader.loadMenuAssets(this);
+		this.assetLoader.loadHelpScreenAssets(this);
 		this.assetLoader.loadAudioAssets(this);
 		
 		console.log(`[Preloader] Loading assets for Preloader and Game scenes`);
@@ -135,45 +222,92 @@ export class Preloader extends Scene
 		}
 	}
 
-	async create ()
-	{
-		//  When all the assets have loaded, it's often worth creating global objects here that the rest of the game can use.
-		//  For example, you can define global animations here, so we can use them in other scenes.
-		
-		// Initialize GameAPI and get the game token
-		try {
-			console.log('[Preloader] Initializing GameAPI...');
-			const gameToken = await this.gameAPI.initializeGame();
-			console.log('[Preloader] Game URL Token:', gameToken);
-			console.log('[Preloader] GameAPI initialized successfully!');
-		} catch (error) {
-			console.error('[Preloader] Failed to initialize GameAPI:', error);
+    async create ()
+    {
+        // Initialize GameAPI and get the game token
+        try {
+            console.log('[Preloader] Initializing GameAPI...');
+            const gameToken = await this.gameAPI.initializeGame();
+            console.log('[Preloader] Game URL Token:', gameToken);
+            console.log('[Preloader] GameAPI initialized successfully!');
+        } catch (error) {
+            console.error('[Preloader] Failed to initialize GameAPI:', error);
+        }
+
+        // Create fullscreen toggle now that assets are loaded (using shared manager)
+        const assetScale = this.networkManager.getAssetScale();
+        this.fullscreenBtn = FullScreenManager.addToggle(this, {
+            margin: 16 * assetScale,
+            iconScale: 1.5 * assetScale,
+            depth: 10000,
+            maximizeKey: 'maximize',
+            minimizeKey: 'minimize'
+        });
+
+        // Enable the spin button for user to continue
+        if (this.buttonSpin) {
+            this.buttonSpin.clearTint();
+            this.buttonSpin.setAlpha(1);
+            this.buttonSpin.setInteractive({ useHandCursor: true });
+        }
+        if (this.buttonBg) {
+            this.buttonBg.clearTint();
+            this.buttonBg.setAlpha(1);
+        }
+
+        // Show call-to-action text
+        if (this.pressToPlayText) {
+            this.pressToPlayText.setAlpha(1);
+            this.tweens.add({
+                targets: this.pressToPlayText,
+                alpha: 0.3,
+                duration: 800,
+                yoyo: true,
+                repeat: -1
+            });
+        }
+
+        // Prepare fade overlay
+        const fadeOverlay = this.add.rectangle(
+            this.scale.width * 0.5,
+            this.scale.height * 0.5,
+            this.scale.width,
+            this.scale.height,
+            0x000000
+        ).setOrigin(0.5, 0.5).setScrollFactor(0).setAlpha(0);
+
+        // Start game on click
+        this.buttonSpin?.once('pointerdown', () => {
+            this.tweens.add({
+                targets: fadeOverlay,
+                alpha: 1,
+                duration: 500,
+                ease: 'Power2',
+                onComplete: () => {
+                    console.log('[Preloader] Starting Game scene after click');
+                    this.scene.start('Game', { 
+                        networkManager: this.networkManager, 
+                        screenModeManager: this.screenModeManager 
+                    });
+                }
+            });
+        });
+
+		// Ensure web fonts are applied after they are ready
+		const fontsObj: any = (document as any).fonts;
+		if (fontsObj && typeof fontsObj.ready?.then === 'function') {
+			fontsObj.ready.then(() => {
+				this.progressText?.setFontFamily('poppins-bold');
+				this.pressToPlayText?.setFontFamily('poppins-regular');
+			}).catch(() => {
+				// Fallback: set families anyway
+				this.progressText?.setFontFamily('poppins-bold');
+				this.pressToPlayText?.setFontFamily('poppins-regular');
+			});
+		} else {
+			// Browser without document.fonts support
+			this.progressText?.setFontFamily('poppins-bold');
+			this.pressToPlayText?.setFontFamily('poppins-regular');
 		}
-		
-		// Create fade to black overlay
-		const fadeOverlay = this.add.rectangle(
-			this.scale.width * 0.5,
-			this.scale.height * 0.5,
-			this.scale.width,
-			this.scale.height,
-			0x000000
-		).setOrigin(0.5, 0.5).setScrollFactor(0).setAlpha(0);
-		
-		// Fade to black and then start the Game scene
-		this.tweens.add({
-			targets: fadeOverlay,
-			alpha: 1,
-			duration: 500,
-			ease: 'Power2',
-			onComplete: () => {
-				console.log('[Preloader] Fade to black complete, starting Game scene');
-				//  Move to the Game scene and pass the managers
-				this.scene.start('Game', { 
-					networkManager: this.networkManager, 
-					screenModeManager: this.screenModeManager 
-				});
-			}
-		});
-		
-	}
+    }
 }

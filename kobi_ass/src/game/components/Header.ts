@@ -134,7 +134,7 @@ export class Header {
 
 	private createWinBarText(scene: Scene, x: number, y: number): void {
 		// Line 1: "YOU WON"
-		this.youWonText = scene.add.text(x, y - 7, 'YOU WON', {
+		this.youWonText = scene.add.text(x, y - 7, 'YOU WIN', {
 			fontSize: '16px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'

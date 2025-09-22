@@ -1065,50 +1065,68 @@ export class Symbols {
             
             // Remove the current sprite
             currentSymbol.destroy();
-            
-            // Create Spine animation in its place
-            const spineSymbol = this.scene.add.spine(x, y, spineKey, spineAtlasKey);
-            spineSymbol.setOrigin(0.5, 0.5);
-            
-            // Start with the configured base scale
-            const configuredScale = this.getSpineSymbolScale(symbolValue);
-            spineSymbol.setScale(configuredScale);
-            
-            // Add to scene directly (not container) to maintain elevated depth above overlay
-            this.scene.add.existing(spineSymbol);
-            this.symbols[col][row] = spineSymbol;
-            
-            // Register the scatter symbol with the ScatterAnimationManager
-            if (this.scatterAnimationManager) {
-              this.scatterAnimationManager.registerScatterSymbol(spineSymbol);
-            }
-            
-            // Ensure the Spine animation maintains the elevated depth
-            spineSymbol.setDepth(600); // Above overlay (500) but below win lines (1000)
-            
-            console.log(`[Symbols] Successfully replaced scatter sprite with Spine animation at column ${col}, row ${row} with depth:`, spineSymbol.depth);
-            
-            // Play the hit animation (looped)
-            spineSymbol.animationState.setAnimation(0, hitAnimationName, true);
-            console.log(`[Symbols] Playing looped scatter animation: ${hitAnimationName}`);
-            
-            // Create smooth scale tween to increase size by 20%
-            const enlargedScale = configuredScale * 1.5; // Increase by 20%
-            this.scene.tweens.add({
-              targets: spineSymbol,
-              scaleX: enlargedScale,
-              scaleY: enlargedScale,
-              duration: 500, // Smooth 500ms transition
-              ease: 'Power2.easeOut', // Smooth easing
-              onComplete: () => {
-                console.log(`[Symbols] Scatter symbol scale tween completed: ${configuredScale} → ${enlargedScale}`);
+
+            const attemptCreate = (attempts: number) => {
+              try {
+                if (!(this.scene.cache.json as any).has(spineKey)) {
+                  if (attempts < 5) {
+                    console.warn(`[Symbols] Spine json '${spineKey}' not ready. Retrying (${attempts + 1}/5)...`);
+                    this.scene.time.delayedCall(150, () => attemptCreate(attempts + 1));
+                    return;
+                  }
+                }
+                // Create Spine animation in its place
+                const spineSymbol = this.scene.add.spine(x, y, spineKey, spineAtlasKey);
+                spineSymbol.setOrigin(0.5, 0.5);
+                
+                // Start with the configured base scale
+                const configuredScale = this.getSpineSymbolScale(symbolValue);
+                spineSymbol.setScale(configuredScale);
+                
+                // Add to scene directly (not container) to maintain elevated depth above overlay
+                this.scene.add.existing(spineSymbol);
+                this.symbols[col][row] = spineSymbol;
+                
+                // Register the scatter symbol with the ScatterAnimationManager
+                if (this.scatterAnimationManager) {
+                  this.scatterAnimationManager.registerScatterSymbol(spineSymbol);
+                }
+                
+                // Ensure the Spine animation maintains the elevated depth
+                spineSymbol.setDepth(600); // Above overlay (500) but below win lines (1000)
+                
+                console.log(`[Symbols] Successfully replaced scatter sprite with Spine animation at column ${col}, row ${row} with depth:`, spineSymbol.depth);
+                
+                // Play the hit animation (looped)
+                spineSymbol.animationState.setAnimation(0, hitAnimationName, true);
+                console.log(`[Symbols] Playing looped scatter animation: ${hitAnimationName}`);
+                
+                // Create smooth scale tween to increase size by 20%
+                const enlargedScale = configuredScale * 1.5; // Increase by 20%
+                this.scene.tweens.add({
+                  targets: spineSymbol,
+                  scaleX: enlargedScale,
+                  scaleY: enlargedScale,
+                  duration: 500, // Smooth 500ms transition
+                  ease: 'Power2.easeOut', // Smooth easing
+                  onComplete: () => {
+                    console.log(`[Symbols] Scatter symbol scale tween completed: ${configuredScale} → ${enlargedScale}`);
+                  }
+                });
+                
+                console.log(`[Symbols] Applied smooth scale tween: ${configuredScale} → ${enlargedScale} to scatter symbol ${symbolValue}`);
+                
+                // Resolve after a short delay to allow animation to start
+                setTimeout(() => resolve(), 100);
+              } catch (e) {
+                if (attempts < 5) {
+                  this.scene.time.delayedCall(150, () => attemptCreate(attempts + 1));
+                  return;
+                }
+                throw e;
               }
-            });
-            
-            console.log(`[Symbols] Applied smooth scale tween: ${configuredScale} → ${enlargedScale} to scatter symbol ${symbolValue}`);
-            
-            // Resolve after a short delay to allow animation to start
-            setTimeout(() => resolve(), 100);
+            };
+            attemptCreate(0);
             
           } catch (error) {
             console.warn(`[Symbols] Failed to replace scatter sprite with Spine animation at column ${col}, row ${row}:`, error);
@@ -2163,11 +2181,30 @@ async function dropReels(self: Symbols, data: Data): Promise<void> {
 
   const reelCompletionPromises: Promise<void>[] = [];
 
+  // Anticipation: if upcoming SpinData shows a scatter on 1st or 3rd columns (x = 0 or 2),
+  // extend only the last reel's animation (x = SLOT_ROWS - 1)
+  let extendLastReelDrop = false;
+  try {
+    const s: number[][] = data.symbols || [];
+    // symbols is [column][row]. Horizontal reels correspond to row indices.
+    const scatterVal = Data.SCATTER[0];
+    const hasScatterCol1 = s.some(col => Array.isArray(col) && col[0] === scatterVal);
+    const hasScatterCol3 = s.some(col => Array.isArray(col) && col[2] === scatterVal);
+    extendLastReelDrop = !!(hasScatterCol1 && hasScatterCol3);
+    console.log(`[Symbols] Anticipation check (reel 1 AND reel 3 scatter): r1=${hasScatterCol1}, r3=${hasScatterCol3} → extend=${extendLastReelDrop}`);
+  } catch (e) {
+    console.warn('[Symbols] Anticipation check failed:', e);
+    extendLastReelDrop = false;
+  }
+  // Persist anticipation state on scene for cross-function checks
+  try { (self.scene as any).__isScatterAnticipationActive = extendLastReelDrop; } catch {}
+
   for (let row = 0; row < SLOT_ROWS; row++) {
     console.log(`[Symbols] Processing row ${row}`);
-    dropPrevSymbols(self, row)
-    dropFillers(self, row)
-    const reelPromise = dropNewSymbols(self, row);
+    const isLastReel = row === (SLOT_ROWS - 1);
+    dropPrevSymbols(self, row, isLastReel && extendLastReelDrop)
+    dropFillers(self, row, isLastReel && extendLastReelDrop)
+    const reelPromise = dropNewSymbols(self, row, isLastReel && extendLastReelDrop);
     reelCompletionPromises.push(reelPromise);
     await delay(self.scene.gameData.dropReelsDelay)
   }
@@ -2178,7 +2215,7 @@ async function dropReels(self: Symbols, data: Data): Promise<void> {
   console.log('[Symbols] All reels have completed animation');
 }
 
-function dropPrevSymbols(self: Symbols, index: number) {
+function dropPrevSymbols(self: Symbols, index: number, extendDuration: boolean = false) {
   if (self.symbols === undefined || self.symbols === null) {
     return;
   }
@@ -2190,7 +2227,12 @@ function dropPrevSymbols(self: Symbols, index: number) {
   }
 
   const height = self.symbols[0][0].displayHeight + self.verticalSpacing;
-  const DROP_DISTANCE = Symbols.FILLER_COUNT * height + self.scene.gameData.winUpHeight;
+  const baseDropDistance = Symbols.FILLER_COUNT * height + self.scene.gameData.winUpHeight;
+  const extraMs = extendDuration ? 3000 : 0;
+  const baseDropMs = self.scene.gameData.dropReelsDuration;
+  const extraPixels = extraMs > 0 && baseDropMs > 0 ? (baseDropDistance * (extraMs / baseDropMs)) : 0;
+  const extraRows = extraPixels > 0 ? Math.ceil(extraPixels / height) : 0;
+  const DROP_DISTANCE = (Symbols.FILLER_COUNT + extraRows) * height + self.scene.gameData.winUpHeight;
 
   for (let i = 0; i < self.symbols.length; i++) {
     // Check if the current row exists and has the required index
@@ -2209,7 +2251,7 @@ function dropPrevSymbols(self: Symbols, index: number) {
         },
         {
           y: `+= ${DROP_DISTANCE}`,
-          duration: self.scene.gameData.dropReelsDuration,
+          duration: self.scene.gameData.dropReelsDuration + extraMs,
           ease: Phaser.Math.Easing.Bounce.Out,
         },
       ],
@@ -2217,7 +2259,7 @@ function dropPrevSymbols(self: Symbols, index: number) {
   }
 }
 
-function dropFillers(self: Symbols, index: number) {
+function dropFillers(self: Symbols, index: number, extendDuration: boolean = false) {
   // Check if symbols array has valid structure
   if (!self.symbols || !self.symbols[0] || !self.symbols[0][0]) {
     console.warn('[Symbols] dropFillers: symbols array structure is invalid, skipping');
@@ -2225,15 +2267,21 @@ function dropFillers(self: Symbols, index: number) {
   }
   
   const height = self.symbols[0][0].displayHeight + self.verticalSpacing;
-  const TOTAL_ITEMS = Symbols.FILLER_COUNT + SLOT_COLUMNS;
+  const baseTotal = Symbols.FILLER_COUNT + SLOT_COLUMNS;
+  const baseDropDistance = baseTotal * height + GameData.WIN_UP_HEIGHT;
+  const extraMs = extendDuration ? 3000 : 0;
+  const baseDropMs = self.scene.gameData.dropDuration * 0.9;
+  const extraPixels = extraMs > 0 && baseDropMs > 0 ? (baseDropDistance * (extraMs / baseDropMs)) : 0;
+  const extraRows = extraPixels > 0 ? Math.ceil(extraPixels / height) : 0;
+  const TOTAL_ITEMS = Symbols.FILLER_COUNT + SLOT_COLUMNS + extraRows;
   const DROP_DISTANCE = TOTAL_ITEMS * height + GameData.WIN_UP_HEIGHT;
   const fillerSymbols: GameObjects.Sprite[] = [];
-  for (let i = 0; i < Symbols.FILLER_COUNT; i++) {
+  for (let i = 0; i < TOTAL_ITEMS - SLOT_COLUMNS; i++) {
 
     const symbolTotalWidth = self.displayWidth + self.horizontalSpacing;
     const startX = self.slotX - self.totalGridWidth * 0.5;
 
-    const START_INDEX_Y = -Symbols.FILLER_COUNT;
+    const START_INDEX_Y = -(TOTAL_ITEMS - SLOT_COLUMNS);
     const x = startX + index * symbolTotalWidth + symbolTotalWidth * 0.5;
     const y = getYPos(self, i + START_INDEX_Y)
 
@@ -2257,7 +2305,7 @@ function dropFillers(self: Symbols, index: number) {
         },
         {
           y: `+= ${DROP_DISTANCE}`,
-          duration: self.scene.gameData.dropDuration * 0.9,
+          duration: (self.scene.gameData.dropDuration * 0.9) + extraMs,
           ease: Phaser.Math.Easing.Linear,
         },
         {
@@ -2279,7 +2327,7 @@ function dropFillers(self: Symbols, index: number) {
   }
 }
 
-function dropNewSymbols(self: Symbols, index: number): Promise<void> {
+function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = false): Promise<void> {
   return new Promise<void>((resolve) => {
     // Check if symbols array has valid structure
     if (!self.symbols || !self.symbols[0] || !self.symbols[0][0]) {
@@ -2289,7 +2337,13 @@ function dropNewSymbols(self: Symbols, index: number): Promise<void> {
     }
     
     const height = self.symbols[0][0].displayHeight + self.verticalSpacing;
-    const START_INDEX = Symbols.FILLER_COUNT + SLOT_COLUMNS;
+    const START_INDEX_BASE = Symbols.FILLER_COUNT + SLOT_COLUMNS;
+    const baseDropDistance = START_INDEX_BASE * height + self.scene.gameData.winUpHeight;
+    const extraMs = extendDuration ? 3000 : 0;
+    const baseDropMs = self.scene.gameData.dropDuration * 0.9;
+    const extraPixels = extraMs > 0 && baseDropMs > 0 ? (baseDropDistance * (extraMs / baseDropMs)) : 0;
+    const extraRows = extraPixels > 0 ? Math.ceil(extraPixels / height) : 0;
+    const START_INDEX = START_INDEX_BASE + extraRows;
     const DROP_DISTANCE = START_INDEX * height + self.scene.gameData.winUpHeight;
 
     let completedAnimations = 0;
@@ -2298,7 +2352,7 @@ function dropNewSymbols(self: Symbols, index: number): Promise<void> {
     for (let col = 0; col < self.newSymbols.length; col++) {
       let symbol = self.newSymbols[col][index];
 
-      const START_INDEX_Y = -(Symbols.FILLER_COUNT + SLOT_COLUMNS);
+      const START_INDEX_Y = -(Symbols.FILLER_COUNT + SLOT_COLUMNS + extraRows);
       const y = getYPos(self, col + START_INDEX_Y)
       symbol.y = y;
       
@@ -2312,7 +2366,7 @@ function dropNewSymbols(self: Symbols, index: number): Promise<void> {
           },
           {
             y: `+= ${DROP_DISTANCE}`,
-            duration: self.scene.gameData.dropDuration * 0.9,
+            duration: (self.scene.gameData.dropDuration * 0.9) + extraMs,
             ease: Phaser.Math.Easing.Linear,
           },
           {
@@ -2333,6 +2387,31 @@ function dropNewSymbols(self: Symbols, index: number): Promise<void> {
               
               completedAnimations++;
               if (completedAnimations === totalAnimations) {
+                // Show after 3rd reel completes if anticipation is active
+                try {
+                  const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
+                  if (isAnticipation && index === 2) {
+                    const sa = (self.scene as any)?.scatterAnticipation;
+                    if (sa && typeof sa.show === 'function') {
+                      sa.show();
+                      console.log('[Symbols] Scatter anticipation shown after 3rd reel drop');
+                    }
+                  }
+                } catch {}
+
+                // Hide after last reel completes if anticipation is active
+                try {
+                  const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
+                  if (isAnticipation && index === (SLOT_ROWS - 1)) {
+                    const sa = (self.scene as any)?.scatterAnticipation;
+                    if (sa && typeof sa.hide === 'function') {
+                      sa.hide();
+                      console.log('[Symbols] Scatter anticipation hidden after last reel drop');
+                    }
+                    // Reset anticipation flag for safety
+                    (self.scene as any).__isScatterAnticipationActive = false;
+                  }
+                } catch {}
                 resolve();
               }
             }
