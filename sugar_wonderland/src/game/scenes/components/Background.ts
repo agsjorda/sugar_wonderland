@@ -367,7 +367,7 @@ export class Background {
 
 		const width = scene.scale.width;
 		const height = scene.scale.height;
-        const depth = 2;
+        const depth = 3;
         
         // Main Lanterns
 		this.main_lantern1 = scene.add.image(width * 0.1, height * 0.25, 'main_lantern');
