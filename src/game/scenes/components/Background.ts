@@ -64,6 +64,8 @@ export class Background {
             const prefix = 'assets/Mobile';
             scene.load.image('mobile_main_background', `${prefix}/Main_Background.png`);
             scene.load.image('mobile_bonus_background', `${prefix}/Bonus_Background.png`);
+            scene.load.image('mobile_main_cover', `${prefix}/Main_Cover.png`);
+            scene.load.image('mobile_bonus_cover', `${prefix}/Bonus_Cover.png`);
         }
         else{
             const prefix = 'assets/background';
@@ -161,6 +163,8 @@ export class Background {
 
 		this.main_background.alpha = main_status;
         this.bonus_background.alpha = bonus_status;
+        this.main_foreground.alpha = main_status;
+        this.bonus_foreground.alpha = bonus_status;
 
         // Only toggle other elements for desktop
         if (!this.isMobile) {
@@ -268,9 +272,18 @@ export class Background {
             this.bonus_background.setScale(1);
             this.bonus_background.setOrigin(0.5, 0.5);
             
+            this.main_foreground = scene.add.image(centerX, scene.scale.height, 'mobile_main_cover');
+            this.main_foreground.setScale(1);
+            this.main_foreground.setOrigin(0.5, 1.075);
+            this.bonus_foreground = scene.add.image(centerX, scene.scale.height, 'mobile_bonus_cover');
+            this.bonus_foreground.setScale(1);
+            this.bonus_foreground.setOrigin(0.5, 1.075);
+
             // Set depth for mobile
             this.main_background.setDepth(0);
             this.bonus_background.setDepth(0);
+            this.main_foreground.setDepth(5);
+            this.bonus_foreground.setDepth(5);
             
             // Initialize other properties to avoid errors
             this.main_cloud = null as any;
@@ -278,8 +291,6 @@ export class Background {
             this.main_lantern1 = null as any;
             this.main_lantern2 = null as any;
             this.main_lantern3 = null as any;
-            this.main_foreground = null as any;
-            this.bonus_foreground = null as any;
             this.bonus_lantern1 = null as any;
             this.bonus_lantern2 = null as any;
             this.bonus_lantern3 = null as any;
@@ -300,7 +311,7 @@ export class Background {
 
             this.main_background.setDepth(0);
             this.main_cloud.setDepth(1);
-            this.main_foreground.setDepth(2);
+            this.main_foreground.setDepth(5);
             
 
             this.bonus_background.setScale(scaleFactor);
@@ -309,7 +320,7 @@ export class Background {
 
             this.bonus_background.setDepth(0);
             this.bonus_cloud.setDepth(1);
-            this.bonus_foreground.setDepth(2);
+            this.bonus_foreground.setDepth(5);
         }
     }
 

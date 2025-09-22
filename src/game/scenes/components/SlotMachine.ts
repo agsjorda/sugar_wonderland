@@ -306,7 +306,7 @@ export class SlotMachine {
         const x = this.isMobile ? scene.scale.width * 0 : this.slotX - 45;    
         const y = this.isMobile ? scene.scale.height * 0.21 : this.slotY - 75/5;
         const width = this.isMobile ? this.totalGridWidth  : this.totalGridWidth + 90;
-        const height = this.isMobile ? this.totalGridHeight * 1.28 : this.totalGridHeight + 75*0.8;
+        const height = this.isMobile ? this.totalGridHeight * 1.5 : this.totalGridHeight + 75*0.8;
         
         const maskShape = scene.add.graphics();
         maskShape.fillRect(x, y, width, height);
@@ -733,6 +733,16 @@ export class SlotMachine {
                 scene.buttons.autoplay.hideRemainingSpinsDisplay();
             }
         } catch (_e) { /* no-op */ }
+
+        // Re-enable autoplay button and hide autoplay indicator when API bonus ends
+        try {
+            // Clear the trigger flag so autoplay buttons are interactive again
+            (scene as any).buttons.freeSpinTriggered = false;
+            // Ensure autoplay buttons reflect the enabled state
+            (scene as any).buttons.updateButtonStates(scene as any);
+            // Explicitly hide the autoplay indicator by alpha
+            (scene as any).buttons.autoplayIndicator?.setAlpha?.(0);
+        } catch (_e) { /* defensive */ }
         
         Events.emitter.emit(Events.WIN_OVERLAY_HIDE);
     }

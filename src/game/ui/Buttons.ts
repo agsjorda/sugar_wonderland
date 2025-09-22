@@ -282,7 +282,8 @@ export class Buttons {
 
     private createContainer(scene: GameScene): void {
         this.buttonContainer = scene.add.container(0, 0) as ButtonContainer;
-        if(!this.isMobile) this.buttonContainer.setDepth(4);
+        this.buttonContainer.setDepth(10);
+        if(!this.isMobile) this.buttonContainer.setDepth(6);
     }
 
     private createRemainingFreeSpinsLabel(scene: GameScene): void {
@@ -1699,7 +1700,7 @@ export class Buttons {
 
         const container = scene.add.container(x, y) as ButtonContainer;
         container.name = "bombWinContainer";
-        container.setDepth(4);
+        container.setDepth(6);
 
         // Create a gradient texture for totalWin
         const gradientTexture = scene.textures.createCanvas('totalWinGradient2', width, Buttons.PANEL_HEIGHT);
@@ -1775,7 +1776,7 @@ export class Buttons {
         const cornerRadius = 10;
 
         const container = scene.add.container(x, y) as ButtonContainer;
-        container.setDepth(4);
+        container.setDepth(6);
 
         // Create a gradient texture for totalWin
         const gradientTexture = scene.textures.createCanvas('totalWinGradient', width, Buttons.PANEL_HEIGHT);
@@ -2015,7 +2016,7 @@ export class Buttons {
         const cornerRadius = 10;
 
         const container = scene.add.container(x, y) as ButtonContainer;
-        container.setDepth(4);
+        container.setDepth(6);
         const betOptions = [0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.6, 2, 2.4, 2.8, 3.2, 3.6, 4, 5, 6, 8, 10, 14, 18, 24, 32 ,40, 60, 80, 100, 110 ,120, 130, 140, 150];
         const indexInit = localStorage.getItem('bet') ? betOptions.indexOf(parseFloat(localStorage.getItem('bet') || '1')) : 5;
         let selectedBetIndex = indexInit;
@@ -3298,7 +3299,12 @@ export class Buttons {
             }
         }
         // Open menu on settings button click (destroy old, create new inside Menu)
-        container.on('pointerdown', () => { scene.audioManager.UtilityButtonSFX.play(); if (this.isMobile) { this.menu.toggleMenu(scene); } else { // Ensure a single instance: destroy previous if exists
+        container.on('pointerdown', () => {
+             scene.audioManager.UtilityButtonSFX.play();
+              if (this.isMobile) { 
+                    this.menu.toggleMenu(scene); 
+                }
+            else { // Ensure a single instance: destroy previous if exists
             scene.children.list.forEach((item: any) => {
                 if (item && item.name === 'systemSettingsContainer') {
                     item.destroy(true);

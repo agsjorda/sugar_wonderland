@@ -626,7 +626,7 @@ export class Menu {
                             img.setAlpha(0.5);
                         }
                     });
-                    this.showHistoryContent(scene, contentArea, targetPage, limit);
+                    this.showHistoryContent(scene, this.historyContent, targetPage, limit);
                 });
             } else {
                 btn.setAlpha(0.5);

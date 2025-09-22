@@ -485,6 +485,10 @@ export class Autoplay {
                 // Keep autoplay indicator reflecting active autoplay pre-overlay
                 this.scene.buttons.autoplayIndicator.visible = true;
             }
+            // When restarting autoplay for a new spin, ensure the autoplay indicator is fully visible
+            if (this.isAutoPlaying) {
+                this.scene.buttons.autoplayIndicator?.setAlpha?.(1);
+            }
         } catch (_e) {}
     }
 
