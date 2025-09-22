@@ -311,7 +311,7 @@ export class Background {
 
             this.main_background.setDepth(0);
             this.main_cloud.setDepth(1);
-            this.main_foreground.setDepth(5);
+            this.main_foreground.setDepth(2);
             
 
             this.bonus_background.setScale(scaleFactor);
@@ -320,7 +320,7 @@ export class Background {
 
             this.bonus_background.setDepth(0);
             this.bonus_cloud.setDepth(1);
-            this.bonus_foreground.setDepth(5);
+            this.bonus_foreground.setDepth(2);
         }
     }
 
