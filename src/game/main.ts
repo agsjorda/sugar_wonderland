@@ -2,7 +2,6 @@ import { Game as MainGame } from './scenes/Game';
 import { LandingPage } from './scenes/LandingPage';
 import { LoadingPage } from './scenes/LoadingPage';
 import { AUTO, Game, Scale, Types } from 'phaser';
-import { ensurePortraitFullscreen, onOrientationChange } from './utils/orientation';
 import { SpinePlugin } from '@esotericsoftware/spine-phaser-v3';
 
 // Find out more information about the Game Config at:
@@ -91,153 +90,117 @@ const StartGame = (parent: string): Game => {
     const config = isMobile() ? mobileConfig : desktopConfig;
     //setupAspectRatioReload();
     const game = new Game({ ...config, parent });
-  
-    // Enforce portrait on mobile: show overlay and block play in landscape
-    try {
-        const overlay = document.getElementById('orientation-overlay') as HTMLElement | null;
-        const overlayImage = overlay ? (overlay.querySelector('#orientation-image') as HTMLImageElement | null) : null;
-        const gameContainer = (document.getElementById(parent) || document.getElementById('game-container')) as HTMLElement | null;
-        const deviceParam = new URLSearchParams(window.location.search).get('device');
-        const forceMobile = deviceParam === 'mobile';
-        const forceDesktop = deviceParam === 'desktop';
-        const pausedSceneKeys = new Set<string>();
-        const updateOrientationLock = () => {
-            // If explicitly desktop via URL or general desktop, ensure overlay hidden and resume
-            if (!isMobile()) {
-                if (overlay) {
-                    overlay.style.display = 'none';
-                    overlay.setAttribute('aria-hidden', 'true');
-                    const content = overlay.querySelector('.orientation-overlay-content') as HTMLElement | null;
-                    if (content) content.style.display = '';
-                    if (overlayImage) overlayImage.style.display = 'none';
-                    overlay.style.backgroundImage = '';
+    // Enforce a portrait-first UX at 428x926 regardless of device rotation
+    if(isMobile()){
+        try {
+            const appElement = document.getElementById('app');
+            const container = document.getElementById(parent) || appElement;
+            // Helpers to compute and apply full-viewport sizing and trigger Phaser refreshes
+            const getViewportSize = () => {
+                const vv = (window as any).visualViewport;
+                const width = vv && vv.width ? Math.round(vv.width) : window.innerWidth;
+                const height = vv && vv.height ? Math.round(vv.height) : window.innerHeight;
+                return { width, height };
+            };
+            const applyContainerSize = () => {
+                const { height } = getViewportSize();
+                if (appElement) {
+                    appElement.style.width = '100vw';
+                    appElement.style.height = `${height}px`;
                 }
-                if (gameContainer) gameContainer.style.visibility = 'visible';
-                // Re-enable input and resume any paused scenes
-                if (game.input) game.input.enabled = true;
-                pausedSceneKeys.forEach((key) => {
-                    try {
-                        // @ts-ignore accessing by key
-                        if (game.scene.isPaused(key)) game.scene.resume(key);
-                    } catch (_e) { /* no-op */ }
+                if (container) {
+                    (container as HTMLElement).style.width = '100vw';
+                    (container as HTMLElement).style.height = `${height}px`;
+                }
+            };
+            const scheduleScaleRefresh = () => {
+                try { game.scale.refresh(); } catch (_e) { /* no-op */ }
+                // Multi-pass to catch mobile UI bar hide/show settling
+                [60, 180, 360, 720].forEach((ms) => {
+                    window.setTimeout(() => {
+                        applyContainerSize();
+                        try { game.scale.refresh(); } catch (_e) { /* no-op */ }
+                    }, ms);
                 });
-                pausedSceneKeys.clear();
-                return;
+            };
+            applyContainerSize();
+            if (appElement) {
+                // Keep the outer app centered with a portrait aspect box
+                (appElement.style as any).display = appElement.style.display || 'flex';
+                (appElement.style as any).justifyContent = appElement.style.justifyContent || 'center';
+                (appElement.style as any).alignItems = appElement.style.alignItems || 'center';
+            }
+            if (container) {
+                // Ensure container grows to available viewport; Phaser FIT preserves 428x926 aspect
+                (container.style as any).aspectRatio = '';
+                container.style.maxWidth = '100vw';
+                container.style.maxHeight = '100vh';
+            }
+            // React to viewport/orientation changes by resizing and refreshing scale (no overlay)
+            const onViewportChange = () => {
+                applyContainerSize();
+                scheduleScaleRefresh();
+            };
+            onViewportChange();
+            window.addEventListener('resize', onViewportChange);
+            window.addEventListener('orientationchange', onViewportChange as any);
+            // Track visual viewport changes (iOS/Android address bars)
+            const vv = (window as any).visualViewport;
+            if (vv && vv.addEventListener) {
+                vv.addEventListener('resize', onViewportChange);
             }
 
-            const portraitMedia = (window.matchMedia && window.matchMedia('(orientation: portrait)').matches);
-            const isPortrait = portraitMedia || (window.innerHeight >= window.innerWidth);
-            if (isPortrait) {
-                if (overlay) {
-                    overlay.style.display = 'none';
-                    overlay.setAttribute('aria-hidden', 'true');
-                    const content = overlay.querySelector('.orientation-overlay-content') as HTMLElement | null;
-                    if (content) content.style.display = '';
-                    if (overlayImage) overlayImage.style.display = 'none';
-                    overlay.style.backgroundImage = '';
-                }
-                if (gameContainer) gameContainer.style.visibility = 'visible';
-                if (game.input) game.input.enabled = true;
-                // Resume paused scenes
-                pausedSceneKeys.forEach((key) => {
-                    try {
-                        // @ts-ignore
-                        if (game.scene.isPaused(key)) game.scene.resume(key);
-                    } catch (_e) { /* no-op */ }
-                });
-                pausedSceneKeys.clear();
-            } else {
-                if (overlay) {
-                    overlay.style.display = 'block';
-                    overlay.setAttribute('aria-hidden', 'false');
-                    const content = overlay.querySelector('.orientation-overlay-content') as HTMLElement | null;
-                    if (content) content.style.display = 'none';
-                    if (overlayImage) {
-                        // Try primary path, then fallback
-                        overlayImage.style.display = 'block';
-                        const primarySrc = '/rotatedDevice.jpg';
-                        const fallbackSrc = '/rotatedDevice.jpg';
-                        if (overlayImage.getAttribute('src') !== primarySrc && overlayImage.getAttribute('src') !== fallbackSrc) {
-                            overlayImage.src = primarySrc;
-                        }
-                        overlayImage.onerror = () => {
-                            overlayImage.onerror = null;
-                            overlayImage.src = fallbackSrc;
-                            // If fallback also fails, show text as last resort
-                            overlayImage.onerror = () => {
-                                overlayImage.style.display = 'none';
-                                if (content) content.style.display = '';
-                            };
-                        };
-                    }
-                    // Clear any background image usage
-                    overlay.style.backgroundImage = '';
-                }
-                // If device=mobile in URL, hide the game completely under the text
-                if (forceMobile && gameContainer) {
-                    gameContainer.style.visibility = 'hidden';
-                } else if (gameContainer) {
-                    gameContainer.style.visibility = 'visible';
-                }
-                // Disable input and pause running scenes
-                if (game.input) game.input.enabled = false;
+            // Best-effort: lock orientation when entering fullscreen (supported browsers only)
+            const lockPortraitIfPossible = async () => {
                 try {
-                    // @ts-ignore Phaser typing
-                    const runningScenes = game.scene.getScenes(true) as any[];
-                    runningScenes.forEach((s: any) => {
-                        const key = (s && s.sys && s.sys.settings && s.sys.settings.key) as string;
-                        if (key && !pausedSceneKeys.has(key)) {
-                            try { game.scene.pause(key); } catch (_e) { /* no-op */ }
-                            pausedSceneKeys.add(key);
-                        }
-                    });
+                    // @ts-ignore - not universally typed
+                    if (screen && screen.orientation && screen.orientation.lock) {
+                        // @ts-ignore
+                        await screen.orientation.lock('portrait');
+                    }
                 } catch (_e) { /* no-op */ }
-            }
-        };
-        window.addEventListener('resize', updateOrientationLock);
-        // Some devices fire orientationchange more reliably
-        // @ts-ignore legacy event exists on some platforms
-        window.addEventListener('orientationchange', updateOrientationLock);
-        // Initial check
-        updateOrientationLock();
-    } catch (_e) { /* no-op */ }
-  
-    // Harden input reliability on mobile Safari/Chrome by setting runtime styles
-    try {
-        const appElement = document.getElementById('app');
-        const container = document.getElementById(parent) || appElement;
-        const canvas = game.canvas as HTMLCanvasElement | null;
-        // Ensure touch listeners can call preventDefault on Safari/Chrome mobile
-        if (canvas) {
-            const noopPrevent = (e: Event) => {
-                // Prevent browser scroll/zoom from stealing the gesture
-                e.preventDefault();
             };
-            canvas.addEventListener('touchstart', noopPrevent, { passive: false });
-            canvas.addEventListener('touchmove', noopPrevent, { passive: false });
-            canvas.addEventListener('touchend', noopPrevent, { passive: false });
-            canvas.addEventListener('touchcancel', noopPrevent, { passive: false });
+            game.scale.on('enterfullscreen', lockPortraitIfPossible);
+            game.scale.on('resize', () => { applyContainerSize(); });
+        } catch (_err) { /* no-op */ }
+        // Harden input reliability on mobile Safari/Chrome by setting runtime styles
+        try {
+            const appElement = document.getElementById('app');
+            const container = document.getElementById(parent) || appElement;
+            const canvas = game.canvas as HTMLCanvasElement | null;
+            // Ensure touch listeners can call preventDefault on Safari/Chrome mobile
+            if (canvas) {
+                const noopPrevent = (e: Event) => {
+                    // Prevent browser scroll/zoom from stealing the gesture
+                    e.preventDefault();
+                };
+                canvas.addEventListener('touchstart', noopPrevent, { passive: false });
+                canvas.addEventListener('touchmove', noopPrevent, { passive: false });
+                canvas.addEventListener('touchend', noopPrevent, { passive: false });
+                canvas.addEventListener('touchcancel', noopPrevent, { passive: false });
+            }
+            const applyTouchSafeStyles = (el: HTMLElement | null | undefined) => {
+                if (!el) return;
+                el.style.touchAction = 'none';
+                // @ts-ignore vendor prefix
+                (el.style as any).msTouchAction = 'none';
+                el.style.userSelect = 'none';
+                // @ts-ignore vendor prefix
+                (el.style as any).webkitUserSelect = 'none';
+                // @ts-ignore vendor prefix
+                (el.style as any).webkitTapHighlightColor = 'transparent';
+                (el.style as any).overscrollBehavior = 'contain';
+            };
+            applyTouchSafeStyles(appElement as HTMLElement);
+            applyTouchSafeStyles(container as HTMLElement);
+            applyTouchSafeStyles(canvas as unknown as HTMLElement);
+        } catch (_e) { /* no-op */ }
+        // Make canvas focusable to improve gesture handling after exiting fullscreen
+        if (game.canvas && !game.canvas.hasAttribute('tabindex')) {
+            game.canvas.setAttribute('tabindex', '0');
         }
-        const applyTouchSafeStyles = (el: HTMLElement | null | undefined) => {
-            if (!el) return;
-            el.style.touchAction = 'none';
-            // @ts-ignore vendor prefix
-            (el.style as any).msTouchAction = 'none';
-            el.style.userSelect = 'none';
-            // @ts-ignore vendor prefix
-            (el.style as any).webkitUserSelect = 'none';
-            // @ts-ignore vendor prefix
-            (el.style as any).webkitTapHighlightColor = 'transparent';
-            (el.style as any).overscrollBehavior = 'contain';
-        };
-        applyTouchSafeStyles(appElement as HTMLElement);
-        applyTouchSafeStyles(container as HTMLElement);
-        applyTouchSafeStyles(canvas as unknown as HTMLElement);
-    } catch (_e) { /* no-op */ }
-    // Make canvas focusable to improve gesture handling after exiting fullscreen
-    if (game.canvas && !game.canvas.hasAttribute('tabindex')) {
-        game.canvas.setAttribute('tabindex', '0');
     }
+
     // Expose game globally for UI overlay controls
     window.phaserGame = game;
     // Ensure the fullscreen element includes the HTML overlay controls
@@ -247,26 +210,6 @@ const StartGame = (parent: string): Game => {
         // @ts-ignore - property exists on Phaser 3 ScaleManager
         game.scale.fullscreenTarget = appElement as unknown as HTMLElement;
     }
-    // Try to automatically enter fullscreen without prompting the user
-    const tryStartFullscreen = () => {
-        try {
-            if (!game.scale.isFullscreen) {
-                const maybePromise = (game.scale as any).startFullscreen?.();
-                if (maybePromise && typeof (maybePromise as any).catch === 'function') {
-                    (maybePromise as Promise<any>).catch(() => {});
-                }
-            }
-        } catch { /* ignore */ }
-    };
-    // Best-effort attempts at and shortly after boot
-    tryStartFullscreen();
-    setTimeout(tryStartFullscreen, 300);
-    setTimeout(tryStartFullscreen, 1000);
-    // Enter fullscreen on the first user interaction (silent, no UI prompt)
-    const onFirstGesture = () => tryStartFullscreen();
-    document.addEventListener('pointerdown', onFirstGesture, { once: true, passive: true });
-    document.addEventListener('keydown', onFirstGesture, { once: true });
-    document.addEventListener('touchend', onFirstGesture, { once: true, passive: false });
     // Ensure ability to re-enter fullscreen after exiting
     game.scale.on('leavefullscreen', () => {
         // Refocus canvas so the next user gesture is captured
@@ -281,39 +224,7 @@ const StartGame = (parent: string): Game => {
     document.addEventListener('fullscreenchange', onFsChange);
     // @ts-ignore - Safari legacy prefix
     document.addEventListener('webkitfullscreenchange', onFsChange);
-
-    // Globally suppress known, benign fullscreen permission rejections
-    const onUnhandled = (event: PromiseRejectionEvent) => {
-        try {
-            const msg = String((event && (event.reason?.message || event.reason)) || '');
-            if (msg && msg.toLowerCase().includes('permissions check failed')) {
-                event.preventDefault();
-            }
-        } catch {}
-    };
-    window.addEventListener('unhandledrejection', onUnhandled);
-
-    // Enforce portrait fullscreen when rotating back to portrait
-    // Attach listeners once after game is created
-    const removeOrientationListener = onOrientationChange(() => {
-        // Best-effort: when back to portrait, ensure fullscreen + portrait lock
-        ensurePortraitFullscreen(() => game?.scale ?? null);
-    });
-    // Also retry fullscreen when tab becomes visible again
-    const onVisibility = () => {
-        if (document.visibilityState === 'visible') {
-            tryStartFullscreen();
-        }
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    // Clean up on game destroy
-    game.events.on(Phaser.Core.Events.DESTROY, () => {
-        try { removeOrientationListener(); } catch {}
-        try { document.removeEventListener('visibilitychange', onVisibility); } catch {}
-        try { window.removeEventListener('unhandledrejection', onUnhandled); } catch {}
-    });
-
     return game;
 };
 
-export default StartGame;   
+export default StartGame; 

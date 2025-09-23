@@ -1277,14 +1277,14 @@ export class Menu {
                 const multiplierIcon3 = scene.add.image(0, 0, 'multiplierIcon');
                 multiplierIcon3.setScale(0.15);
                 multiplierIcon3.setOrigin(0.5, 0.5);
-                multiplierIcon3.setPosition(163, 405 + multiplier_y);
+                multiplierIcon3.setPosition(163, 390 + multiplier_y);
                 multiplierContainer.add(multiplierIcon3);
                 
             
                 const multiplierIcon2 = scene.add.image(0, 0, 'multiplierIcon');
                 multiplierIcon2.setScale(0.15);
                 multiplierIcon2.setOrigin(0.5, 0.5);
-                multiplierIcon2.setPosition(100, 550 + multiplier_y);
+                multiplierIcon2.setPosition(100, 525 + multiplier_y);
                 multiplierContainer.add(multiplierIcon2);
             
             const multiplierIcon = scene.add.image(0, 0, 'multiplierIcon');
@@ -1294,7 +1294,7 @@ export class Menu {
             multiplierContainer.add(multiplierIcon);
             this.contentContainer.bringToTop(multiplierIcon);
             
-            this.yPosition -= scaledSymbolSize * 17.75;
+            this.yPosition -= scaledSymbolSize * 17.2;
             this.addContent(scene, 'Game Settings', 'title');
     
             const gamesettingsContainer = scene.add.container(-this.padding * 1.5, this.yPosition);
