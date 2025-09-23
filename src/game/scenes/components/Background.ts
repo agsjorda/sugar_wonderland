@@ -184,7 +184,6 @@ export class Background {
 
     private createFullscreenToggle(scene: Scene): void {
         const width = scene.scale.width;
-        const height = scene.scale.height;
         const padding = this.isMobile ? 10 : 12;
 
         // Create button
@@ -199,11 +198,19 @@ export class Background {
 
         // Toggle on click
         btn.on('pointerup', () => {
-            if (scene.scale.isFullscreen) {
-                scene.scale.stopFullscreen();
-            } else {
-                scene.scale.startFullscreen();
-            }
+            try {
+                if (scene.scale.isFullscreen) {
+                    const p = (scene.scale as any).stopFullscreen?.();
+                    if (p && typeof (p as any).catch === 'function') {
+                        (p as Promise<any>).catch(() => {});
+                    }
+                } else {
+                    const p = (scene.scale as any).startFullscreen?.();
+                    if (p && typeof (p as any).catch === 'function') {
+                        (p as Promise<any>).catch(() => {});
+                    }
+                }
+            } catch {}
         });
 
         // Update icon on fs change

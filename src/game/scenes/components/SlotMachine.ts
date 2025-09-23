@@ -13,6 +13,7 @@ import { BombContainer } from './BombContainer';
 import { getRandomRows } from './IdleState';
 import chalk from 'chalk';
 import { MaxWinClaimPopup } from './MaxWinClaimPopup';
+import { layoutContainersRow } from '../../utils/layoutRow';
 
 // Extend Scene to include gameData and audioManager
 interface GameScene extends Scene {
@@ -201,57 +202,77 @@ export class SlotMachine {
         
         scene.gameData.debugLog("Valid symbols for display:", validSymbols);
         
-        // Create display for each valid symbol
-        let xOffset = 0;
-        // Display entries horizontally, left to right, with 50px spacing between entries
-        validSymbols.forEach((symbol, index) => {
-            // Create count text (top)
-            if(validSymbols.length > 1){
-                if(index == 0) xOffset = scene.scale.width / 5
-            }
-            const countText = scene.add.text(xOffset - 30, 0, `${symbol.count}`, {
+        // Build up to 3 entry containers and lay them out in a row
+        const entryContainers: Phaser.GameObjects.Container[] = [];
+        validSymbols.slice(0, 3).forEach((symbol) => {
+            const entry = scene.add.container(0, 0);
+
+            // Count text
+            const countText = scene.add.text(0, 0, `${symbol.count}`, {
                 fontSize: '20px',
                 color: '#FFFFFF',
                 fontFamily: 'Poppins',
             });
             countText.setOrigin(0.5, 0.5);
 
-            // Create symbol sprite (middle)
+            // Symbol sprite
             let symbolSprite: GameObjects.Sprite | null = null;
             if (symbol.symbol >= 1 && symbol.symbol <= 9) {
                 const symbolKey = `Symbol${symbol.symbol}_SW`;
                 const frameKey = `Symbol${symbol.symbol}_SW-00000.png`;
-                symbolSprite = scene.add.sprite(xOffset, 0, symbolKey, frameKey);
+                symbolSprite = scene.add.sprite(0, 0, symbolKey, frameKey);
                 symbolSprite.setDisplaySize(40, 40);
                 scene.gameData.debugLog(`Created symbol sprite for symbol ${symbol.symbol}`);
             }
 
-            // Create win text (bottom)
+            // Win text
             const winToText = symbol.win.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2});
-            
-            const winText = scene.add.text(xOffset + 50, 0, `= ${scene.gameData.currency}${winToText}`, {
+            const winText = scene.add.text(0, 0, `= ${scene.gameData.currency}${winToText}`, {
                 fontSize: '20px',
                 color: '#FFFFFF',
                 fontFamily: 'Poppins',
             });
             winText.setOrigin(0.5, 0.5);
 
+            // Add to entry container before measuring
+            entry.add(countText);
+            if (symbolSprite) entry.add(symbolSprite);
+            entry.add(winText);
 
-            // Add to container
-            this.symbolCountWinContainer!.add(countText);
+            // Inline layout inside the entry: [count] [icon] [= $win]
+            const innerGap = 4;
+            const countW = countText.getBounds().width;
+            const iconW = symbolSprite ? symbolSprite.getBounds().width : 0;
+            const winW = winText.getBounds().width;
+            const totalW = countW + (symbolSprite ? innerGap + iconW : 0) + innerGap + winW;
+            let left = -totalW / 2;
+            countText.setPosition(left + countW / 2, 0);
+            left += countW;
             if (symbolSprite) {
-                this.symbolCountWinContainer!.add(symbolSprite);
+                left += innerGap;
+                symbolSprite.setPosition(left + iconW / 2, 0);
+                left += iconW;
             }
-            this.symbolCountWinContainer!.add(winText);
+            left += innerGap;
+            winText.setPosition(left + winW / 2, 0);
 
-            // Store references for cleanup
+            // Add entry to parent container
+            this.symbolCountWinContainer!.add(entry);
+            entryContainers.push(entry);
+
+            // Track for cleanup
             this.symbolCountWinTexts.push(countText, winText);
-            if (symbolSprite) {
-                this.symbolCountWinTexts.push(symbolSprite as any);
-            }
+            if (symbolSprite) this.symbolCountWinTexts.push(symbolSprite as any);
+        });
 
-
-            xOffset -= (winText.width * 3 + countText.width * 2) ;
+        // Lay out the entries within available width
+        const maxWidth = this.isMobile ? scene.scale.width * 0.9 : this.totalGridWidth;
+        layoutContainersRow(scene, entryContainers, {
+            x: 0,
+            y: 0,
+            maxWidth,
+            gap: 18,
+            align: 'center'
         });
         
         if(this.isMobile){

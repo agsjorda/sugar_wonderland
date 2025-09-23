@@ -56,11 +56,19 @@ export class LandingPage extends Scene {
         btn.setInteractive({ useHandCursor: true });
         this.fsButton = btn;
         btn.on('pointerup', () => {
-            if (this.scale.isFullscreen) {
-                this.scale.stopFullscreen();
-            } else {
-                this.scale.startFullscreen();
-            }
+            try {
+                if (this.scale.isFullscreen) {
+                    const p = (this.scale as any).stopFullscreen?.();
+                    if (p && typeof (p as any).catch === 'function') {
+                        (p as Promise<any>).catch(() => {});
+                    }
+                } else {
+                    const p = (this.scale as any).startFullscreen?.();
+                    if (p && typeof (p as any).catch === 'function') {
+                        (p as Promise<any>).catch(() => {});
+                    }
+                }
+            } catch {}
         });
         const updateIcon = () => {
             const btn = this.fsButton;
@@ -265,4 +273,16 @@ export class LandingPage extends Scene {
         //         this.scene.remove('LoadingPage');
         //     });
     }
-}                                                                                           
+}
+
+import { requestWakeLock, releaseWakeLock } from '../utils/wake-lock';
+
+export class BootScene extends Phaser.Scene {
+  create() {
+    // Ask for it after the first user interaction
+    requestWakeLock();
+
+    // Optional: be a good citizen on game shutdown
+    this.game.events.on(Phaser.Core.Events.DESTROY, () => releaseWakeLock());
+  }
+}

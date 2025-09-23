@@ -1321,11 +1321,11 @@ export class Menu {
             this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 7.5, gamesettingsContainer, '', 'When multiple symbol wins occur, all values are combined into the total win.', true, this.contentWidth + this.padding * 3);
             this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 8.75, gamesettingsContainer, '', 'Free spins rewards are granted after the round ends.', true, this.contentWidth + this.padding * 3);
     
-            this.yPosition -= scaledSymbolSize * 3.5;
+            this.yPosition -= scaledSymbolSize * 3.25;
     
             this.commonRules(scene, this.contentWidth, 153);
     
-            this.yPosition -= scaledSymbolSize * 45;
+            this.yPosition -= scaledSymbolSize * 44;
             contentArea.add(this.contentContainer);
     }
     
