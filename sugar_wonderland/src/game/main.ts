@@ -2,6 +2,7 @@ import { Game as MainGame } from './scenes/Game';
 import { LandingPage } from './scenes/LandingPage';
 import { LoadingPage } from './scenes/LoadingPage';
 import { AUTO, Game, Scale, Types } from 'phaser';
+import { ensurePortraitFullscreen, onOrientationChange } from './utils/orientation';
 import { SpinePlugin } from '@esotericsoftware/spine-phaser-v3';
 
 // Find out more information about the Game Config at:
@@ -90,6 +91,7 @@ const StartGame = (parent: string): Game => {
     const config = isMobile() ? mobileConfig : desktopConfig;
     //setupAspectRatioReload();
     const game = new Game({ ...config, parent });
+  
     // Enforce portrait on mobile: show overlay and block play in landscape
     try {
         const overlay = document.getElementById('orientation-overlay') as HTMLElement | null;
@@ -199,6 +201,7 @@ const StartGame = (parent: string): Game => {
         // Initial check
         updateOrientationLock();
     } catch (_e) { /* no-op */ }
+  
     // Harden input reliability on mobile Safari/Chrome by setting runtime styles
     try {
         const appElement = document.getElementById('app');
@@ -244,6 +247,26 @@ const StartGame = (parent: string): Game => {
         // @ts-ignore - property exists on Phaser 3 ScaleManager
         game.scale.fullscreenTarget = appElement as unknown as HTMLElement;
     }
+    // Try to automatically enter fullscreen without prompting the user
+    const tryStartFullscreen = () => {
+        try {
+            if (!game.scale.isFullscreen) {
+                const maybePromise = (game.scale as any).startFullscreen?.();
+                if (maybePromise && typeof (maybePromise as any).catch === 'function') {
+                    (maybePromise as Promise<any>).catch(() => {});
+                }
+            }
+        } catch { /* ignore */ }
+    };
+    // Best-effort attempts at and shortly after boot
+    tryStartFullscreen();
+    setTimeout(tryStartFullscreen, 300);
+    setTimeout(tryStartFullscreen, 1000);
+    // Enter fullscreen on the first user interaction (silent, no UI prompt)
+    const onFirstGesture = () => tryStartFullscreen();
+    document.addEventListener('pointerdown', onFirstGesture, { once: true, passive: true });
+    document.addEventListener('keydown', onFirstGesture, { once: true });
+    document.addEventListener('touchend', onFirstGesture, { once: true, passive: false });
     // Ensure ability to re-enter fullscreen after exiting
     game.scale.on('leavefullscreen', () => {
         // Refocus canvas so the next user gesture is captured
@@ -258,6 +281,38 @@ const StartGame = (parent: string): Game => {
     document.addEventListener('fullscreenchange', onFsChange);
     // @ts-ignore - Safari legacy prefix
     document.addEventListener('webkitfullscreenchange', onFsChange);
+
+    // Globally suppress known, benign fullscreen permission rejections
+    const onUnhandled = (event: PromiseRejectionEvent) => {
+        try {
+            const msg = String((event && (event.reason?.message || event.reason)) || '');
+            if (msg && msg.toLowerCase().includes('permissions check failed')) {
+                event.preventDefault();
+            }
+        } catch {}
+    };
+    window.addEventListener('unhandledrejection', onUnhandled);
+
+    // Enforce portrait fullscreen when rotating back to portrait
+    // Attach listeners once after game is created
+    const removeOrientationListener = onOrientationChange(() => {
+        // Best-effort: when back to portrait, ensure fullscreen + portrait lock
+        ensurePortraitFullscreen(() => game?.scale ?? null);
+    });
+    // Also retry fullscreen when tab becomes visible again
+    const onVisibility = () => {
+        if (document.visibilityState === 'visible') {
+            tryStartFullscreen();
+        }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    // Clean up on game destroy
+    game.events.on(Phaser.Core.Events.DESTROY, () => {
+        try { removeOrientationListener(); } catch {}
+        try { document.removeEventListener('visibilitychange', onVisibility); } catch {}
+        try { window.removeEventListener('unhandledrejection', onUnhandled); } catch {}
+    });
+
     return game;
 };
 

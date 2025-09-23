@@ -2287,8 +2287,8 @@ export class Buttons {
                 try { (updatePopupBetUI as any)?.(); } catch (_e) {}
             });
 
-                    betContainer.add(buttonContainer);
-        return buttonContainer;
+            betContainer.add(buttonContainer);
+            return buttonContainer;
         });
 
         // Popup Bet control box (minus | value | plus)
