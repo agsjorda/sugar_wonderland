@@ -11,6 +11,7 @@ export enum SoundEffectType {
 	REEL_DROP = 'reeldrop',
 	TURBO_DROP = 'turbodrop',
 	WHEEL_SPIN = 'wheelspin',
+	MENU_CLICK = 'menu_click',
 	HIT_WIN = 'hitwin',
 	WILD_MULTI = 'wildmulti',
 	SCATTER = 'scatter',
@@ -75,6 +76,7 @@ export class AudioManager {
 		
 		// Sound effects
 		this.scene.load.audio('spinb_ka', 'assets/sounds/SFX/spinb_ka.ogg');
+		this.scene.load.audio('click_sw', 'assets/sounds/click_sw.ogg');
 		this.scene.load.audio('reeldrop_ka', 'assets/sounds/SFX/reeldrop_ka.ogg');
 		this.scene.load.audio('turbodrop_ka', 'assets/sounds/SFX/turbodrop_ka.ogg');
 		this.scene.load.audio('coin_throw_ka', 'assets/sounds/SFX/coin_throw_ka.ogg');
@@ -121,6 +123,15 @@ export class AudioManager {
 			});
 			this.sfxInstances.set(SoundEffectType.SPIN, spinSfx);
 			console.log('[AudioManager] Spin sound effect instance created');
+
+			// Menu click SFX
+			try {
+				const clickSfx = this.scene.sound.add('click_sw', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.MENU_CLICK, clickSfx);
+				console.log('[AudioManager] Menu click SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create click_sw SFX instance:', e);
+			}
 
 			const reelDropSfx = this.scene.sound.add('reeldrop_ka', {
 				volume: this.sfxVolume,

@@ -623,7 +623,7 @@ export class Game extends Scene
 		console.log(`[Game] Win detected - Payout: $${payout}, Bet: $${bet}, Multiplier: ${multiplier}x`);
 		
 		// Only show dialogs for wins that are at least 20x the bet size
-		if (multiplier < 0.8) {
+		if (multiplier < 20) {
 			console.log(`[Game] Win below threshold - No dialog shown for ${multiplier.toFixed(2)}x multiplier`);
 			// Clear the win dialog state since no dialog was shown
 			gameStateManager.isShowingWinDialog = false;
@@ -631,16 +631,16 @@ export class Game extends Scene
 		}
 		
 		// Determine which win dialog to show based on multiplier thresholds
-		if (multiplier >= 6) {
+		if (multiplier >= 60) {
 			console.log(`[Game] Large Win! Showing LargeW_KA dialog for ${multiplier.toFixed(2)}x multiplier`);
 			this.dialogs.showLargeWin(this, { winAmount: payout });
-		} else if (multiplier >= 5) {
+		} else if (multiplier >= 45) {
 			console.log(`[Game] Super Win! Showing SuperW_KA dialog for ${multiplier.toFixed(2)}x multiplier`);
 			this.dialogs.showSuperWin(this, { winAmount: payout });
-		} else if (multiplier >= 4) {
+		} else if (multiplier >= 30) {
 			console.log(`[Game] Medium Win! Showing MediumW_KA dialog for ${multiplier.toFixed(2)}x multiplier`);
 			this.dialogs.showMediumWin(this, { winAmount: payout });
-		} else if (multiplier >= 0.8) {
+		} else if (multiplier >= 20) {
 			console.log(`[Game] Small Win! Showing SmallW_KA dialog for ${multiplier.toFixed(2)}x multiplier`);
 			this.dialogs.showSmallWin(this, { winAmount: payout });
 		}
@@ -730,19 +730,19 @@ export class Game extends Scene
 		let coinCount = 0;
 
 		// Determine coin count based on win multiplier thresholds
-		if (multiplier >= 6) {
+		if (multiplier >= 60) {
 			// Large win: 30 coins
 			coinCount = 50;
 			console.log(`[Game] Large Win! Spawning ${coinCount} coins for ${multiplier.toFixed(2)}x multiplier`);
-		} else if (multiplier >= 5) {
+		} else if (multiplier >= 45) {
 			// Super win: 20 coins
 			coinCount = 30;
 			console.log(`[Game] Super Win! Spawning ${coinCount} coins for ${multiplier.toFixed(2)}x multiplier`);
-		} else if (multiplier >= 4) {
+		} else if (multiplier >= 30) {
 			// Medium win: 15 coins
 			coinCount = 20;
 			console.log(`[Game] Medium Win! Spawning ${coinCount} coins for ${multiplier.toFixed(2)}x multiplier`);
-		} else if (multiplier >= 0.8) {
+		} else if (multiplier >= 20) {
 			// Small win: 10 coins
 			coinCount = 10;
 			console.log(`[Game] Small Win! Spawning ${coinCount} coins for ${multiplier.toFixed(2)}x multiplier`);

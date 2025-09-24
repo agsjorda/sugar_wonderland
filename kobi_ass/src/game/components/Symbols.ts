@@ -1907,7 +1907,7 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
     const betAmount = parseFloat(spinData.bet);
     const multiplier = totalWin / betAmount;
     
-    if (multiplier >= 0.8) {
+    if (multiplier >= 20) {
       console.log(`[Symbols] Win meets dialog threshold (${multiplier.toFixed(2)}x) - pausing autoplay immediately`);
       gameStateManager.isShowingWinDialog = true;
     } else {

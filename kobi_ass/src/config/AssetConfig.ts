@@ -425,6 +425,8 @@ export class AssetConfig {
 		
 		return {
 			audio: {
+				// Menu/UI clicks
+				'click_sw': 'assets/sounds/click_sw.ogg',
 				'mainbg_ka': 'assets/sounds/BG/mainbg_ka.ogg',
 				'bonusbg_ka': 'assets/sounds/BG/bonusbg_ka.ogg',
 				'freespinbg_ka': 'assets/sounds/Wins/freespin_ka.ogg',

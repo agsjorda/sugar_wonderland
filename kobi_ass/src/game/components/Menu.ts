@@ -274,7 +274,7 @@ export class Menu {
 
             // Tab click handler
             tabContainer.on('pointerup', () => {
-                scene.audioManager.playSoundEffect(SoundEffectType.DIALOG_CONGRATS);
+                scene.audioManager.playSoundEffect(SoundEffectType.MENU_CLICK);
                 this.switchTab(scene, tabContainers, index, tabConfigs);
             });
 
@@ -631,7 +631,7 @@ export class Menu {
                 btn.setInteractive({ useHandCursor: true });
                 btn.on('pointerup', () => {
                     if (this.historyIsLoading) { return; }
-                    scene.audioManager.playSoundEffect(SoundEffectType.DIALOG_CONGRATS);
+                    scene.audioManager.playSoundEffect(SoundEffectType.MENU_CLICK);
                     // Disable all pagination buttons during load
                     contentArea.iterate((child: Phaser.GameObjects.GameObject) => {
                         const img = child as Phaser.GameObjects.Image;
