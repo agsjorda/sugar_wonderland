@@ -74,6 +74,9 @@ export class WinAnimation {
                     runningWin += intervalWin;
                 }
                 
+                if(winType === 'FreeSpin'){
+                    runningWin = totalwin;
+                }
                 Events.emitter.emit(Events.WIN_OVERLAY_UPDATE_TOTAL_WIN,
                      runningWin,
                      winType
