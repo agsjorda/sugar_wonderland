@@ -2604,7 +2604,7 @@ export class Buttons {
         // Button background
         if(this.isMobile){
             this.buyFeatureButton = scene.add.image(0, 0, 'buyFeature') as ButtonImage;
-            console.log(this.buyFeatureButton.width, this.buyFeatureButton.height);
+            //console.log(this.buyFeatureButton.width, this.buyFeatureButton.height);
             this.buyFeatureButton.setInteractive(new Geom.Rectangle(
                 this.buyFeatureButton.width/4,
                 this.buyFeatureButton.height/4,
@@ -3217,7 +3217,8 @@ export class Buttons {
                 totalWinFinalTimer = null;
             }
 			//if (hideTimer) { hideTimer.remove(false); hideTimer = null; }
-			youWonAmount.setText(scene.gameData.currency + ' ' + (0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+			youWonAmount.setText(scene.gameData.currency + ' ' 
+                + (0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 			//hideMarquee();
 		});
 

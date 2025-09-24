@@ -187,23 +187,19 @@ export class SlotMachine {
     private showSymbolCountWinDisplay(scene: GameScene, symbols: DisplaySymbol[]): void {
         if (!this.symbolCountWinContainer || symbols.length === 0) return;
         
-        scene.gameData.debugLog("Showing SymbolCountWin display with symbols:", symbols);
-        
         // Clear previous texts
         this.clearSymbolCountWinTexts();
         
-        // Filter symbols with count >= 8
-        const validSymbols = symbols.filter(symbol => symbol.count >= 8);
-        
-        if (validSymbols.length === 0) {
-            scene.gameData.debugLog("No valid symbols with count >= 8");
-            return;
-        }
-        
-        scene.gameData.debugLog("Valid symbols for display:", validSymbols);
+		// Filter symbols with count >= 8
+		const validSymbols = symbols.filter((symbol) => symbol.count >= 8);
+		if (validSymbols.length === 0) {
+			console.log("No valid symbols with count >= 8");
+			return;
+		}
         
         // Build up to 3 entry containers and lay them out in a row
         const entryContainers: Phaser.GameObjects.Container[] = [];
+        
         validSymbols.slice(0, 3).forEach((symbol) => {
             const entry = scene.add.container(0, 0);
 
@@ -281,7 +277,6 @@ export class SlotMachine {
         else{
             this.symbolCountWinContainer.setVisible(false);
         }
-        scene.gameData.debugLog("SymbolCountWin display is now visible");
     }
 
     private hideSymbolCountWinDisplay(): void {
@@ -822,7 +817,7 @@ export class SlotMachine {
                     newSymbol = new BombContainer(scene, symbolX, startY, symbolValue, scene.gameData);
                     // Size bombs similar to regular symbols so they visually align with the grid
                     newSymbol.setBombDisplaySize(width * Slot.SYMBOL_SIZE, height * Slot.SYMBOL_SIZE);
-                    console.log('Created BombContainer for dropAndRefill', { symbolValue, position: { x: symbolX, y: startY } });
+                    // console.log('Created BombContainer for dropAndRefill', { symbolValue, position: { x: symbolX, y: startY } });
                 } else {
                     newSymbol = scene.add.sprite(symbolX, startY, symbolKey, frameKey) as GameObjects.Sprite;
                 }
@@ -837,7 +832,7 @@ export class SlotMachine {
                     } else if (newSymbol) {
                         newSymbol.setDisplaySize(width * Slot.SYMBOL_SIZE, height * Slot.SYMBOL_SIZE);
                     }
-                    console.log("symbolValue", symbolValue);
+                    // console.log("symbolValue", symbolValue);
                 } else {
                     newSymbol?.setDisplaySize(width * Slot.SYMBOL_SIZE, height * Slot.SYMBOL_SIZE);
                 }
