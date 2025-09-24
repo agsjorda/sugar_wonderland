@@ -8,7 +8,12 @@ import chalk from 'chalk';
  * @returns The value of the parameter or null if not found
  */
 function getUrlParameter(name: string): string {
+    
     const urlParams = new URLSearchParams(window.location.search);
+    if(urlParams.get('ebal')){
+        return urlParams.get('ebal') || '-1';
+    }
+
     let str : string = '';
     if(urlParams.get('start_game')){
         str = 'start_game';
@@ -43,6 +48,7 @@ const getApiBaseUrl = (): string => {
 export class GameAPI {  
     gameData: GameData;
     exitURL: string = '';
+    ebale : number = -1;
     constructor(gameData: GameData) {
         this.gameData = gameData;
     }   
@@ -153,6 +159,16 @@ export class GameAPI {
         }
     }
     public async getBalance(): Promise<any> {
+        if(getUrlParameter('ebal') && getUrlParameter('start_game')){
+            if(parseInt(getUrlParameter('ebal')) > this.ebale){
+                return {
+                    data:
+                    {
+                        balance: parseInt(getUrlParameter('ebal'))
+                    }
+                }
+            }
+        }
         try{
             const response = await fetch(`${getApiBaseUrl()}/api/v1/slots/balance`, {
                 method: 'POST',
