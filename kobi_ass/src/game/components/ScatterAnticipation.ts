@@ -98,6 +98,13 @@ export class ScatterAnticipation {
 			}
 			// Ensure animation is playing when shown
 			this.playDefaultLoop();
+			// Play anticipation loop SFX
+			try {
+				const audio = (window as any)?.audioManager;
+				if (audio && typeof audio.playSoundEffect === 'function') {
+					audio.playSoundEffect('anticipation');
+				}
+			} catch {}
 		}
 	}
 
@@ -108,6 +115,13 @@ export class ScatterAnticipation {
 		} else if (this.spineObject) {
 			this.spineObject.setVisible(false);
 		}
+		// Fade out anticipation SFX
+		try {
+			const audio = (window as any)?.audioManager;
+			if (audio && typeof audio.fadeOutSfx === 'function') {
+				audio.fadeOutSfx('anticipation', 300);
+			}
+		} catch {}
 	}
 
 	public destroy(): void {

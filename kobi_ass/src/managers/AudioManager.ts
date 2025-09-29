@@ -15,6 +15,7 @@ export enum SoundEffectType {
 	HIT_WIN = 'hitwin',
 	WILD_MULTI = 'wildmulti',
 	SCATTER = 'scatter',
+	ANTICIPATION = 'anticipation',
 	WIN_LINE_1 = 'winline_1',
 	WIN_LINE_2 = 'winline_2',
 	COIN_THROW = 'coin_throw',
@@ -37,7 +38,7 @@ export enum SoundEffectType {
 export class AudioManager {
 	private scene: Phaser.Scene;
 	private currentMusic: MusicType | null = null;
-	private musicVolume: number = 0.5;
+	private musicVolume: number = 0.2;
 	private sfxVolume: number = 0.55;
 	private ambientVolume: number = 0.3; // Volume for ambient audio layer
 	private isMuted: boolean = false;
@@ -207,6 +208,15 @@ export class AudioManager {
 				console.warn('[AudioManager] Failed to create scatter_ka SFX instance:', e);
 			}
 
+			// Create anticipation SFX instance (looping)
+			try {
+				const anticipation = this.scene.sound.add('anticipation_ka', { volume: this.sfxVolume, loop: true });
+				this.sfxInstances.set(SoundEffectType.ANTICIPATION, anticipation);
+				console.log('[AudioManager] Anticipation SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create anticipation_ka SFX instance:', e);
+			}
+
 			// Create win dialog SFX instances
 			const bigWinSfx = this.scene.sound.add('bigw_ka', { volume: this.sfxVolume, loop: false });
 			this.sfxInstances.set(SoundEffectType.WIN_BIG, bigWinSfx);
@@ -264,6 +274,93 @@ export class AudioManager {
 		if (this.isMuted) return;
 		const pick = Math.random() < 0.5 ? SoundEffectType.WIN_LINE_1 : SoundEffectType.WIN_LINE_2;
 		this.playSoundEffect(pick);
+	}
+
+	/**
+	 * Crossfade from current music to the target music type without gaps
+	 */
+	crossfadeTo(nextType: MusicType, durationMs: number = 500): void {
+		if (this.isMuted) return;
+		if (this.currentMusic === nextType) return;
+
+		const currentType = this.currentMusic;
+		const from = currentType ? this.musicInstances.get(currentType) : null;
+		const to = this.musicInstances.get(nextType);
+		if (!to) {
+			console.warn('[AudioManager] Crossfade target music not found:', nextType);
+			this.playBackgroundMusic(nextType);
+			return;
+		}
+
+		// If nothing is currently playing, just play the target
+		if (!from || !from.isPlaying) {
+			try {
+				if ('setVolume' in to && typeof (to as any).setVolume === 'function') {
+					(to as any).setVolume(0);
+				}
+				to.play();
+				this.currentMusic = nextType;
+				const steps = 10;
+				const interval = Math.max(10, Math.floor(durationMs / steps));
+				let step = 0;
+				const timer = setInterval(() => {
+					step++;
+					const t = step / steps;
+					if ('setVolume' in to && typeof (to as any).setVolume === 'function') {
+						(to as any).setVolume(this.musicVolume * t);
+					}
+					if (step >= steps) {
+						clearInterval(timer);
+						if ('setVolume' in to && typeof (to as any).setVolume === 'function') {
+							(to as any).setVolume(this.musicVolume);
+						}
+					}
+				}, interval);
+			} catch (e) {
+				console.warn('[AudioManager] Failed simple fade-in for target music, falling back to play:', e);
+				this.playBackgroundMusic(nextType);
+			}
+			return;
+		}
+
+		// Crossfade between two tracks
+		try {
+			const fromStart = (from as any).volume ?? this.musicVolume;
+			// Ensure target starts at 0 volume
+			if ('setVolume' in to && typeof (to as any).setVolume === 'function') {
+				(to as any).setVolume(0);
+			}
+			if (!to.isPlaying) to.play();
+
+			const steps = 12;
+			const interval = Math.max(10, Math.floor(durationMs / steps));
+			let step = 0;
+			const timer = setInterval(() => {
+				step++;
+				const t = step / steps;
+				const toVol = this.musicVolume * t;
+				const fromVol = Math.max(0, fromStart * (1 - t));
+				if ('setVolume' in to && typeof (to as any).setVolume === 'function') {
+					(to as any).setVolume(toVol);
+				}
+				if ('setVolume' in from && typeof (from as any).setVolume === 'function') {
+					(from as any).setVolume(fromVol);
+				}
+				if (step >= steps) {
+					clearInterval(timer);
+					// Stop the old track and finalize volumes
+					try { if (from.isPlaying) from.stop(); } catch {}
+					if ('setVolume' in to && typeof (to as any).setVolume === 'function') {
+						(to as any).setVolume(this.musicVolume);
+					}
+					this.currentMusic = nextType;
+					this.startAmbientAudio();
+				}
+			}, interval);
+		} catch (e) {
+			console.warn('[AudioManager] Crossfade failed, falling back to direct switch:', e);
+			this.playBackgroundMusic(nextType);
+		}
 	}
 
 	/**
@@ -620,6 +717,10 @@ export class AudioManager {
 		const sfx = this.sfxInstances.get(sfxType);
 		if (sfx) {
 			try {
+				// Ensure looping SFX restarts if needed
+				if (sfxType === SoundEffectType.ANTICIPATION && sfx.isPlaying) {
+					sfx.stop();
+				}
 				sfx.play();
 				// Track current win SFX so we can fade it out on dialog close
 				if (sfxType === SoundEffectType.WIN_BIG || sfxType === SoundEffectType.WIN_MEGA || sfxType === SoundEffectType.WIN_SUPER || sfxType === SoundEffectType.WIN_EPIC) {
@@ -631,6 +732,38 @@ export class AudioManager {
 			}
 		} else {
 			console.warn(`[AudioManager] Sound effect instance not found for type: ${sfxType}`);
+		}
+	}
+
+	/**
+	 * Fade out a specific SFX by type and stop it when done
+	 */
+	fadeOutSfx(sfxType: SoundEffectType, durationMs: number = 400): void {
+		const sfx = this.sfxInstances.get(sfxType);
+		if (!sfx || !sfx.isPlaying) return;
+		try {
+			const startVolume = (sfx as any).volume ?? this.sfxVolume;
+			const steps = 8;
+			const interval = Math.max(10, Math.floor(durationMs / steps));
+			let step = 0;
+			const timer = setInterval(() => {
+				step++;
+				const t = step / steps;
+				const vol = startVolume * (1 - t);
+				if ('setVolume' in sfx && typeof (sfx as any).setVolume === 'function') {
+					(sfx as any).setVolume(Math.max(0, vol));
+				}
+				if (step >= steps) {
+					clearInterval(timer);
+					if (sfx.isPlaying) sfx.stop();
+					if ('setVolume' in sfx && typeof (sfx as any).setVolume === 'function') {
+						(sfx as any).setVolume(this.sfxVolume);
+					}
+				}
+			}, interval);
+		} catch (e) {
+			console.warn('[AudioManager] Failed to fade out SFX:', e);
+			try { if (sfx.isPlaying) sfx.stop(); } catch {}
 		}
 	}
 

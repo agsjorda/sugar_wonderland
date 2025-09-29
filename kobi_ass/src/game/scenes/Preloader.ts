@@ -7,6 +7,8 @@ import { AssetLoader } from '../../utils/AssetLoader';
 import { GameAPI } from '../../backend/GameAPI';
 import { GameData } from '../components/GameData';
 import { FullScreenManager } from '../../managers/FullScreenManager';
+import { ensureSpineLoader } from '../../utils/SpineGuard';
+import { StudioLoadingScreen } from '../components/StudioLoadingScreen';
 
 export class Preloader extends Scene
 {
@@ -56,6 +58,9 @@ export class Preloader extends Scene
 		
 		console.log(`[Preloader] Applying asset scale: ${assetScale}x`);
 		
+		// Black background for studio loading
+		this.cameras.main.setBackgroundColor(0x000000);
+
 		// Always show background since we're forcing portrait mode
 		const background = this.add.image(
 			this.scale.width * 0.5, 
@@ -80,6 +85,18 @@ export class Preloader extends Scene
 		console.log(`[Preloader] Background position: (${this.scale.width * 0.5}, ${this.scale.height * 0.5})`);
 
 		if (screenConfig.isPortrait) {
+		// Display studio loading screen
+		const studio = new StudioLoadingScreen(this);
+		studio.show();
+		// Schedule fade-out after minimum 3s, then reveal preloader UI if needed
+		studio.fadeOutAndDestroy(3000, 500);
+
+		// Delay revealing Preloader's own progress UI until studio fade completes
+		this.events.once('studio-fade-complete', () => {
+			// Optionally, we could reveal or update UI elements here if they were hidden
+			// For now, no-op; Preloader already shows its own progress bar
+		});
+
 			const buttonY = this.scale.height * 0.8;
 			
 			// Scale buttons based on quality (low quality assets need 2x scaling)
@@ -211,7 +228,6 @@ export class Preloader extends Scene
 		this.assetLoader.loadBuyFeatureAssets(this);
 		this.assetLoader.loadMenuAssets(this);
 		this.assetLoader.loadHelpScreenAssets(this);
-		this.assetLoader.loadAudioAssets(this);
 		
 		console.log(`[Preloader] Loading assets for Preloader and Game scenes`);
 		

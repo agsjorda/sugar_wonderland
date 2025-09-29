@@ -169,12 +169,29 @@ export class Game extends Scene
 
 		// Initialize AudioManager
 		this.audioManager = new AudioManager(this);
-		this.audioManager.createMusicInstances();
 		console.log('[Game] AudioManager initialized');
 
-		// Start main background music
-		this.audioManager.playBackgroundMusic(MusicType.MAIN);
-		console.log('[Game] Started main background music');
+		// Defer audio loading: load audio assets in the background after visuals are ready
+		this.time.delayedCall(0, () => {
+			console.log('[Game] Background-loading audio assets...');
+			this.load.on('complete', () => {
+				try {
+					this.audioManager.createMusicInstances();
+					this.audioManager.playBackgroundMusic(MusicType.MAIN);
+					console.log('[Game] Audio assets loaded and background music started');
+				} catch (e) {
+					console.warn('[Game] Failed to initialize or start audio after load:', e);
+				}
+			}, this);
+			// Mirror AssetConfig audio definitions
+			const audioAssets = new AssetConfig(this.networkManager, this.screenModeManager).getAudioAssets();
+			if (audioAssets.audio) {
+				Object.entries(audioAssets.audio).forEach(([key, path]) => {
+					try { this.load.audio(key, path as string); } catch {}
+				});
+			}
+			this.load.start();
+		});
 
 		// Make AudioManager available globally for other components
 		(window as any).audioManager = this.audioManager;

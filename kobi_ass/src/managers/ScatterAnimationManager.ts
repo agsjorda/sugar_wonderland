@@ -106,6 +106,17 @@ export class ScatterAnimationManager {
     this.isAnimating = true;
     console.log('[ScatterAnimationManager] Starting scatter animation sequence - player will see scatter symbols for 1 second');
 
+    // Switch BG music to Free Spin track when scatter animation starts
+    try {
+      const audioMgr = (window as any).audioManager;
+      if (audioMgr && typeof audioMgr.switchToFreeSpinMusic === 'function') {
+        audioMgr.switchToFreeSpinMusic();
+        console.log('[ScatterAnimationManager] Requested switch to free spin background music');
+      }
+    } catch (e) {
+      console.warn('[ScatterAnimationManager] Failed to switch to free spin music', e);
+    }
+
     try {
       // Step 1: Wait for player to see scatter symbols
       console.log('[ScatterAnimationManager] Waiting for player to see scatter symbols...');
@@ -579,6 +590,27 @@ export class ScatterAnimationManager {
     console.log('[ScatterAnimationManager] Resetting all symbols and animations...');
     
     try {
+      // If free spin music is playing, stop it and switch to bonus music when entering bonus mode
+      try {
+        const audioMgr = (window as any).audioManager;
+        const currentType = audioMgr && typeof audioMgr.getCurrentMusicType === 'function' ? audioMgr.getCurrentMusicType() : null;
+        if (currentType === 'freespin') {
+          if (typeof audioMgr.stopCurrentMusic === 'function') {
+            audioMgr.stopCurrentMusic();
+            console.log('[ScatterAnimationManager] Stopped free spin music after scatter animation finishes');
+          }
+          if (gameStateManager.isBonus) {
+            if (typeof audioMgr.crossfadeTo === 'function') {
+              audioMgr.crossfadeTo('bonus', 600);
+              console.log('[ScatterAnimationManager] Crossfading to bonus background music after scatter animation');
+            } else if (typeof audioMgr.playBackgroundMusic === 'function') {
+              audioMgr.playBackgroundMusic('bonus');
+              console.log('[ScatterAnimationManager] Started bonus background music after scatter animation');
+            }
+          }
+        }
+      } catch {}
+
       // Reset game state - but don't reset isBonus if we're in an active bonus mode
       gameStateManager.isScatter = false;
       

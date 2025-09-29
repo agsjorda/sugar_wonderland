@@ -126,6 +126,13 @@ export class AssetConfig {
 				'button_bg': `${prefix}/loading/button_bg.png`,
 				'button_spin': `${prefix}/loading/button_spin.png`,
 				'kobi_logo_loading': `${prefix}/loading/kobi-logo-loading.png`
+			},
+			spine: {
+				// Studio loading spine (DI JOKER) – only available in portrait/high
+				'di_joker': {
+					atlas: `assets/portrait/high/dijoker_loading/DI JOKER.atlas`,
+					json: `assets/portrait/high/dijoker_loading/DI JOKER.json`
+				}
 			}
 		};
 	}
@@ -193,9 +200,9 @@ export class AssetConfig {
 				'minimize': `assets/controller/${screenMode}/${quality}/minimize.png`,
 			},
 			spine: {
-				'generic_UI_animation': {
-					atlas: `assets/controller/${screenMode}/${quality}/generic_UI_animation/generic_UI_animation.atlas`,
-					json: `assets/controller/${screenMode}/${quality}/generic_UI_animation/generic_UI_animation.json`
+				'spin_button_animation': {
+					atlas: `assets/controller/${screenMode}/${quality}/spin_button_anim/spin_button_anim.atlas`,
+					json: `assets/controller/${screenMode}/${quality}/spin_button_anim/spin_button_anim.json`
 				},
 				'button_animation_idle': {
 					atlas: `assets/controller/${screenMode}/${quality}/button_animation_idle/button_animation_idle.atlas`,
@@ -204,6 +211,11 @@ export class AssetConfig {
 				'amplify_bet': {
 					atlas: `assets/portrait/high/amplify_bet/Amplify Bet.atlas`,
 					json: `assets/portrait/high/amplify_bet/Amplify Bet.json`
+				},
+				// Enhance Bet idle loop (available only in portrait/high for now)
+				'enhance_bet_idle_on': {
+					atlas: `assets/controller/portrait/high/enhanceBet_idle_on/Amplify Bet.atlas`,
+					json: `assets/controller/portrait/high/enhanceBet_idle_on/Amplify Bet.json`
 				},
 				'turbo_animation': {
 					atlas: `assets/controller/${screenMode}/${quality}/turbo_animation/Turbo_Spin.atlas`,
@@ -442,6 +454,7 @@ export class AssetConfig {
 				// Wild multi SFX
 				'wildmulti_ka': 'assets/sounds/SFX/wildmulti_ka.ogg',
 				'scatter_ka': 'assets/sounds/SFX/scatter_ka.ogg',
+				'anticipation_ka': 'assets/sounds/SFX/anticipation_ka.ogg',
 				// Winline SFX
 				'winline_1_ka': 'assets/sounds/SFX/winline_1_ka.ogg',
 				'winline_2_ka': 'assets/sounds/SFX/winline_2_ka.ogg',

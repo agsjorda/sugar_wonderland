@@ -67,6 +67,9 @@ export class SlotController {
 	
 	// Amplify bet spine animation
 	private amplifyBetAnimation: any = null;
+
+	// Enhance Bet idle loop spine animation (shown when enhanced bet is ON)
+	private enhanceBetIdleAnimation: any = null;
 	
 	// Flag to prevent amplify bet reset during internal bet changes
 	private isInternalBetChange: boolean = false;
@@ -180,8 +183,8 @@ export class SlotController {
 	private createSpinButtonAnimation(scene: Scene, assetScale: number): void {
 		try {
 			// Check if the spine assets are loaded
-			if (!scene.cache.json.has('generic_UI_animation')) {
-				console.warn('[SlotController] generic_UI_animation spine assets not loaded yet, will retry later');
+			if (!scene.cache.json.has('spin_button_animation')) {
+				console.warn('[SlotController] spin_button_animation spine assets not loaded yet, will retry later');
 				// Set up a retry mechanism
 				scene.time.delayedCall(1000, () => {
 					this.createSpinButtonAnimation(scene, assetScale);
@@ -201,13 +204,13 @@ export class SlotController {
 			this.spinButtonAnimation = scene.add.spine(
 				spinButton.x, 
 				spinButton.y, 
-				"generic_UI_animation", 
-				"generic_UI_animation-atlas"
+				"spin_button_animation", 
+				"spin_button_animation-atlas"
 			);
 			
 			// Set properties following the same pattern as kobi-ass
 			this.spinButtonAnimation.setOrigin(0.5, 0.5);
-			this.spinButtonAnimation.setScale(assetScale * 0.45); // Same scale as spin button
+			this.spinButtonAnimation.setScale(assetScale * 0.435); // Same scale as spin button
 			this.spinButtonAnimation.setDepth(9); // Behind the spin button
 			
 			// Set animation speed to 1.3x
@@ -1022,6 +1025,8 @@ export class SlotController {
 
 		// Create amplify bet spine animation (behind bet background)
 		this.createAmplifyBetAnimation(scene, betX, betY, containerWidth, containerHeight);
+		// Create enhance-bet idle spine animation (behind bet background)
+		this.createEnhanceBetIdleAnimation(scene, betX, betY, containerWidth, containerHeight);
 		
 		// Create rounded rectangle background
 		const betBg = scene.add.graphics();
@@ -1120,9 +1125,11 @@ export class SlotController {
 			}
 
 			// Create the spine animation
+			const amplifyOffsetX = -4; // slight left
+			const amplifyOffsetY =  0; // slight up
 			this.amplifyBetAnimation = scene.add.spine(
-				betX, 
-				betY, 
+				betX + amplifyOffsetX, 
+				betY + amplifyOffsetY, 
 				'amplify_bet', 
 				'amplify_bet-atlas'
 			);
@@ -1145,6 +1152,66 @@ export class SlotController {
 		} catch (error) {
 			console.error('[SlotController] Failed to create amplify bet spine animation:', error);
 		}
+	}
+
+	/**
+	 * Create the Enhance Bet idle loop spine animation near the Amplify button
+	 */
+	private createEnhanceBetIdleAnimation(scene: Scene, betX: number, betY: number, containerWidth: number, containerHeight: number): void {
+		try {
+			if (!scene.cache.json.has('enhance_bet_idle_on')) {
+				console.warn('[SlotController] enhance_bet_idle_on spine assets not loaded, skipping idle animation creation');
+				return;
+			}
+
+			// Position to exactly match amplify bet animation if available, including offsets
+			const targetX = this.amplifyBetAnimation ? this.amplifyBetAnimation.x : (betX - 4);
+			const targetY = this.amplifyBetAnimation ? this.amplifyBetAnimation.y : (betY);
+			this.enhanceBetIdleAnimation = scene.add.spine(targetX, targetY, 'enhance_bet_idle_on', 'enhance_bet_idle_on-atlas');
+			this.enhanceBetIdleAnimation.setOrigin(0.5, 0.5);
+			// Match scale and depth to amplify bet animation if present
+			if (this.amplifyBetAnimation) {
+				this.enhanceBetIdleAnimation.setScale(this.amplifyBetAnimation.scaleX, this.amplifyBetAnimation.scaleY);
+				this.enhanceBetIdleAnimation.setDepth(this.amplifyBetAnimation.depth);
+			} else {
+				this.enhanceBetIdleAnimation.setScale(1);
+				this.enhanceBetIdleAnimation.setDepth(7);
+			}
+			this.enhanceBetIdleAnimation.setVisible(false);
+
+			// Add to controller container so it renders with HUD
+			this.controllerContainer.add(this.enhanceBetIdleAnimation);
+
+			console.log('[SlotController] Enhance Bet idle spine created');
+		} catch (error) {
+			console.error('[SlotController] Failed to create enhance bet idle animation:', error);
+		}
+	}
+
+	/** Start the enhance bet idle loop (loop=true) */
+	private showEnhanceBetIdleLoop(): void {
+		if (!this.enhanceBetIdleAnimation) {
+			return;
+		}
+		this.enhanceBetIdleAnimation.setVisible(true);
+		const idleName = 'animation'; // single animation in JSON is named 'animation'
+		if (this.enhanceBetIdleAnimation.skeleton?.data.findAnimation(idleName)) {
+			this.enhanceBetIdleAnimation.animationState.setAnimation(0, idleName, true);
+		} else {
+			const animations = this.enhanceBetIdleAnimation.skeleton?.data.animations || [];
+			if (animations.length > 0) {
+				this.enhanceBetIdleAnimation.animationState.setAnimation(0, animations[0].name, true);
+			}
+		}
+	}
+
+	/** Stop and hide the enhance bet idle loop */
+	private hideEnhanceBetIdleLoop(): void {
+		if (!this.enhanceBetIdleAnimation) {
+			return;
+		}
+		this.enhanceBetIdleAnimation.animationState.clearTracks();
+		this.enhanceBetIdleAnimation.setVisible(false);
 	}
 
 	private createFeatureButton(scene: Scene, assetScale: number): void {
@@ -1482,16 +1549,22 @@ export class SlotController {
 			// Get current balance and bet amount
 			const currentBalance = this.getBalanceAmount();
 			const currentBet = this.getBaseBetAmount();
+			const gameData = this.getGameData();
+
+			// If Enhanced Bet is active, include the additional 25% in the deducted amount (frontend only)
+			const totalBetToCharge = (gameData && gameData.isEnhancedBet)
+				? currentBet * 1.25
+				: currentBet;
 			
-			console.log(`[SlotController] Decrementing balance: $${currentBalance} - $${currentBet}`);
+			console.log(`[SlotController] Decrementing balance: $${currentBalance} - $${totalBetToCharge} ${gameData && gameData.isEnhancedBet ? '(enhanced bet +25%)' : ''}`);
 			
 			// Calculate new balance
-			const newBalance = Math.max(0, currentBalance - currentBet); // Ensure balance doesn't go below 0
+			const newBalance = Math.max(0, currentBalance - totalBetToCharge); // Ensure balance doesn't go below 0
 			
 			// Update balance display immediately
 			this.updateBalanceAmount(newBalance);
 			
-			console.log(`[SlotController] Balance decremented: $${currentBalance} -> $${newBalance} (bet: $${currentBet})`);
+			console.log(`[SlotController] Balance decremented: $${currentBalance} -> $${newBalance} (bet charged: $${totalBetToCharge})`);
 			
 		} catch (error) {
 			console.error('[SlotController] Error decrementing balance:', error);
@@ -1963,6 +2036,7 @@ export class SlotController {
 			this.setAmplifyButtonState(false);
 			// Hide the animation when turning off
 			this.hideAmplifyBetAnimation();
+			this.hideEnhanceBetIdleLoop();
 			// Restore original bet amount (remove 25% increase)
 			this.restoreOriginalBetAmount();
 		} else {
@@ -2311,6 +2385,11 @@ export class SlotController {
 
 		// Remove pulsing/bouncing regardless of state; keep only color/tint change
 		this.stopAmplifyBetBouncing();
+
+		// Only hide idle when turning off/resetting; show is handled after toggle animation completes
+		if (!gameData.isEnhancedBet) {
+			this.hideEnhanceBetIdleLoop();
+		}
 	}
 
 
@@ -2430,12 +2509,17 @@ export class SlotController {
 		if (this.amplifyBetAnimation.skeleton && this.amplifyBetAnimation.skeleton.data.findAnimation(animationName)) {
 			this.amplifyBetAnimation.animationState.setAnimation(0, animationName, false); // Play once, no loop
 			
-			// Listen for animation completion to hide it
+			// Listen for animation completion to hide it and start idle loop
 			this.amplifyBetAnimation.animationState.addListener({
 				complete: (entry: any) => {
 					if (entry.animation.name === animationName) {
 						this.amplifyBetAnimation.setVisible(false);
 						console.log('[SlotController] Amplify bet animation completed and hidden');
+						// After toggle animation completes, show the idle loop if enhanced bet is still ON
+						const gameData = this.getGameData();
+						if (gameData && gameData.isEnhancedBet) {
+							this.showEnhanceBetIdleLoop();
+						}
 					}
 				}
 			});
@@ -2448,12 +2532,16 @@ export class SlotController {
 				console.log('[SlotController] Using fallback animation:', animations[0].name);
 				this.amplifyBetAnimation.animationState.setAnimation(0, animations[0].name, false);
 				
-				// Listen for animation completion to hide it
+				// Listen for animation completion to hide it and start idle loop
 				this.amplifyBetAnimation.animationState.addListener({
 					complete: (entry: any) => {
 						if (entry.animation.name === animations[0].name) {
 							this.amplifyBetAnimation.setVisible(false);
 							console.log('[SlotController] Amplify bet fallback animation completed and hidden');
+							const gameData = this.getGameData();
+							if (gameData && gameData.isEnhancedBet) {
+								this.showEnhanceBetIdleLoop();
+							}
 						}
 					}
 				});
@@ -2543,6 +2631,7 @@ export class SlotController {
 		gameData.isEnhancedBet = false;
 		this.setAmplifyButtonState(false);
 		this.hideAmplifyBetAnimation();
+		this.hideEnhanceBetIdleLoop();
 		this.stopAmplifyBetBouncing();
 		// Price still reflects base bet x100, so refresh it
 		this.updateFeatureAmountFromCurrentBet();

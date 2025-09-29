@@ -19,7 +19,7 @@ interface GameScene extends Scene {
 export class Menu {
     private menuContainer?: ButtonContainer;
     private contentArea: GameObjects.Container;
-    private isMobile: boolean = false;
+    private isMobile: boolean = true;
     private width: number = 0;
     private height: number = 0;
     private menuEventHandlers: Function[] = [];
@@ -99,7 +99,6 @@ export class Menu {
 
 
     constructor(settingsOnly: boolean = false) {
-        this.isMobile = this.isMobileDevice();
         this.settingsOnly = settingsOnly;
     }
 
@@ -112,15 +111,7 @@ export class Menu {
         this.contentContainer = scene.add.container(0, 0);
     }
 
-    private isMobileDevice(): boolean {
-        const urlParams = new URLSearchParams(window.location.search);
-        if(urlParams.get('device') == 'mobile'){
-            return true;
-        }else if(urlParams.get('device') == 'desktop'){
-            return false;
-        }
-        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    }
+    
 
     public createMenu(scene: GameScene): ButtonContainer {
         this.scene = scene; // Store scene reference
@@ -233,8 +224,8 @@ export class Menu {
             if (iconKey) {
                 const icon = scene.add.image(0, tabHeight / 2, iconKey) as ButtonImage;
                 icon.setOrigin(-0.5, 0.5);
-                // Scale to a consistent height
-                const targetHeight = this.isMobile ? 18 : 22;
+                // Scale to a consistent height (mobile-only)
+                const targetHeight = 18;
                 const scale = targetHeight / icon.height;
                 icon.setScale(scale);
                 if (tabConfig.icon === 'close') {
@@ -255,7 +246,7 @@ export class Menu {
             const textAlign = index < normalTabCount ? 'left' : 'center';
             
             const text = scene.add.text(textX, tabHeight / 2, tabConfig.text, {
-                fontSize: this.isMobile ? '16px' : '20px',
+                fontSize: '16px',
                 color: '#FFFFFF',
                 fontFamily: 'Poppins-Regular',
                 align: textAlign
@@ -997,12 +988,7 @@ export class Menu {
     }
 
     public showMenu(scene: GameScene): void {        
-        if(this.isMobile){
-            this.settingsOnly = false;
-        }
-        else{
-            this.settingsOnly = true;
-        }
+        this.settingsOnly = false;
         // Ensure only one instance exists by destroying any previous menu
         if (this.menuContainer) {
             this.destroyMenu(scene);
@@ -1094,7 +1080,7 @@ export class Menu {
     private createHelpScreenContent(scene: GameScene, contentArea: GameObjects.Container): void {
             this.padding = 10;
             this.textHorizontalPadding = -2;
-            this.contentWidth = this.isMobile ? scene.scale.width - this.padding * 6 : this.viewWidth - this.padding * 12;
+            this.contentWidth = scene.scale.width - this.padding * 6;
             this.yPosition = this.padding + 10;
     
             this.addTextBlock(scene, 'header1', 'Game Rules', { spacingAfter: 15 });
@@ -1291,32 +1277,50 @@ export class Menu {
             // Removed Tumble Win section
             this.yPosition += this.padding * 7.5;
             this.addTextBlock(scene, 'header2', 'Free Spins Rules');
-            this.yPosition += scaledSymbolSize * 0.6;
+            this.yPosition += scaledSymbolSize * 0.25;
             //this.yPosition -= scaledSymbolSize * 4.5;
     
-            const freeSpinContainer = scene.add.container(-this.padding * 1.5, this.yPosition-scaledSymbolSize * 0.5);
+            const freeSpinContainer = scene.add.container(-this.padding * 1.5, this.yPosition-scaledSymbolSize * 0.2);
             this.yPosition += this.createBorder(scene, freeSpinContainer, 
                 this.padding, 
                 0, 
                 this.contentWidth + this.padding * 3, 
-                scaledSymbolSize * 24.5
+                scaledSymbolSize * 35
                 
             );
             this.contentContainer.add(freeSpinContainer);
             this.contentContainer.sendToBack(freeSpinContainer);
 
-            this.yPosition -= scaledSymbolSize * 0.25;
+            this.yPosition -= scaledSymbolSize * 1.25;
 
             // Use a common template for Bonus Trigger and Free Spins Start
+            const freeSpinsTitleOffset = this.padding * 15; // distance from image → title
+            const freeSpinsDescOffset = this.padding * 5;  // distance from title → description
             const bonusDesc = 'Land 3             SCATTER \non reel 1, 3, and 5 on the screen to \ntrigger the FREE SPINS feature.';
-            const bonusBottomY = this.addHelpSubSection(
+            const bonusImageTop = this.padding * 31.5; // explicit image Y inside the bordered area
+            // Compute center X of the bordered container for image placement
+            // @ts-ignore
+            const frameW0 = (freeSpinContainer.getData && freeSpinContainer.getData('frameW')) || (this.contentWidth + this.padding * 3);
+            // @ts-ignore
+            const frameX0 = (freeSpinContainer.getData && freeSpinContainer.getData('frameX')) || this.padding;
+            const centerX0 = frameX0 + frameW0 / 2;
+            const bonusBottomY = this.addSubSectionInstruction(
                 scene,
                 freeSpinContainer,
-                'Bonus Trigger',
-                'scatterGame',
-                330,
-                bonusDesc,
-                { imageY: 150, descY: 395, titleX: (this.textHorizontalPadding ?? this.padding / 2) + this.padding * 3.1 }
+                {
+                    title: 'Bonus Trigger',
+                    imageKey: 'scatterGame',
+                    imageX: centerX0,
+                    imageY: bonusImageTop,
+                    imageOrigin: { x: 0.5, y: 0.33 },
+                    imageScale: 1.1,
+                    titleOffsetY: freeSpinsTitleOffset,
+                    titleX: (this.textHorizontalPadding ?? this.padding / 2) + this.padding * 3.1,
+                    desc: bonusDesc,
+                    descOffsetY: freeSpinsDescOffset,
+                    descX: this.padding * 3,
+                    wordWrapWidth: this.contentWidth + this.padding * 3
+                }
             );
 
             // Horizontal divider under Bonus Trigger
@@ -1334,14 +1338,24 @@ export class Menu {
             freeSpinContainer.add(dividerG);
 
             const fsDesc = 'Before the round begins, a random number of free spins is awarded.\nA Spin Wheel appears to reveal the number of free spins.\nOnce the wheel stops, the total number of spins is granted.';
-            const fsStartBottom = this.addHelpSubSection(
+            const fsImageTop = dividerY + this.padding * 30;
+            const fsStartBottom = this.addSubSectionInstruction(
                 scene,
                 freeSpinContainer,
-                'Free Spins Start',
-                'wheelSpin_helper',
-                dividerY + this.padding * 32,
-                fsDesc,
-                { imageY: dividerY + this.padding * 13, descY: dividerY + this.padding * 37, titleX: (this.textHorizontalPadding ?? this.padding / 2) + this.padding * 3.1 }
+                {
+                    title: 'Free Spins Start',
+                    imageKey: 'wheelSpin_helper',
+                    imageX: frameX2 + frameW2 / 2,
+                    imageY: fsImageTop,
+                    imageOrigin: { x: 0.5, y: 0.33 },
+                    imageScale: 1.1,
+                    titleOffsetY: freeSpinsTitleOffset,
+                    titleX: (this.textHorizontalPadding ?? this.padding / 2) + this.padding * 3.1,
+                    desc: fsDesc,
+                    descOffsetY: freeSpinsDescOffset,
+                    descX: this.padding * 3,
+                    wordWrapWidth: this.contentWidth + this.padding * 3
+                }
             );
 
             // Divider after Free Spins Start
@@ -1356,20 +1370,30 @@ export class Menu {
 
             // New section: Free Spins Round (mirror Free Spins Start spacing)
             const fsRoundDesc = 'During Free Spins, all WILDs that \nland on reels 2, 3, and 4 stay on \nthe screen for the entire round.\n\nThese Sticky WILDs come with a \nrandom multiplier revealed when \nthey appear, which remains fixed \nuntil the end of the feature.\n\nSpecial reels are active during \nFree Spins. \nBONUS symbols do not appear, \nand the feature cannot be \nretriggered.';
-            this.addHelpSubSection(
+            const fsRoundImageTop = dividerY2 + this.padding * 42;
+            this.addSubSectionInstruction(
                 scene,
                 freeSpinContainer,
-                'Free Spins Round',
-                'freeSpin_round',
-                dividerY2 + this.padding * 32,
-                fsRoundDesc,
-                { imageY: dividerY2 + this.padding * 17, descY: dividerY2 + this.padding * 37, titleX: (this.textHorizontalPadding ?? this.padding / 2) + this.padding * 3.1 }
+                {
+                    title: 'Free Spins Round',
+                    imageKey: 'freeSpin_round',
+                    imageX: frameX2 + frameW2 / 2,
+                    imageY: fsRoundImageTop,
+                    imageOrigin: { x: 0.5, y: 0.5 },
+                    imageScale: 1.1,
+                    titleOffsetY: freeSpinsTitleOffset,
+                    titleX: (this.textHorizontalPadding ?? this.padding / 2) + this.padding * 3.1,
+                    desc: fsRoundDesc,
+                    descOffsetY: freeSpinsDescOffset,
+                    descX: this.padding * 3,
+                    wordWrapWidth: this.contentWidth + this.padding * 3
+                }
             );
     
             const scatterSymbolImage2 = scene.add.image(0, 0, 'ScatterLabel');
             scatterSymbolImage2.setScale(0.2);
             scatterSymbolImage2.setOrigin(0.5, 0.5);
-            scatterSymbolImage2.setPosition(130, 395);
+            scatterSymbolImage2.setPosition(130, 880);
             freeSpinContainer.add(scatterSymbolImage2);
     
             const scatterSymbolImage = scene.add.image(0, 0, 'ScatterLabel');
@@ -1441,34 +1465,34 @@ export class Menu {
         );
         this.contentContainer.add(howToPlayContainer);
 
-        this.createHeader(scene, commonPadding , this.isMobile ? commonPadding / 2 : commonPadding * 1.5, howToPlayContainer, 'Bet Controls', '#379557');
+        this.createHeader(scene, commonPadding , commonPadding / 2, howToPlayContainer, 'Bet Controls', '#379557');
 
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 5 : commonPadding * 6 , howToPlayContainer, this.isMobile ? 'howToPlay1Mobile' : 'howToPlay1', this.isMobile ? '' : 'Adjust your total bet.');
+        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 5 , howToPlayContainer, 'howToPlay1Mobile', '');
 
-        this.createHeader(scene, commonPadding, this.isMobile ? commonPadding * 9.5 : commonPadding * 9, howToPlayContainer, 'Game Actions', '#379557');
+        this.createHeader(scene, commonPadding, commonPadding * 9.5, howToPlayContainer, 'Game Actions', '#379557');
         
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 15 : commonPadding * 14, howToPlayContainer, this.isMobile ? 'howToPlay2Mobile' : 'howToPlay2', this.isMobile ? '' : 'Start the game round.');
-        this.createHowToPlayEntry(scene, commonPadding / 3, this.isMobile ? commonPadding * 25 : commonPadding * 21, howToPlayContainer, this.isMobile ? 'howToPlay11Mobile' : 'BuyFeatHelp', this.isMobile ? '' : 'Lets you buy the free spins round for 100x your total bet.');
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 38 : commonPadding * 28, howToPlayContainer, this.isMobile ? 'howToPlay12Mobile' : 'DoubleHelp', this.isMobile ? '' : 'You\'re wagering 25% more per spin, but you also have better chances at hitting big features.');
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 50 : commonPadding * 35, howToPlayContainer, this.isMobile ? 'howToPlay3Mobile' : 'howToPlay3', this.isMobile ? '' : 'Open the autoplay menu. Tap again to stop autoplay.');
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 60 : commonPadding * 42, howToPlayContainer, this.isMobile ? 'howToPlay4Mobile' : 'howToPlay4', this.isMobile ? '' : 'Speeds up the game.');
+        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 15, howToPlayContainer, 'howToPlay2Mobile', '');
+        this.createHowToPlayEntry(scene, commonPadding / 3, commonPadding * 25, howToPlayContainer, 'howToPlay11Mobile', '');
+        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 38, howToPlayContainer, 'howToPlay12Mobile', '');
+        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 50, howToPlayContainer, 'howToPlay3Mobile', '');
+        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 60, howToPlayContainer, 'howToPlay4Mobile', '');
 
-        this.createHeader(scene, commonPadding, this.isMobile ? commonPadding * 66 : commonPadding * 52, howToPlayContainer, 'Display & Stats', '#379557');
+        this.createHeader(scene, commonPadding, commonPadding * 66, howToPlayContainer, 'Display & Stats', '#379557');
 
         this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 72 : commonPadding * 52, howToPlayContainer, 'howToPlay5', 'Shows your current available credits.', true, this.contentWidth - this.padding * 2);
         this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 82 : commonPadding * 59, howToPlayContainer, 'howToPlay6', 'Display your total winnings from the current round.', true, this.contentWidth - this.padding * 2);
         this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 93 : commonPadding * 66, howToPlayContainer, 'howToPlay7', 'Adjust your wager using the - and + buttons.', true, this.contentWidth - this.padding * 2);
 
-        this.createHeader(scene, commonPadding, this.isMobile ? commonPadding * 101 : commonPadding * 71, howToPlayContainer, 'General Controls', '#379557');
+        this.createHeader(scene, commonPadding, commonPadding * 101, howToPlayContainer, 'General Controls', '#379557');
 
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 107 : commonPadding * 74, howToPlayContainer, this.isMobile ? 'howToPlay8Mobile' : 'howToPlay8', this.isMobile ? '' : 'Toggle game sounds on and off.');  
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 114.5 : commonPadding * 78, howToPlayContainer, this.isMobile ? 'howToPlay9Mobile' : 'howToPlay9', this.isMobile ? '' : 'Access gameplay preferences and system options.');
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 124 : commonPadding * 83, howToPlayContainer, this.isMobile ? 'howToPlay10Mobile' : 'howToPlay10', this.isMobile ? '' : 'View game rules, features, and paytable.');        
+        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 107, howToPlayContainer, 'howToPlay8Mobile', '');  
+        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 114.5, howToPlayContainer, 'howToPlay9Mobile', '');
+        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 124, howToPlayContainer, 'howToPlay10Mobile', '');        
 
         this.yPosition -= scaledSymbolSize * 15;
     }
     private createHeader(scene: GameScene, x: number, y: number, container: GameObjects.Container, text: string, color: string): void {
-        const genericTableWidth = this.isMobile ? this.viewWidth - this.padding * 2 : 1129;
+        const genericTableWidth = this.viewWidth - this.padding * 2;
         
         const header = scene.add.text(0, 0,text,
             {
@@ -1647,9 +1671,7 @@ export class Menu {
             textElement.setPosition(textX, textElement.y + this.padding * 6);
         }
         container.add(textElement);
-        if (this.isMobile) {
-            this.yPosition += (imageElement ? imageElement.displayHeight * 2 : 0) + textElement.displayHeight + this.padding * 2;
-        }
+        this.yPosition += (imageElement ? imageElement.displayHeight * 2 : 0) + textElement.displayHeight + this.padding * 2;
     }
 
     // Helper: render a help subsection with title, centered image, and description
@@ -1661,7 +1683,7 @@ export class Menu {
         imageKey: string,
         titleY: number,
         description: string,
-        opts?: { imageY?: number; descY?: number; descX?: number; titleX?: number }
+        opts?: { imageY?: number; descY?: number; descX?: number; titleX?: number; titleToImageGap?: number; imageToDescGap?: number }
     ): number {
         // Title (use header2 style) with same horizontal inset as Bonus Trigger
         this.addTextBlock(scene, 'header2', title, {
@@ -1678,7 +1700,7 @@ export class Menu {
         const centerX = frameX + frameW / 2;
 
         // Image
-        const imageY = opts?.imageY ?? (titleY + this.padding * 7);
+        const imageY = opts?.imageY ?? (titleY + (opts?.titleToImageGap ?? this.padding * 7));
         const img = scene.add.image(centerX, imageY, imageKey);
         const useOffsetOrigin = imageKey === 'scatterGame' || imageKey === 'wheelSpin_helper';
         img.setOrigin(0.5, useOffsetOrigin ? 0.33 : 0.5);
@@ -1687,10 +1709,99 @@ export class Menu {
 
         // Description
         const descX = opts?.descX ?? (this.padding * 3);
-        const descY = opts?.descY ?? (img.y + (img.displayHeight / 2) + this.padding * 3);
+        const descY = opts?.descY ?? (img.y + (img.displayHeight / 2) + (opts?.imageToDescGap ?? this.padding * 3));
         const descText = scene.add.text(descX, descY, description, {
             ...this.textStyle,
             wordWrap: { width: this.contentWidth + this.padding * 3 }
+        });
+        descText.setOrigin(0, 0);
+        container.add(descText);
+
+        return descText.y + descText.displayHeight;
+    }
+
+    // Helper: image → title → description layout; returns bottom Y
+    private addHelpSubSectionImageFirst(
+        scene: GameScene,
+        container: GameObjects.Container,
+        title: string,
+        imageKey: string,
+        topY: number,
+        description: string,
+        opts?: { descX?: number; titleX?: number; imageToTitleGap?: number; titleToDescGap?: number }
+    ): number {
+        // Frame metrics
+        // @ts-ignore
+        const frameW = (container.getData && container.getData('frameW')) || (this.contentWidth + this.padding * 3);
+        // @ts-ignore
+        const frameX = (container.getData && container.getData('frameX')) || this.padding;
+        const centerX = frameX + frameW / 2;
+
+        // Image centered at topY
+        const img = scene.add.image(centerX, topY, imageKey);
+        const useOffsetOrigin = imageKey === 'scatterGame' || imageKey === 'wheelSpin_helper';
+        img.setOrigin(0.5, useOffsetOrigin ? 0.33 : 0.5);
+        img.setScale(1.1);
+        container.add(img);
+
+        // Title below image
+        const titleY = img.y + (img.displayHeight / 2) + (opts?.imageToTitleGap ?? this.padding * 3);
+        this.addTextBlock(scene, 'header2', title, {
+            container,
+            x: opts?.titleX ?? ((this.textHorizontalPadding ?? this.padding / 2) + this.padding * 1.5),
+            y: titleY,
+        });
+
+        // Description below title
+        const descX = opts?.descX ?? (this.padding * 3);
+        const descY = titleY + (opts?.titleToDescGap ?? this.padding * 3);
+        const descText = scene.add.text(descX, descY, description, {
+            ...this.textStyle,
+            wordWrap: { width: this.contentWidth + this.padding * 3 }
+        });
+        descText.setOrigin(0, 0);
+        container.add(descText);
+
+        return descText.y + descText.displayHeight;
+    }
+
+    // New helper as requested: explicit image position, relative offsets for title and description
+    private addSubSectionInstruction(
+        scene: GameScene,
+        container: GameObjects.Container,
+        params: {
+            title: string;
+            imageKey: string;
+            imageX: number;
+            imageY: number;
+            imageOrigin?: { x: number; y: number };
+            imageScale?: number;
+            titleOffsetY: number; // distance below image
+            titleX?: number;
+            desc: string;
+            descOffsetY: number; // distance below title
+            descX?: number;
+            wordWrapWidth?: number;
+        }
+    ): number {
+        const img = scene.add.image(params.imageX, params.imageY, params.imageKey);
+        img.setOrigin(params.imageOrigin?.x ?? 0.5, params.imageOrigin?.y ?? 0.5);
+        if (params.imageScale) {
+            img.setScale(params.imageScale);
+        }
+        container.add(img);
+
+        const titleY = img.y + (img.displayHeight / 2) + params.titleOffsetY;
+        this.addTextBlock(scene, 'header2', params.title, {
+            container,
+            x: params.titleX ?? ((this.textHorizontalPadding ?? this.padding / 2) + this.padding * 1.5),
+            y: titleY
+        });
+
+        const descY = titleY + params.descOffsetY;
+        const descText = scene.add.text(params.descX ?? (this.padding * 3), descY, params.desc, {
+            ...this.textStyle,
+            wordWrap: params.wordWrapWidth ? { width: params.wordWrapWidth } : { width: this.contentWidth + this.padding * 3 }
         });
         descText.setOrigin(0, 0);
         container.add(descText);
@@ -1740,8 +1851,8 @@ export class Menu {
     }
 
     private createPayoutTable(scene: GameScene, x: number, y: number, container: GameObjects.Container, symbolIndex: number): void {
-        const cellWidth1 = this.isMobile ? 60 : 45; 
-        const cellWidth2 = this.isMobile ? 100 : 80;
+        const cellWidth1 = 60; 
+        const cellWidth2 = 100;
         const cellHeight = 22.5;
         const cellPadding = 5;
 

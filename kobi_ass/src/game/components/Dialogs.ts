@@ -207,15 +207,23 @@ export class Dialogs {
 		// Create the dialog content
 		this.createDialogContent(scene, config);
 
-		// Play dialog-specific SFX (FreeSpin/ Congrats) when shown
+        // Play dialog-specific SFX (FreeSpin/ Congrats) when shown
 		try {
 			const audioManager = (window as any).audioManager;
 			if (audioManager && typeof audioManager.playSoundEffect === 'function') {
 				const type = (this.currentDialogType || '').toLowerCase();
-				if (type === 'freespindialog_ka') {
-					audioManager.playSoundEffect('dialog_freespin');
-				} else if (type === 'congrats_ka') {
+                if (type === 'freespindialog_ka') {
+                    // Use congrats_ka for the FreeSpin dialog per request
+                    audioManager.playSoundEffect('dialog_congrats');
+                    // Duck background music similar to win dialogs
+                    if (typeof audioManager.duckBackground === 'function') {
+                        audioManager.duckBackground(0.3);
+                    }
+                } else if (type === 'congrats_ka') {
 					audioManager.playSoundEffect('dialog_congrats');
+                    if (typeof audioManager.duckBackground === 'function') {
+                        audioManager.duckBackground(0.3);
+                    }
 				}
 			}
 		} catch {}
@@ -940,6 +948,13 @@ export class Dialogs {
 		// Hide dialog content quickly after iris starts closing (200ms delay)
 		scene.time.delayedCall(200, () => {
 			console.log('[Dialogs] Hiding dialog content quickly for better iris visibility');
+			// Fade out FreeSpin dialog SFX if playing
+			try {
+				const audioManager = (window as any).audioManager;
+				if (audioManager && typeof audioManager.fadeOutSfx === 'function') {
+					audioManager.fadeOutSfx('dialog_congrats', 400);
+				}
+			} catch {}
 			// Disable dialog elements before cleanup
 			this.disableAllWinDialogElements();
 			this.cleanupDialog();
@@ -967,6 +982,13 @@ export class Dialogs {
 					// Emit dialog animations complete event AFTER the full iris transition completes
 					scene.events.emit('dialogAnimationsComplete');
 					console.log('[Dialogs] Dialog animations complete event emitted after full iris transition');
+					// Restore background music volume after dialog completes
+					try {
+						const audioManager = (window as any).audioManager;
+						if (audioManager && typeof audioManager.restoreBackground === 'function') {
+							audioManager.restoreBackground();
+						}
+					} catch {}
 				});
 			});
 		});
@@ -1035,9 +1057,16 @@ export class Dialogs {
 					console.log('[Dialogs] Symbols re-enabled after transition');
 				}
 				
-				// Emit dialog animations complete event for scatter bonus reset
-				scene.events.emit('dialogAnimationsComplete');
+					// Emit dialog animations complete event for scatter bonus reset
+					scene.events.emit('dialogAnimationsComplete');
 				console.log('[Dialogs] Dialog animations complete event emitted');
+					// Restore background music volume after dialog completes
+					try {
+						const audioManager = (window as any).audioManager;
+						if (audioManager && typeof audioManager.restoreBackground === 'function') {
+							audioManager.restoreBackground();
+						}
+					} catch {}
 				
 				// Wait 0.7 seconds, then fade out
 				scene.time.delayedCall(700, () => {

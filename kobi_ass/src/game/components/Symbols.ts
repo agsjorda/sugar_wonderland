@@ -32,6 +32,10 @@ export class Symbols {
   public winLineDrawer: WinLineDrawer;
   private overlayRect?: Phaser.GameObjects.Graphics;
   public currentSpinData: any = null; // Store current spin data for access by other components
+  
+  // Sticky wilds (persist across bonus free spins)
+  public stickyWilds: Map<string, any> = new Map();
+  public stickyWildsContainer?: Phaser.GameObjects.Container;
 
   // Configuration for Spine symbol scales - adjust these values manually
   private spineSymbolScales: { [key: number]: number } = {
@@ -82,6 +86,20 @@ export class Symbols {
     this.onSpinDone(this.scene);
     this.setupDialogEventListeners();
     this.setupSpinEventListener(); // Re-enabled to clean up symbols at spin start
+    
+    // Prepare overlay container for sticky wilds above base symbols
+    this.ensureStickyWildsContainer();
+    
+    // Clear sticky wilds when bonus mode ends
+    this.scene.events.on('setBonusMode', (isBonus: boolean) => {
+      if (!isBonus) {
+        this.clearStickyWilds();
+      }
+    });
+    // Also clear on bonus UI hide events
+    this.scene.events.on('hideBonusBackground', () => this.clearStickyWilds());
+    this.scene.events.on('hideBonusHeader', () => this.clearStickyWilds());
+    this.scene.events.on('scatterBonusCompleted', () => this.clearStickyWilds());
 
     // Listen for a full free spin reset request (after congrats/bonus end)
     this.scene.events.on('resetFreeSpinState', () => {
@@ -97,6 +115,84 @@ export class Symbols {
       this.freeSpinAutoplayTriggered = false;
       this.dialogListenerSetup = false;
     });
+  }
+
+  // Ensure sticky wilds container exists (rendered above regular symbols and overlays)
+  public ensureStickyWildsContainer(): void {
+    if (!this.stickyWildsContainer) {
+      this.stickyWildsContainer = this.scene.add.container(0, 0);
+      // Place above overlay (overlay depth is 500) and above moved winning symbols (600)
+      this.stickyWildsContainer.setDepth(700);
+    }
+  }
+
+  private getStickyKey(col: number, row: number): string {
+    return `${col}_${row}`;
+  }
+
+  public hasStickyWildAt(col: number, row: number): boolean {
+    return this.stickyWilds.has(this.getStickyKey(col, row));
+  }
+
+  public addStickyWildAt(col: number, row: number, symbolValue: number): void {
+    // Only valid during bonus
+    if (!gameStateManager.isBonus) return;
+    // Only for rows 2-4 (0-indexed 1..3)
+    if (row < 1 || row > 3) return;
+    // Only for wildcard symbols
+    if (!WILDCARD_SYMBOLS.includes(symbolValue)) return;
+    
+    this.ensureStickyWildsContainer();
+    const key = this.getStickyKey(col, row);
+    if (this.stickyWilds.has(key)) {
+      // Sticky already exists here; hide the newly dropped wildcard sprite underneath
+      const existingBase = this.symbols?.[col]?.[row];
+      try {
+        if (existingBase?.setVisible) existingBase.setVisible(false);
+        else if (existingBase?.setAlpha) existingBase.setAlpha(0);
+      } catch {}
+      return;
+    }
+    
+    const baseSymbol = this.symbols?.[col]?.[row];
+    if (!baseSymbol) return;
+    const x = baseSymbol.x;
+    const y = baseSymbol.y;
+    
+    try {
+      const spineKey = `symbol_${symbolValue}_spine`;
+      const spineAtlasKey = spineKey + '-atlas';
+      const spine = this.scene.add.spine(x, y, spineKey, spineAtlasKey);
+      spine.setOrigin(0.5, 0.5);
+      spine.setScale(this.getSpineSymbolScale(symbolValue));
+      // Keep looping animation so it remains visibly active
+      const symbolName = `Symbol${symbolValue}_KA`;
+      const anim = `${symbolName}_hit`;
+      spine.animationState.setAnimation(0, anim, true);
+      
+      this.stickyWildsContainer?.add(spine);
+      this.stickyWilds.set(key, spine);
+
+      // Hide the base wildcard sprite underneath so only the sticky spine is visible
+      try {
+        if (baseSymbol?.setVisible) baseSymbol.setVisible(false);
+        else if (baseSymbol?.setAlpha) baseSymbol.setAlpha(0);
+      } catch {}
+    } catch (e) {
+      console.warn('[Symbols] Failed to create sticky wild spine at', col, row, e);
+    }
+  }
+
+  public clearStickyWilds(): void {
+    if (this.stickyWilds) {
+      for (const spine of this.stickyWilds.values()) {
+        try { spine?.destroy?.(); } catch {}
+      }
+      this.stickyWilds.clear();
+    }
+    if (this.stickyWildsContainer) {
+      try { this.stickyWildsContainer.removeAll(true); } catch {}
+    }
   }
 
   private setupSpinEventListener() {
@@ -141,6 +237,10 @@ export class Symbols {
       this.resetSymbolDepths();
       // Restore symbol visibility for new spin
       this.restoreSymbolVisibility();
+      // Keep sticky wilds visible during bonus
+      if (gameStateManager.isBonus) {
+        this.restoreStickyWildsVisibility();
+      }
     });
     
     // Listen for winline completion to resume autoplay
@@ -161,12 +261,12 @@ export class Symbols {
       
       resumeAutoplayAfterWinlines(this.scene.gameData);
 
-      // // If bonus finished and no win dialog will show, display congrats now
-      // if (gameStateManager.isBonus && gameStateManager.isBonusFinished && !gameStateManager.isShowingWinDialog) {
-      //   console.log('[Symbols] Bonus finished without win dialog on last spin - showing congrats');
-      //   this.showCongratsDialogAfterDelay();
-      //   gameStateManager.isBonusFinished = false;
-      // }
+      // If bonus finished and no win dialog will show, display congrats now
+      if (gameStateManager.isBonus && gameStateManager.isBonusFinished && !gameStateManager.isShowingWinDialog) {
+        console.log('[Symbols] Bonus finished without win dialog on last spin - showing congrats');
+        this.showCongratsDialogAfterDelay();
+        gameStateManager.isBonusFinished = false;
+      }
     });
     
     // Listen for winline start to pause autoplay
@@ -208,6 +308,11 @@ export class Symbols {
     for (let col = 0; col < this.symbols.length; col++) {
       for (let row = 0; row < this.symbols[col].length; row++) {
         const symbol = this.symbols[col][row];
+        
+        // Skip sticky wilds during bonus mode so they persist
+        if (gameStateManager.isBonus && this.hasStickyWildAt(col, row)) {
+          continue;
+        }
         
         if (symbol && symbol.animationState) {
           // This is a Spine symbol, convert it back to PNG
@@ -363,12 +468,32 @@ export class Symbols {
       for (let col = 0; col < this.symbols.length; col++) {
         for (let row = 0; row < this.symbols[col].length; row++) {
           const symbol = this.symbols[col][row];
-          if (symbol) {
-            if (typeof symbol.setVisible === 'function') {
-              symbol.setVisible(true);
-              visibleCount++;
-            }
-            resetCount++;
+          if (!symbol) continue;
+
+          // Default: show symbol
+          if (typeof symbol.setVisible === 'function') {
+            symbol.setVisible(true);
+            visibleCount++;
+          }
+          resetCount++;
+
+          // During bonus, if a sticky wild Spine exists here AND this PNG is a wildcard, keep it hidden
+          if (gameStateManager.isBonus && this.hasStickyWildAt(col, row)) {
+            try {
+              const textureKey: string | undefined = symbol.texture?.key;
+              const isWildByTexture = typeof textureKey === 'string' && (/^symbol_\d+$/).test(textureKey)
+                ? (() => { const n = parseInt(textureKey.split('_')[1], 10); return WILDCARD_SYMBOLS.includes(n); })()
+                : false;
+              const valueFromData = this.currentSymbolData?.[col]?.[row];
+              const isWildByData = typeof valueFromData === 'number' && WILDCARD_SYMBOLS.includes(valueFromData);
+              if (isWildByTexture || isWildByData) {
+                if (typeof symbol.setAlpha === 'function') {
+                  symbol.setAlpha(0);
+                } else if (typeof symbol.setVisible === 'function') {
+                  symbol.setVisible(false);
+                }
+              }
+            } catch {}
           }
         }
       }
@@ -694,6 +819,23 @@ export class Symbols {
       for (let col = 0; col < this.symbols.length; col++) {
         for (let row = 0; row < this.symbols[col].length; row++) {
           const symbol = this.symbols[col][row];
+          // Skip resetting sticky wild spines during bonus mode
+          if (gameStateManager.isBonus && this.hasStickyWildAt(col, row)) {
+            // Ensure underlying wildcard PNG stays hidden if present
+            try {
+              const textureKey: string | undefined = symbol?.texture?.key;
+              const isWildByTexture = typeof textureKey === 'string' && (/^symbol_\d+$/).test(textureKey)
+                ? (() => { const n = parseInt(textureKey.split('_')[1], 10); return WILDCARD_SYMBOLS.includes(n); })()
+                : false;
+              const valueFromData = this.currentSymbolData?.[col]?.[row];
+              const isWildByData = typeof valueFromData === 'number' && WILDCARD_SYMBOLS.includes(valueFromData);
+              if (isWildByTexture || isWildByData) {
+                if (symbol?.setAlpha) symbol.setAlpha(0);
+                else if (symbol?.setVisible) symbol.setVisible(false);
+              }
+            } catch {}
+            continue;
+          }
           if (symbol && symbol.active) {
             // Check if symbol has the required methods before calling them
             if (typeof symbol.clearTint === 'function') {
@@ -731,6 +873,16 @@ export class Symbols {
     if (this.winLineDrawer) {
       this.winLineDrawer.stopLooping();
       this.winLineDrawer.clearLines();
+    }
+  }
+
+  /**
+   * Ensure sticky wild overlay stays visible across spins during bonus
+   */
+  public restoreStickyWildsVisibility(): void {
+    if (this.stickyWildsContainer) {
+      this.stickyWildsContainer.setVisible(true);
+      this.stickyWildsContainer.setAlpha(1);
     }
   }
 
@@ -1797,6 +1949,20 @@ function createInitialSymbols(self: Symbols) {
       symbol.displayHeight = self.displayHeight;
       self.container.add(symbol);
 
+      // During bonus: if a sticky wild already exists here and the new symbol is a wildcard (rows 2-4), hide the PNG
+      try {
+        if (gameStateManager.isBonus && row >= 1 && row <= 3) {
+          const val = symbols[col][row];
+          if (typeof val === 'number' && WILDCARD_SYMBOLS.includes(val) && self.hasStickyWildAt(col, row)) {
+            if (typeof symbol.setAlpha === 'function') {
+              symbol.setAlpha(0);
+            } else if (typeof symbol.setVisible === 'function') {
+              symbol.setVisible(false);
+            }
+          }
+        }
+      } catch {}
+
       rows.push(symbol);
     }
     self.symbols.push(rows);
@@ -1876,6 +2042,30 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   
   // Replace with spine animations if needed
   replaceWithSpineAnimations(self, mockData);
+  
+  // Add sticky wilds during bonus mode on rows 2-4 (rows index 1..3)
+  try {
+    if (gameStateManager.isBonus && self.symbols && mockData.symbols) {
+      for (let col = 0; col < mockData.symbols.length; col++) {
+        for (let row = 1; row <= 3 && row < mockData.symbols[col].length; row++) {
+          const val = mockData.symbols[col][row];
+          if (typeof val === 'number' && WILDCARD_SYMBOLS.includes(val)) {
+            if (typeof (self as any).addStickyWildAt === 'function') {
+              (self as any).addStickyWildAt(col, row, val);
+              // Ensure the newly dropped base symbol is hidden if sticky already exists
+              try {
+                const base = self.symbols?.[col]?.[row];
+                if (base?.setVisible) base.setVisible(false);
+                else if (base?.setAlpha) base.setAlpha(0);
+              } catch {}
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Symbols] Error while adding sticky wilds:', e);
+  }
   
   // Check for scatter symbols and trigger scatter bonus if found
   console.log('[Symbols] Checking for scatter symbols...');
@@ -2505,6 +2695,19 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
       if (currentSymbol) {
         // Get the symbol value and construct the Spine key
         const symbolValue = data.symbols[grid.y][grid.x];
+
+        // If this grid already has a sticky wild during bonus, ensure base is hidden and skip replacement
+        if (gameStateManager.isBonus && self.hasStickyWildAt(grid.y, grid.x) && WILDCARD_SYMBOLS.includes(symbolValue)) {
+          try {
+            // Hide underlying base symbol to avoid double visuals
+            const base = self.symbols?.[grid.y]?.[grid.x];
+            if (base?.setVisible) base.setVisible(false);
+            else if (base?.setAlpha) base.setAlpha(0);
+            // Reconfirm sticky wild at this cell
+            (self as any).addStickyWildAt(grid.y, grid.x, symbolValue);
+          } catch {}
+          continue;
+        }
         const spineKey = `symbol_${symbolValue}_spine`;
         const spineAtlasKey = spineKey + '-atlas';
         const symbolName = `Symbol${symbolValue}_KA`;
