@@ -717,9 +717,6 @@ export class SlotMachine {
 
         Events.emitter.emit(Events.FINAL_WIN_SHOW);
 
-        
-        scene.background.toggleBackground(scene);
-        scene.audioManager.changeBackgroundMusic(scene);
         const bonusWin = scene.gameData.totalBonusWin;
         console.log("endiAPIBonus", bonusWin);  
         // para sure
@@ -957,9 +954,9 @@ export class SlotMachine {
                 console.log("Match result:", result);
                 lastResult = result;
 
-                if(scene.gameData.useApiFreeSpins){
-                    Events.emitter.emit(Events.FREE_SPIN_TOTAL_WIN);
-                }
+                // if(scene.gameData.useApiFreeSpins){
+                //     Events.emitter.emit(Events.FREE_SPIN_TOTAL_WIN);
+                // }
 
                 if (result === "No more matches" || result === "free spins") {
                     continueMatching = false;
@@ -1035,6 +1032,7 @@ export class SlotMachine {
             Events.emitter.emit(Events.TUMBLE_SEQUENCE_DONE, { symbolGrid });
             // Always ensure spinning state is reset
             scene.gameData.isSpinning = false;
+            
             console.log("Spin sequence completed, isSpinning reset to false");
             // Immediately re-enable buttons when spinning completes
             if (scene.buttons && scene.buttons.enableButtonsVisually) {
@@ -1076,6 +1074,13 @@ export class SlotMachine {
             this.hideSymbolCountWinDisplay();
             // Cleanup any orphaned symbols in the slot container before starting a new spin
             this.cleanupAloneSymbols();
+            
+            try {
+                if(scene.gameData.useApiFreeSpins){
+                        Events.emitter.emit(Events.FREE_SPIN_TOTAL_WIN);
+                    }
+            }
+            catch (_e) {}
             
             // Ensure buttons stay disabled during actual spin processing
             if (scene.buttons && scene.buttons.updateButtonStates) {

@@ -692,6 +692,8 @@ export class WinOverlayContainer {
                             Events.emitter.emit(Events.AUTOPLAY_START, this.scene.gameData.freeSpins);
                         }
                     }
+                    this.scene.background.toggleBackground(this.scene);
+                    this.scene.audioManager.changeBackgroundMusic(this.scene);
                     this.destroy();
                 });
             });

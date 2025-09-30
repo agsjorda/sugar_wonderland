@@ -1868,9 +1868,11 @@ export class Buttons {
                         ? capValue
                         : totalWinCurrentTotal;
                     totalWinFinalTimer = scene.time.delayedCall(250, () => {
-                        text1.setText('TOTAL WIN');
                         if(!scene.gameData.isBonusRound){
                             text1.setText('WIN');
+                        }
+                        else{
+                            text1.setText('TOTAL WIN');
                         }
                         text2.setText(`${scene.gameData.currency} ${formatMoney(finalDisplay)}`);
                         totalWinFinalTimer = null;
@@ -1975,9 +1977,7 @@ export class Buttons {
             try {
                 const fsLen = (scene.gameData.totalWinFreeSpin?.length || 0);
                 if (scene.gameData.useApiFreeSpins && fsLen > 0 && (scene.gameData.apiFreeSpinsIndex >= fsLen)) {
-                    const finalTotal = (scene.gameData.totalBonusWin && scene.gameData.totalBonusWin > 0)
-                        ? scene.gameData.totalBonusWin
-                        : (scene.gameData.totalWinFreeSpin || []).reduce((s, v) => s + (Number(v) || 0), 0);
+                    const finalTotal = (scene.gameData.totalWinFreeSpin || []).reduce((s, v) => s + (Number(v) || 0), 0);
                     text1.setText('TOTAL WIN');
                     text2.setText(`${scene.gameData.currency} ${formatMoney(finalTotal)}`);
                 }
@@ -1991,7 +1991,12 @@ export class Buttons {
            this.totalWinContainer.setVisible(this.isMobile ? false : true);
         });
         Events.emitter.on(Events.FREE_SPIN_TOTAL_WIN, ()=>{
+            // Calculate finalTotal as the sum of totalWinFreeSpin up to and including currentFreeSpinIndex
+            const idx = Math.max(0, Math.min(scene.gameData.currentFreeSpinIndex || 0, (scene.gameData.totalWinFreeSpin?.length || 1) - 1));
+            const finalTotal = (scene.gameData.totalWinFreeSpin || []).slice(0, idx + 1).reduce((s, v) => s + (Number(v) || 0), 0);
+            
             text1.setText('TOTAL WIN');
+            text2.setText(`${scene.gameData.currency} ${finalTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
         });
 
         this.buttonContainer.add(container);
@@ -3070,9 +3075,7 @@ export class Buttons {
             try {
                 const fsLen = (scene.gameData.totalWinFreeSpin?.length || 0);
                 if (this.isMobile && scene.gameData.useApiFreeSpins && fsLen > 0 && (scene.gameData.apiFreeSpinsIndex >= fsLen)) {
-                    const finalTotal = (scene.gameData.totalBonusWin && scene.gameData.totalBonusWin > 0)
-                        ? scene.gameData.totalBonusWin
-                        : (scene.gameData.totalWinFreeSpin || []).reduce((s, v) => s + (Number(v) || 0), 0);
+                    const finalTotal = (scene.gameData.totalWinFreeSpin || []).reduce((s, v) => s + (Number(v) || 0), 0);
                     youWonLabel.setText('TOTAL WIN');
                     youWonAmount.setText(`${scene.gameData.currency} ${finalTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
                 }
@@ -3156,9 +3159,11 @@ export class Buttons {
                         ? capValue
                         : marqueeCurrentTotal;
                     totalWinFinalTimer = scene.time.delayedCall(250, ()=>{
-                        youWonLabel.setText('TOTAL WIN');
                         if(!scene.gameData.isBonusRound){
                             youWonLabel.setText('WIN');
+                        }
+                        else{
+                            youWonLabel.setText('TOTAL WIN');
                         }
                         youWonAmount.setText(`${scene.gameData.currency} ${finalDisplay.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
                         totalWinFinalTimer = null;
@@ -3243,7 +3248,13 @@ export class Buttons {
             youWonAmount.setText(`${scene.gameData.currency} ${scene.gameData.totalBonusWin.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
         });
         Events.emitter.on(Events.FREE_SPIN_TOTAL_WIN, ()=>{
+            
+            // Calculate finalTotal as the sum of totalWinFreeSpin up to and including currentFreeSpinIndex
+            const idx = Math.max(0, Math.min(scene.gameData.currentFreeSpinIndex || 0, (scene.gameData.totalWinFreeSpin?.length || 1) - 1));
+            const finalTotal = (scene.gameData.totalWinFreeSpin || []).slice(0, idx + 1).reduce((s, v) => s + (Number(v) || 0), 0);
+            
             youWonLabel.setText('TOTAL WIN');
+            youWonAmount.setText(`${scene.gameData.currency} ${finalTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
         });
     }
 
