@@ -583,7 +583,7 @@ export class BombContainer extends GameObjects.Container {
                         Events.emitter.emit(Events.SHOW_BOMB_WIN);
                         // console.log(this.scene.gameData.totalWinFreeSpinPerTumble[this.scene.gameData.apiFreeSpinsIndex]);
                         Events.emitter.emit(Events.UPDATE_TOTAL_WIN, 0, true);
-                    }, 50);
+                    }, 15);
                  } catch (_e) {}
             }
         });
