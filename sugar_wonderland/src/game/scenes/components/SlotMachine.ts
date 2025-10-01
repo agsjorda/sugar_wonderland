@@ -370,12 +370,12 @@ export class SlotMachine {
         scene.gameData.apiBet = result.bet;
         scene.gameData.bet = result.bet;
         scene.gameData.debugLog("slotArea", result.slot.area);
-        if(result.slot.freeSpin?.length > 0){
+        if(result.slot.freeSpin.items?.length > 0){
             console.log(chalk.bgGreenBright.black.bold(' [BUY FEATURE] triggered freeSpin '), result.slot.freeSpin);
         }
         
         // If backend returned free spin sequence, store it to drive the bonus round from API data
-        const apiFs = result?.slot?.freeSpin || result?.slot?.freeSpins || [];
+        const apiFs = result?.slot?.freeSpin.items || result?.slot?.freeSpins.items || [];
         scene.gameData.totalBonusWin = result.slot.totalWin;
 
         if (Array.isArray(apiFs) && apiFs.length > 0) {
