@@ -758,6 +758,7 @@ export class SlotMachine {
         } catch (_e) { /* defensive */ }
         
         Events.emitter.emit(Events.WIN_OVERLAY_HIDE);
+        Events.emitter.emit(Events.UPDATE_BALANCE);
     }
 
     private async playSpinAnimations(scene: GameScene, newValues: number[][], data: SpinData): Promise<void> {
