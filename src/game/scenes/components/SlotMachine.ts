@@ -644,6 +644,8 @@ export class SlotMachine {
             this.showWinOverlay(scene, thisFreeSpinTotal, betForFs);
         }
 
+        // Before advancing the FS index, emit TOTAL WIN for the just-finished FS
+        try { Events.emitter.emit(Events.FREE_SPIN_TOTAL_WIN); } catch (_e) {}
         // Advance to next API free spin
         scene.gameData.apiFreeSpinsIndex = idx + 1;
         
@@ -952,7 +954,7 @@ export class SlotMachine {
         try {
             while (continueMatching) {
                 const result = await this.checkMatchAsync(symbolGrid, scene, SymbolsIn[this.currentIndex]);
-                console.log("Match result:", result);
+                // console.log("Match result:", result);
                 lastResult = result;
 
                 // if(scene.gameData.useApiFreeSpins){
@@ -1034,7 +1036,7 @@ export class SlotMachine {
             // Always ensure spinning state is reset
             scene.gameData.isSpinning = false;
             
-            console.log("Spin sequence completed, isSpinning reset to false");
+            // console.log("Spin sequence completed, isSpinning reset to false");
             // Immediately re-enable buttons when spinning completes
             if (scene.buttons && scene.buttons.enableButtonsVisually) {
                 scene.buttons.enableButtonsVisually(scene);
