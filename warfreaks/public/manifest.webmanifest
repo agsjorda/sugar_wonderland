@@ -1,0 +1,10 @@
+{
+  "name": "Felice in Space",
+  "short_name": "Felice",
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#000000",
+  "theme_color": "#000000"
+}
+
