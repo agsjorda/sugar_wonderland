@@ -1646,7 +1646,7 @@ export class Buttons {
         container.add(demoLabel);
 
         Events.emitter.on(Events.SPIN_ANIMATION_START, () => {
-            Events.emitter.emit(Events.UPDATE_BALANCE);            
+            //Events.emitter.emit(Events.UPDATE_BALANCE);            
         });
 
         Events.emitter.on(Events.WIN, () => {
@@ -1695,6 +1695,7 @@ export class Buttons {
 
         
         Events.emitter.emit(Events.GET_BALANCE);
+        Events.emitter.emit(Events.UPDATE_BALANCE);
     }
 
     private createBombWin(scene: GameScene): void {
