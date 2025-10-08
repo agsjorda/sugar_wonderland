@@ -1666,6 +1666,14 @@ export class Buttons {
             scene.gameData.balance = balance;
         });
 
+        Events.emitter.on(Events.UPDATE_FAKE_BALANCE, (reduce: number, increase: number) => {
+            scene.gameData.balance -= reduce;
+            scene.gameData.balance += increase;
+            //console.error("fake balance updated> reduce:" + reduce + " increase:" + increase + " = balance:" +  scene.gameData.balance);
+            text2.setText(scene.gameData.currency + " " + scene.gameData.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+        });
+
+
         Events.emitter.on(Events.GET_BALANCE, () => {
             try{
                 scene.gameAPI.getBalance().then((data) => {

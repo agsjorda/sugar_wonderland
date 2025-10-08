@@ -340,13 +340,6 @@ export class SlotMachine {
             return;
         }
 
-        Events.emitter.emit(Events.UPDATE_BALANCE);
-
-        scene.gameAPI.getBalance().then((data) => {
-            console.log(data);
-            Events.emitter.emit(Events.GET_BALANCE);
-        });
-
         this.cleanupAloneSymbols();
         let newValues: number[][] = [];
         
@@ -366,13 +359,24 @@ export class SlotMachine {
             console.log('[BUY FEATURE] doSpin error', result);
             return;
         }
+        
+        console.log("result", result.slot);
+        // console.log("Tumbles", result.slot.tumbles);
+
+        
+        let toBet = result.bet;
+        if(data.isBuyFeature){
+            toBet *= 100;
+        }
+         else if(data.isEnhancedBet){
+            toBet *= 1.25;
+        }
+
+        Events.emitter.emit(Events.UPDATE_FAKE_BALANCE, toBet, 0); // ( reduce , increase )
+        
         // console.log("result", result);
         scene.gameData.apiBet = result.bet;
         scene.gameData.bet = result.bet;
-        scene.gameData.debugLog("slotArea", result.slot.area);
-        if(result.slot.freeSpin.items?.length > 0){
-            console.log(chalk.bgGreenBright.black.bold(' [BUY FEATURE] triggered freeSpin '), result.slot.freeSpin);
-        }
         
         // If backend returned free spin sequence, store it to drive the bonus round from API data
         const apiFs = result?.slot?.freeSpin.items || result?.slot?.freeSpins.items || [];
@@ -454,7 +458,7 @@ export class SlotMachine {
                             }
                         }
                     }
-                    if (scatterSprites.length > 0) {
+                    if (scatterSprites.length >= 3) {
                         await this.animateScatterSymbolsForApi(scene, scatterSprites);
                     }
                 } catch (_e) {
@@ -496,6 +500,7 @@ export class SlotMachine {
         }
 
         scene.gameData.totalWin = result.slot.totalWin;
+        try { (scene.gameData as any).lastTotalWin = result.slot.totalWin; } catch (_e) {}
         // Flag for max win based on API, pass to scene for later use
         try { (scene as any).lastSpinHadMaxWin = !!(result?.slot?.maxWin); } catch (_e) {}
         this.currentIndex = 0;
@@ -505,6 +510,7 @@ export class SlotMachine {
     }
     
         if (Array.isArray(result.slot.tumbles) && result.slot.tumbles.length > 0) {
+            try { (scene.gameData as any).lastTumbles = result.slot.tumbles; } catch (_e) {}
             await this.processMatchesSequentially(scene, newValues, result.slot.tumbles);
         } else {
             // No tumbles; emit end events and reset spin state so autoplay won't advance early
@@ -523,12 +529,6 @@ export class SlotMachine {
             // Ensure lone symbols are cleaned even when there are no tumbles
             this.cleanupAloneSymbols();
         }
-
-        // process API winning data
-        // result.slot.area - contains the first slot data
-        // result.slot.totalWin : number , total win if more than 1 tumblee wins
-        // result.slot.tumbles[] : [ symbols[in[], out[ [symbol,count] ] ] , win: number ]
-            // result.slot.tumbles[0].symbols 
 
         scene.gameData.buyFeatureEnabled = false;
     }
@@ -644,8 +644,6 @@ export class SlotMachine {
             this.showWinOverlay(scene, thisFreeSpinTotal, betForFs);
         }
 
-        // Before advancing the FS index, emit TOTAL WIN for the just-finished FS
-        try { Events.emitter.emit(Events.FREE_SPIN_TOTAL_WIN); } catch (_e) {}
         // Advance to next API free spin
         scene.gameData.apiFreeSpinsIndex = idx + 1;
         
@@ -717,14 +715,14 @@ export class SlotMachine {
             }
         } catch (_e) { /* ignore recompute errors */ }
 
-        Events.emitter.emit(Events.FINAL_WIN_SHOW);
+        // Events.emitter.emit(Events.FINAL_WIN_SHOW);
 
-        const bonusWin = scene.gameData.totalBonusWin;
-        console.log("endiAPIBonus", bonusWin);  
+        const bonusWin = scene.gameData.totalWin;
+        // console.log("endiAPIBonus", bonusWin);  
         // para sure
-        setTimeout(() => {
-            Events.emitter.emit(Events.FINAL_WIN_SHOW);
-        }, 10);
+        // setTimeout(() => {
+            // Events.emitter.emit(Events.FINAL_WIN_SHOW);
+        // }, 10);
 
 
         this.showBonusWin(scene, bonusWin);
@@ -1035,12 +1033,15 @@ export class SlotMachine {
             Events.emitter.emit(Events.TUMBLE_SEQUENCE_DONE, { symbolGrid });
             // Always ensure spinning state is reset
             scene.gameData.isSpinning = false;
-            
+
+            if (scene.gameData.useApiFreeSpins) {
+                Events.emitter.emit(Events.FREE_SPIN_TOTAL_WIN);
+            }
             // console.log("Spin sequence completed, isSpinning reset to false");
             // Immediately re-enable buttons when spinning completes
             if (scene.buttons && scene.buttons.enableButtonsVisually) {
                 scene.buttons.enableButtonsVisually(scene);
-                Events.emitter.emit(Events.GET_BALANCE);
+                // Events.emitter.emit(Events.GET_BALANCE);
             }
         }
     }
@@ -1422,13 +1423,13 @@ export class SlotMachine {
             // --- SCATTER CHECK (deferred to end of match-8s flow) ---
             if (!scene.gameData.useApiFreeSpins) {
                 const scatterCount = symbolCount[0] || 0;
-                console.log(chalk.yellow(`[SCATTER] No matches. scatterCount = ${scatterCount}, isBonus = ${scene.gameData.isBonusRound}, threshold = ${scene.gameData.isBonusRound ? 3 : 4}`));
+                // console.log(chalk.yellow(`[SCATTER] No matches. scatterCount = ${scatterCount}, isBonus = ${scene.gameData.isBonusRound}, threshold = ${scene.gameData.isBonusRound ? 3 : 4}`));
                 if (scatterCount >= 4 || (scene.gameData.isBonusRound && scatterCount >= 3)) {
                     // Defer scatter handling until after all match-8s/bomb animations
                     this.deferredScatterCount = scatterCount;
-                    console.log(chalk.blueBright.bold('[SCATTER] Threshold met, deferring scatter handling until end of tumble sequence'));
+                    // console.log(chalk.blueBright.bold('[SCATTER] Threshold met, deferring scatter handling until end of tumble sequence'));
                 } else {
-                    console.log(chalk.white.bold('[SCATTER] Threshold not met, continuing normal flow'));
+                    // console.log(chalk.white.bold('[SCATTER] Threshold not met, continuing normal flow'));
                 }
             }
 
@@ -1571,13 +1572,13 @@ export class SlotMachine {
                 
                 // Play scatter symbol animation
                 try {
-                    console.log(`[SCATTER] Animating scatter symbol idx=${index}`);
+                    // console.log(`[SCATTER] Animating scatter symbol idx=${index}`);
                     this.animation.playSymbolAnimation(sprite, 0);
                 } catch (e) {
-                    console.warn('[SCATTER] playSymbolAnimation threw, attempting to continue', e);
+                    // console.warn('[SCATTER] playSymbolAnimation threw, attempting to continue', e);
                 }
                 sprite.once('animationcomplete', () => {
-                    console.log(`[SCATTER] Scatter animation complete idx=${index}`);
+                    // console.log(`[SCATTER] Scatter animation complete idx=${index}`);
                     sprite.alpha = 0;
                     resolve();
                 });
@@ -1586,7 +1587,7 @@ export class SlotMachine {
         });
 
         await Promise.all(animationPromises);
-        console.log('[SCATTER] All scatter animations finished, calling handleScatterRewards');
+        // console.log('[SCATTER] All scatter animations finished, calling handleScatterRewards');
         
         // Handle scatter rewards after animations complete
         this.handleScatterRewards(scene, scatterCount);
@@ -1595,7 +1596,7 @@ export class SlotMachine {
     private handleScatterRewards(scene: GameScene, scatterCount: number): void {
         // Award free spins based on scatterCount
         let freeSpins = scene.gameData.freeSpins || 0;
-        console.log(`[BONUS] handleScatterRewards start, scatterCount=${scatterCount}, isBonus=${scene.gameData.isBonusRound}`);
+        // console.log(`[BONUS] handleScatterRewards start, scatterCount=${scatterCount}, isBonus=${scene.gameData.isBonusRound}`);
 
 		if (scene.gameData.isBonusRound) {
             // During bonus round, add spins for 3+ scatters
@@ -1608,7 +1609,7 @@ export class SlotMachine {
             //scene.gameData.totalFreeSpins += addFreeSpins;
             scene.gameData.freeSpins += addFreeSpins;
             // scene.buttons.autoplay.addSpins(addFreeSpins);
-            console.log(`[BONUS] Retrigger: +${addFreeSpins} FS → totalFS=${scene.gameData.totalFreeSpins}, remainingFS=${scene.gameData.freeSpins}`);
+            // console.log(`[BONUS] Retrigger: +${addFreeSpins} FS → totalFS=${scene.gameData.totalFreeSpins}, remainingFS=${scene.gameData.freeSpins}`);
             
             // Update the remaining spins display
             if (scene.buttons.autoplay.isAutoPlaying) {
