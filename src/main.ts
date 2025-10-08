@@ -31,11 +31,3 @@ document.addEventListener('DOMContentLoaded', (): void => {
         }
     }, 1000);
 }); 
-
-document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-        Events.emitter.emit(Events.GET_BALANCE);
-    } else {
-        Events.emitter.emit(Events.GET_BALANCE);
-    }
-});
