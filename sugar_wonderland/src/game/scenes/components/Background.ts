@@ -154,11 +154,11 @@ export class Background {
         if(_scene.gameData.isBonusRound){
             main_status = 0;
             bonus_status = 1;
-            console.log(chalk.redBright.bold(`[BG] toggleBackground called. isBonusRound=${_scene.gameData.isBonusRound}`));
+            // console.log(chalk.redBright.bold(`[BG] toggleBackground called. isBonusRound=${_scene.gameData.isBonusRound}`));
         } else {
             main_status = 1;
             bonus_status = 0;
-            console.log(chalk.red.bold(`[BG] toggleBackground called. isBonusRound=${_scene.gameData.isBonusRound}`));
+            // console.log(chalk.red.bold(`[BG] toggleBackground called. isBonusRound=${_scene.gameData.isBonusRound}`));
         }
 
 		this.main_background.alpha = main_status;

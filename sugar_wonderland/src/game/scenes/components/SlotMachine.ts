@@ -340,6 +340,8 @@ export class SlotMachine {
             return;
         }
 
+        Events.emitter.emit(Events.GET_BALANCE);
+
         this.cleanupAloneSymbols();
         let newValues: number[][] = [];
         
@@ -351,6 +353,8 @@ export class SlotMachine {
         if(isBuyFeature || isEnhancedBet)
             console.log('[BUY FEATURE] isBuyFeature:', isBuyFeature, 'betAmount sent:', betAmount, 'isEnhancedBet:', isEnhancedBet);;
         
+
+
         const result = await scene.gameAPI.doSpin(betAmount, isBuyFeature, isEnhancedBet);
 
         scene.buttons.bonusMultiplier = 1;
@@ -664,6 +668,7 @@ export class SlotMachine {
                 scene.time.delayedCall(300, () => this.playApiFreeSpin(scene));
             } else {
                 // End of bonus per API — after the last FS overlay closes, show Congrats
+                Events.emitter.emit(Events.FINAL_WIN_SHOW, {});
                 await this.endApiBonus(scene);
             }
         };
@@ -758,7 +763,7 @@ export class SlotMachine {
         } catch (_e) { /* defensive */ }
         
         Events.emitter.emit(Events.WIN_OVERLAY_HIDE);
-        Events.emitter.emit(Events.UPDATE_BALANCE);
+        Events.emitter.emit(Events.UPDATE_BALANCE, bonusWin);
     }
 
     private async playSpinAnimations(scene: GameScene, newValues: number[][], data: SpinData): Promise<void> {
@@ -1041,7 +1046,6 @@ export class SlotMachine {
             // Immediately re-enable buttons when spinning completes
             if (scene.buttons && scene.buttons.enableButtonsVisually) {
                 scene.buttons.enableButtonsVisually(scene);
-                // Events.emitter.emit(Events.GET_BALANCE);
             }
         }
     }
