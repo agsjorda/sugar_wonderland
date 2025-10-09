@@ -953,7 +953,6 @@ export class SlotMachine {
     private async processMatchesSequentially(scene: GameScene, symbolGrid: number[][], SymbolsIn : Tumble[]): Promise<void> {
         let continueMatching = true;
         let lastResult: string | undefined = undefined;
-        // console.log("SymbolsIn", SymbolsIn);
         try {
             while (continueMatching) {
                 const result = await this.checkMatchAsync(symbolGrid, scene, SymbolsIn[this.currentIndex]);
@@ -1031,6 +1030,7 @@ export class SlotMachine {
                     }
                 }
                 await this.animateScatterSymbols(scene, scatterSprites, deferredCount);
+
                 // animateScatterSymbols will emit MATCHES_DONE and call handleScatterRewards
             }
 
@@ -1038,6 +1038,14 @@ export class SlotMachine {
             Events.emitter.emit(Events.TUMBLE_SEQUENCE_DONE, { symbolGrid });
             // Always ensure spinning state is reset
             scene.gameData.isSpinning = false;
+
+            let totalWin = 0;
+            SymbolsIn.forEach(v=>{
+                totalWin += v.win;
+            })
+            if(!scene.gameData.isBonusRound){
+                Events.emitter.emit(Events.UPDATE_BALANCE, totalWin);
+            }
 
             if (scene.gameData.useApiFreeSpins) {
                 Events.emitter.emit(Events.FREE_SPIN_TOTAL_WIN);
