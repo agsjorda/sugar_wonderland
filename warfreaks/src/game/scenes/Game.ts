@@ -105,11 +105,7 @@ export class Game extends Scene {
 
             // Initialize fade-in
             this.initFadeIn();
-
-            // Request fullscreen on load
-            this.requestFullscreen();
-
-            // Add keyboard input handling
+            
         } catch (error) {
             console.error('Error during create:', error);
             // Handle creation error appropriately

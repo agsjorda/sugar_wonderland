@@ -9,6 +9,13 @@ export class LandingPage extends Scene {
     protected pressed: boolean = false;
     private isTransitioning: boolean = false;
 
+    private fsButton: Phaser.GameObjects.Image | null = null;
+    private onEnterFs?: () => void;
+    private onLeaveFs?: () => void;
+    
+    private onDomFsChange?: () => void;
+    private onResize?: () => void;
+
     constructor() {
         super('LandingPage');
     }
@@ -18,20 +25,70 @@ export class LandingPage extends Scene {
         this.load.image('background_mobile', 'assets/background/preloader_mobile.png');
         this.load.image('spinButton', 'assets/Controllers/Spin.png');
         this.load.image('gameTemplateBackground', 'assets/background/Main_Background.png')
+        // Fullscreen toggle icons
+        this.load.image('fs_max', 'assets/Controllers/Maximize.png');
+        this.load.image('fs_min', 'assets/Controllers/Minimize.png');
     }
 
     create(): void {
-        console.log(this.cameras.main.width, this.cameras.main.height);
+        // console.log(this.cameras.main.width, this.cameras.main.height);
         
         // Log font status for debugging
         logFontStatus();
         
-        // Detect if mobile
-        
         // Choose background based on device
         const backgroundKey = 'background_mobile' 
         this.add.image(this.cameras.main.width / 2, this.cameras.main.height / 2, backgroundKey)
-        .setOrigin(0.5);
+        .setOrigin(0.5).setDisplaySize(428, 926);
+        
+        // Fullscreen toggle button (above background)
+        const padding = 10;
+        const size = 28;
+        const fsKey = this.scale.isFullscreen ? 'fs_min' : 'fs_max';
+        const btn = this.add.image(this.cameras.main.width - padding, padding, fsKey);
+        btn.setOrigin(1, 0);
+        btn.setDisplaySize(size, size);
+        btn.setDepth(1000);
+        btn.setInteractive({ useHandCursor: true });
+        this.fsButton = btn;
+        btn.on('pointerup', () => {
+            if (this.scale.isFullscreen) {
+                this.scale.stopFullscreen();
+            } else {
+                this.scale.startFullscreen();
+            }
+        });
+        const updateIcon = () => {
+            const btn = this.fsButton;
+            if (!btn || !(btn as any).scene || !(btn as any).scene.sys) return;
+            const key = this.scale.isFullscreen ? 'fs_min' : 'fs_max';
+            // Ensure texture exists before swapping
+            if (this.textures && this.textures.exists(key)) {
+                btn.setTexture(key);
+            }
+        };
+        this.onEnterFs = updateIcon;
+        this.onLeaveFs = updateIcon;
+        this.scale.on('enterfullscreen', this.onEnterFs);
+        this.scale.on('leavefullscreen', this.onLeaveFs);
+
+        // Also listen to DOM fullscreen changes for desktop
+        this.onDomFsChange = updateIcon;
+        document.addEventListener('fullscreenchange', this.onDomFsChange);
+        // @ts-ignore - Safari prefix
+        document.addEventListener('webkitfullscreenchange', this.onDomFsChange);
+
+        // Reposition on resize
+        const reposition = () => {
+            const p = padding;
+            if (this.fsButton) this.fsButton.setPosition(this.cameras.main.width - p, p);
+        };
+        this.onResize = reposition;
+        this.scale.on('resize', this.onResize);
+        
+        // Cleanup on scene shutdown/remove
+        this.events.once('shutdown', () => this.cleanupFullscreenHandlers());
+        this.events.once('destroy', () => this.cleanupFullscreenHandlers());
         
         // Adjust logo position and scale based on device
         const logoScale = 0.25
@@ -106,6 +163,25 @@ export class LandingPage extends Scene {
         });
 
         this.scene.launch('LoadingPage');
+    }
+    
+    private cleanupFullscreenHandlers(): void {
+        if (this.onEnterFs) this.scale.off('enterfullscreen', this.onEnterFs);
+        if (this.onLeaveFs) this.scale.off('leavefullscreen', this.onLeaveFs);
+        if (this.onResize) this.scale.off('resize', this.onResize);
+        if (this.onDomFsChange) {
+            document.removeEventListener('fullscreenchange', this.onDomFsChange as any);
+            // @ts-ignore
+            document.removeEventListener('webkitfullscreenchange', this.onDomFsChange);
+        }
+        this.onEnterFs = undefined;
+        this.onLeaveFs = undefined;
+        this.onResize = undefined;
+        this.onDomFsChange = undefined;
+        if (this.fsButton) {
+            this.fsButton.destroy();
+            this.fsButton = null;
+        }
     }
 
     private startIdleRotation(): void {

@@ -486,7 +486,8 @@ export class SlotMachine {
          else if(isEnhancedBet){
             toBet *= 1.25;
         }
-        console.log("toBet", toBet, isBuyFeature, isEnhancedBet);
+        
+        // console.log("toBet", toBet, isBuyFeature, isEnhancedBet);
 
         Events.emitter.emit(Events.UPDATE_FAKE_BALANCE, toBet, 0); // ( reduce , increase )
         

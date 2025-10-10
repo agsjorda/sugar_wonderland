@@ -321,6 +321,9 @@ export class Buttons {
         this.turboOnButton.on('pointerdown', () => {
             this.toggleTurbo(scene);
         });
+        
+            
+        this.turboAnimationEnable(false);
     }
 
     
@@ -1327,26 +1330,42 @@ export class Buttons {
     }
 
     private amplifyBet: SpineGameObject;
-    private amplifyBetAnimation(){
-        this.amplifyBet.setAlpha(1);
-        this.amplifyBet.animationState.setAnimation(0, 'animation', false);
-        this.amplifyBet.animationState.addListener({
-            complete: () => {
-                this.amplifyBet.setAlpha(0);
-            }
-        });
+    private amplifyBetIdle: SpineGameObject;
+    private amplifyBetAnimation(){        
+        if(this.amplifyBetIdle.alpha === 0){
+            this.amplifyBetIdle.setAlpha(1);
+            this.amplifyBetIdle.animationState.setAnimation(0, 'animation', true);
+            
+            this.amplifyBet.setAlpha(1);
+            this.amplifyBet.animationState.setAnimation(0, 'animation', false);
+            this.amplifyBet.animationState.addListener({
+                complete: () => {
+                    this.amplifyBet.setAlpha(0);
+                }
+            });
+        }
+        else{
+            this.amplifyBetIdle.setAlpha(0);
+            this.amplifyBetIdle.animationState.clearTracks();
+        }
     }
     
     private createBet(scene: GameScene): void {
         const width = this.isMobile ? Buttons.PANEL_WIDTH : Buttons.PANEL_WIDTH;
         const x = this.isMobile ? this.totalWinContainer.x * 1.3 : this.totalWinContainer.x + width * 1.5 + this.width * 0.01;
         const y = this.isMobile ? this.totalWinContainer.y : this.height * 0.83;
-        const cornerRadius = 15;
+        const cornerRadius = 10;
 
         const container = scene.add.container(x, y) as ButtonContainer;
-        container.setDepth(14);
+        // Desktop: original depth 4, Mobile: slightly higher
+        container.setDepth(this.isMobile ? 6 : 4);
         const betOptions = [0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.6, 2, 2.4, 2.8, 3.2, 3.6, 4, 5, 6, 8, 10, 14, 18, 24, 32 ,40, 60, 80, 100, 110 ,120, 130, 140, 150];
-        let selectedBetIndex = 15;
+        const indexInit = localStorage.getItem('bet') ? betOptions.indexOf(parseFloat(localStorage.getItem('bet') || '1')) : 5;
+        let selectedBetIndex = indexInit;
+        const EPS = 1e-6;
+        const findBetIndexByValue = (val: number) => betOptions.findIndex(v => Math.abs(v - val) < EPS);
+        const isAtMinValue = (val: number) => (val <= betOptions[0] + EPS);
+        const isAtMaxValue = (val: number) => (val >= betOptions[betOptions.length - 1] - EPS);
 
         // Create the background with gradient and border
         this.totalBet = scene.add.graphics();
@@ -1369,7 +1388,7 @@ export class Buttons {
 
         // Add bet value text under BET
         const betValueText = scene.add.text(width * 0.5, Buttons.PANEL_HEIGHT * 0.65, scene.gameData.currency + " " 
-            + (scene.gameData.bet).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }), {
+            + (scene.gameData.bet).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), {
             fontSize: '32px',
             color: '#FFFFFF',
             align: 'center',
@@ -1380,23 +1399,85 @@ export class Buttons {
         container.add(betValueText);
         betValueText.setOrigin(0.5, 0.5);
 
+        // Amplify_Bet spine animation inside bet panel
+        try {
+            const amplifyAnim = scene.add.spine(width * 0.5, Buttons.PANEL_HEIGHT * 0.5, 'Amplify_Bet', 'Amplify_Bet') as SpineGameObject;
+            amplifyAnim.setScale(this.isMobile ? 1.75 : 2.5);
+            container.addAt(amplifyAnim, 0); // above background, behind texts
+            amplifyAnim.setAlpha(0);
+
+            this.amplifyBet = amplifyAnim;
+            container.sendToBack(amplifyAnim);
+        } catch (_e) {
+        }
+
+        // Amplify_Bet_Idle spine animation inside bet panel
+        try {
+
+            const amplifyAnimIdle = scene.add.spine(width * 0.5, Buttons.PANEL_HEIGHT * 0.5, 'Amplify_Bet_Idle', 'Amplify_Bet_Idle') as SpineGameObject;
+            amplifyAnimIdle.setScale(2);
+            container.addAt(amplifyAnimIdle, 0);
+            amplifyAnimIdle.setAlpha(0);
+
+            this.amplifyBetIdle = amplifyAnimIdle;
+            container.sendToBack(this.amplifyBetIdle);
+        } catch (_e) {
+        }
+
         // plus button
         const plusBtn = scene.add.image(0, 0, 'plus') as ButtonImage;
-        plusBtn.setPosition(this.isMobile ? betValueText.x + 80 : width - 50, this.isMobile ? betValueText.y - 5 : Buttons.PANEL_HEIGHT * 0.65);
-        plusBtn.setScale(this.isMobile ? 0.25 : 0.3);
+        plusBtn.setPosition(betValueText.x + 90, betValueText.y - 5);
+        //plusBtn.setScale(this.isMobile ? 0.25 : 0.3);
         
         plusBtn.setInteractive().isButton = true;
-        plusBtn.setAlpha(0.8);
         container.add(plusBtn);
 
         // minus button
         const minusBtn = scene.add.image(0, 0, 'minus') as ButtonImage;
-        minusBtn.setPosition(this.isMobile ? betValueText.x - 80 : 50, this.isMobile ? plusBtn.y : Buttons.PANEL_HEIGHT * 0.65);
-        minusBtn.setScale(this.isMobile ? 0.25 : 0.3);
+        minusBtn.setPosition(betValueText.x - 90, plusBtn.y);
+        //minusBtn.setScale(this.isMobile ? 0.25 : 0.3);
 
         minusBtn.setInteractive().isButton = true;
-        minusBtn.setAlpha(0.8); 
         container.add(minusBtn);
+
+        // Helper to enable/disable bet nav buttons at min/max
+        const updateBetButtonsState = () => {
+            // derive from actual bet value to avoid stale index
+            const atMin = isAtMinValue(scene.gameData.bet);
+            const atMax = isAtMaxValue(scene.gameData.bet);
+
+            if (atMin) {
+                minusBtn.setAlpha(0.25);
+                (minusBtn as any).disableInteractive?.();
+            } else {
+                minusBtn.setAlpha(1);
+                (minusBtn as any).setInteractive?.();
+            }
+
+            if (atMax) {
+                plusBtn.setAlpha(0.25);
+                (plusBtn as any).disableInteractive?.();
+            } else {
+                plusBtn.setAlpha(1);
+                (plusBtn as any).setInteractive?.();
+            }
+        };
+
+        // Clickable middle area to open bet popup
+        const middleZone = scene.add.zone(width * 0.5, Buttons.PANEL_HEIGHT * 0.5, width * 0.5, Buttons.PANEL_HEIGHT * 0.6) as ButtonZone;
+        (middleZone as any).setInteractive().isButton = true;
+        middleZone.on('pointerdown', () => {
+            if(scene.gameData.isSpinning) return;
+            if(scene.gameData.isBonusRound) return;
+            scene.audioManager.UtilityButtonSFX.play();
+            selectedBetIndex = betOptions.indexOf(scene.gameData.bet);
+            if (selectedBetIndex === -1) { selectedBetIndex = 0; }
+            this.showBetPopup(scene, selectedBetIndex);
+        });
+        container.addAt(middleZone, 0);
+
+        // Initialize +/- button states
+        updateBetButtonsState();
 
         // bet container
         container.setScale(this.isMobile ? 0.5 : 1);
@@ -1404,47 +1485,56 @@ export class Buttons {
         // Add click handlers to show bet popup
         plusBtn.on('pointerdown', () => {
             if(scene.gameData.isSpinning) return;
+            if(scene.gameData.isBonusRound) return;
             scene.audioManager.UtilityButtonSFX.play();
 
-            selectedBetIndex++;
-            if(selectedBetIndex >= betOptions.length) {
-                selectedBetIndex = 0;
+            const idx = findBetIndexByValue(scene.gameData.bet);
+            if (idx >= 0 && idx < betOptions.length - 1) {
+                scene.audioManager.UtilityButtonSFX.play();
+                const nextIndex = idx + 1;
+                scene.gameData.bet = betOptions[nextIndex];
+                selectedBetIndex = nextIndex;
+                updateBetButtonsState();
+                Events.emitter.emit(Events.CHANGE_BET, {});
+                Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {});
             }
-            scene.gameData.bet = betOptions[selectedBetIndex];
-
-            this.showBetPopup(scene);
-            Events.emitter.emit(Events.CHANGE_BET, {});
-            Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {}); 
         });
 
         minusBtn.on('pointerdown', () => {
             if(scene.gameData.isSpinning) return;
-            scene.audioManager.UtilityButtonSFX.play();
+            if(scene.gameData.isBonusRound) return;
 
-            selectedBetIndex--;
-            if(selectedBetIndex < 0) {
-                selectedBetIndex = betOptions.length - 1;
+            const idx = findBetIndexByValue(scene.gameData.bet);
+            if (idx > 0) {
+                scene.audioManager.UtilityButtonSFX.play();
+                const prevIndex = idx - 1;
+                scene.gameData.bet = betOptions[prevIndex];
+                selectedBetIndex = prevIndex;
+                updateBetButtonsState();
+                Events.emitter.emit(Events.CHANGE_BET, {});
+                Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {});
             }
-            scene.gameData.bet = betOptions[selectedBetIndex];
-
-            this.showBetPopup(scene);
-            Events.emitter.emit(Events.CHANGE_BET, {});
-            Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {}); 
         });
 
         // Update bet value when it changes
         Events.emitter.on(Events.CHANGE_BET, () => {
-            const totalBet = (scene.gameData.bet).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-            betValueText.setText(/*scene.gameData.currency +*/ totalBet);
+            const totalBet = (scene.gameData.bet).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            betValueText.setText(scene.gameData.currency + " " + totalBet);
+            localStorage.setItem('bet', scene.gameData.bet.toString());
+            updateBetButtonsState();
         });
 
-        Events.emitter.on(Events.ENHANCE_BET_TOGGLE, () => {
+        Events.emitter.on(Events.ENHANCE_BET_TOGGLE, (isBuy?:boolean) => {
             if(scene.gameData.doubleChanceEnabled) {
-                betValueText.setText(/*scene.gameData.currency +*/ (scene.gameData.bet * 1.25).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
+                betValueText.setText(scene.gameData.currency + (scene.gameData.bet * 1.25).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
             } else {
-                betValueText.setText(/*scene.gameData.currency +*/ (scene.gameData.bet).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
+                betValueText.setText(scene.gameData.currency + (scene.gameData.bet).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
             }
         });
+
+        scene.gameData.bet = localStorage.getItem('bet') ? parseFloat(localStorage.getItem('bet') || '1') : 1;
+        localStorage.setItem('bet', scene.gameData.bet.toString());
+        try { (updateBetButtonsState as any)(); } catch (_e) {}
 
         container.name = 'betContainer';
         //this.buttonContainer.add(container);
@@ -1456,10 +1546,10 @@ export class Buttons {
         const padding = 32;
         // Create bet background
         const betBg = scene.add.graphics();
-        betBg.fillStyle(0x333333, 0.95);
-        betBg.fillRoundedRect(0, 0, 402 + padding * 2, 645 + padding * 2, 16);
-        betBg.lineStyle(4, 0x66D449);
-        betBg.strokeRoundedRect(0, 0, 402 + padding * 2, 645 + padding * 2, 16);
+        betBg.fillStyle(0x000000, 0.8);
+        betBg.fillRoundedRect(0, 0, 403 + padding * 1.5, 912, 16);
+        betBg.lineStyle(0, 0x66D449);
+        betBg.strokeRoundedRect(0, 0, 403 + padding * 1.5, 912, 16);
         betContainer.add(betBg);
 
         // Title
@@ -1548,25 +1638,124 @@ export class Buttons {
                 buttonBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
                 selectedButton = buttonContainer;
                 selectedBetIndex = index;
-
-                // Update total bet display
-                scene.gameData.bet = betOptions[selectedBetIndex];
-                Events.emitter.emit(Events.CHANGE_BET, {});
-                Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {}); 
+                try { (updatePopupBetUI as any)?.(); } catch (_e) {}
             });
 
             betContainer.add(buttonContainer);
             return buttonContainer;
         });
 
+        // Popup Bet control box (minus | value | plus)
+        const gridBottomY = (buttons[buttons.length - 1] as any).y + buttonHeight;
+        const popupBetLabel = scene.add.text(padding, gridBottomY + spacing * 1.5, 'BET', {
+            fontSize: '24px',
+            color: '#FFFFFF',
+            fontFamily: 'Poppins'
+        });
+        betContainer.add(popupBetLabel);
+
+        const popupBetBoxY = popupBetLabel.y + popupBetLabel.height + spacing / 2;
+        const popupBetBoxWidth = 402;
+        const popupBetBoxHeight = 60;
+        const popupBetBox = scene.add.graphics();
+        popupBetBox.fillStyle(0x333333, 0.95);
+        popupBetBox.lineStyle(1, 0x66D449, 1);
+        popupBetBox.fillRoundedRect(padding, popupBetBoxY, popupBetBoxWidth, popupBetBoxHeight, 10);
+        popupBetBox.strokeRoundedRect(padding, popupBetBoxY, popupBetBoxWidth, popupBetBoxHeight, 10);
+        betContainer.add(popupBetBox);
+
+        const popupBetValueY = popupBetBoxY + popupBetBoxHeight / 2;
+        const popupMinusBtn = scene.add.image(padding + 30, popupBetValueY, 'minus') as ButtonImage;
+        //popupMinusBtn.setScale(0.35);
+        (popupMinusBtn as any).setInteractive?.();
+        (popupMinusBtn as any).isButton = true;
+        betContainer.add(popupMinusBtn);
+
+        const popupBetValue = scene.add.text(padding + popupBetBoxWidth / 2, popupBetValueY,
+            scene.gameData.currency + ' ' + betOptions[selectedBetIndex].toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), {
+            fontSize: '28px',
+            color: '#FFFFFF',
+            fontFamily: 'Poppins',
+            fontStyle: 'bold',
+            align: 'center'
+        }) as ButtonText;
+        popupBetValue.setOrigin(0.5, 0.5);
+        betContainer.add(popupBetValue);
+
+        const popupPlusBtn = scene.add.image(padding + popupBetBoxWidth - 30, popupBetValueY, 'plus') as ButtonImage;
+        //popupPlusBtn.setScale(0.4);
+        (popupPlusBtn as any).setInteractive?.();
+        (popupPlusBtn as any).isButton = true;
+        betContainer.add(popupPlusBtn);
+
+        const updatePopupBetUI = () => {
+            popupBetValue.setText(
+                scene.gameData.currency + ' ' + betOptions[selectedBetIndex].toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            );
+            // Update grid highlight to match selectedBetIndex
+            if (selectedButton) {
+                const prevBg = selectedButton.list[0] as GameObjects.Graphics;
+                prevBg.clear();
+                prevBg.fillStyle(0x181818, 1);
+                prevBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
+            }
+            selectedButton = buttons[selectedBetIndex];
+            if (selectedButton) {
+                const bg = selectedButton.list[0] as GameObjects.Graphics;
+                bg.clear();
+                bg.fillStyle(0x66D449, 1);
+                bg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
+            }
+            // Enable/disable +/- at bounds (local selection only)
+            const atMin = selectedBetIndex <= 0;
+            const atMax = selectedBetIndex >= betOptions.length - 1;
+            if (atMin) {
+                (popupMinusBtn as any).setAlpha?.(0.3);
+                (popupMinusBtn as any).disableInteractive?.();
+            } else {
+                (popupMinusBtn as any).setAlpha?.(0.8);
+                (popupMinusBtn as any).setInteractive?.();
+            }
+            if (atMax) {
+                (popupPlusBtn as any).setAlpha?.(0.3);
+                (popupPlusBtn as any).disableInteractive?.();
+            } else {
+                (popupPlusBtn as any).setAlpha?.(0.8);
+                (popupPlusBtn as any).setInteractive?.();
+            }
+        };
+        updatePopupBetUI();
+
+        // Keep bet popup in sync when outside plus/minus changes the bet
+        Events.emitter.on(Events.CHANGE_BET, () => {
+            selectedBetIndex = betOptions.indexOf(scene.gameData.bet);
+            if (selectedBetIndex === -1) { selectedBetIndex = 0; }
+            try { (updatePopupBetUI as any)(); } catch (_e) {}
+        });
+
+        popupMinusBtn.on('pointerdown', () => {
+            if (selectedBetIndex > 0) {
+                scene.audioManager.UtilityButtonSFX.play();
+                selectedBetIndex -= 1;
+                updatePopupBetUI();
+            }
+        });
+        popupPlusBtn.on('pointerdown', () => {
+            if (selectedBetIndex < betOptions.length - 1) {
+                scene.audioManager.UtilityButtonSFX.play();
+                selectedBetIndex += 1;
+                updatePopupBetUI();
+            }
+        });
+
         const btnWidth = 402;
         const btnHeight = 62;
-        const betBtnBg = scene.add.image(btnWidth/2 + padding, 702 - padding * 2, 'greenLongBtn') as ButtonImage;
+        const betBtnBg = scene.add.image(btnWidth/2 + padding, 912 - padding * 4, 'greenLongBtn') as ButtonImage;
         betBtnBg.displayWidth = btnWidth;
         betBtnBg.displayHeight = btnHeight;
         betContainer.add(betBtnBg);
         
-        const betButtonText = scene.add.text(btnWidth/2 + padding, 702 - padding * 2, 'CONFIRM', {
+        const betButtonText = scene.add.text(btnWidth/2 + padding, 912 - padding * 4, 'CONFIRM', {
             fontSize: '28px',
             color: '#000000',
             fontStyle: 'bold',
@@ -1577,7 +1766,18 @@ export class Buttons {
 
         (betBtnBg as any as ButtonImage).setInteractive().isButton = true;
         betBtnBg.on('pointerdown', () => {
-            if (selectedBetIndex > 0) {
+
+            if(scene.gameData.isSpinning) {
+                scene.gameData.bet = scene.gameData.apiBet;
+                Events.emitter.emit(Events.CHANGE_BET, {});
+                Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {}); 
+            }
+            else{
+                // Update total bet display
+                scene.gameData.bet = betOptions[selectedBetIndex];
+                Events.emitter.emit(Events.CHANGE_BET, {});
+                Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {}); 
+            }
                 scene.audioManager.UtilityButtonSFX.play();
 
                 scene.tweens.add({
@@ -1586,6 +1786,7 @@ export class Buttons {
                     duration: 200,
                     ease: 'Cubic.easeIn',
                     onComplete: () => {
+                        
                         betContainer.setVisible(false);
                         betContainer.list.forEach(item => {
                             if(item instanceof GameObjects.Graphics && item.name === 'betMask') {
@@ -1597,52 +1798,129 @@ export class Buttons {
                     }
                 });
             }
+        );
+
+
+        // Set initial selected button based on current bet
+        const currentBetIndex = betOptions.indexOf(scene.gameData.bet);
+        const initialIndex = currentBetIndex !== -1 ? currentBetIndex : 0;
+        selectedButton = buttons[initialIndex];
+        
+        // Reset all buttons to unselected state first
+        buttons.forEach((buttonContainer, index) => {
+            const buttonBg = buttonContainer.list[0] as GameObjects.Graphics;
+            buttonBg.clear();
+            buttonBg.fillStyle(0x181818, 1);
+            buttonBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
         });
+        
+        // Update the visual state of the initial selected button
+        if (selectedButton) {
+            const initialBg = selectedButton.list[0] as GameObjects.Graphics;
+            initialBg.clear();
+            initialBg.fillStyle(0x66D449, 1);
+            initialBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
+        }
 
+        // Sync selection highlight with global bet changes while popup is open
+        const setPopupSelectionByBet = () => {
+            const idx = betOptions.indexOf(scene.gameData.bet);
+            if (idx === -1) { return; }
+            selectedBetIndex = idx;
+            // Reset all to unselected
+            buttons.forEach((buttonContainer) => {
+                const bg = buttonContainer.list[0] as GameObjects.Graphics;
+                bg.clear();
+                bg.fillStyle(0x181818, 1);
+                bg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
+            });
+            // Highlight the selected
+            const target = buttons[selectedBetIndex];
+            if (target) {
+                const bg = target.list[0] as GameObjects.Graphics;
+                bg.clear();
+                bg.fillStyle(0x66D449, 1);
+                bg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
+            }
+        };
 
-        // Set initial selected button
-        selectedButton = buttons[0];
+        Events.emitter.on(Events.CHANGE_BET, () => {
+            if (this.betContainer && this.betContainer.visible) {
+                setPopupSelectionByBet();
+            }
+        });
 
         // Position the container
         betContainer.setPosition(
-            this.isMobile ? scene.scale.width / 2 - 466 * 0.38: scene.scale.width * 0.5 - 720 / 3,
-            this.isMobile ? scene.scale.height / 2 - 709 * 0.42  : scene.scale.height * 0.5 - 420);
+            this.isMobile ? 0 : scene.scale.width * 0.5 - 720 / 3,
+            this.isMobile ? scene.scale.height - 912 : scene.scale.height * 0.5 - 420);
+        betContainer.setScale(0.95, 1);
         betContainer.setVisible(false);
 
         this.betContainer = betContainer;
+        this.betContainer_Y = this.betContainer.y;
 
         // Store references
     }
 
-    public showBetPopup(scene: GameScene): void {
+    public showBetPopup(scene: GameScene, selectedBetIndex?: number): void {
         if (this.betContainer) {
-            
-            const mask = scene.add.graphics();
-            mask.name = 'betMask';
-            mask.fillStyle(0x000000, 0.7); // Black with 0.7 opacity
-            mask.fillRect(0, 0, scene.scale.width, scene.scale.height);
-            mask.setInteractive(new Geom.Rectangle(0, 0, scene.scale.width, scene.scale.height), Geom.Rectangle.Contains);
-            mask.on('pointerdown', () => this.hideBetPopup(scene));
-            this.betContainer.add(mask);
-            
-            mask.setScale(this.isMobile ? 2.25 : 1, this.isMobile ? 2.5 : 1);
-            mask.setPosition(
-                this.isMobile ? -scene.scale.width / 2 : -this.betContainer.x,
-                this.isMobile ? -scene.scale.height : -this.betContainer.y); // Adjust position relative to container
-            this.betContainer.sendToBack(mask); // Ensure mask is behind other elements
-            
             if(this.betContainer.visible === false) {
                 this.betContainer.setVisible(true);
                 this.betContainer.alpha = 0;
-                    
                 scene.tweens.add({
                     targets: this.betContainer,
                     alpha: { from: 0, to: 1 },
+                    y: { from:  this.betContainer_Y + 1000, to: this.betContainer_Y },
                     duration: 1000,
-                    ease: 'Back.easeOut'
+                    ease: "Expo.easeOut",
+                    onComplete: () => {
+                        const mask = scene.add.graphics();
+                        mask.name = 'betMask';
+                        mask.fillStyle(0x000000, 0.7); // Black with 0.7 opacity
+                        mask.fillRect(0, 0, scene.scale.width, scene.scale.height);
+                        mask.setInteractive(new Geom.Rectangle(0, 0, scene.scale.width, scene.scale.height), Geom.Rectangle.Contains);
+                        mask.on('pointerdown', () => this.hideBetPopup(scene));
+                        this.betContainer.add(mask);
+                        
+                        mask.setScale(this.isMobile ? 2.25 : 1, this.isMobile ? 2.5 : 1);
+                        mask.setPosition(
+                            this.isMobile ? -scene.scale.width / 2 : -this.betContainer.x,
+                            this.isMobile ? -scene.scale.height : -this.betContainer_Y); // Adjust position relative to container
+                        this.betContainer.sendToBack(mask); // Ensure mask is behind other elements
+                        scene.tweens.add({
+                            targets: mask,
+                            alpha: {from: 0, to: 0.01},
+                            duration: 1000
+                        });
+                    }
                 });
             }
-                        Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {}); 
+            
+            // Automatically click the button corresponding to current bet when popup opens
+            const betOptions = [0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.6, 2, 2.4, 2.8, 3.2, 3.6, 4, 5, 6, 8, 10, 14, 18, 24, 32 ,40, 60, 80, 100, 110 ,120, 130, 140, 150];
+            const currentBetIndex = selectedBetIndex !== undefined ? selectedBetIndex : betOptions.indexOf(scene.gameData.bet);
+            
+            if (currentBetIndex !== -1 && this.betContainer.list.length > 0) {
+                // Find the button container for the current bet
+                const buttonContainers = this.betContainer.list.filter(item => 
+                    item instanceof GameObjects.Container && 
+                    item !== this.betContainer && 
+                    (item as any).list && 
+                    (item as any).list.length > 0 &&
+                    (item as any).list[0] instanceof GameObjects.Graphics
+                ) as GameObjects.Container[];
+                
+                if (currentBetIndex < buttonContainers.length) {
+                    // Simulate clicking the button for the current bet
+                    const targetButton = buttonContainers[currentBetIndex];
+                    if (targetButton && (targetButton as any).emit) {
+                        (targetButton as any).emit('pointerdown');
+                    }
+                }
+            }
+            
+            Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {}); 
         }
     }
 
@@ -1651,8 +1929,9 @@ export class Buttons {
            scene.tweens.add({
                targets: this.betContainer,
                alpha: 0,
-               duration: 200,
-               ease: 'Back.easeIn',
+               y: { from: this.betContainer_Y, to: this.betContainer_Y + scene.scale.height},
+               duration: 1000,
+               ease: 'Expo.easeInOut',
                onComplete: () => {
                    this.betContainer.setVisible(false);
                    this.betContainer.list.forEach(item => {
@@ -1664,69 +1943,44 @@ export class Buttons {
            });
        }
     }
-
+    
     private createBuyFeature(scene: GameScene): void {
         // Elliptical buy feature button in upper left
         const x = this.isMobile ? this.width * 0.505 : this.width * 0.15;
         const y = this.isMobile ? this.height * 0.75 : this.height * 0.13;
 
-        const ellipseWidth = 277;
-        const ellipseHeight = 114;
         const container = scene.add.container(x, y) as ButtonContainer;
 
         // Button background
-        let buttonBg : GameObjects.Image | GameObjects.Graphics;
-        if(this.isMobile){
-            buttonBg = scene.add.image(0, 0, 'buyFeature') as ButtonImage;
-            buttonBg.setInteractive();
-            (buttonBg as any).isButton = true;
-            container.add(buttonBg);
-        } else {
-            buttonBg = scene.add.graphics();
-            buttonBg.fillStyle(0x181818, 0.95);
-            buttonBg.lineStyle(2, 0x66D449, 1);
-            buttonBg.strokeRoundedRect(-ellipseWidth/2, -ellipseHeight/2, ellipseWidth, ellipseHeight, ellipseHeight/2);
-            buttonBg.fillRoundedRect(-ellipseWidth/2, -ellipseHeight/2, ellipseWidth, ellipseHeight, ellipseHeight/2);
-            buttonBg.setInteractive();
-            (buttonBg as any).isButton = true;
-            container.add(buttonBg);
-        }
-        // BUY FEATURE text
+            this.buyFeatureButton = scene.add.image(0, 0, 'buyFeature') as ButtonImage;
+          
+            this.buyFeatureButton.setInteractive(new Geom.Rectangle(
+                0,
+                0,
+                this.buyFeatureButton.width,
+                this.buyFeatureButton.height
+            ), Geom.Rectangle.Contains);
+            (this.buyFeatureButton as any).isButton = true;
+            container.add(this.buyFeatureButton);
         
-        const buttonText = scene.add.text(0, -24, 'BUY FEATURE', {
+        this.buyFeatureButtonText = scene.add.text(0, -24, 'BUY FEATURE', {
         }) as ButtonText;
-        buttonText.setOrigin(0.5, 0.5);
-        if(this.isMobile){
-            buttonText.setScale(0.5);
-            buttonText.setPosition(0, -12);
-            buttonText.setStyle({
+        this.buyFeatureButtonText.setOrigin(0.5, 0.5);
+            this.buyFeatureButtonText.setScale(0.5);
+            this.buyFeatureButtonText.setPosition(0, -12);
+            this.buyFeatureButtonText.setStyle({
                 fontSize: '24px',
                 color: '#FFFFFF',
                 fontFamily: 'Poppins',
                 fontStyle: 'bold',
                 align: 'center',
             });
-        }
-        else{
-            buttonText.setStyle({
-                fontSize: '24px',
-                color: '#FFFFFF',
-                fontFamily: 'Poppins',
-                fontStyle: 'bold',
-                align: 'center',
-                letterSpacing: 1.5,
-                stroke: '#181818',
-                strokeThickness: 2,
-                shadow: { offsetX: 0, offsetY: 2, color: '#000000', blur: 4, fill: true }
-            })  
-        }
-        container.add(buttonText);
+        
+        container.add(this.buyFeatureButtonText);
 
         // Price text (large, green)
         const price = scene.gameData.getBuyFeaturePrice();
-        const priceText = this.isMobile ? 
-        scene.gameData.currency + ' ' + price.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-        : price.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        const priceText = scene.gameData.currency + ' ' + price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         this.buyFeaturePriceText = scene.add.text(0, 24,  priceText, {
             fontSize: '42px',
             color: '#3FFF0D',
@@ -1735,119 +1989,18 @@ export class Buttons {
             fontStyle: 'bold'
         }) as ButtonText;
         this.buyFeaturePriceText.setOrigin(0.5, 0.5);
-        if(this.isMobile){
+        
             this.buyFeaturePriceText.setScale(0.4);
             this.buyFeaturePriceText.setPosition(0, 8);
             this.buyFeaturePriceText.setColor('#FFFFFF');
-        }
+            
         container.add(this.buyFeaturePriceText);
 
         container.name = 'buyFeatureContainer';
         this.buttonContainer.add(container);
         this.buttonContainer.sendToBack(container);
 
-        // Create the popup
-        const width = 573;
-        const height = 369;
-        const popupX = this.isMobile ? scene.scale.width / 2 - width / 4 : scene.scale.width / 2 - width / 2; 
-        const popupY = this.isMobile ? scene.scale.height / 2 - height / 4 : scene.scale.height / 2 - height / 2;
-
-        const popupContainer = scene.add.container(popupX, popupY) as ButtonContainer;
-        popupContainer.setDepth(1000);
-        popupContainer.setVisible(false);
-
-        // Popup background
-        const bg = scene.add.image(
-            this.isMobile ? scene.scale.width * 0.65 : width/2,
-            this.isMobile ? scene.scale.height / 5 : height/2,
-            'buyFeatBG') as ButtonImage;
-        bg.setOrigin(0.5, 0.5);
-        popupContainer.add(bg);
-        //if ((scene.sys.game.renderer as any).pipelines) {
-        //    bg.setPipeline('BlurPostFX');
-        //}
-
-        
-        const freeSpinDisplay = scene.add.image(width / 2, 46, 'freeSpinDisplay');
-        freeSpinDisplay.displayWidth = 200;
-        freeSpinDisplay.displayHeight = 107;
-        freeSpinDisplay.setOrigin(0.5, 0.25);
-        freeSpinDisplay.alpha = 1
-        popupContainer.add(freeSpinDisplay);
-
-        // Main text
-        const buyText = scene.add.text(width / 2, 144, '', {
-            color: '#FFFFFF',
-            fontFamily: 'Poppins',
-            fontStyle: 'bold',
-            align: 'center'
-        }) as ButtonText;
-        buyText.setOrigin(0.5, 0.25);
-        popupContainer.add(buyText);
-
-        const btnWidth = 127;
-        const btnHeight = 63;
-        // Buy and Close buttons
-        const buyBtnBg = scene.add.image(width / 2 - btnWidth/2 - 20 , height - 48 - btnHeight/2, 'greenBtn') as ButtonImage;
-        buyBtnBg.displayWidth = btnWidth;
-        buyBtnBg.displayHeight = btnHeight;
-        buyBtnBg.setOrigin(0.5, 0.5);
-        buyBtnBg.alpha = 1
-        popupContainer.add(buyBtnBg);
-        
-        const buyBtnText = scene.add.text(width / 2 - btnWidth/2 - 20, height - 48 - btnHeight/2, 'Buy', {
-            fontSize: '36px',
-            color: '#FFFFFF',
-            fontFamily: 'Poppins',
-            fontStyle: 'bold',
-            align: 'center'
-        }) as ButtonText;
-        buyBtnText.setOrigin(0.5, 0.5);
-        popupContainer.add(buyBtnText);
-        
-        const closeBtnBg = scene.add.image(width / 2 + btnWidth/2 + 20, height - 48 - btnHeight/2, 'greenBtn') as ButtonImage;
-        closeBtnBg.displayWidth = btnWidth;
-        closeBtnBg.displayHeight = btnHeight;
-        closeBtnBg.setOrigin(0.5, 0.5);
-        closeBtnBg.alpha = 0;
-        popupContainer.add(closeBtnBg);
-
-        const closeBtnText = scene.add.text(width / 2 + btnWidth/2 + 20, height - 48 - btnHeight/2, 'Close', {
-            fontSize: '32px',
-            color: '#FFFFFF',
-            fontFamily: 'Poppins',
-            fontStyle: 'bold'
-        }) as ButtonText;
-        closeBtnText.setOrigin(0.5, 0.5);
-        popupContainer.add(closeBtnText);
-        popupContainer.setScale(this.isMobile ? 0.5 : 1);
-
-        buyBtnBg.setInteractive().isButton = true;
-        buyBtnBg.on('pointerdown', () => {
-            // Set up for guaranteed scatter trigger
-            // api buy feature, check balance
-            
-            // Reset any existing state
-            scene.gameData.isSpinning = false;
-            scene.gameData.totalWin = 0;
-            Events.emitter.emit(Events.WIN, {});
-            
-            // Hide the popup
-            popupContainer.setVisible(false);
-            
-            // Trigger the spin without deducting bet amount
-            Events.emitter.emit(Events.SPIN, {
-                currentRow: scene.gameData.currentRow,
-                symbols: scene.gameData.slot.values,
-                isBuyFeature: true  // Add flag to indicate this is a buy feature spin
-            });
-            
-            popupContainer.list.forEach(item => {
-                if(item instanceof GameObjects.Graphics && item.name === 'buyFeatureMask') {
-                    item.destroy();
-                }
-            });
-        });
+        // Popup is now handled by BuyFeaturePopup component
 
         // Function to update button state
         const updateButtonState = () => {
@@ -1857,84 +2010,34 @@ export class Buttons {
                 scene.gameData.isBonusRound;
 
             if (shouldDisable) {
-                buttonBg.setAlpha(0.5);
                 this.buyFeaturePriceText.setAlpha(0.5);
-                    buttonText.setAlpha(0.5);
             } else {
-                buttonBg.setAlpha(1);
                 this.buyFeaturePriceText.setAlpha(1);
-                buttonText.setAlpha(1);
             }
         };
 
         // Show popup when buy feature is pressed
         const showBuyFeaturePopup = () => {
-            // Don't show if spinning, autoplay is active, or in bonus round
-            if (scene.gameData.isSpinning || 
-                scene.autoplay.isAutoPlaying || 
-                scene.gameData.isBonusRound) return;
             
+            scene.audioManager.UtilityButtonSFX.play();
+            
+            Events.emitter.emit(Events.REMOVE_ENHANCE_BET, {});
+
             // Close autoplay settings if open
             if (this.autoplayPopup && this.autoplayPopup.visible) {
                 this.autoplayPopup.setVisible(false);
             }
-            const cost = scene.gameData.getBuyFeaturePrice();
-            buyText.setText(`Buy 10 Free Spin\nAt the cost of $${cost}?`);
-            buyText.setStyle({
-                color: '#FFFFFF',
-                fontFamily: 'Poppins',
-                fontSize: '48px',
-                fontStyle: 'bold',
-                fontWeight: '700',
-                align: 'center',
-                lineHeight: 'normal'
-            });
             
-            
-            const mask = scene.add.graphics();
-            mask.name = 'buyFeatureMask';
-            mask.fillStyle(0x000000, 0.7); // Black with 0.7 opacity
-            mask.fillRect(0, 0, scene.scale.width, scene.scale.height);
-            mask.setInteractive(new Geom.Rectangle(0, 0, scene.scale.width, scene.scale.height), Geom.Rectangle.Contains);
-            mask.on('pointerdown', () => {
-                popupContainer.setVisible(false);
-                popupContainer.list.forEach(item => {
-                    if(item instanceof GameObjects.Graphics && item.name === 'buyFeatureMask') {
-                        item.destroy();
-                    }
-                });
-            });
-            mask.setScale(this.isMobile ? 2.5 : 1);
-            popupContainer.add(mask);
-            mask.setPosition(
-                this.isMobile ? -popupContainer.x * 3 : -popupContainer.x,
-                this.isMobile ? -popupContainer.y * 2 : -popupContainer.y); // Adjust position relative to container
-            popupContainer.sendToBack(mask); // Ensure mask is behind other elements
-            
-
-            popupContainer.setVisible(true);
-            popupContainer.alpha = 0;
-            scene.tweens.add({
-                targets: popupContainer,
-                alpha: { from: 0, to: 1 },
-                duration: 200,
-                ease: 'Cubic.easeOut'
-            });
+            // Show the new buy feature popup
+            if (scene.buyFeaturePopup) {
+                scene.buyFeaturePopup.show(scene); 
+            }
         };
 
         // Add click handlers
-        buttonBg.on('pointerdown', showBuyFeaturePopup);
+        this.buyFeatureButton?.on('pointerdown', showBuyFeaturePopup);
         
-        closeBtnBg.setInteractive().isButton = true;
-        
-        closeBtnBg.on('pointerdown', () => {
-            popupContainer.setVisible(false);
-            popupContainer.list.forEach(item => {
-                if(item instanceof GameObjects.Graphics && item.name === 'buyFeatureMask') {
-                    item.destroy();
-                }
-            });
-        });
+        // Close button is now handled by BuyFeaturePopup component
 
         // Listen for spin state changes
         Events.emitter.on(Events.SPIN_ANIMATION_START, updateButtonState);
@@ -1949,12 +2052,9 @@ export class Buttons {
 
     updateBuyFeaturePrice(scene: GameScene, newPrice: number) {
 		if (this.buyFeaturePriceText) {
-			this.buyFeaturePriceText.setText(this.isMobile ? 
-            scene.gameData.currency + ' ' + newPrice.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-            : newPrice.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
+			this.buyFeaturePriceText.setText(scene.gameData.currency + ' ' + newPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 		}
 	}
-
 
     private createDoubleFeature(scene: GameScene): void {
         const x = this.width * 0.73;

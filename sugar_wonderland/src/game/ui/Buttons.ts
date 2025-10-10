@@ -1681,7 +1681,8 @@ export class Buttons {
                         text2.setText(scene.gameData.currency + " " + balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })); 
 
                         // console.log(chalk.yellowBright.bold("refreshing balance"), data.data.balance);
-                    scene.gameData.balance = parseFloat(balance);
+                    scene.gameData.balance = balance;
+                    console.log("balance", balance);
                 });
             } catch(error) {
                 scene.gameData.debugLog("error updating balance " + error);
@@ -1936,7 +1937,7 @@ export class Buttons {
                 
                 // text1.setText('TOTAL WIN');
                 // if(!scene.gameData.isBonusRound){
-                text2.setText(`${scene.gameData.currency}` + (0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                // text2.setText(`${scene.gameData.currency}` + (0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
                 //     text1.setText('WIN');
                 // }
             //}
@@ -2520,27 +2521,7 @@ export class Buttons {
                     alpha: { from: 0, to: 1 },
                     y: { from:  this.betContainer_Y + 1000, to: this.betContainer_Y },
                     duration: 1000,
-                    ease: "Expo.easeOut",
-                    onStart: () => {
-                        // const mask = scene.add.graphics();
-                        // mask.name = 'betMask';
-                        // mask.fillStyle(0x000000, 0.7); // Black with 0.7 opacity
-                        // mask.fillRect(0, 0, scene.scale.width, scene.scale.height);
-                        // mask.setInteractive(new Geom.Rectangle(0, 0, scene.scale.width, scene.scale.height), Geom.Rectangle.Contains);
-                        // mask.on('pointerdown', () => this.hideBetPopup(scene));
-                        // this.betContainer.add(mask);
-                        
-                        // mask.setScale(this.isMobile ? 2.25 : 1, this.isMobile ? 2.5 : 1);
-                        // mask.setPosition(
-                        //     this.isMobile ? -scene.scale.width / 2 : -this.betContainer.x,
-                        //     this.isMobile ? -scene.scale.height : -this.betContainer_Y); // Adjust position relative to container
-                        // this.betContainer.sendToBack(mask); // Ensure mask is behind other elements
-                        // scene.tweens.add({
-                        //     targets: mask,
-                        //     alpha: {from: 0, to: 0.7},
-                        //     duration: 1000
-                        // });
-                    }
+                    ease: "Expo.easeOut"
                 });
             }
             
