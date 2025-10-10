@@ -455,8 +455,8 @@ export class SlotMachine {
             //await this.playApiFreeSpin(scene);
             return;
         }
-
-        //Events.emitter.emit(Events.UPDATE_BALANCE);
+        
+        Events.emitter.emit(Events.GET_BALANCE);
 
         this.cleanupAloneSymbols();
         let newValues: number[][] = [];
@@ -466,8 +466,6 @@ export class SlotMachine {
         const betAmount =  scene.gameData.bet;
         const isEnhancedBet = data.isEnhancedBet ?? scene.gameData.doubleChanceEnabled;
         
-        // if(isBuyFeature || isEnhancedBet)
-        //     console.log('[BUY FEATURE] isBuyFeature:', isBuyFeature, 'betAmount sent:', betAmount, 'isEnhancedBet:', isEnhancedBet);;
         
         const result = await scene.gameAPI.doSpin(betAmount, isBuyFeature, isEnhancedBet);
 
@@ -481,19 +479,16 @@ export class SlotMachine {
         console.log("result", result);
         // console.log("Tumbles", result.slot.tumbles);
 
-        let toBet = result.bet;
-        if(data.isBuyFeature){
+        let toBet = parseFloat(result.bet);
+        if(isBuyFeature){
             toBet *= 100;
         }
-         else if(data.isEnhancedBet){
+         else if(isEnhancedBet){
             toBet *= 1.25;
         }
+        console.log("toBet", toBet, isBuyFeature, isEnhancedBet);
 
         Events.emitter.emit(Events.UPDATE_FAKE_BALANCE, toBet, 0); // ( reduce , increase )
-        
-        // if(result.slot.freeSpin?.items?.length > 0){
-        //     console.log(chalk.bgGreenBright.black.bold(' [BUY FEATURE] triggered freeSpin '), result.slot.freeSpin);
-        // }
         
         // If backend returned free spin sequence, store it to drive the bonus round from API data
         const apiFs = result?.slot?.freeSpin?.items || result?.slot?.freeSpins?.items || [];
@@ -1138,6 +1133,14 @@ export class SlotMachine {
             // Always ensure spinning state is reset
             scene.gameData.isSpinning = false;
 
+            let totalWin = 0;
+            SymbolsIn.forEach(v=>{
+                totalWin += v.win;
+            })
+            if(!scene.gameData.isBonusRound){
+                Events.emitter.emit(Events.UPDATE_BALANCE, totalWin);
+            }
+
             if (scene.gameData.useApiFreeSpins) {
                 Events.emitter.emit(Events.FREE_SPIN_TOTAL_WIN);
             }
@@ -1146,7 +1149,6 @@ export class SlotMachine {
             // Immediately re-enable buttons when spinning completes
             if (scene.buttons && scene.buttons.enableButtonsVisually) {
                 scene.buttons.enableButtonsVisually(scene);
-                Events.emitter.emit(Events.GET_BALANCE);
             }
         }
     }

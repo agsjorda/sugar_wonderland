@@ -105,9 +105,6 @@ export class Game extends Scene {
 
             // Initialize fade-in
             this.initFadeIn();
-            
-            // Initialize balance
-            Events.emitter.emit(Events.UPDATE_BALANCE);
 
             // Request fullscreen on load
             this.requestFullscreen();

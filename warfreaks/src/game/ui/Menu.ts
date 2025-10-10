@@ -1,10 +1,11 @@
 import { Scene, GameObjects, Tweens } from 'phaser';
 import { Geom } from 'phaser';
-import { GameData, Slot } from '../scenes/components/GameData';
+import { GameData } from '../scenes/components/GameData';
+import { SymbolContainer } from '../scenes/components/SymbolContainer';
 import { AudioManager } from '../scenes/components/AudioManager';
 import { SlotMachine } from '../scenes/components/SlotMachine';
 import { Autoplay } from '../scenes/components/Autoplay';
-import { SymbolContainer } from '../scenes/components/SymbolContainer';
+import { SetupPoseBoundsProvider, SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 
 interface ButtonBase {
     isButton: boolean;
@@ -22,9 +23,8 @@ interface GameScene extends Scene {
 }
 
 export class Menu {
-    private menuContainer: ButtonContainer;
+    private menuContainer?: ButtonContainer;
     private contentArea: GameObjects.Container;
-    private isMobile: boolean = false;
     private width: number = 0;
     private height: number = 0;
     private menuEventHandlers: Function[] = [];
@@ -32,9 +32,9 @@ export class Menu {
     private isDraggingSFX: boolean = false;
     private scene: GameScene;
 
-    private padding = 20;
-    private contentWidth = 1200;
-    private viewWidth = 1329;
+    private padding = 10;
+    private contentWidth = 488;
+    private viewWidth = 488;
     private yPosition = 0;
     private scrollView: GameObjects.Container;
     private contentContainer: GameObjects.Container;
@@ -47,6 +47,15 @@ export class Menu {
     private historyContent: GameObjects.Container;
     private settingsContent: GameObjects.Container;
     private activeTabIndex: number = 0;
+
+    // History pagination state
+    private historyCurrentPage: number = 1;
+    private historyTotalPages: number = 1;
+    private historyPageLimit: number = 11;
+    private historyIsLoading: boolean = false;
+    private historyHeaderContainer?: GameObjects.Container;
+    private historyRowsContainer?: GameObjects.Container;
+    private historyPaginationContainer?: GameObjects.Container;
 
     protected titleStyle = {
         fontSize: '24px',
@@ -65,20 +74,77 @@ export class Menu {
 
 
     constructor() {
-        this.isMobile = this.isMobileDevice();
     }
 
-    preload(){
+    preload(scene: Scene){
+        // Load menu icon sprites
+        scene.load.image('menu_info', 'assets/Mobile/Menu/Info.png');
+        scene.load.image('menu_history', 'assets/Mobile/Menu/History.png');
+        scene.load.image('menu_settings', 'assets/Mobile/Menu/Settings.png');
+        scene.load.image('menu_close', 'assets/Buttons/ekis.png');
+        // History pager icons
+        scene.load.image('icon_left', 'assets/Mobile/Menu/icon_left.png');
+        scene.load.image('icon_most_left', 'assets/Mobile/Menu/icon_most_left.png');
+        scene.load.image('icon_right', 'assets/Mobile/Menu/icon_right.png');
+        scene.load.image('icon_most_right', 'assets/Mobile/Menu/icon_most_right.png');
 
+        scene.load.image('loading_icon', 'assets/Mobile/Menu/loading.png');
+
+        
+        const prefix = 'assets/Symbols/HelpScreen/';
+        scene.load.image('ScatterLabel', `${prefix}ScatterSymbol.png`);
+        scene.load.image('BuyFeatHelp', `${prefix}BuyFeatHelp.png`);
+        scene.load.image('DoubleHelp', `${prefix}DoubleHelp.png`);
+        scene.load.image('BuyFeatMobile', `${prefix}BuyFeatMobile.png`);
+        scene.load.image('DoubleHelpMobile', `${prefix}DoubleHelpMobile.png`);
+
+        scene.load.image('tumbleSymbol', `${prefix}tumbleIcon.png`);
+        scene.load.image('tumbleGame', `${prefix}tumbleGame.png`);
+        scene.load.image('tumbleWin', `${prefix}tumbleWin.png`);
+
+        scene.load.image('scatterIcon', `${prefix}scatterIcon.png`);
+        scene.load.image('scatterGame', `${prefix}scatterGame.png`);
+        scene.load.image('scatterWin', `${prefix}scatterWin.png`);
+
+        scene.load.image('multiplierIcon', `${prefix}multiplierIcon.png`);
+        scene.load.image('multiplierGame', `${prefix}multiplierGame.png`);
+
+        scene.load.image('paylineWin1', `${prefix}paylineWin1.png`);
+        scene.load.image('paylineWin2', `${prefix}paylineWin2.png`);
+        scene.load.image('paylineNoWin1', `${prefix}paylineNoWin1.png`);
+        scene.load.image('paylineNoWin2', `${prefix}paylineNoWin2.png`);
+        scene.load.image('paylineMobileWin', `${prefix}paylineMobileWin.png`);
+        scene.load.image('paylineMobileNoWin', `${prefix}paylineMobileNoWin.png`);
+
+        scene.load.image('howToPlay1', `${prefix}HowToPlay1.png`);
+        scene.load.image('howToPlay2', `${prefix}HowToPlay2.png`);
+        scene.load.image('howToPlay3', `${prefix}HowToPlay3.png`);
+        scene.load.image('howToPlay4', `${prefix}HowToPlay4.png`);
+        scene.load.image('howToPlay5', `${prefix}HowToPlay5.png`);
+        scene.load.image('howToPlay6', `${prefix}HowToPlay6.png`);
+        scene.load.image('howToPlay7', `${prefix}HowToPlay7.png`);
+        scene.load.image('howToPlay8', `${prefix}HowToPlay8.png`);
+        scene.load.image('howToPlay9', `${prefix}HowToPlay9.png`);
+        scene.load.image('howToPlay10', `${prefix}HowToPlay10.png`);
+
+        scene.load.image('howToPlay1Mobile', `${prefix}HowToPlay1Mobile.png`);
+        scene.load.image('howToPlay2Mobile', `${prefix}HowToPlay2Mobile.png`);
+        scene.load.image('howToPlay3Mobile', `${prefix}HowToPlay3Mobile.png`);
+        scene.load.image('howToPlay4Mobile', `${prefix}HowToPlay4Mobile.png`);
+        scene.load.image('howToPlay8Mobile', `${prefix}HowToPlay8Mobile.png`);
+        scene.load.image('howToPlay9Mobile', `${prefix}HowToPlay9Mobile.png`);
+        scene.load.image('howToPlay10Mobile', `${prefix}HowToPlay10Mobile.png`);
+        scene.load.image('howToPlay11Mobile', `${prefix}HowToPlay11Mobile.png`);
+        scene.load.image('howToPlay12Mobile', `${prefix}HowToPlay12Mobile.png`);
+
+        // Load UI elements
+        scene.load.image('greenRectBtn', 'assets/Buttons/greenRectBtn.png');
+        scene.load.image('ekis', 'assets/Buttons/ekis.png');
     }
 
     create(scene: GameScene){
         // No need to store scene reference
         this.contentContainer = scene.add.container(0, 0);
-    }
-
-    private isMobileDevice(): boolean {
-        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     }
 
     public createMenu(scene: GameScene): ButtonContainer {
@@ -96,6 +162,10 @@ export class Menu {
         const bg = scene.add.graphics();
         bg.fillStyle(0x000000, 0.8);
         bg.fillRect(0, 0, this.width, this.height);
+        // Make overlay interactive to block pointer events from reaching the game underneath
+        bg.setInteractive(new Geom.Rectangle(0, 0, this.width, this.height), Geom.Rectangle.Contains);
+        bg.on('pointerdown', () => {});
+        bg.on('pointerup', () => {});
         menuContainer.add(bg);
 
         // Create menu panel - full screen
@@ -111,21 +181,40 @@ export class Menu {
         const panelBg = scene.add.graphics();
         panelBg.fillStyle(0x181818, 0.95);
         panelBg.fillRect(0, 0, panelWidth, panelHeight);
+        // Make panel capture input too
+        panelBg.setInteractive(new Geom.Rectangle(0, 0, panelWidth, panelHeight), Geom.Rectangle.Contains);
+        panelBg.on('pointerdown', () => {});
+        panelBg.on('pointerup', () => {});
         this.panel.add(panelBg);
 
         // Create tabs with different widths
         const tabHeight = 61;
-        const normalTabCount = 3;
         const smallTabScale = 0.5; // X tab will be half the width of normal tabs
-        const totalTabUnits = normalTabCount + smallTabScale; // 3.5 units total
-        const normalTabWidth = panelWidth / totalTabUnits;
-        const smallTabWidth = normalTabWidth * smallTabScale;
 
-        const tabConfigs = [
-            { text: 'Rules', width: normalTabWidth, x: 0, icon: 'info' },
-            { text: 'History', width: normalTabWidth, x: normalTabWidth, icon: 'history' },
-            { text: 'Settings', width: normalTabWidth, x: normalTabWidth * 2, icon: 'settings' },
-            { text: 'X', width: smallTabWidth, x: normalTabWidth * 3, icon: 'close' }
+        // Determine which tabs to show
+        const baseIcons: string[] = 
+            ['info', 'history', 'settings'];
+
+        const getLabel = (icon: string) => {
+            switch (icon) {
+                case 'info': return 'Rules';
+                case 'history': return 'History';
+                case 'settings': return 'Settings';
+                case 'close': return 'X';
+                default: return '';
+            }
+        };
+
+        const normalTabCount = baseIcons.length;
+        const totalTabUnits = normalTabCount + smallTabScale;
+        const normalTabWidth = panelWidth / totalTabUnits;
+        // Calculate close width to cover any rounding remainder to the panel edge
+        const closeWidth = panelWidth - normalTabWidth * normalTabCount;
+
+        // Original spacing: no inter-tab gaps; close tab is smaller on the right
+        const tabConfigs: { text: string; width: number; x: number; icon: string }[] = [
+            ...baseIcons.map((icon, i) => ({ text: getLabel(icon), width: normalTabWidth, x: normalTabWidth * i, icon })),
+            { text: getLabel('close'), width: closeWidth, x: normalTabWidth * normalTabCount, icon: 'close' }
         ];
 
         const tabContainers: ButtonContainer[] = [];
@@ -133,9 +222,11 @@ export class Menu {
         tabConfigs.forEach((tabConfig, index) => {
             const tabContainer = scene.add.container(tabConfig.x, 0) as ButtonContainer;
             
-            // Tab background - black for all tabs initially
+            // Tab background
             const tabBg = scene.add.graphics();
-            tabBg.fillStyle(0x000000, 1);
+            const isClose = tabConfig.icon === 'close';
+
+            tabBg.fillStyle(isClose ? 0x1F1F1F : 0x000000, 1); // Close has dark gray bg
             tabBg.fillRect(0, 0, tabConfig.width, tabHeight);
             tabContainer.add(tabBg);
 
@@ -146,44 +237,57 @@ export class Menu {
             activeIndicator.setVisible(index === 0);
             tabContainer.add(activeIndicator);
 
-            // Tab icon (if not close button)
-            if (index < 3) {
-                let iconText = '';
-                let iconColor = '#90EE90'; // Light green
-                
-                switch (tabConfig.icon) {
-                    case 'info':
-                        iconText = 'ⓘ';
-                        break;
-                    case 'history':
-                        iconText = '↻';
-                        break;
-                    case 'settings':
-                        iconText = '⚙';
-                        break;
-                }
+            // Tab icon for all (including close)
+            let iconKey = '';
+            switch (tabConfig.icon) {
+                case 'info':
+                    iconKey = 'menu_info';
+                    break;
+                case 'history':
+                    iconKey = 'menu_history';
+                    break;
+                case 'settings':
+                    iconKey = 'menu_settings';
+                    break;
+                case 'close':
+                    iconKey = 'menu_close';
+                    break;
+            }
 
-                const icon = scene.add.text(15, tabHeight / 2, iconText, {
-                    fontSize: this.isMobile ? '18px' : '22px',
-                    color: iconColor,
-                    fontFamily: 'Arial',
-                    align: 'left'
-                }) as ButtonText;
-                icon.setOrigin(0, 0.5);
+            if (iconKey) {
+                const icon = scene.add.image(0, tabHeight / 2, iconKey) as ButtonImage;
+                icon.setOrigin(-0.5, 0.5);
+                // Scale to a consistent height
+                const targetHeight = 18;
+                const scale = targetHeight / icon.height;
+                icon.setScale(scale);
+                if (tabConfig.icon === 'close') {
+                    // Center the close icon on its dark background
+                    icon.setOrigin(0, 0.5);
+                    icon.setPosition(tabConfig.width / 3, tabHeight / 2);
+                    icon.clearTint();
+                } else {
+                    // Left align icon with padding and tint green
+                    icon.setPosition(12, tabHeight / 2);
+                    icon.setTint(0x379557);
+                }
                 tabContainer.add(icon);
             }
 
             // Tab text
-            const textX = index < 3 ? 45 : tabConfig.width / 2; // Offset for icon on normal tabs
-            const textAlign = index < 3 ? 'left' : 'center';
+            const textX = index < normalTabCount ? 45 : tabConfig.width / 2; // Offset for icon on normal tabs
+            const textAlign = index < normalTabCount ? 'left' : 'center';
             
             const text = scene.add.text(textX, tabHeight / 2, tabConfig.text, {
-                fontSize: this.isMobile ? '16px' : '20px',
+                fontSize: '16px',
                 color: '#FFFFFF',
                 fontFamily: 'Poppins',
                 align: textAlign
             }) as ButtonText;
-            text.setOrigin(index < 3 ? 0 : 0.5, 0.5);
+            if(tabConfig.icon === 'close'){
+                text.setVisible(false);
+            }
+            text.setOrigin(index < normalTabCount ? 0 : 0.5, 0.5);
             tabContainer.add(text);
 
             // Make tab interactive
@@ -193,16 +297,17 @@ export class Menu {
             ).isButton = true;
 
             // Tab click handler
-            tabContainer.on('pointerdown', () => {
+            tabContainer.on('pointerup', () => {
                 scene.audioManager.UtilityButtonSFX.play();
                 this.switchTab(scene, tabContainers, index, tabConfigs);
             });
 
             tabContainers.push(tabContainer);
             this.panel.add(tabContainer);
-
-            this.switchTab(scene, tabContainers, 0, tabConfigs); // initial tab is Rules
         });
+
+        // Set initial active tab highlight
+        this.switchTab(scene, tabContainers, 0, tabConfigs);
 
         // Create content area with mask to prevent overlap with tabs
         const contentArea = scene.add.container(20, tabHeight + 20);
@@ -224,8 +329,8 @@ export class Menu {
         // Initialize tab content containers
         this.initializeTabContentContainers(scene);
 
-        // Show initial content (Rules tab)
-        this.showTabContent(scene, 0);
+        // Show initial content based on first tab
+        this.showTabContent(scene, tabConfigs[0].icon);
 
         // Store menu container reference
         this.menuContainer = menuContainer;
@@ -246,7 +351,9 @@ export class Menu {
         
         // Initialize content for each tab
         this.setupScrollableRulesContent(scene);
-        this.showHistoryContent(scene, this.historyContent);
+        this.historyCurrentPage = 1;
+        this.historyPageLimit = 11;
+        this.showHistoryContent(scene, this.historyContent, this.historyCurrentPage, this.historyPageLimit);
         this.createVolumeSettingsContent(scene, this.settingsContent);
         
         // Initially hide all except rules
@@ -299,33 +406,48 @@ export class Menu {
                 activeIndicator.setVisible(true);
             } else {
                 // Inactive tab: black background, no underline
-                tabBg.fillStyle(0x000000, 1);
+                tabBg.fillStyle(tabConfig.icon === 'close' ? 0x1F1F1F : 0x000000);
                 tabBg.fillRect(0, 0, tabConfig.width, 61);
                 activeIndicator.setVisible(false);
             }
         });
 
         // Show content for active tab
-        this.showTabContent(scene, activeIndex);
+        const tabKey: string = tabConfigs[activeIndex].icon;
+        this.showTabContent(scene, tabKey);
     }
 
-    private showTabContent(scene: GameScene, tabIndex: number): void {
+    private showTabContent(scene: GameScene, tabKey: string): void {
         if (!this.contentArea) return;
         
-        this.activeTabIndex = tabIndex;
         this.hideAllTabContent();
 
-        switch (tabIndex) {
-            case 0: // Rules
+        switch (tabKey) {
+            case 'info':
                 this.rulesContent.setVisible(true);
+                // Enable scrolling only on rules tab
+                try {
+                    const interactiveHeight = Math.max(this.contentArea.height, this.yPosition);
+                    this.scrollView.setInteractive(new Phaser.Geom.Rectangle(
+                        0, 0,
+                        this.contentArea.width,
+                        interactiveHeight
+                    ), Phaser.Geom.Rectangle.Contains);
+                } catch (_e) {}
                 break;
-            case 1: // History
+            case 'history':
                 this.historyContent.setVisible(true);
+                // Disable scrolling and reset position for non-rules tabs
+                try { this.scrollView.disableInteractive(); } catch (_e) {}
+                this.contentContainer.y = 0;
                 break;
-            case 2: // Settings
+            case 'settings':
                 this.settingsContent.setVisible(true);
+                // Disable scrolling and reset position for non-rules tabs
+                try { this.scrollView.disableInteractive(); } catch (_e) {}
+                this.contentContainer.y = 0;
                 break;
-            case 3: // X (Close)
+            case 'close':
                 this.hideMenu(scene);
                 break;
         }
@@ -333,16 +455,262 @@ export class Menu {
 
 
 
-    private showHistoryContent(scene: GameScene, contentArea: GameObjects.Container): void {
-        // Create a simple history page with "HISTORY" text
-        const historyText = scene.add.text(15, 15,'History', this.titleStyle) as ButtonText;
-        historyText.setOrigin(0, 0);
-        contentArea.add(historyText);
+    private async showHistoryContent(scene: GameScene, contentArea: GameObjects.Container, page: number, limit: number): Promise<void> {
+        // Keep old rows until new data is ready; build containers on first run
+        const historyHeaders : string[] = ['Spin', 'Currency', 'Bet', 'Win'];
+        // Recreate or reparent containers if needed (handles menu reopen)
+        if (!this.historyHeaderContainer || !this.historyHeaderContainer.scene) {
+            this.historyHeaderContainer = scene.add.container(0, 0);
+            const historyText = scene.add.text(15, 15,'History', this.titleStyle) as ButtonText;
+            historyText.setOrigin(0, 0);
+            this.historyHeaderContainer.add(historyText);
+        }
+        if (!this.historyRowsContainer || !this.historyRowsContainer.scene) {
+            this.historyRowsContainer = scene.add.container(0, 0);
+        }
+        if (!this.historyPaginationContainer || !this.historyPaginationContainer.scene) {
+            this.historyPaginationContainer = scene.add.container(0, 0);
+        }
+        if ((this.historyHeaderContainer as any).parentContainer !== contentArea) {
+            contentArea.add(this.historyHeaderContainer);
+        }
+        if ((this.historyRowsContainer as any).parentContainer !== contentArea) {
+            contentArea.add(this.historyRowsContainer);
+        }
+        if ((this.historyPaginationContainer as any).parentContainer !== contentArea) {
+            contentArea.add(this.historyPaginationContainer);
+        }
+
+        // Prevent stacking requests
+        if (this.historyIsLoading) {
+            return;
+        }
+        this.historyIsLoading = true;
+
+        // Show loading icon while fetching history (centered on screen)
+        const loaderX = scene.scale.width * 0.45;
+        const loaderY = scene.scale.height * 0.3;
+        const loader = scene.add.image(loaderX, loaderY, 'loading_icon') as ButtonImage;
+        loader.setOrigin(0.5, 0.5);
+        loader.setScale(0.25);
+        contentArea.add(loader);
+        const spinTween = scene.tweens.add({
+            targets: loader,
+            angle: 360,
+            duration: 800,
+            repeat: -1,
+            ease: 'Linear'
+        });
+
+        let result: any;
+        try{
+            result = await scene.gameAPI.getHistory(page, limit);
+        } finally {
+            spinTween.stop();
+            loader.destroy();
+            this.historyIsLoading = false;
+        }
+        // console.log(result);
+
+        // Update pagination state
+        this.historyCurrentPage = result?.meta?.page ?? page;
+        this.historyTotalPages = result?.meta?.pageCount ?? 1;
+        this.historyPageLimit = limit;
+        
+        // Display headers centered per column (only once)
+        const columnCenters = this.getHistoryColumnCenters(scene);
+        const headerContainer = this.historyHeaderContainer as GameObjects.Container;
+        // When reopening, header could have been destroyed; rebuild if empty or missing headers
+        if (headerContainer.length <= 1) { // only title exists
+            const headerY = 60;
+            historyHeaders.forEach((header, idx) => {
+                const headerText = scene.add.text(columnCenters[idx], headerY, header, {
+                    fontSize: '14px',
+                    color: '#FFFFFF',
+                    fontFamily: 'Poppins',
+                    fontStyle: 'bold',
+                }) as ButtonText;
+                headerText.setOrigin(0.5, 0);
+                headerContainer.add(headerText);
+            });
+        }
+
+        let spinDate = '26/7/2025, 16:00';
+        let currency = 'usd';
+        let bet = '250.00';
+        let win = 250000000;
+
+        let contentY = 100;
+        const rowsContainer = this.historyRowsContainer as GameObjects.Container;
+        rowsContainer.removeAll(true);
+        result.data?.forEach((v?:any)=>{
+            spinDate = this.formatISOToDMYHM(v.created_at);
+            currency = v.currency == ''?'usd':v.currency;
+            bet = v.total_bet;
+            win = v.total_win;
+
+            contentY += 30;
+            // Create row centered per column
+            this.createHistoryEntry(contentY, scene, rowsContainer, spinDate, currency, bet, win.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), columnCenters);
+            this.addDividerHistory(scene, rowsContainer, contentY);
+            contentY += 20;
+        });
+        
+        // Add pagination buttons at bottom-center
+        const paginationContainer = this.historyPaginationContainer as GameObjects.Container;
+        paginationContainer.removeAll(true);
+        this.addHistoryPagination(scene, paginationContainer, this.historyCurrentPage, this.historyTotalPages, this.historyPageLimit);
     }
+
+    private formatISOToDMYHM(iso: string, timeZone = 'Asia/Manila'): string {
+        const d = new Date(iso);
+        const parts = new Intl.DateTimeFormat('en-GB', {
+          day: 'numeric',        // no leading zero
+          month: 'numeric',      // no leading zero
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+          timeZone,
+        }).formatToParts(d);
+      
+        const map = Object.fromEntries(parts.map(p => [p.type, p.value]));
+        return `${map.day}/${map.month}/${map.year}, ${map.hour}:${map.minute}`;
+      }
+      
+
+    private createHistoryEntry(y: number, scene: GameScene, contentArea: GameObjects.Container, spinDate: string, currency: string, bet: string, win: string, columnCenters: number[]): void {
+        // Create separate text fields and center them per column
+        const values: string[] = [spinDate, currency, bet, win];
+        values.forEach((value, idx) => {
+            const text = scene.add.text(columnCenters[idx], y, value, {
+                fontSize: '14px',
+                color: '#FFFFFF',
+                fontFamily: 'Poppins',
+            }) as ButtonText;
+            text.setOrigin(0.5, 0);
+            contentArea.add(text);
+        });
+    }
+
+    // Compute four column centers within the content area bounds
+    private getHistoryColumnCenters(scene: GameScene): number[] {
+        const worldLeft = 20;
+        const worldRight = scene.scale.width - 20;
+        const parentOffsetX = this.contentArea ? this.contentArea.x : 0;
+        const localLeft = worldLeft - parentOffsetX;
+        const localRight = worldRight - parentOffsetX;
+        const totalWidth = localRight - localLeft;
+
+        // Define column center ratios across the available width (tuned for headers)
+        const ratios = [0.15, 0.40, 0.65, 0.88];
+        return ratios.map(r => localLeft + totalWidth * r);
+    }
+
+    private addDividerHistory(scene: GameScene, contentArea: GameObjects.Container, y: number): void {
+        const dividerY = y + 30;
+        const worldLeft = 20;
+        const worldRight = scene.scale.width - 20;
+        const parentOffsetX = this.contentArea ? this.contentArea.x : 0;
+        const localLeft = worldLeft - parentOffsetX;
+        const localWidth = worldRight - worldLeft;
+        const divider = scene.add.graphics();
+        divider.fillStyle(0xFFFFFF, 0.1);
+        divider.fillRect(localLeft, dividerY, localWidth, 1);
+        contentArea.add(divider);
+    }
+
+    private addHistoryPagination(scene: GameScene, contentArea: GameObjects.Container, page: number, totalPages: number, limit: number): void {
+        const buttonSpacing = 18;
+        const icons = ['icon_most_left', 'icon_left', 'icon_right', 'icon_most_right'];
+
+        // Use the actual content area dimensions (parent container) for placement
+        const areaWidth = this.contentArea ? this.contentArea.width : scene.scale.width;
+        const areaHeight = this.contentArea ? this.contentArea.height : scene.scale.height;
+
+        // Bottom within the visible content area
+        const bottomPadding = 80;
+        const y = areaHeight - bottomPadding;
+
+        // Measure total width for centering within the content area
+        const tempImages: Phaser.GameObjects.Image[] = icons.map(key => scene.add.image(0, 0, key) as ButtonImage);
+        const totalWidth = tempImages.reduce((sum, img, i) => sum + img.width + (i > 0 ? buttonSpacing : 0), 0);
+        tempImages.forEach(img => img.destroy());
+
+        // Start X so the row is centered inside the content area's local coordinates
+        let currentX = (areaWidth - totalWidth) / 2;
+
+        // Place interactive buttons into the history content container
+        icons.forEach((key) => {
+            const btn = scene.add.image(currentX, y, key) as ButtonImage;
+            btn.setOrigin(0, 1);
+
+            let targetPage = page;
+            let enabled = true;
+            switch (key) {
+                case 'icon_most_left':
+                    targetPage = 1;
+                    enabled = page > 1;
+                    break;
+                case 'icon_left':
+                    targetPage = Math.max(1, page - 1);
+                    enabled = page > 1;
+                    break;
+                case 'icon_right':
+                    targetPage = Math.min(totalPages, page + 1);
+                    enabled = page < totalPages;
+                    break;
+                case 'icon_most_right':
+                    targetPage = Math.max(1, totalPages);
+                    enabled = page < totalPages;
+                    break;
+            }
+
+            if (enabled) {
+                btn.setInteractive({ useHandCursor: true });
+                btn.on('pointerup', () => {
+                    if (this.historyIsLoading) { return; }
+                    scene.audioManager.UtilityButtonSFX.play();
+                    // Disable all pagination buttons during load
+                    contentArea.iterate((child: Phaser.GameObjects.GameObject) => {
+                        const img = child as Phaser.GameObjects.Image;
+                        if (img && (img as any).texture && icons.includes((img as any).texture.key)) {
+                            img.disableInteractive();
+                            img.setAlpha(0.5);
+                        }
+                    });
+                    this.showHistoryContent(scene, this.historyContent, targetPage, limit);
+                });
+            } else {
+                btn.setAlpha(0.5);
+                btn.disableInteractive();
+            }
+
+            contentArea.add(btn);
+            currentX += btn.width + buttonSpacing;
+        });
+
+        // Page number display: "Page 1 of 10"
+        const pageNumberText = scene.add.text(
+            areaWidth / 2,
+            y + 40, // place below the pagination buttons
+            `Page ${page} of ${totalPages}`,
+            {
+                fontSize: '20px',
+                color: '#FFFFFF',
+                fontFamily: 'Poppins',
+                align: 'center'
+            }
+        ) as ButtonText;
+        pageNumberText.setOrigin(0.5, 0); // center horizontally
+        contentArea.add(pageNumberText);
+    }
+
+
 
     private createVolumeSettingsContent(scene: GameScene, contentArea: GameObjects.Container): void {
         const scaleFactor = 1;
-        const widthSlider = 300;
+        const widthSlider = 340;
 
         // Title - Settings in green color #379557
         const title = scene.add.text(15, 15, 'Settings', this.titleStyle) as ButtonText;
@@ -353,32 +721,132 @@ export class Menu {
         const startX = 15;
         const startY = 15;
         const sliderStartX = startX;
-        const musicSliderY = startY + 80;
-        const sfxSliderY = startY + 220;
+        const musicSliderY = startY + 115;
+        const sfxSliderY = startY + 230;
 
-        // Music section
-        const musicIcon = scene.add.image(startX + 10, startY + 60, 'volume') as ButtonImage;
-        musicIcon.setScale(0.5 * scaleFactor);
-        contentArea.add(musicIcon);
-
-        const musicLabel = scene.add.text(startX + 40, startY + 50, 'Background Music', {
+        // Music section (no icon)
+        const musicLabel = scene.add.text(startX + 0, startY + 70, 'Background Music', {
             fontSize: '18px',
             color: '#FFFFFF',
             fontFamily: 'Poppins'
         }) as ButtonText;
         contentArea.add(musicLabel);
 
-        // SFX section
-        const sfxIcon = scene.add.image(startX + 10, startY + 200, 'volume') as ButtonImage;
-        sfxIcon.setScale(0.5 * scaleFactor);
-        contentArea.add(sfxIcon);
-
-        const sfxLabel = scene.add.text(startX + 40, startY + 190, 'Sound FX', {
+        // SFX section (no icon)
+        const sfxLabel = scene.add.text(startX + 0, startY + 170, 'Sound FX', {
             fontSize: '18px',
             color: '#FFFFFF',
             fontFamily: 'Poppins'
         }) as ButtonText;
         contentArea.add(sfxLabel);
+
+        // Skip Intro section (UI only)
+        const skipLabelY = startY + 270;
+        const skipLabel = scene.add.text(startX + 0, skipLabelY, 'Skip Intro', {
+            fontSize: '18px',
+            color: '#FFFFFF',
+            fontFamily: 'Poppins'
+        }) as ButtonText;
+        contentArea.add(skipLabel);
+
+        // Toggle switches (right side)
+        const toggleWidth = 64;
+        const toggleHeight = 36;
+        const toggleRadius = 18;
+        // Place toggles within the visible content area width (panel width - 40 padding)
+        const contentAreaWidth = scene.scale.width - 40;
+        const toggleX = Math.max(sliderStartX + 200, contentAreaWidth - toggleWidth - 20);
+
+        const drawToggle = (bg: Phaser.GameObjects.Graphics, circle: Phaser.GameObjects.Graphics, x: number, yCenter: number, on: boolean) => {
+            const y = yCenter - toggleHeight / 2;
+            bg.clear();
+            circle.clear();
+            if (on) {
+                // ON: green track; white knob on RIGHT
+                bg.fillStyle(0x379557, 1);
+                bg.lineStyle(3, 0x2F6D49, 1);
+                bg.strokeRoundedRect(x, y, toggleWidth, toggleHeight, toggleRadius);
+                bg.fillRoundedRect(x, y, toggleWidth, toggleHeight, toggleRadius);
+                circle.fillStyle(0xFFFFFF, 1);
+                circle.fillCircle(x + toggleWidth - toggleRadius, y + toggleHeight / 2, toggleRadius - 4);
+            } else {
+                // OFF: dark gray track; white knob on LEFT
+                bg.fillStyle(0x1F2937, 1);
+                bg.lineStyle(3, 0x9CA3AF, 1);
+                bg.strokeRoundedRect(x, y, toggleWidth, toggleHeight, toggleRadius);
+                bg.fillRoundedRect(x, y, toggleWidth, toggleHeight, toggleRadius);
+                circle.fillStyle(0xFFFFFF, 1);
+                circle.fillCircle(x + toggleRadius, y + toggleHeight / 2, toggleRadius - 4);
+            }
+        };
+
+        // Music toggle
+        const musicToggleBg = scene.add.graphics();
+        const musicToggleCircle = scene.add.graphics();
+        contentArea.add(musicToggleBg);
+        contentArea.add(musicToggleCircle);
+        musicToggleBg.setDepth(10);
+        musicToggleCircle.setDepth(11);
+        let musicOn = scene.audioManager.getMusicVolume() > 0;
+        if (!musicOn) {
+            // Default should be ON
+            musicOn = true;
+            scene.audioManager.setMusicVolume(1);
+        }
+        drawToggle(musicToggleBg, musicToggleCircle, toggleX, startY + 70, musicOn);
+        const musicToggleArea = scene.add.zone(toggleX, startY + 70 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
+        musicToggleArea.setInteractive();
+        musicToggleArea.on('pointerdown', () => {
+            musicOn = !musicOn;
+            scene.audioManager.setMusicVolume(musicOn ? 1 : 0);
+            drawToggle(musicToggleBg, musicToggleCircle, toggleX, startY + 70, musicOn);
+            updateSliders();
+        });
+        contentArea.add(musicToggleArea);
+        musicToggleArea.setDepth(12);
+
+        // SFX toggle
+        const sfxToggleBg = scene.add.graphics();
+        const sfxToggleCircle = scene.add.graphics();
+        contentArea.add(sfxToggleBg);
+        contentArea.add(sfxToggleCircle);
+        sfxToggleBg.setDepth(10);
+        sfxToggleCircle.setDepth(11);
+        let sfxOn = scene.audioManager.getSFXVolume() > 0;
+        if (!sfxOn) {
+            // Default should be ON
+            sfxOn = true;
+            scene.audioManager.setSFXVolume(1);
+        }
+        drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 170, sfxOn);
+        const sfxToggleArea = scene.add.zone(toggleX, startY + 170 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
+        sfxToggleArea.setInteractive();
+        sfxToggleArea.on('pointerdown', () => {
+            sfxOn = !sfxOn;
+            scene.audioManager.setSFXVolume(sfxOn ? 1 : 0);
+            drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 170, sfxOn);
+            updateSliders();
+        });
+        contentArea.add(sfxToggleArea);
+        sfxToggleArea.setDepth(12);
+
+        // Skip Intro toggle (no functionality yet)
+        const skipToggleBg = scene.add.graphics();
+        const skipToggleCircle = scene.add.graphics();
+        contentArea.add(skipToggleBg);
+        contentArea.add(skipToggleCircle);
+        skipToggleBg.setDepth(10);
+        skipToggleCircle.setDepth(11);
+        let skipOn = false; // UI-only state
+        drawToggle(skipToggleBg, skipToggleCircle, toggleX, skipLabelY + 2, skipOn);
+        const skipToggleArea = scene.add.zone(toggleX, skipLabelY + 2 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
+        skipToggleArea.setInteractive();
+        skipToggleArea.on('pointerdown', () => {
+            skipOn = !skipOn;
+            drawToggle(skipToggleBg, skipToggleCircle, toggleX, skipLabelY + 2, skipOn);
+        });
+        contentArea.add(skipToggleArea);
+        skipToggleArea.setDepth(12);
 
                 // Music slider background
         const musicSliderBg = scene.add.graphics();
@@ -396,71 +864,82 @@ export class Menu {
 
         const musicSlider = scene.add.graphics();
         musicSlider.fillStyle(0xffffff, 1);
-        musicSlider.fillCircle(sliderStartX + 0.75 * widthSlider * scaleFactor, musicSliderY + 4, 12 * scaleFactor);
+        // Draw knob at local origin and position the graphics instead of drawing at world coords
+        musicSlider.fillCircle(0, 0, 12 * scaleFactor);
+        musicSlider.setPosition(sliderStartX + 0.75 * widthSlider * scaleFactor, musicSliderY + 4);
+        // Enlarge interactive hit area and keep it local to the graphics
+        musicSlider.setInteractive(
+            new Geom.Circle(0, 0, 22 * scaleFactor),
+            Geom.Circle.Contains
+        );
         contentArea.add(musicSlider);
 
         // Music value text
-        const musicValue = scene.add.text(sliderStartX , musicSliderY + 15, '75%', {
+        const musicValue = scene.add.text(sliderStartX , musicSliderY + 25, '75%', {
             fontSize: '16px',
             color: '#FFFFFF',
             fontFamily: 'Poppins'
         }) as ButtonText;
         contentArea.add(musicValue);
 
-        // SFX slider
+        // SFX slider (hidden for now)
         const sfxSliderBg = scene.add.graphics();
-        sfxSliderBg.fillStyle(0x379557, 1);
-        sfxSliderBg.fillRoundedRect(sliderStartX, sfxSliderY, widthSlider * scaleFactor, 8 * scaleFactor, 4 * scaleFactor);
-        
         const sfxSliderBg2 = scene.add.graphics();
-        sfxSliderBg2.fillStyle(0x333333, 1);
-        sfxSliderBg2.lineStyle(1, 0x666666);
-        sfxSliderBg2.fillRoundedRect(sliderStartX, sfxSliderY, widthSlider * scaleFactor, 8 * scaleFactor, 4 * scaleFactor);
-        sfxSliderBg2.strokeRoundedRect(sliderStartX, sfxSliderY, widthSlider * scaleFactor, 8 * scaleFactor, 4 * scaleFactor);
-        
-        contentArea.add(sfxSliderBg2);
-        contentArea.add(sfxSliderBg);
-
         const sfxSlider = scene.add.graphics();
-        sfxSlider.fillStyle(0xffffff, 1);
-        sfxSlider.fillCircle(sliderStartX + 0.75 * widthSlider * scaleFactor, sfxSliderY + 4, 12 * scaleFactor);
-        contentArea.add(sfxSlider);
-
-        // SFX value text
-        const sfxValue = scene.add.text(sliderStartX, sfxSliderY + 15, '75%', {
+        const sfxValue = scene.add.text(sliderStartX, sfxSliderY + 25, '75%', {
             fontSize: '16px',
             color: '#FFFFFF',
             fontFamily: 'Poppins'
         }) as ButtonText;
-        contentArea.add(sfxValue);
+        sfxSliderBg.setVisible(false);
+        sfxSliderBg2.setVisible(false);
+        sfxSlider.setVisible(false);
+        sfxValue.setVisible(false);
 
         // Helper to update slider positions and values
         const updateSliders = (musicX: number | null = null, sfxX: number | null = null) => {
             const sliderWidth = widthSlider * scaleFactor;
 
             const musicVol = musicX !== null ? 
-                Math.max(0, Math.min(1, (musicX - sliderStartX) / sliderWidth)) : 
+                Math.max(0, Math.min(1, musicX / sliderWidth)) : 
                 scene.audioManager.getMusicVolume();
             
             const sfxVol = sfxX !== null ? 
-                Math.max(0, Math.min(1, (sfxX - sliderStartX) / sliderWidth)) : 
+                Math.max(0, Math.min(1, sfxX / sliderWidth)) : 
                 scene.audioManager.getSFXVolume();
             
             // Update music slider
             musicSlider.clear();
             musicSlider.fillStyle(0xffffff, 1);
             const musicSliderX = sliderStartX + (musicVol * sliderWidth);
-            musicSlider.fillCircle(musicSliderX, musicSliderY + 4, 12 * scaleFactor);
+            // Keep drawing local and move the graphics to the new position
+            musicSlider.fillCircle(0, 0, 12 * scaleFactor);
+            musicSlider.setPosition(musicSliderX, musicSliderY + 4);
             musicSliderBg.clear();
             musicSliderBg.fillStyle(0x379557, 1);
             musicSliderBg.fillRoundedRect(sliderStartX, musicSliderY, sliderWidth * musicVol, 8 * scaleFactor, 4 * scaleFactor);
             musicValue.setText(Math.round(musicVol * 100) + '%');
+
+            // Sync music toggle state with slider value
+            // If slider reaches 0%, force toggle OFF; if >0%, ensure toggle ON
+            if (musicVol === 0) {
+                if (musicOn) {
+                    musicOn = false;
+                    drawToggle(musicToggleBg, musicToggleCircle, toggleX, startY + 70, musicOn);
+                }
+            } else {
+                if (!musicOn) {
+                    musicOn = true;
+                    drawToggle(musicToggleBg, musicToggleCircle, toggleX, startY + 70, musicOn);
+                }
+            }
             
-            // Update SFX slider
+            // Update SFX slider (kept hidden)
+            const sfxSliderX = sliderStartX + (sfxVol * sliderWidth);
             sfxSlider.clear();
             sfxSlider.fillStyle(0xffffff, 1);
-            const sfxSliderX = sliderStartX + (sfxVol * sliderWidth);
-            sfxSlider.fillCircle(sfxSliderX, sfxSliderY + 4, 12 * scaleFactor);
+            sfxSlider.fillCircle(0, 0, 12 * scaleFactor);
+            sfxSlider.setPosition(sfxSliderX, sfxSliderY + 4);
             sfxSliderBg.clear();
             sfxSliderBg.fillStyle(0x379557, 1);
             sfxSliderBg.fillRoundedRect(sliderStartX, sfxSliderY, sliderWidth * sfxVol, 8 * scaleFactor, 4 * scaleFactor);
@@ -470,43 +949,18 @@ export class Menu {
             if (musicX !== null) scene.audioManager.setMusicVolume(musicVol);
             if (sfxX !== null) scene.audioManager.setSFXVolume(sfxVol);
 
-            // Update interactive areas for sliders
+            // Update interactive areas for sliders (keep hit areas centered on the local origin)
             musicSlider.setInteractive(
-                new Geom.Circle(musicSliderX, musicSliderY + 4, 15 * scaleFactor),  
+                new Geom.Circle(0, 0, 22 * scaleFactor),  
                 Geom.Circle.Contains
             );
-            sfxSlider.setInteractive(
-                new Geom.Circle(sfxSliderX, sfxSliderY + 4, 15 * scaleFactor),
-                Geom.Circle.Contains
-            );
+            // Keep SFX interactions disabled while hidden
+            sfxSlider.disableInteractive();
         };
 
         // Initial slider setup
         updateSliders();
-        
-                musicIcon.setInteractive();
-        musicIcon.on('pointerdown', () => {
-            if(scene.audioManager.getMusicVolume() === 0) {
-                scene.audioManager.setMusicVolume(1);
-                musicIcon.setTint(0xFFFFFF);
-            } else {
-                scene.audioManager.setMusicVolume(0);
-                musicIcon.setTint(0xFF0000);
-            }
-            updateSliders();
-        });
 
-        sfxIcon.setInteractive();
-        sfxIcon.on('pointerdown', () => {
-            if(scene.audioManager.getSFXVolume() === 0) {
-                scene.audioManager.setSFXVolume(1);
-                sfxIcon.setTint(0xFFFFFF);
-            } else {
-                scene.audioManager.setSFXVolume(0);
-                sfxIcon.setTint(0xFF0000);
-            }
-            updateSliders();
-        });
 
         // Make sliders draggable
         this.isDraggingMusic = false;
@@ -516,12 +970,14 @@ export class Menu {
         const pointerMoveHandler = (pointer: Phaser.Input.Pointer) => {
             if (this.isDraggingMusic) {
                 const sliderWidth = widthSlider * scaleFactor;
-                const localX = pointer.x - contentArea.x - sliderStartX;
-                updateSliders(Math.max(0, Math.min(sliderWidth, localX)), null);
+                const p = (musicSliderTrack as any).getLocalPoint(pointer.x, pointer.y);
+                const localX = Math.max(0, Math.min(sliderWidth, p && typeof p.x === 'number' ? p.x : 0));
+                updateSliders(localX, null);
             } else if (this.isDraggingSFX) {
                 const sliderWidth = widthSlider * scaleFactor;
-                const localX = pointer.x - contentArea.x - sliderStartX;
-                updateSliders(null, Math.max(0, Math.min(sliderWidth, localX)));
+                const p = (sfxSliderTrack as any).getLocalPoint(pointer.x, pointer.y);
+                const localX = Math.max(0, Math.min(sliderWidth, p && typeof p.x === 'number' ? p.x : 0));
+                updateSliders(null, localX);
             }
         };
 
@@ -538,40 +994,35 @@ export class Menu {
 
         // Create clickable areas for the entire slider tracks
         const musicSliderTrack = scene.add.graphics();
+        musicSliderTrack.setPosition(sliderStartX, musicSliderY);
         musicSliderTrack.fillStyle(0x000000, 0); // Transparent
-        musicSliderTrack.fillRect(sliderStartX, musicSliderY - 10, widthSlider * scaleFactor, 28);
+        // Draw and set hit area in local coords for reliable input inside a container
+        musicSliderTrack.fillRect(0, -10, widthSlider * scaleFactor, 28);
         musicSliderTrack.setInteractive(
-            new Geom.Rectangle(sliderStartX, musicSliderY - 10, widthSlider * scaleFactor, 28),
+            new Geom.Rectangle(0, -10, widthSlider * scaleFactor, 28),
             Geom.Rectangle.Contains
         );
         contentArea.add(musicSliderTrack);
 
         const sfxSliderTrack = scene.add.graphics();
+        sfxSliderTrack.setPosition(sliderStartX, sfxSliderY);
         sfxSliderTrack.fillStyle(0x000000, 0); // Transparent
-        sfxSliderTrack.fillRect(sliderStartX, sfxSliderY - 10, widthSlider * scaleFactor, 28);
-        sfxSliderTrack.setInteractive(
-            new Geom.Rectangle(sliderStartX, sfxSliderY - 10, widthSlider * scaleFactor, 28),
-            Geom.Rectangle.Contains
-        );
+        // Keep SFX track hidden and non-interactive for now
+        sfxSliderTrack.setVisible(false);
         contentArea.add(sfxSliderTrack);
 
         // Music slider track click handler
-        musicSliderTrack.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-            const localX = pointer.x - contentArea.x - sliderStartX;
+        musicSliderTrack.on('pointerdown', (pointer: Phaser.Input.Pointer, localX: number) => {
             const sliderWidth = widthSlider * scaleFactor;
-            const newVolume = Math.max(0, Math.min(1, localX / sliderWidth));
+            localX = Math.max(0, Math.min(sliderWidth, localX));
+            const newVolume = localX / sliderWidth;
             scene.audioManager.setMusicVolume(newVolume);
+            this.isDraggingMusic = true; // allow click-and-drag on the track
             updateSliders();
         });
 
         // SFX slider track click handler
-        sfxSliderTrack.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-            const localX = pointer.x - contentArea.x - sliderStartX;
-            const sliderWidth = widthSlider * scaleFactor;
-            const newVolume = Math.max(0, Math.min(1, localX / sliderWidth));
-            scene.audioManager.setSFXVolume(newVolume);
-            updateSliders();
-        });
+        // SFX track interaction disabled while hidden
 
         // Music slider handle interaction
         musicSlider.on('pointerdown', () => {
@@ -585,18 +1036,24 @@ export class Menu {
     }
 
     public showMenu(scene: GameScene): void {        
-        this.createMenu(scene);
+        
+        // Ensure only one instance exists by destroying any previous menu
+        if (this.menuContainer) {
+            this.destroyMenu(scene);
+        }
+        const container = this.createMenu(scene);
 
-        this.menuContainer.setVisible(true);
-        this.menuContainer.setAlpha(0);
+        container.setVisible(true);
+        container.setAlpha(0);
         this.isVisible = true;
         
         scene.tweens.add({
-            targets: this.menuContainer,
+            targets: container,
             alpha: 1,
             duration: 300,
             ease: 'Power2'
         });
+
     }
 
     public hideMenu(scene: GameScene): void {
@@ -624,6 +1081,17 @@ export class Menu {
         this.isDraggingSFX = false;
     }
 
+    private destroyMenu(scene: GameScene): void {
+        // Hide and cleanup listeners first
+        this.hideMenu(scene);
+        // Destroy existing container to free resources
+        if (this.menuContainer) {
+            this.menuContainer.destroy(true);
+            this.menuContainer = undefined;
+        }
+        this.panel = undefined as any;
+    }
+
 
 
     private addContent(scene: GameScene, _text: string, _type: string, _wordWrap: boolean = false, _wordWrapWidth: number = 0): void {
@@ -631,7 +1099,7 @@ export class Menu {
             const content = scene.add.text(this.padding / 2, this.yPosition, _text, this.titleStyle as Phaser.Types.GameObjects.Text.TextStyle);
             this.contentContainer.add(content);
             if (_text === 'Bonus Trigger') {
-                content.setPosition(content.x + this.padding * 2, content.y);
+                content.setPosition(0, content.y);
             }
             this.yPosition += content.height + this.padding;
         } else if (_type === 'text') {
@@ -649,8 +1117,13 @@ export class Menu {
 
     private createHelpScreenContent(scene: GameScene, contentArea: GameObjects.Container): void {
             this.padding = 10;
-            this.contentWidth = this.isMobile ? scene.scale.width - this.padding * 6 : this.viewWidth - this.padding * 12;
+            this.contentWidth = scene.scale.width - this.padding * 6;
             this.yPosition = this.padding;
+
+            // this.addContent(scene, 'UNDER CONSTRUCTION', 'title');
+
+            // contentArea.add(this.contentContainer);
+            // return;
     
             this.addContent(scene, 'Game Rules', 'title');
     
@@ -664,11 +1137,11 @@ export class Menu {
     
             this.addContent(scene, 'Payout', 'title');
             
-            this.yPosition += this.padding * 12;
+            this.yPosition += this.padding * 7;
     
             // Create 9 row symbol grid with payouts
             const symbolSize = 153;
-            const symbolScale = 0.75;
+            const symbolScale = 0.5;
             const scaledSymbolSize = symbolSize * symbolScale;
             for (let i = 0; i < 9; i++) {
                 const cellX = this.padding;
@@ -679,34 +1152,20 @@ export class Menu {
     
                 this.createBorder(scene, symbolContainer, 
                     -this.padding / 2, 
-                    -scaledSymbolSize + this.padding * 3, 
+                    -scaledSymbolSize, 
                     this.contentWidth + this.padding * 3,
-                    scaledSymbolSize * 1.25
+                    scaledSymbolSize * 1.5
                 );
     
-                // Add symbol using SymbolContainer
-                const symbol = new SymbolContainer(scene, this.padding * 3, 0, i + 1, scene.gameData);
-                
-                // Apply symbol size adjustment similar to SlotMachine.ts line 431
-                // const symbolValue = i + 1;
-                // if (symbolValue === 2 || symbolValue === 4 || symbolValue === 6) {
-                //    // Adjust ratio for symbols 2, 4, and 6 to match other symbols
-                //    symbol.setSymbolDisplaySize(
-                //        symbolSize * symbolScale * (1 + Slot.SYMBOL_SIZE_ADJUSTMENT), 
-                //        symbolSize * symbolScale * (1 - Slot.SYMBOL_SIZE_ADJUSTMENT)
-                //    );
-                // } else {
-                    // Regular symbols
-                    symbol.setSymbolDisplaySize(symbolSize * symbolScale, symbolSize * symbolScale);
-                // }
-                
-                symbol.setScale(symbolScale);
-                symbol.getSymbolSprite().setOrigin(0, 0.7);
+                const symbol = new SymbolContainer(scene, 0, 0, i + 1, scene.gameData);
+                symbol.setSymbolDisplaySize(scaledSymbolSize, scaledSymbolSize);
+                symbol.setScale(symbolScale * 1.5);
+                symbol.getSymbolSprite().setOrigin(-0.5, 0.75);
+                try { (symbol.getSymbolSprite() as SpineGameObject).animationState.timeScale = 0; } catch (_e) {}
                 symbolContainer.add(symbol);
                 if(i == 5){
                     symbol.setPosition(symbol.x, symbol.y + this.padding);
                 }
-    
     
                 // Add payout table next to symbol
                 this.createPayoutTable(scene,
@@ -722,10 +1181,10 @@ export class Menu {
             }
             this.yPosition -=  scaledSymbolSize;
     
-            this.yPosition += this.padding * 4;
+            this.yPosition += this.padding * 3;
             this.addContent(scene, 'Scatter', 'text');
     
-            this.yPosition += this.padding * 4;
+            this.yPosition += this.padding * 3;
             { // scatter payouts
                 const cellX = -this.padding / 2;
                 const cellY = this.yPosition;
@@ -735,22 +1194,22 @@ export class Menu {
     
                 this.createBorder(scene, symbolContainer, 
                     0, 
-                    -scaledSymbolSize + this.padding * 3, 
+                    -scaledSymbolSize, 
                     this.contentWidth + this.padding * 3 ,
-                    scaledSymbolSize * 4
+                    scaledSymbolSize * 5.5
                 );
     
                 // Add symbol
                 const symbol = scene.add.sprite(0, 0, 'ScatterLabel');
-                symbol.setScale(0.7);
-                symbol.setOrigin(0.5, 0.5);
+                symbol.setScale(0.75);
+                symbol.setOrigin(0.3, 0.4);
                 symbolContainer.add(symbol);
                 symbol.setPosition(scene.scale.width * 0.4, this.padding);
     
                 // Add payout table next to symbol
                 this.createPayoutTable(scene, 
                     symbol.x / 3,  // Position table right of symbol
-                    symbol.height * 0.9,                      // Center vertically with symbol
+                    symbol.height,                      // Center vertically with symbol
                     symbolContainer,
                     0       
                 );
@@ -760,7 +1219,7 @@ export class Menu {
                 this.yPosition += scaledSymbolSize * 5;  // Move to next row
             }
     
-            this.yPosition -= scaledSymbolSize * 1.5;
+            //this.yPosition -= scaledSymbolSize * 3.5;
             this.addContent(scene, 'Tumble Win', 'title');
     
             const tumbleWinContainer = scene.add.container(-this.padding * 1.5, this.yPosition);
@@ -768,20 +1227,20 @@ export class Menu {
                 this.padding, 
                 0, 
                 this.contentWidth + this.padding * 3, 
-                scaledSymbolSize * 5.75 
+                scaledSymbolSize * 14
             );
             this.contentContainer.add(tumbleWinContainer);
-            this.createHowToPlayEntry(scene, 20, 170, tumbleWinContainer, 'tumbleGame', 
+            this.createHowToPlayEntry(scene, 20, 380, tumbleWinContainer, 'tumbleGame', 
                 'After each spin, winning symbols are paid and then removed from the screen. Remaining symbols drop down, and new ones fall from above to fill the empty spaces.\n\n' +
                 'Tumbles continue as long as new winning combinations appear — there\'s no limit to the number of tumbles per spin.\n\n' +
                 'All wins are credited to the player\'s balance after all tumbles from a base spin are completed.',
-            true, this.contentWidth + this.padding * 5);
+            true, this.contentWidth - this.padding);
     
     
             const tumbleSymbolImage = scene.add.image(0, 0, 'tumbleSymbol');
             tumbleSymbolImage.setScale(0.5);
             tumbleSymbolImage.setOrigin(0.5, 0.5);
-            tumbleSymbolImage.setPosition(70, 85);
+            tumbleSymbolImage.setPosition(90, 65);
             tumbleWinContainer.add(tumbleSymbolImage);
             
     
@@ -791,28 +1250,25 @@ export class Menu {
             tumbleWinImage.setPosition(tumbleSymbolImage.x - tumbleSymbolImage.displayWidth/2 + this.padding * 2, tumbleSymbolImage.y - tumbleWinImage.height/3);
             tumbleWinContainer.add(tumbleWinImage);
             
-            this.yPosition -= scaledSymbolSize * 5.75;
-            
-            this.yPosition -= this.padding * 1.25;
+            this.yPosition -= scaledSymbolSize * 20.5;
             this.addContent(scene, 'Free Spins Rules', 'title');
-            this.yPosition += this.padding * 1.25;
-
-            this.yPosition += scaledSymbolSize  * 1.75;
+            this.yPosition += scaledSymbolSize  * 9.5;
             this.addContent(scene, 'Bonus Trigger', 'title');
-            this.yPosition -= scaledSymbolSize  * 1.75;
+            this.yPosition -= scaledSymbolSize  * 9.5;
     
             const freeSpinContainer = scene.add.container(-this.padding * 1.5, this.yPosition-scaledSymbolSize * 0.5);
             this.yPosition += this.createBorder(scene, freeSpinContainer, 
                 this.padding, 
                 0, 
                 this.contentWidth + this.padding * 3, 
-                scaledSymbolSize * 4.5
-                
+                scaledSymbolSize * 13.5
             );
             this.contentContainer.add(freeSpinContainer);
             this.contentContainer.sendToBack(freeSpinContainer);
-            this.yPosition -= this.padding * 2;
-            this.createHowToPlayEntry(scene, 20, 120, freeSpinContainer, 'scatterGame', 
+
+            this.yPosition -= scaledSymbolSize * 6.75;
+            
+            this.createHowToPlayEntry(scene, 20, 380, freeSpinContainer, 'scatterGame', 
                 'Land 4 or more         SCATTER \nsymbols anywhere on the screen to trigger the free spins feature.\n\n' +
                 'You\'ll start with 10 free spins.\n\n' +
                 'During the bonus round, hitting 3 or more scatter symbols awards 5 extra free spins', 
@@ -821,75 +1277,76 @@ export class Menu {
             const scatterSymbolImage2 = scene.add.image(0, 0, 'scatterIcon');
             scatterSymbolImage2.setScale(0.25);
             scatterSymbolImage2.setOrigin(0.5, 0.5);
-            scatterSymbolImage2.setPosition(195, 300);
+            scatterSymbolImage2.setPosition(195, 790);
             freeSpinContainer.add(scatterSymbolImage2);
     
             const scatterSymbolImage = scene.add.image(0, 0, 'scatterIcon');
             scatterSymbolImage.setScale(0.5);
             scatterSymbolImage.setOrigin(0.5, 0.5);
-            scatterSymbolImage.setPosition(100, 60);
+            scatterSymbolImage.setPosition(100, 55);
             freeSpinContainer.add(scatterSymbolImage);
             
             const scatterWinImage = scene.add.image(0, 0, 'scatterWin');
             scatterWinImage.setScale(0.5);
             scatterWinImage.setOrigin(0.5, 0.5);
-            scatterWinImage.setPosition(scatterSymbolImage.x - scatterSymbolImage.displayWidth/2 + this.padding * 2, scatterSymbolImage.y * 3/4 - scatterWinImage.height/ 4);
+            scatterWinImage.setPosition(scatterSymbolImage.x - scatterSymbolImage.displayWidth/2 + this.padding * 2, scatterSymbolImage.y * 0.75 - scatterWinImage.height/2 + 20);
             freeSpinContainer.add(scatterWinImage);
             
-            this.yPosition -= scaledSymbolSize * 3;
-            //this.addDivider(0x379557);
-    
+            this.yPosition -= scaledSymbolSize * 12.75;
+            // this.addDivider(scene, 0x379557);
+            
+
             //this.yPosition += scaledSymbolSize  * 4;
             this.addContent(scene, 'Multiplier', 'title');
-            this.yPosition -= scaledSymbolSize  * 2.5;
+            //this.yPosition += scaledSymbolSize  * 0.75;
             
             const multiplierContainer = scene.add.container(-this.padding * 1.5, this.yPosition);
             this.yPosition += this.createBorder(scene, multiplierContainer, 
                 this.padding, 
                 0, 
                 this.contentWidth + this.padding * 3, 
-                scaledSymbolSize * 6.5
+                scaledSymbolSize * 15
             );
-            this.yPosition += scaledSymbolSize *6;
+            this.yPosition += scaledSymbolSize * 6.5;
             this.contentContainer.add(multiplierContainer);
             this.contentContainer.sendToBack(multiplierContainer);
             
     
-            this.createHowToPlayEntry(scene, 20, 150, multiplierContainer, 'multiplierGame', 
+            this.createHowToPlayEntry(scene, 20, 380, multiplierContainer, 'multiplierGame', 
                 '\nThe         Multiplier symbol only appears during the FREE SPINS round and remains on the screen until the tumbling sequence ends.\n\n' +
                 'Each time a         symbol lands, it randomly takes a multiplier value: 2x, 3x, 4x, 5x, 6x, 8x, 10x, 12x, 15x, 20x, 25x, 50x, or even 100x!\n\n' +
                 'Once all tumbles are finished, the total of all           multipliers is added and applied to the total win of the that sequence.\n\n' +
                 'Special reels are used during the FREE SPINS round.',
             true, this.contentWidth + this.padding * 3);
     
-            
+            let multiplier_y = 470;
                 const multiplierIcon4 = scene.add.image(0, 0, 'multiplierIcon');
                 multiplierIcon4.setScale(0.15);
                 multiplierIcon4.setOrigin(0.5, 0.5);
-                multiplierIcon4.setPosition(80, 280);
+                multiplierIcon4.setPosition(80, 280 + multiplier_y);
                 multiplierContainer.add(multiplierIcon4);
             
                 const multiplierIcon3 = scene.add.image(0, 0, 'multiplierIcon');
                 multiplierIcon3.setScale(0.15);
                 multiplierIcon3.setOrigin(0.5, 0.5);
-                multiplierIcon3.setPosition(163, 405);
+                multiplierIcon3.setPosition(163, 395 + multiplier_y);
                 multiplierContainer.add(multiplierIcon3);
                 
             
                 const multiplierIcon2 = scene.add.image(0, 0, 'multiplierIcon');
                 multiplierIcon2.setScale(0.15);
                 multiplierIcon2.setOrigin(0.5, 0.5);
-                multiplierIcon2.setPosition(100, 550);
+                multiplierIcon2.setPosition(100, 530 + multiplier_y);
                 multiplierContainer.add(multiplierIcon2);
             
             const multiplierIcon = scene.add.image(0, 0, 'multiplierIcon');
-            multiplierIcon.setScale(0.25);
+            multiplierIcon.setScale(0.33);
             multiplierIcon.setOrigin(0.5, 0.5);
-            multiplierIcon.setPosition(40, 75);
+            multiplierIcon.setPosition(100, 50);
             multiplierContainer.add(multiplierIcon);
             this.contentContainer.bringToTop(multiplierIcon);
             
-            this.yPosition -= scaledSymbolSize * 12.5;
+            this.yPosition -= scaledSymbolSize * 28.0;
             this.addContent(scene, 'Game Settings', 'title');
     
             const gamesettingsContainer = scene.add.container(-this.padding * 1.5, this.yPosition);
@@ -897,28 +1354,30 @@ export class Menu {
                 this.padding, 
                 0, 
                 this.contentWidth + this.padding * 3, 
-                scaledSymbolSize * 6
+                scaledSymbolSize * 10
             );
             this.contentContainer.add(gamesettingsContainer);
     
-            this.yPosition -= scaledSymbolSize * 6;
+            //this.yPosition -= scaledSymbolSize * 9.75;
+            this.yPosition -= scaledSymbolSize * 10
     
+            this.yPosition += this.padding;
             this.addContent(scene, 'Paylines', 'title');
     
-            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 0.6, gamesettingsContainer, '', 'Symbols can land anywhere on the screen.', true, this.contentWidth + this.padding * 3);
+            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 0.75, gamesettingsContainer, '', 'Symbols can land anywhere on the screen.', true, this.contentWidth + this.padding * 3);
     
-            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 1.75, gamesettingsContainer, 'paylineMobileWin', '');
-            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 3.25, gamesettingsContainer, 'paylineMobileNoWin', '');
+            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 2.75, gamesettingsContainer, 'paylineMobileWin', '');
+            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 5.25, gamesettingsContainer, 'paylineMobileNoWin', '');
     
-            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 4.0, gamesettingsContainer, '', 'All wins are multiplied by the base bet. \n\n'+
-                'When multiple symbol wins occur, all values are combined into the total win. \n\n'+
-                'Free spins rewards are granted after the round ends.', true, this.contentWidth + this.padding * 3);
+            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 6.5, gamesettingsContainer, '', 'All wins are multiplied by the base bet.', true, this.contentWidth + this.padding * 3);
+            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 7.5, gamesettingsContainer, '', 'When multiple symbol wins occur, all values are combined into the total win.', true, this.contentWidth + this.padding * 3);
+            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 8.75, gamesettingsContainer, '', 'Free spins rewards are granted after the round ends.', true, this.contentWidth + this.padding * 3);
     
-            this.yPosition -= scaledSymbolSize * 3;
+            this.yPosition -= scaledSymbolSize * 3.0;
     
             this.commonRules(scene, this.contentWidth, 153);
     
-            this.yPosition -= scaledSymbolSize * 38;
+            this.yPosition -= scaledSymbolSize * 43;
             contentArea.add(this.contentContainer);
     }
     
@@ -936,36 +1395,35 @@ export class Menu {
             scaledSymbolSize * 25
         );
         this.contentContainer.add(howToPlayContainer);
-
-        this.createHeader(scene, commonPadding , this.isMobile ? commonPadding / 2 : commonPadding * 1.5, howToPlayContainer, 'Bet Controls', '#379557');
-
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 5 : commonPadding * 6 , howToPlayContainer, this.isMobile ? 'howToPlay1Mobile' : 'howToPlay1', this.isMobile ? '' : 'Adjust your total bet.');
-
-        this.createHeader(scene, commonPadding, this.isMobile ? commonPadding * 9.5 : commonPadding * 9, howToPlayContainer, 'Game Actions', '#379557');
         
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 15 : commonPadding * 14, howToPlayContainer, this.isMobile ? 'howToPlay2Mobile' : 'howToPlay2', this.isMobile ? '' : 'Start the game round.');
-        this.createHowToPlayEntry(scene, commonPadding / 3, this.isMobile ? commonPadding * 25 : commonPadding * 21, howToPlayContainer, this.isMobile ? 'howToPlay11Mobile' : 'BuyFeatHelp', this.isMobile ? '' : 'Lets you buy the free spins round for 100x your total bet.');
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 38 : commonPadding * 28, howToPlayContainer, this.isMobile ? 'howToPlay12Mobile' : 'DoubleHelp', this.isMobile ? '' : 'You\'re wagering 25% more per spin, but you also have better chances at hitting big features.');
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 50 : commonPadding * 35, howToPlayContainer, this.isMobile ? 'howToPlay3Mobile' : 'howToPlay3', this.isMobile ? '' : 'Open the autoplay menu. Tap again to stop autoplay.');
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 60 : commonPadding * 42, howToPlayContainer, this.isMobile ? 'howToPlay4Mobile' : 'howToPlay4', this.isMobile ? '' : 'Speeds up the game.');
+        this.createHeader(scene, commonPadding ,  commonPadding / 2 , howToPlayContainer, 'Bet Controls', '#379557');
 
-        this.createHeader(scene, commonPadding, this.isMobile ? commonPadding * 66 : commonPadding * 52, howToPlayContainer, 'Display & Stats', '#379557');
+        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 5 , howToPlayContainer, 'howToPlay1', 'Adjust your total bet.');
 
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 70 : commonPadding * 52, howToPlayContainer, 'howToPlay5', 'Shows your current available credits.', true, this.contentWidth + this.padding * 3);
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 79 : commonPadding * 59, howToPlayContainer, 'howToPlay6', 'Display your total winnings from the current round.', true, this.contentWidth + this.padding * 3);
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 88 : commonPadding * 66, howToPlayContainer, 'howToPlay7', 'Adjust your wager using the - and + buttons.', true, this.contentWidth + this.padding * 3);
+        this.createHeader(scene, commonPadding, commonPadding * 9.5, howToPlayContainer, 'Game Actions', '#379557');
+        
+        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 15, howToPlayContainer, 'howToPlay2', 'Start the game round.');
+        this.createHowToPlayEntry(scene, commonPadding / 3, commonPadding * 25, howToPlayContainer, 'howToPlay11Mobile',  '');
+        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 38, howToPlayContainer, 'howToPlay12Mobile', '');
+        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 50, howToPlayContainer, 'howToPlay3Mobile', '');
+        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 60, howToPlayContainer, 'howToPlay4Mobile', '');
 
-        this.createHeader(scene, commonPadding, this.isMobile ? commonPadding * 96 : commonPadding * 71, howToPlayContainer, 'General Controls', '#379557');
+        this.createHeader(scene, commonPadding, commonPadding * 66, howToPlayContainer, 'Display & Stats', '#379557');
 
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 102 : commonPadding * 74, howToPlayContainer, this.isMobile ? 'howToPlay8Mobile' : 'howToPlay8', this.isMobile ? '' : 'Toggle game sounds on and off.');  
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 110.5 : commonPadding * 78, howToPlayContainer, this.isMobile ? 'howToPlay9Mobile' : 'howToPlay9', this.isMobile ? '' : 'Access gameplay preferences and system options.');
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 120 : commonPadding * 83, howToPlayContainer, this.isMobile ? 'howToPlay10Mobile' : 'howToPlay10', this.isMobile ? '' : 'View game rules, features, and paytable.');        
+        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 72, howToPlayContainer, 'howToPlay5', 'Shows your current available credits.', true, this.contentWidth - this.padding * 2);
+        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 82, howToPlayContainer, 'howToPlay6', 'Display your total winnings from the current round.', true, this.contentWidth - this.padding * 2);
+        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 93, howToPlayContainer, 'howToPlay7', 'Adjust your wager using the - and + buttons.', true, this.contentWidth - this.padding * 2);
 
-        this.yPosition -= scaledSymbolSize * 5;
+        this.createHeader(scene, commonPadding, commonPadding * 101, howToPlayContainer, 'General Controls', '#379557');
+
+        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 107, howToPlayContainer, 'howToPlay8Mobile', 'Toggle game sounds on and off.');  
+        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 114.5, howToPlayContainer, 'howToPlay9Mobile', 'Access gameplay preferences and system options.');
+        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 124, howToPlayContainer, 'howToPlay10Mobile', 'View game rules, features, and paytable.');        
+
+        this.yPosition -= scaledSymbolSize * 15;
     }
-
     private createHeader(scene: GameScene, x: number, y: number, container: GameObjects.Container, text: string, color: string): void {
-        const genericTableWidth = this.isMobile ? this.viewWidth - this.padding * 2 : 1129;
+        const genericTableWidth = this.viewWidth - this.padding * 2;
         
         const header = scene.add.text(0, 0,text,
             {
@@ -1100,8 +1558,6 @@ export class Menu {
             });
         });
     }
-
-    
     private createHowToPlayEntry(scene: GameScene, x: number, y: number, container: GameObjects.Container, image: string, text: string, wordWrap: boolean = false, wordWrapWidth: number = 0): void {
         let imageElement = null;
         if(image!=''){
@@ -1109,12 +1565,17 @@ export class Menu {
         }
         if(imageElement != null){
             if(image == 'tumbleGame' || image == 'scatterGame' || image == 'multiplierGame'){
-                imageElement.setScale(0.5);
+                imageElement.setOrigin(-0.133, 0.5);
             }
-            imageElement.setOrigin(0, 0.5);
+            else{
+                imageElement.setOrigin(0, 0.5);
+            }
         }
         if(image == 'BuyFeatMobile'){
             imageElement?.setPosition(x - imageElement.displayWidth/5, y);
+        }
+        if(image == 'howToPlay11Mobile'){
+            imageElement?.setScale(0.910, 1);
         }
         if(imageElement != null){
             container.add(imageElement);
@@ -1128,10 +1589,8 @@ export class Menu {
                 wordWrap: wordWrap ? { width: wordWrapWidth } : undefined,
             }
         );
-        textElement.setPosition(
-            this.isMobile ? x : x + (imageElement != null ? imageElement.displayWidth + this.padding : 0),
-            this.isMobile ? (imageElement != null ? imageElement.y + imageElement.displayHeight / 2 + this.padding * 2 : y) :
-                            (imageElement != null ? imageElement.y - imageElement.displayHeight / 10: y));
+        textElement.setPosition( x, (imageElement != null ? imageElement.y + imageElement.displayHeight / 2 + this.padding * 2 : y));
+                            
         textElement.setOrigin(0, 0);
         
         if(image == 'BuyFeatMobile'){
@@ -1141,9 +1600,7 @@ export class Menu {
             textElement.setPosition(x, textElement.y + this.padding * 6);
         }
         container.add(textElement); 
-        if(this.isMobile){
-            this.yPosition += (imageElement != null ? imageElement.displayHeight * 2 : 0) + textElement.displayHeight + this.padding * 2;
-        }
+        this.yPosition += (imageElement != null ? imageElement.displayHeight * 2 : 0) + textElement.displayHeight + this.padding * 2;
     }
 
     private createBorder(scene: GameScene, _container: GameObjects.Container, _x: number, _y: number, _width: number, _height: number): number {
@@ -1162,15 +1619,15 @@ export class Menu {
         // Add divider
         const divider = scene.add.graphics();
         divider.lineStyle(2, _color);
-        const x2 = this.isMobile ? this.viewWidth - this.padding * 4 : this.contentWidth + this.padding * 2;
+        const x2 = this.viewWidth - this.padding * 4;
         divider.lineBetween(this.padding, this.yPosition, x2, this.yPosition );
         this.contentContainer.add(divider);
         this.yPosition += this.padding;
     }
 
     private createPayoutTable(scene: GameScene, x: number, y: number, container: GameObjects.Container, symbolIndex: number): void {
-        const cellWidth1 = this.isMobile ? 45 : 45; 
-        const cellWidth2 = this.isMobile ? 100 : 80;
+        const cellWidth1 = 60; 
+        const cellWidth2 = 100;
         const cellHeight = 22.5;
         const cellPadding = 5;
 
@@ -1199,7 +1656,7 @@ export class Menu {
                 } else {
                     cellWidth = cellWidth2 * 2;
                 }
-                const cellX = x + (col == 2 ? cellWidth1 + cellWidth2 : col * (cellWidth /2 ));
+                const cellX = x + (col == 2 ? cellWidth1 + cellWidth2 + cellPadding * 2 : col * (cellWidth + cellPadding));
                 const cellY = tableY + row * (cellHeight + cellPadding);
 
                 // Draw cell border
@@ -1229,7 +1686,8 @@ export class Menu {
                                 fontSize: '20px',
                                 color: '#FFFFFF',
                                 fontFamily: 'Poppins', 
-                                align: 'left'
+                                align: 'left',
+                                fontStyle: 'bold'
                             });
                         }
                         else{
@@ -1265,7 +1723,8 @@ export class Menu {
                         const textElement = scene.add.text(cellX + cellWidth + this.padding, cellY + cellHeight/2, text, {
                             fontSize: '20px',
                             color: '#FFFFFF',
-                            fontFamily: 'Poppins'
+                            fontFamily: 'Poppins',
+                            fontStyle: 'bold'
                         });
                         textElement.setOrigin(col == 0 ? 0 : 0.5, 0.5);
                         container.add(textElement);
@@ -1288,14 +1747,16 @@ export class Menu {
                                 fontSize: '20px',
                                 color: '#FFFFFF',
                                 fontFamily: 'Poppins',
+                                padding: {
+                                    left: this.padding,
+                                    right: this.padding
+                                }
                             }
                         );
                         scatterTextCell.setOrigin(0, 0);
                         container.add(scatterTextCell);
-                        if(this.isMobile){
-                            scatterTextCell.setPosition(this.padding, scatterTextCell.y + scatterTextCell.displayHeight + this.padding * 10);
-                            scatterTextCell.setWordWrapWidth(this.contentWidth * 2);
-                        }
+                        scatterTextCell.setPosition(0, scatterTextCell.y + scatterTextCell.displayHeight + this.padding * 10);
+                        scatterTextCell.setWordWrapWidth(this.contentWidth * 2);
                     }
                 }
             }
@@ -1305,6 +1766,7 @@ export class Menu {
 
 
     public toggleMenu(scene: GameScene): void {
+        
         this.showMenu(scene);
     }
 }

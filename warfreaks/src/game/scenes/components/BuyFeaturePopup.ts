@@ -15,14 +15,13 @@ type ButtonContainer = GameObjects.Container & ButtonBase;
 type ButtonImage = GameObjects.Image & ButtonBase;
 type ButtonText = GameObjects.Text & ButtonBase;
 
+
 interface GameScene extends Scene {
     gameData: GameData;
     audioManager: AudioManager;
     slotMachine: SlotMachine;
-    helpScreen: HelpScreen;
     autoplay: Autoplay;
 }
-
 export class BuyFeaturePopup {
     private popupContainer: GameObjects.Container | null = null;
     private isMobile: boolean = false;

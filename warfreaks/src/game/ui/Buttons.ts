@@ -129,11 +129,38 @@ export class Buttons {
         scene.load.image('win_bar_main', 'assets/Mobile/win_bar_main.png');
         scene.load.image('win_bar_bonus', 'assets/Mobile/win_bar_bonus.png');
 
+
+
+        // Preload Spine animation for the spin button idle effect
+        scene.load.spineAtlas('button_animation_idle', 'assets/Controllers/Animation/Spin/button_animation_idle.atlas');
+        scene.load.spineJson('button_animation_idle', 'assets/Controllers/Animation/Spin/button_animation_idle.json');
+
+        // Preload Spine animation for the spin button press effect
+        scene.load.spineAtlas('Amplify_Bet', 'assets/Controllers/Animation/AmplifyBet/Amplify Bet.atlas');
+        scene.load.spineJson( 'Amplify_Bet', 'assets/Controllers/Animation/AmplifyBet/Amplify Bet.json');
+
+        // Preload Spine animation for the spin button idle effect
+        scene.load.spineAtlas('Amplify_Bet_Idle', 'assets/Controllers/Animation/AmplifyBet_Idle/Amplify Bet.atlas');
+        scene.load.spineJson( 'Amplify_Bet_Idle', 'assets/Controllers/Animation/AmplifyBet_Idle/Amplify Bet.json');
+        
+
+        // Preload spine animation for the spin click event
+        scene.load.spineJson('generic_UI_animation', 'assets/Controllers/Animation/generic_UI_animation/generic_UI_animation.json');
+        scene.load.spineAtlas('generic_UI_animation', 'assets/Controllers/Animation/generic_UI_animation/generic_UI_animation.atlas');
+
+        // Preload spine animation for the turbo animation
+        scene.load.spineJson('turbo_animation', 'assets/Controllers/Animation/turbo_animation/Turbo_Spin.json');
+        scene.load.spineAtlas('turbo_animation', 'assets/Controllers/Animation/turbo_animation/Turbo_Spin.atlas');
+
+        // Preload spine animation for Spin button animation
+        scene.load.spineJson('spin_button_animation', 'assets/Controllers/Animation/spin_button_anim/spin_button_anim.json');
+        scene.load.spineAtlas('spin_button_animation', 'assets/Controllers/Animation/spin_button_anim/spin_button_anim.atlas');
+
         // Preload help screen assets
         const helpScreen = new HelpScreen();
         helpScreen.preload(scene);
         const menu = new Menu();
-        menu.preload();
+        menu.preload(scene);
     }
 
     create(scene: GameScene): void {
@@ -147,14 +174,21 @@ export class Buttons {
         this.createTurboButton(scene);
         this.createSpinButton(scene);
         this.createAutoplay(scene);
-        if(!this.isMobile) this.createInfo(scene);
+        
+         this.createInfo(scene); // desktop
+
         this.createBalance(scene);
-        this.createTotalWin(scene);
+
+        this.createTotalWin(scene); // desktop
+
         this.createBet(scene);
         this.createBuyFeature(scene);
         this.createDoubleFeature(scene);
         this.createLogo(scene);
+
         this.createMarquee(scene);
+        this.createMarqueeBonus(scene);
+
         this.createSettings(scene);
         //this.createSettingsButton(scene);
         
@@ -173,12 +207,16 @@ export class Buttons {
         if (!scene.gameData.isSpinning) {
             this.turboButton.visible = !this.turboButton.visible;
             this.turboOnButton.visible = !this.turboOnButton.visible;
+            this.turboOnButton.setAlpha(this.turboOnButton.visible ? 1 : 0);
+            this.turboAnimationEnable(this.turboOnButton.visible);
             scene.gameData.turbo = !scene.gameData.turbo;
         } else {
             // Queue the turbo toggle for after current spin completes
             const onSpinComplete = () => {
                 this.turboButton.visible = !this.turboButton.visible;
                 this.turboOnButton.visible = !this.turboOnButton.visible;
+                this.turboOnButton.setAlpha(this.turboOnButton.visible ? 1 : 0);
+                this.turboAnimationEnable(this.turboOnButton.visible);
                 scene.gameData.turbo = !scene.gameData.turbo;
                 Events.emitter.off(Events.MATCHES_DONE, onSpinComplete); // Remove listener after use
             };
@@ -226,6 +264,46 @@ export class Buttons {
         container.name = 'turboContainer';
         container.setScale(this.isMobile ? 0.5 : 1);
         this.buttonContainer.add(container);
+
+        const spineObject = scene.add.spine(0, 10, 'turbo_animation', 'turbo_animation') as SpineGameObject;
+        spineObject.setScale(2.5);
+        container.add(spineObject);
+        spineObject.setAlpha(1);
+        this.turboAnimation = spineObject;
+
+        container.bringToTop(spineObject);
+
+        
+        if(this.isMobile){
+            const turboText = scene.add.text(0, 50,
+                'Turbo',
+                {
+                    fontSize: '12px',
+                    color: '#FFFFFF',
+                    fontFamily: 'Poppins',
+                    align: 'center'
+                }
+            );
+            turboText.setOrigin(0.5, 0); // Center horizontally, top align vertically
+            turboText.setScale(2);
+            container.add(turboText);
+        }
+
+        container.setScale(this.isMobile ? 0.475 : 1);
+        this.buttonContainer.add(container);
+        // Record base Y and hook Y-axis toggle event
+        this.baseYPositions[container.name] = container.y;
+        Events.emitter.on(Events.CREATE_TURBO_BUTTON, (hidden?: boolean) => {
+            if (!container) return;
+            const baseY = this.baseYPositions['turboContainer'] ?? container.y;
+            const targetY = hidden ? scene.scale.height + 200 : baseY;
+            // Fallback to direct set if tween cannot be created
+            try {
+                scene.tweens.add({ targets: container, y: targetY, duration: 200, ease: 'Cubic.easeInOut' });
+            } catch (_e) {
+                (container as any).y = targetY;
+            }
+        });
 
         container.setInteractive(
             new Geom.Circle(0, 0, width * 1.25), 
@@ -1003,67 +1081,68 @@ export class Buttons {
 	}
 
     private createInfo(scene: GameScene): void {
-        const x = this.isMobile ? this.width * 0.115 : this.width * 0.88;
-        const y = this.isMobile ? this.height * 0.67 : this.height * 0.70;
+        return; // for desktop view only
+        // const x = this.isMobile ? this.width * 0.115 : this.width * 0.88;
+        // const y = this.isMobile ? this.height * 0.67 : this.height * 0.70;
 
-        const container = scene.add.container(x, y) as ButtonContainer;
+        // const container = scene.add.container(x, y) as ButtonContainer;
 
-        const infoButton = scene.add.image(0, 0, 'info') as ButtonImage;
-        const infoOnButton = scene.add.image(0, 0, 'infoOn') as ButtonImage;
-        infoOnButton.visible = false;
+        // const infoButton = scene.add.image(0, 0, 'info') as ButtonImage;
+        // const infoOnButton = scene.add.image(0, 0, 'infoOn') as ButtonImage;
+        // infoOnButton.visible = false;
 
-        const width = infoButton.width * 0.6;
-        const height = infoButton.height * 0.6;
+        // const width = infoButton.width * 0.6;
+        // const height = infoButton.height * 0.6;
 
-        // inner circle
-        const innerCircle = scene.add.graphics();
-        innerCircle.fillStyle(0x000000, 0.5);
-        innerCircle.fillCircle(0, 0, this.isMobile ? width * 1.75 : width * 1.875);
-        container.add(innerCircle);
+        // // inner circle
+        // const innerCircle = scene.add.graphics();
+        // innerCircle.fillStyle(0x000000, 0.5);
+        // innerCircle.fillCircle(0, 0, this.isMobile ? width * 1.75 : width * 1.875);
+        // container.add(innerCircle);
 
-        // outer circle
-        const border = scene.add.graphics();
-        border.fillStyle(0x000000, 0.15);
-        border.fillCircle(0, 0, width * 2.25);
-        border.setVisible(this.isMobile ? false : true);
-        container.add(border);
+        // // outer circle
+        // const border = scene.add.graphics();
+        // border.fillStyle(0x000000, 0.15);
+        // border.fillCircle(0, 0, width * 2.25);
+        // border.setVisible(this.isMobile ? false : true);
+        // container.add(border);
 
-        infoButton.displayWidth = width * .8;
-        infoButton.displayHeight = height * .8;
+        // infoButton.displayWidth = width * .8;
+        // infoButton.displayHeight = height * .8;
         
-        infoOnButton.displayWidth = width * 4.5 * .8;
-        infoOnButton.displayHeight = height * 2.25 * .8;
+        // infoOnButton.displayWidth = width * 4.5 * .8;
+        // infoOnButton.displayHeight = height * 2.25 * .8;
 
-        infoButton.setInteractive().isButton = true;
-        infoOnButton.setInteractive().isButton = true;
-        container.add(infoButton);
-        container.add(infoOnButton);
+        // infoButton.setInteractive().isButton = true;
+        // infoOnButton.setInteractive().isButton = true;
+        // container.add(infoButton);
+        // container.add(infoOnButton);
 
-        container.setScale(this.isMobile ? 0.8 : 1);
-        this.buttonContainer.add(container);
+        // container.setScale(this.isMobile ? 0.8 : 1);
+        // this.buttonContainer.add(container);
 
-        container.setInteractive(
-            new Geom.Circle(0, 0, width * 1.25 / 0.8),
-            Geom.Circle.Contains
-        ).isButton = true;
+        // container.setInteractive(
+        //     new Geom.Circle(0, 0, width * 1.25 / 0.8),
+        //     Geom.Circle.Contains
+        // ).isButton = true;
 
-        const toggleInfo = () => {
-            scene.audioManager.UtilityButtonSFX.play();
-            this.hideBetPopup(scene);
+        // const toggleInfo = () => {
+        //     scene.audioManager.UtilityButtonSFX.play();
+        //     this.hideBetPopup(scene);
             
             
-            scene.gameData.isHelpScreenVisible = !scene.gameData.isHelpScreenVisible;
-        };
+        //     scene.gameData.isHelpScreenVisible = !scene.gameData.isHelpScreenVisible;
+        // };
 
-        container.on('pointerdown', toggleInfo);
-        infoButton.on('pointerdown', toggleInfo);
-        infoOnButton.on('pointerdown', toggleInfo);
+        // container.on('pointerdown', toggleInfo);
+        // infoButton.on('pointerdown', toggleInfo);
+        // infoOnButton.on('pointerdown', toggleInfo);
 
-        // Listen for help screen toggle event
-        Events.emitter.on(Events.HELP_SCREEN_TOGGLE, () => {
-            // Update button state based on help screen visibility
-            toggleInfo();
-        });
+        // // Listen for help screen toggle event
+        // Events.emitter.on(Events.HELP_SCREEN_TOGGLE, () => {
+        //     // Update button state based on help screen visibility
+        //     toggleInfo();
+        // });
     }
 
     private createBalance(scene: GameScene): void {
@@ -1120,26 +1199,51 @@ export class Buttons {
         text2.setOrigin(0.5, 0.5);
 
         Events.emitter.on(Events.SPIN_ANIMATION_START, () => {
-            Events.emitter.emit(Events.UPDATE_BALANCE);            
+            //Events.emitter.emit(Events.UPDATE_BALANCE);            
         });
 
-        Events.emitter.on(Events.WIN, () => {
-            Events.emitter.emit(Events.UPDATE_BALANCE);     
+        Events.emitter.on(Events.WIN, (data: any) => {
+            if(!data)
+            {
+                console.error("balance updated");
+                Events.emitter.emit(Events.UPDATE_BALANCE);
+            }
         });
 
         Events.emitter.on(Events.UPDATE_BALANCE, () => {
+            // console.error("balance updated");
             try{
                 scene.gameAPI.getBalance().then((data) => {
+                    // console.log("balance", data);
                     const balance = data.data.balance;
-                    text2.setText(scene.gameData.currency + " " + balance); 
-                    scene.gameData.debugLog("update balance " + balance);
+                        text2.setText(scene.gameData.currency + " " + balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })); 
+                    // console.log("update balance " + balance);
 
                     scene.gameData.balance = parseFloat(balance);
                 });
+            } catch(error) {
+                // console.log("error updating balance " + error);
+                text2.setText(scene.gameData.currency + " " + scene.gameData.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
             }
-            catch (error) {
-                console.error("Error updating balance:", error);
-                scene.gameData.balance = 10000;
+        });
+
+        Events.emitter.on(Events.UPDATE_FAKE_BALANCE, (reduce: number, increase: number) => {
+            scene.gameData.balance -= reduce;
+            scene.gameData.balance += increase;
+            //console.error("fake balance updated> reduce:" + reduce + " increase:" + increase + " = balance:" +  scene.gameData.balance);
+            text2.setText(scene.gameData.currency + " " + scene.gameData.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+        });
+
+        Events.emitter.on(Events.GET_BALANCE, () => {
+            try{
+                scene.gameAPI.getBalance().then((data) => {
+                    const balance = data.data.balance;
+                        text2.setText(scene.gameData.currency + " " + balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })); 
+
+                        // console.log(chalk.yellowBright.bold("refreshing balance"), data.data.balance);
+                    scene.gameData.balance = parseFloat(balance);
+                });
+            } catch(error) {
                 text2.setText(scene.gameData.currency + " " + scene.gameData.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
             }
         });
@@ -1148,10 +1252,12 @@ export class Buttons {
         this.balanceContainer = container;
         this.buttonContainer.add(container);
 
+        Events.emitter.emit(Events.GET_BALANCE);
         Events.emitter.emit(Events.UPDATE_BALANCE);
     }
 
     private createTotalWin(scene: GameScene): void {
+        // for desktop view only. 
         const width =  Buttons.PANEL_WIDTH * 1.5; 
         const x = this.isMobile ? this.balanceContainer.x + width * 0.525 : this.balanceContainer.x + width + this.width * 0.01;
         const y = this.isMobile ? this.balanceContainer.y : this.balanceContainer.y;
@@ -1163,12 +1269,14 @@ export class Buttons {
         // Create a gradient texture for totalWin
         const gradientTexture = scene.textures.createCanvas('totalWinGradient', width, Buttons.PANEL_HEIGHT);
         if (gradientTexture) {
+            // @ts-ignore
             const context = gradientTexture.getContext();
             const gradient = context.createLinearGradient(0, 0, 0, Buttons.PANEL_HEIGHT);
             gradient.addColorStop(0, 'rgba(0, 0, 0, 0.24)');
             gradient.addColorStop(1, 'rgba(0, 0, 0, 0.24)');
             context.fillStyle = gradient;
             context.fillRect(0, 0, width, Buttons.PANEL_HEIGHT);
+            // @ts-ignore
             gradientTexture.refresh();
         }
 
@@ -2094,7 +2202,7 @@ export class Buttons {
         // Mobile-only marquee; depth high enough to be visible
         container.setDepth(20);
 
-        const marquee = scene.add.image(0, 0, 'marquee');
+        const marquee = scene.add.image(0, 0, 'win_bar_main');
         marquee.setScale(0.49);
         container.add(marquee);
 
@@ -2310,6 +2418,8 @@ export class Buttons {
         Events.emitter.on(Events.FINAL_WIN_SHOW, () => {
             youWonLabel.setText('TOTAL WIN');
             youWonAmount.setText(`${scene.gameData.currency} ${scene.gameData.totalWin.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+
+            Events.emitter.emit(Events.GET_BALANCE);
         });
         Events.emitter.on(Events.FREE_SPIN_TOTAL_WIN, ()=>{
             //console.log(scene.gameData.currentFreeSpinIndex);
