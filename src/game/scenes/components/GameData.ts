@@ -107,7 +107,7 @@ export class GameData {
     currentMatchingSymbols: number[] = [];
     doubleChanceMultiplier: number = 2;
     
-    winRank : number[] = [1, 20, 30, 45, 60, 21000];
+    winRank : number[] = [1, 1, 2, 3, 4, 21000];
 
     public gameUrl: string = '';
     public gameToken: string = '';
