@@ -376,7 +376,10 @@ export class SlotMachine {
         }
         // console.log("toBet", toBet, isBuyFeature, isEnhancedBet);
 
-        Events.emitter.emit(Events.UPDATE_FAKE_BALANCE, toBet, 0); // ( reduce , increase )
+        setTimeout(() => {
+            Events.emitter.emit(Events.UPDATE_FAKE_BALANCE, toBet, 0); // ( reduce , increase )
+        }, 100);
+        
         
         // console.log("result", result);
         scene.gameData.apiBet = result.bet;
