@@ -1651,6 +1651,7 @@ export class Buttons {
 
         Events.emitter.on(Events.WIN, () => {
             Events.emitter.emit(Events.UPDATE_BALANCE);
+            Events.emitter.emit(Events.GET_BALANCE);
         });
 
         Events.emitter.on(Events.FINAL_WIN_SHOW, () => {

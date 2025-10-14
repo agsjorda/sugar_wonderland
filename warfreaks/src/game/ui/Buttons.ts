@@ -557,7 +557,7 @@ export class Buttons {
             this.autoplayButton?.setInteractive();
         }
     }
-
+    private autoPlay_Y : number = 0;
     private createAutoplay(scene: GameScene): void {
         const x = this.isMobile ? this.width * 0.28 : this.width * 0.88;
         const y = this.isMobile ? this.mobile_buttons_y  : this.height * 0.598;
@@ -591,27 +591,47 @@ export class Buttons {
         container.add(this.autoplayOnButton);
         this.autoplayOnButton.visible = false;
 
+        // Create generic UI click animation overlay for autoplay (hidden by default)
+        const autoplayGenericSpine = scene.add.spine(0, 0, 'generic_UI_animation', 'generic_UI_animation') as SpineGameObject;
+        autoplayGenericSpine.setPosition(0, 0);
+        autoplayGenericSpine.setOrigin(0.5, 0.5);
+        autoplayGenericSpine.setScale(0.25);
+        autoplayGenericSpine.setAlpha(1);
+        container.add(autoplayGenericSpine);
+        this.genericUIAnimation = autoplayGenericSpine;
+
         this.buttonContainer.add(container);
+        // Record base Y and hook Y-axis toggle event
+        container.name = 'autoplayContainer';
+        this.baseYPositions[container.name] = container.y;
+        Events.emitter.on(Events.CREATE_AUTOPLAY, (hidden?: boolean) => {
+            if (!container) return;
+            const baseY = this.baseYPositions['autoplayContainer'] ?? container.y;
+            const targetY = hidden ? scene.scale.height + 200 : baseY;
+            try {
+                scene.tweens.add({ targets: container, y: targetY, duration: 200, ease: 'Cubic.easeInOut' });
+            } catch (_e) {
+                (container as any).y = targetY;
+            }
+        });
 
         // --- AUTOPLAY SETTINGS POPUP ---
-        const popupWidth = this.isMobile ? scene.scale.width : 466;
-        const popupHeight = 547;
-        const popup = scene.add.container(
-            this.isMobile ? 0 : scene.scale.width / 2 - popupWidth / 2,
-            this.isMobile ? scene.scale.height / 2  - popupHeight * 0.42 : scene.scale.height / 2 - popupHeight / 2);
+        const popupWidth = scene.scale.width;
+        const popupHeight = 722;
+        const popup = scene.add.container(0, scene.scale.height / 2 - popupHeight * (1 - popupHeight/scene.scale.height * .75));
         popup.setDepth(1000);
         popup.setVisible(false);
-        popup.setScale(this.isMobile ? 1 : 1);
 
         // Store popup reference for external access
         this.autoplayPopup = popup;
+        this.autoPlay_Y = popup.y;
 
         // Popup background
         const bg = scene.add.graphics();
         bg.fillStyle(0x000000, 0.8);
         bg.lineStyle(3, 0x66D449, 1);
-        bg.strokeRoundedRect(0, 0, popupWidth, popupHeight, 16);
-        bg.fillRoundedRect(0, 0, popupWidth, popupHeight, 16);
+        bg.strokeRoundedRect(0, 0, popupWidth, popupHeight * 2, 16);
+        bg.fillRoundedRect(0, 0, popupWidth, popupHeight * 2, 16);
         popup.add(bg);
         
         // Add blur effect if available
@@ -636,27 +656,39 @@ export class Buttons {
         });
         (closeBtn as any as ButtonText).setInteractive().isButton = true;
         popup.add(closeBtn);
+        
+        // Balance section (enclosed in a rectangular box)
+        const balanceBoxY = padding * 2;
+        const balanceBoxHeight = 60;
+        const balanceBoxWidth = popupWidth - padding * 2;
+        const balanceBox = scene.add.graphics();
+        balanceBox.fillStyle(0x000000, 0.5);
+        balanceBox.lineStyle(1, 0x66D449, 0);
+        balanceBox.fillRoundedRect(padding, balanceBoxY + balanceBoxHeight / 6, balanceBoxWidth, balanceBoxHeight, 10);
+        balanceBox.strokeRoundedRect(padding, balanceBoxY + balanceBoxHeight / 6, balanceBoxWidth, balanceBoxHeight, 10);
+        popup.add(balanceBox);
 
-        // Balance section
-        const balanceLabel = scene.add.text(padding, padding * 2 + textPadding, 'Balance', {
+        const balanceLabel = scene.add.text(padding + 16, balanceBoxY + balanceBoxHeight * 2/3, 'Balance', {
             fontSize: '24px',
             color: '#FFFFFF',
             fontFamily: 'Poppins'
         });
+        balanceLabel.setOrigin(0, 0.5);
         popup.add(balanceLabel);
 
-        const balanceValue = 
-        scene.add.text(balanceLabel.x + balanceLabel.width + textPadding + padding / 2,
-             balanceLabel.y, scene.gameData.currency + scene.gameData.balance.toLocaleString(), {
+        const balanceValue = scene.add.text(padding + balanceBoxWidth - 16, balanceBoxY + balanceBoxHeight * 2/3,
+            scene.gameData.currency + scene.gameData.balance.toLocaleString(), {
             fontSize: '24px',
-            color: '#FFFFFF',
+            color: '#66D449',
             fontFamily: 'Poppins',
-            align: 'right'
-        }); 
+            align: 'center'
+        });
+        (balanceValue as any).setOrigin?.(1, 0.5);
         popup.add(balanceValue);
 
         // Number of autospins section
-        const spinsLabel = scene.add.text(padding, balanceLabel.y + balanceLabel.height + textPadding * 4, 'Number of autospins', {
+        const spinsLabelY = balanceBoxY + balanceBoxHeight + textPadding * 10;
+        const spinsLabel = scene.add.text(padding, spinsLabelY, 'Number of autospins', {
             fontSize: '24px',
             color: '#FFFFFF',
             fontFamily: 'Poppins'
@@ -665,7 +697,7 @@ export class Buttons {
 
         // Spin options
         const spinOptions = [10, 30, 50, 75, 100, 150, 500, 1000];
-        const buttonWidth = 88.5;
+        const buttonWidth = 88.5 * 0.9;
         const buttonHeight = 60;
         const spacing = 16;
         let selectedSpins = spinOptions[0]; // Set default to first option
@@ -696,16 +728,10 @@ export class Buttons {
             buttonContainer.add(text);
 
             // Make button interactive
-            if(this.isMobile) {
-                const hitArea = new Geom.Rectangle(0, 0, buttonWidth, buttonHeight);
-                buttonContainer.setInteractive(hitArea, Geom.Rectangle.Contains);
-                (buttonContainer as any).isButton = true;
-            }
-            else{
-                buttonContainer.setInteractive();
-                (buttonContainer as any).isButton = true;
-            }
-
+            const hitArea = new Geom.Rectangle(0, 0, buttonWidth, buttonHeight);
+            buttonContainer.setInteractive(hitArea, Geom.Rectangle.Contains);
+            (buttonContainer as any).isButton = true;
+    
             buttonContainer.on('pointerdown', () => {
                 scene.audioManager.UtilityButtonSFX.play();
                 
@@ -743,13 +769,22 @@ export class Buttons {
         });
         popup.add(betLabel);
 
-        const betValueY = betLabel.y + betLabel.height + padding*1.5;
+        // Bet controls box
+        const betBoxY = betLabel.y + betLabel.height + padding / 3;
+        const betBoxHeight = 74;
+        const betBoxWidth = popupWidth - padding * 2;
+        const betBox = scene.add.graphics();
+        betBox.fillStyle(0x333333, 0.8);
+        betBox.lineStyle(1, 0x66D449, 1);
+        betBox.fillRoundedRect(padding, betBoxY, betBoxWidth, betBoxHeight, 10);
+        betBox.strokeRoundedRect(padding, betBoxY, betBoxWidth, betBoxHeight, 10);
+        popup.add(betBox);
+
+        const betValueY = betBoxY + betBoxHeight / 2;
         // Bet controls
-        const minusBtn = scene.add.image(padding * 2, betValueY, 'minus');
-        minusBtn.setScale(0.35);   
+        const minusBtn = scene.add.image(padding + 36, betValueY, 'minus');
         (minusBtn as any as ButtonImage).setInteractive().isButton = true;
         popup.add(minusBtn);
-
 
         let bet = scene.gameData.bet * selectedSpins; // Initialize bet with selected spins
         const betValue = scene.add.text(popupWidth / 2, betValueY, scene.gameData.currency + bet.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), {
@@ -761,84 +796,83 @@ export class Buttons {
         betValue.setOrigin(0.5, 0.5);
         popup.add(betValue);
 
-        const plusBtn = scene.add.image(popupWidth - padding * 2, betValueY, 'plus');
-        plusBtn.setScale(0.4);
+
+        const plusBtn = scene.add.image(padding + betBoxWidth - 36, betValueY, 'plus');
         (plusBtn as any as ButtonImage).setInteractive().isButton = true;
         popup.add(plusBtn);
 
+        // Use same bet options as main bet controls
+        const betOptionsPopup = [0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.6, 2, 2.4, 2.8, 3.2, 3.6, 4, 5, 6, 8, 10, 14, 18, 24, 32 ,40, 60, 80, 100, 110 ,120, 130, 140, 150];
+        let selectedBetIndexPopup = betOptionsPopup.indexOf(scene.gameData.bet);
+        if (selectedBetIndexPopup === -1) {
+            selectedBetIndexPopup = 0;
+        }
+        const EPS_POP = 1e-6;
+        const findPopupBetIndexByValue = (val: number) => betOptionsPopup.findIndex(v => Math.abs(v - val) < EPS_POP);
+        const popupAtMin = (val: number) => (val <= betOptionsPopup[0] + EPS_POP);
+        const popupAtMax = (val: number) => (val >= betOptionsPopup[betOptionsPopup.length - 1] - EPS_POP);
+
+        // helper to update +/- state at min/max
+        const updatePopupBetButtonsState = () => {
+            // derive from actual value
+            const atMin = popupAtMin(scene.gameData.bet);
+            const atMax = popupAtMax(scene.gameData.bet);
+            if (atMin) {
+                (minusBtn as any).setAlpha?.(0.3);
+                (minusBtn as any).disableInteractive?.();
+            } else {
+                (minusBtn as any).setAlpha?.(0.8);
+                (minusBtn as any).setInteractive?.();
+            }
+            if (atMax) {
+                (plusBtn as any).setAlpha?.(0.3);
+                (plusBtn as any).disableInteractive?.();
+            } else {
+                (plusBtn as any).setAlpha?.(0.8);
+                (plusBtn as any).setInteractive?.();
+            }
+        };
+
         plusBtn.on('pointerdown', () => {
-            scene.audioManager.UtilityButtonSFX.play();
-            
-            // Find the next higher spin option
-            const nextSpinOption = spinOptions.find(spins => spins > selectedSpins);
-            if (nextSpinOption) {
-                // Update selected spins and bet immediately
-                selectedSpins = nextSpinOption;
-                bet = scene.gameData.bet * selectedSpins;
-                
-                // Update button appearance
-                if (selectedButton) {
-                    const prevBg = selectedButton.list[0] as GameObjects.Graphics;
-                    prevBg.clear();
-                    prevBg.fillStyle(0x181818, 1);
-                    prevBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
-                }
-                
-                // Select the next button
-                const nextButton = buttons[spinOptions.indexOf(nextSpinOption)];
-                const nextBg = nextButton.list[0] as GameObjects.Graphics;
-                nextBg.clear();
-                nextBg.fillStyle(0x66D449, 1);
-                nextBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
-                selectedButton = nextButton;
-                
-                // Update display
+            const idx = findPopupBetIndexByValue(scene.gameData.bet);
+            if (idx >= 0 && idx < betOptionsPopup.length - 1) {
+                scene.audioManager.UtilityButtonSFX.play();
+                selectedBetIndexPopup = idx + 1;
+                scene.gameData.bet = betOptionsPopup[selectedBetIndexPopup];
                 updateBetDisplay();
+                updatePopupBetButtonsState();
+                Events.emitter.emit(Events.CHANGE_BET, {});
+                Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {});
             }
         });
 
         minusBtn.on('pointerdown', () => {
-            scene.audioManager.UtilityButtonSFX.play();
-            
-            // Find the next lower spin option
-            const prevSpinOption = [...spinOptions].reverse().find(spins => spins < selectedSpins);
-            if (prevSpinOption) {
-                // Update selected spins and bet immediately
-                selectedSpins = prevSpinOption;
-                bet = scene.gameData.bet * selectedSpins;
-                
-                // Update button appearance
-                if (selectedButton) {
-                    const prevBg = selectedButton.list[0] as GameObjects.Graphics;
-                    prevBg.clear();
-                    prevBg.fillStyle(0x181818, 1);
-                    prevBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
-                }
-                
-                // Select the previous button
-                const prevButton = buttons[spinOptions.indexOf(prevSpinOption)];
-                const prevBg = prevButton.list[0] as GameObjects.Graphics;
-                prevBg.clear();
-                prevBg.fillStyle(0x66D449, 1);
-                prevBg.fillRoundedRect(0, 0, buttonWidth, buttonHeight, 8);
-                selectedButton = prevButton;
-                
-                // Update display
+            const idx = findPopupBetIndexByValue(scene.gameData.bet);
+            if (idx > 0) {
+                scene.audioManager.UtilityButtonSFX.play();
+                selectedBetIndexPopup = idx - 1;
+                scene.gameData.bet = betOptionsPopup[selectedBetIndexPopup];
                 updateBetDisplay();
+                updatePopupBetButtonsState();
+                Events.emitter.emit(Events.CHANGE_BET, {});
+                Events.emitter.emit(Events.ENHANCE_BET_TOGGLE, {});
             }
         });
 
         function updateBetDisplay() {
-            const autoplayCost = scene.gameData.bet * selectedSpins;
+            const autoplayCost = scene.gameData.bet// * selectedSpins;
             betValue.setText(scene.gameData.currency + " " + autoplayCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
         }
         updateBetDisplay();
+        updatePopupBetButtonsState();
 
         // Start Autoplay button - moved down to avoid overlap
         const startBtnBg = scene.add.image(popupWidth / 2, 0, 'greenLongBtn');
         startBtnBg.displayWidth = 402;
         startBtnBg.displayHeight = 62;
-        startBtnBg.setPosition(popupWidth / 2, popupHeight - padding - startBtnBg.displayHeight/2);
+        // Add additional spacing below the bet box
+        const startBtnYOffset = 24; // extra space below content
+        startBtnBg.setPosition(popupWidth / 2, popupHeight - padding *3 - startBtnBg.displayHeight/2 - startBtnYOffset);
         startBtnBg.setOrigin(0.5, 0.5);
         popup.add(startBtnBg);
 
@@ -854,6 +888,7 @@ export class Buttons {
         (startBtnBg as any as ButtonImage).setInteractive().isButton = true;
         startBtnBg.on('pointerdown', () => {
             if (selectedSpins > 0) {
+                this.autoplayIndicator.setAlpha(1);
                 scene.audioManager.UtilityButtonSFX.play();
 
                 this.autoplayButton.visible = false;
@@ -861,8 +896,8 @@ export class Buttons {
                 
                 scene.tweens.add({
                     targets: popup,
-                    alpha: 0,
-                    duration: 200,
+                    y: {from: popup.y, to: popup.y + 1500},
+                    duration: 1000,
                     ease: 'Cubic.easeIn',
                     onComplete: () => {
                         popup.setVisible(false);
@@ -874,7 +909,7 @@ export class Buttons {
                     }
                 });
                 
-                scene.gameData.debugLog("autoplay.isAutoPlaying", scene.autoplay.isAutoPlaying);
+                // console.log("autoplay.isAutoPlaying", this.autoplay.isAutoPlaying);
                 // Start autoplay 
                 Events.emitter.emit(Events.AUTOPLAY_START, selectedSpins);
 
@@ -887,7 +922,8 @@ export class Buttons {
             scene.tweens.add({
                 targets: popup,
                 alpha: 0,
-                duration: 200,
+                y: { from: this.autoPlay_Y, to: this.autoPlay_Y + 1000},
+                duration: 500,
                 ease: 'Cubic.easeIn',
                 onComplete: () => {
                     popup.setVisible(false);
@@ -910,15 +946,18 @@ export class Buttons {
         this.autoplayButton.on('pointerdown', () => {
             if (scene.gameData.isSpinning) return;
             scene.audioManager.UtilityButtonSFX.play();
+            this.playGenericUIAnimationOnce();
             
             // Close buy feature popup if open
-            if (this.buyFeaturePopup && this.buyFeaturePopup.visible) {
-                this.closeBuyFeaturePopup();
+            if (scene.buyFeaturePopup && scene.buyFeaturePopup.isVisible()) {
+                scene.buyFeaturePopup.hide(scene);
             }
+
             this.hideBetPopup(scene);
             updateBalance();
             bet = scene.gameData.bet * selectedSpins;
             updateBetDisplay();
+            try { (updatePopupBetButtonsState as any)(); } catch (_e) {}
             
             const mask = scene.add.graphics();
             mask.name = 'betMask';
@@ -926,7 +965,15 @@ export class Buttons {
             mask.fillRect(0, 0, scene.scale.width, scene.scale.height);
             mask.setInteractive(new Geom.Rectangle(0, 0, scene.scale.width, scene.scale.height), Geom.Rectangle.Contains);
             mask.on('pointerdown', () => {
-                popup.setVisible(false);
+                scene.tweens.add({
+                    targets:popup,
+                    y: { from: this.autoPlay_Y, to: this.autoPlay_Y + 1000},
+                    duration: 500,
+                    ease:'Expo.easeOut',
+                    onComplete: () =>{
+                        popup.setVisible(false);
+                    }
+                });
                 popup.list.forEach(item => {
                     if(item instanceof GameObjects.Graphics && item.name === 'betMask') {
                         item.destroy();
@@ -940,19 +987,26 @@ export class Buttons {
                 
             popup.add(mask);
             popup.sendToBack(mask); // Ensure mask is behind other elements
-            
-
+            scene.tweens.add({
+                targets: mask,
+                alpha: {from: 0, to: 0.01}
+            });
             popup.setVisible(true);
             popup.alpha = 0;
             scene.tweens.add({
                 targets: popup,
-                alpha: 1,   
-                duration: 200,
-                ease: 'Cubic.easeOut'
+                alpha: {from:0, to:1},
+                y:{ from: this.autoPlay_Y + 1000, to: this.autoPlay_Y},
+                duration: 500,
+                ease: 'Expo.easeOut'
             });
         });
 
         this.autoplayOnButton.on('pointerdown', () => {
+            // If bonus is triggered and autoplay is paused for bonus, ignore stop clicks
+            if ((scene as any).gameData?.autoplayWasPaused) {
+                return;
+            }
             scene.audioManager.UtilityButtonSFX.play();
             Events.emitter.emit(Events.AUTOPLAY_STOP);
         });
@@ -962,7 +1016,6 @@ export class Buttons {
             this.autoplayButton.visible = true;
             this.autoplayOnButton.visible = false;
         });
-        
 
         if(this.isMobile){
             const autoplayText = scene.add.text(0, 30,
@@ -977,9 +1030,9 @@ export class Buttons {
             autoplayText.setOrigin(0.5, 0); // Center horizontally, top align vertically
             container.add(autoplayText);
         }
-
         //this.buttonContainer.add(popup);
     }
+    
     public resetAutoplayButtons(): void {
         this.autoplayButton.visible = true;
         this.autoplayOnButton.visible = false;
@@ -1349,7 +1402,7 @@ export class Buttons {
             this.amplifyBetIdle.animationState.clearTracks();
         }
     }
-    
+
     private createBet(scene: GameScene): void {
         const width = this.isMobile ? Buttons.PANEL_WIDTH : Buttons.PANEL_WIDTH;
         const x = this.isMobile ? this.totalWinContainer.x * 1.3 : this.totalWinContainer.x + width * 1.5 + this.width * 0.01;

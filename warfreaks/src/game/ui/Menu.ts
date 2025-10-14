@@ -1159,13 +1159,17 @@ export class Menu {
     
                 const symbol = new SymbolContainer(scene, 0, 0, i + 1, scene.gameData);
                 symbol.setSymbolDisplaySize(scaledSymbolSize, scaledSymbolSize);
-                symbol.setScale(symbolScale * 1.5);
-                symbol.getSymbolSprite().setOrigin(-0.5, 0.75);
+                if(i < 5) {
+                    symbol.setScale(symbolScale * 3.25);
+                    symbol.getSymbolSprite().setOrigin(-.15, 0.66);
+                }
+                else {
+                    symbol.setScale(symbolScale * 2);
+                    symbol.getSymbolSprite().setOrigin(-0.5, 0.75);
+                }
                 try { (symbol.getSymbolSprite() as SpineGameObject).animationState.timeScale = 0; } catch (_e) {}
                 symbolContainer.add(symbol);
-                if(i == 5){
-                    symbol.setPosition(symbol.x, symbol.y + this.padding);
-                }
+                
     
                 // Add payout table next to symbol
                 this.createPayoutTable(scene,
@@ -1238,7 +1242,7 @@ export class Menu {
     
     
             const tumbleSymbolImage = scene.add.image(0, 0, 'tumbleSymbol');
-            tumbleSymbolImage.setScale(0.5);
+            tumbleSymbolImage.setScale(1);
             tumbleSymbolImage.setOrigin(0.5, 0.5);
             tumbleSymbolImage.setPosition(90, 65);
             tumbleWinContainer.add(tumbleSymbolImage);
@@ -1281,7 +1285,7 @@ export class Menu {
             freeSpinContainer.add(scatterSymbolImage2);
     
             const scatterSymbolImage = scene.add.image(0, 0, 'scatterIcon');
-            scatterSymbolImage.setScale(0.5);
+            scatterSymbolImage.setScale(2);
             scatterSymbolImage.setOrigin(0.5, 0.5);
             scatterSymbolImage.setPosition(100, 55);
             freeSpinContainer.add(scatterSymbolImage);
