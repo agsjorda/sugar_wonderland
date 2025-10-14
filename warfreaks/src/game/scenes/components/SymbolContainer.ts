@@ -133,8 +133,8 @@ export class SymbolContainer extends GameObjects.Container {
      * Note: This method is kept for compatibility, but Animation.ts now calls the sprite directly
      */
     playSymbolAnimation(): void {
-        this.gameData.debugLog('Playing symbol animation', { symbolValue: this.symbolValue });
-        
+        // console.log('Playing symbol animation', { symbolValue: this.symbolValue });
+                
         try {
             if (this.isHighPaying) {
                 // For high paying symbols, play the idle animation

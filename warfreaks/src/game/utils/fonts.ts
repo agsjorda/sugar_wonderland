@@ -45,6 +45,12 @@ export const getFontFamily = (): string => {
     return FONT_FAMILY;
 };
 
+export const DIGIT_FONT_FAMILY = "'DS-Digital', 'DS_Digi', 'Poppins', Arial, sans-serif";
+
+export const getDigitFontFamily = (): string => {
+    return DIGIT_FONT_FAMILY;
+};
+
 /**
  * Log font loading status for debugging
  */

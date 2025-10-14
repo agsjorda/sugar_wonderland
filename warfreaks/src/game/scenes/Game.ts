@@ -9,9 +9,10 @@ import { Buttons } from '../ui/Buttons';
 import { AudioManager } from './components/AudioManager';    
 import { Autoplay } from './components/Autoplay';
 import { HelpScreen } from './components/HelpScreen';
-import { BuyFeaturePopup } from './components/BuyFeaturePopup';
 import { GameAPI } from './backend/GameAPI';
-import { Events } from './components/Events';
+import { BuyFeaturePopup } from './components/BuyFeaturePopup';
+import { SessionTimeoutPopup } from './components/SessionTimeoutPopup';
+import { InsufficientBalancePopup } from './components/InsufficientBalancePopup';
 
 // Interface for component lifecycle management
 interface GameComponent {
@@ -33,6 +34,8 @@ export class Game extends Scene {
     public helpScreen: HelpScreen;
     public buyFeaturePopup: BuyFeaturePopup;
     public gameAPI: GameAPI;
+    public sessionTimeoutPopup: SessionTimeoutPopup;
+    public insufficientBalancePopup: InsufficientBalancePopup;
 
     private components: GameComponent[];
 
@@ -56,6 +59,8 @@ export class Game extends Scene {
         this.autoplay = new Autoplay();
         this.helpScreen = new HelpScreen();
         this.buyFeaturePopup = new BuyFeaturePopup();
+        this.sessionTimeoutPopup = new SessionTimeoutPopup();
+        this.insufficientBalancePopup = new InsufficientBalancePopup();
         
         // Inject the single autoplay instance into buttons
         this.buttons.autoplay = this.autoplay;
@@ -69,6 +74,8 @@ export class Game extends Scene {
             this.autoplay,
             this.helpScreen,
             this.buyFeaturePopup,
+            this.sessionTimeoutPopup,
+            this.insufficientBalancePopup,
         ];
     }
 

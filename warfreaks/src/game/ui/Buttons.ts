@@ -193,6 +193,230 @@ export class Buttons {
         //this.createSettingsButton(scene);
         
         this.setupKeyboardInput(scene);
+
+        this.createRemainingFreeSpinsLabel(scene);
+    }
+
+    private createRemainingFreeSpinsLabel(scene: GameScene): void {
+        const labelText = 'Remaining Free Spins:';
+        const x = this.isMobile ? scene.scale.width * 0.2 : scene.scale.width * 0.88;
+        const y = this.isMobile ? scene.scale.height * 0.815 : scene.scale.height * 0.39;
+        const style = {
+            fontSize: '32px',
+            color: '#09FF5C',
+            fontFamily: 'Poppins',
+            fontStyle: 'bold',
+            align: 'left' as const,
+            stroke: '#222222',
+            strokeThickness: 6,
+            shadow: {
+                offsetX: 0,
+                offsetY: 0,
+                color: '#000000',
+                blur: 15,
+                stroke: true,
+                fill: false
+            },
+            wordWrap: { width: scene.scale.width * 0.5, useAdvancedWrap: true }
+        };
+        this.remainingFsLabel = scene.add.text(x, y, labelText, style);
+        this.remainingFsLabel.setOrigin(this.isMobile ? 0 : 0.5, this.isMobile ? 0 : 0.225);
+        this.remainingFsLabel.setDepth(1000);
+        this.remainingFsLabel.setVisible(false);
+        
+        const x_count = this.isMobile ? scene.scale.width * 0.65 : scene.scale.width * 0.88;
+        const y_count = this.isMobile ? scene.scale.height * 0.81 : scene.scale.height * 0.39;
+        const style2 = {
+            fontSize: '84px',
+            color: '#FFFFFF',
+            fontFamily: 'Poppins',
+            fontStyle: 'bold',
+            align: 'left' as const,
+            stroke: '#222222',
+            strokeThickness: 6,
+            shadow: {
+                offsetX: 0,
+                offsetY: 0,
+                color: '#000000',
+                blur: 15,
+                stroke: true,
+                fill: false
+            }
+        };
+// remaining free spin label (mobile, desktop)
+        this.remainingFsLabel_Count = scene.add.text(x_count, y_count, '0', style2);
+        this.remainingFsLabel_Count.setOrigin(this.isMobile ? 0 : 0.5, this.isMobile ? 0 : 0);
+        this.remainingFsLabel_Count.setDepth(1000);
+        this.remainingFsLabel_Count.setVisible(false);
+
+
+
+        const updateLabelVisibility = () => {
+            if (!this.remainingFsLabel || !this.remainingFsLabel_Count) return;
+            // Reposition in case of resize/orientation or platform switch
+
+            //const newX = this.isMobile ? scene.scale.width * 0.275 : scene.scale.width * 0.88;
+            //const newX_count = this.isMobile ? scene.scale.width * 0.7 : scene.scale.width * 0.88;
+            //const newY = this.isMobile ? scene.scale.height * 0.92 : scene.scale.height * 0.61;
+            //
+            //this.remainingFsLabel.setPosition(newX, newY);
+            //this.remainingFsLabel_Count.setPosition(newX_count, newY);
+            
+            this.remainingFsLabel.setFontSize('32px');
+            const shouldShow = !!scene.gameData.isBonusRound && (scene.gameData.freeSpins ?? 0) > 0;
+            const count = this.forceSpinsLeftOverlay ? 10 : (scene.gameData.freeSpins ?? 0);
+            if(this.isMobile){
+                this.remainingFsLabel.setText(`Remaining Free Spins:`);
+                this.remainingFsLabel_Count.setText(`${count}`);
+            }
+            else {
+                this.remainingFsLabel.setText(`Spins Left:`);
+                this.remainingFsLabel_Count.setText(`${this.forceSpinsLeftOverlay ? count : (count - 1)}`);
+            }
+            this.remainingFsLabel.setVisible(shouldShow);
+            this.remainingFsLabel_Count.setVisible(shouldShow);
+
+            // Sync freeSpinBtn with the Spins Left label visibility or active/paused autoplay
+            try { this.freeSpinBtn.visible = shouldShow || !!this.autoplay?.isAutoPlaying || !!scene.gameData.autoplayWasPaused; } catch (_e) {}
+            // Avoid overlap: hide autoplay indicator while Spins Left is shown
+            // Only show autoplay indicator when autoplay is actively running
+            try { this.autoplayIndicator.visible = shouldShow ? false : (!!this.autoplay?.isAutoPlaying || !!scene.gameData.autoplayWasPaused); } catch (_e) {}
+			// Enforcement: only during active bonus ensure freeSpinBtn stays visible
+			try { if (scene.gameData.isBonusRound && this.autoplayIndicator?.visible) { this.freeSpinBtn.visible = true; } } catch (_e) {}
+            // Ensure spin button alpha follows autoplay indicator visibility
+            try { this.updateButtonStates(scene); } catch (_e) {}
+
+            // Toggle bottom controls visibility and Y-axis positions based on free spins state
+            // Desktop: keep controls visible; Mobile: hide while in bonus
+            if (this.isMobile) {
+                    this.hideBottomControlsForBonus(scene, shouldShow);
+
+                    this.remainingFsLabel.setText(`Remaining Free Spins:`);
+                    this.remainingFsLabel_Count.setText(`${count - 1}`);
+                
+            } else {
+                // On desktop, keep controls visible and show/hide spins using the spin-button HUD like autoplay
+                if (shouldShow && this.autoplay?.ensureRemainingSpinsDisplay) {
+                    this.autoplay.ensureRemainingSpinsDisplay(scene);
+                // } else if (!shouldShow && this.autoplay?.hideRemainingSpinsDisplay) {
+                //     this.autoplay.hideRemainingSpinsDisplay();
+                }
+            }
+        };
+
+        // Update label on common state-change events
+        Events.emitter.on(Events.SPIN_ANIMATION_START, updateLabelVisibility);
+        Events.emitter.on(Events.SPIN_ANIMATION_END, updateLabelVisibility);
+        Events.emitter.on(Events.MATCHES_DONE, updateLabelVisibility);
+        Events.emitter.on(Events.UPDATE_TOTAL_WIN, updateLabelVisibility);
+        Events.emitter.on(Events.AUTOPLAY_START, updateLabelVisibility);
+        Events.emitter.on(Events.AUTOPLAY_STOP, updateLabelVisibility);
+
+        // Show immediate label when FreeSpin overlay appears
+        Events.emitter.on(Events.FREE_SPIN_OVERLAY_SHOW, () => {
+            this.forceSpinsLeftOverlay = true;
+            if (!this.remainingFsLabel || !this.remainingFsLabel_Count) return;
+            this.remainingFsLabel.setText(this.isMobile ? `Remaining Free Spins:` : `Spins Left:`);
+            this.remainingFsLabel_Count.setText(`10`);
+            this.remainingFsLabel.setVisible(true);
+            this.remainingFsLabel_Count.setVisible(true);
+            // On entering FS overlay: ensure FS button is shown, spin hidden, and autoplay indicator hidden
+            try { this.freeSpinBtn.visible = true; this.freeSpinBtn.setAlpha(1); } catch (_e) {}
+            try { this.spinButton.setAlpha(0); } catch (_e) {}
+            try { this.autoplayIndicator.visible = false; } catch (_e) {}
+            try { this.updateButtonStates(scene); } catch (_e) {}
+        });
+        // Re-sync to actual state when overlay hides
+        Events.emitter.on(Events.WIN_OVERLAY_HIDE, () => {
+            this.forceSpinsLeftOverlay = false;
+            try { updateLabelVisibility(); } catch (_e) {}
+        });
+
+        // Initial evaluation
+        updateLabelVisibility();
+    }
+
+    public showRemainingFreeSpinsLabel(scene: GameScene): void {
+        if (!this.remainingFsLabel || !this.remainingFsLabel_Count) return;
+        const count = scene.gameData.freeSpins ?? 0;
+        if(this.isMobile){
+            this.remainingFsLabel.setText(`Remaining Free Spins:`);
+            this.remainingFsLabel_Count.setText(`${count - 1}`);
+        }
+        else{
+            this.remainingFsLabel.setText(`Spins Left:`);
+            this.remainingFsLabel_Count.setText(`${count}`);
+        }
+        // Mobile: show text label; Desktop: use autoplay HUD near spin button
+        //this.remainingFsLabel.setVisible(this.isMobile);
+        //this.remainingFsLabel_Count.setVisible(this.isMobile);
+        if (!this.isMobile && this.autoplay?.ensureRemainingSpinsDisplay) {
+            this.autoplay.ensureRemainingSpinsDisplay(scene);
+        }
+        // Ensure button syncs when label is requested to show
+        try { this.freeSpinBtn.visible = true; } catch (_e) {}
+        try { this.autoplayIndicator.visible = false; } catch (_e) {}
+    }
+
+    public updateRemainingFreeSpinsCount(scene: GameScene): void {
+        if (!this.remainingFsLabel || !this.remainingFsLabel_Count) return;
+        const count = scene.gameData.freeSpins ?? 0;
+        if(this.isMobile){
+            this.remainingFsLabel.setText(`Remaining Free Spins:`);
+            this.remainingFsLabel_Count.setText(`${count}`);
+        }
+        else{
+            this.remainingFsLabel.setText(`Spins Left:`);
+            this.remainingFsLabel_Count.setText(`${count}`);
+        }
+        //this.remainingFsLabel_Count.setVisible(this.isMobile);
+        if (!this.isMobile && this.autoplay?.ensureRemainingSpinsDisplay) {
+            this.autoplay.ensureRemainingSpinsDisplay(scene);
+        }
+    }
+
+    public hideRemainingFreeSpinsLabel(scene?: GameScene): void {
+        if (!this.remainingFsLabel || !this.remainingFsLabel_Count) return;
+        this.remainingFsLabel.setVisible(false);
+        this.remainingFsLabel_Count.setVisible(false);
+        this.remainingFsLabel_Count.setText(``);
+        this.remainingFsLabel_Count.setVisible(false);
+        // Hide the button when the label is hidden, unless autoplay indicator is visible or autoplay is running/paused for bonus
+        try {
+            const paused = scene ? !!(scene as any).gameData?.autoplayWasPaused : false;
+            if (!this.autoplayIndicator?.visible && !this.autoplay?.isAutoPlaying && !paused) {
+                this.freeSpinBtn.visible = false;
+            }
+        } catch (_e) {}
+    }
+
+    public hideBottomControlsForBonus(scene: GameScene, hidden: boolean): void {
+        if (!this.buttonContainer) return;
+        // On desktop, never hide bottom controls during free spins
+        if (!this.isMobile) {
+            hidden = false;
+        }
+        const setVisibleByName = (name: string, visible: boolean) => {
+            const child = this.buttonContainer.list.find(c => (c as any).name === name) as ButtonContainer | undefined;
+            if (child) child.setVisible(visible);
+        };
+        setVisibleByName('spinContainer', !hidden);
+        setVisibleByName('turboContainer', !hidden);
+        setVisibleByName('doubleFeatureContainer', !hidden);
+        setVisibleByName('autoplayContainer', !hidden);
+        // Mobile: keep volume/settings visible even when hiding; Desktop: follow hidden flag
+        setVisibleByName('settingsContainer', this.isMobile && hidden ? !hidden : true);
+        // Desktop: also hide info button when hiding
+        if (!this.isMobile) {
+            setVisibleByName('infoContainer', !hidden);
+        }
+
+        // Emit Y-axis toggle events to move controls out/in
+        Events.emitter.emit(Events.CREATE_TURBO_BUTTON, hidden);
+        Events.emitter.emit(Events.CREATE_AUTOPLAY, hidden);
+        Events.emitter.emit(Events.CREATE_SPIN_BUTTON, hidden);
+        Events.emitter.emit(Events.CREATE_DOUBLE_FEATURE, hidden);
+        Events.emitter.emit(Events.CREATE_INFO, hidden);
     }
 
     private createContainer(scene: GameScene): void {
@@ -2332,19 +2556,33 @@ export class Buttons {
 
     private createLogo(scene: GameScene): void {
         const x = this.width * 0.5;
-        const y = this.height * 0.05;
+        const y = this.height * 0.075;
         const container = scene.add.container(x, y) as ButtonContainer;
 
         const logo = scene.add.image(0, 0, 'logo') as ButtonImage;
         logo.setScale(1);
         container.add(logo);
 
-        container.name = 'logoContainer';
+        container.name = 'logoContainer';1
         container.setScale(0.2);
         this.buttonContainer.add(container);
     }
 
-
+    private winBar_Main1: GameObjects.Image;
+    private winBar_Main2: GameObjects.Image;
+    private winBar_Bonus1: GameObjects.Image;
+    private winBar_Bonus2: GameObjects.Image;
+    private slotBackground_Main: GameObjects.Image;
+    private slotBackground_Bonus: GameObjects.Image;
+    
+    private toggleGridBackground(scene: GameScene): void {
+        const x = this.width * 0.5;
+        const y = this.height * 0.075;
+        const container = scene.add.container(x, y) as ButtonContainer;
+        container.name = 'logoContainer';
+        container.setScale(0.2);
+        this.buttonContainer.add(container);
+    }
     public bonusMultiplier : number = 1;
 
     private createMarqueeBonus(scene: GameScene): void {
@@ -2357,6 +2595,7 @@ export class Buttons {
 
         const marquee = scene.add.image(0, 0, 'win_bar_main');
         marquee.setScale(0.49);
+        this.winBar_Main1 = marquee;
         container.add(marquee);
 
         const youWonString = scene.gameData.totalWin.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });

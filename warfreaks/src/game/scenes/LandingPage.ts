@@ -233,4 +233,4 @@ export class LandingPage extends Scene {
                this.scene.remove('LoadingPage');
            });
     }
-}                                                                                           
+}

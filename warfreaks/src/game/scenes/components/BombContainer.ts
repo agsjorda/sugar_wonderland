@@ -453,7 +453,6 @@ export class BombContainer extends GameObjects.Container {
             targets: this.floatingText,
             x: targetX,
             y: targetY,
-            scale: 1.5,
             duration: 900,
             ease: 'Sine.easeOut',
             onUpdate: () => {

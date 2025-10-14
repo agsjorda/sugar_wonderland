@@ -74,19 +74,26 @@ export class Animation {
                 const spineObject = actualSprite as unknown as SpineGameObject;
                 if(symbolValue >= 6 && symbolValue <= 9) {
                     if(spineObject.animationState) {
-                    const animationState = spineObject.animationState.setAnimation(0, `animation`, false);
+                        const animationState = spineObject.animationState.setAnimation(0, `animation`, false);
                     
-                    animationState.timeScale = 1;
+                        animationState.timeScale = 1;
                     // Set up listener for animation completion
-                    animationState.listener = {
-                        complete: () => {
-                            // Remove the listener to prevent memory leaks
-                            animationState.listener = null;
-                            resolve();
-                        }
-                    };
+                        animationState.listener = {
+                            complete: () => {
+                                // Remove the listener to prevent memory leaks
+                                animationState.listener = null;
+                                resolve();
+                            }
+                        };
                     }
                     else {
+                        resolve();
+                    }
+                }
+                else if (symbolValue == 0) {
+                    if(spineObject.animationState) {
+                        const animationState = spineObject.animationState.setAnimation(0, `symbol0_WF`, false);
+                        animationState.timeScale = 1;
                         resolve();
                     }
                 }

@@ -5,6 +5,7 @@ import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 export class WinAnimation {
     private scene: Scene;
     private spineWinAnim: SpineGameObject;
+    private freeSpinAnim: SpineGameObject;
     private bombAtlas: number[] = [2,3,4,5,6,8,10,12,15,20,25,50,100];
     private bombImages: Phaser.GameObjects.Image[] = [];
     private currentBombImage: Phaser.GameObjects.Image | null = null;
@@ -18,6 +19,13 @@ export class WinAnimation {
     preload(): void {
         this.scene.load.spineAtlas('myWinAnim2', 'assets/Win/win_dialog.atlas');
         this.scene.load.spineJson('myWinAnim2', 'assets/Win/win_dialog.json');
+        
+        this.scene.load.spineAtlas('freeSpinAnim', 'assets/Win/free_spin.atlas');
+        this.scene.load.spineJson('freeSpinAnim', 'assets/Win/free_spin.json');
+
+        // New: total win (congrats) animation assets
+        this.scene.load.spineAtlas('totalWinAnim', 'assets/Win/total_win.atlas');
+        this.scene.load.spineJson('totalWinAnim', 'assets/Win/total_win.json');
 
         this.scene.load.spineAtlas('Symbol10_SW', 'assets/Symbols/Bomb/multiplier_WF.atlas');
         this.scene.load.spineJson('Symbol10_SW', 'assets/Symbols/Bomb/multiplier_WF.json');
@@ -26,9 +34,22 @@ export class WinAnimation {
 
     create(): void {
         let spineObject2 = this.scene.add.spine(0, 0, 'myWinAnim2', 'myWinAnim2') as SpineGameObject;
-        this.spineWinAnim = spineObject2;
         spineObject2.setPosition(0, 0);
         spineObject2.setAlpha(0);
+        this.spineWinAnim = spineObject2;
+
+        let _freeSpinAnim = this.scene.add.spine(0, 0, 'freeSpinAnim', 'freeSpinAnim') as SpineGameObject;
+        _freeSpinAnim.setPosition(0, 0);
+        _freeSpinAnim.setAlpha(0);
+        this.freeSpinAnim = _freeSpinAnim;
+
+        // Pre-create an instance for total win to warm caches; overlays will create their own instances
+        try {
+            const _totalWinAnim = this.scene.add.spine(0, 0, 'totalWinAnim', 'totalWinAnim') as SpineGameObject;
+            _totalWinAnim.setPosition(0, 0);
+            _totalWinAnim.setAlpha(0);
+            _totalWinAnim.destroy();
+        } catch (_e) { /* ignore if asset not ready; overlays will handle */ }
 
         let bombSymbol = this.scene.add.spine(0, 0, 'Symbol10_SW', 'Symbol10_SW') as SpineGameObject;
         bombSymbol.setPosition(0, 0);
