@@ -1348,6 +1348,7 @@ export class SlotMachine {
         const winOverlay = new WinOverlayContainer(scene, this.winAnimation);
         this.winOverlayContainers.push(winOverlay);
         this.activeWinOverlay = true;
+        console.error("next", next);
         winOverlay.show(next.totalWin, next.overlayType);
     }
 
