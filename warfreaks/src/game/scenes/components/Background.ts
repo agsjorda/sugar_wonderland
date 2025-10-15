@@ -1,4 +1,5 @@
 import { Scene, GameObjects } from 'phaser';
+import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 
 interface FieryParticle {
     graphics: GameObjects.Graphics;
@@ -21,6 +22,10 @@ export class Background {
 
     private bonus_background: GameObjects.Image;
     private arch: GameObjects.Image;
+
+    private dove: SpineGameObject;
+    private dove2: SpineGameObject;
+    private jetfighter_02: SpineGameObject;
 
     private particles: FieryParticle[] = [];
     private readonly PARTICLE_COUNT = 150; // Random between 50-100
@@ -47,7 +52,12 @@ export class Background {
         scene.load.image('mobile_bonus_background', `${prefix}/Bonus_Background.png`);
         scene.load.image('rifle', `${prefix}/rifle.png`);
         scene.load.image('arch', `${prefix}/arch.png`);
-        
+
+        scene.load.spineAtlas(`dove`,`assets/background/dove.atlas`);
+        scene.load.spineJson(`dove`,`assets/background/dove.json`); // animation
+
+        scene.load.spineAtlas(`jetfighter_02`,`assets/background/jetfighter_02.atlas`);
+        scene.load.spineJson(`jetfighter_02`,`assets/background/jetfighter_02.json`); // jetfighter_wf_win
     }
 
     create(scene: Scene): void {
@@ -148,9 +158,13 @@ export class Background {
         this.main_background.alpha = main_status;
         this.rifle.alpha = main_status;
 
+        this.jetfighter_02.setVisible(main_status ? true : false);
 
         this.bonus_background.alpha = bonus_status;
         this.arch.alpha = bonus_status;
+
+        this.dove.setVisible(bonus_status ? true : false);
+        this.dove2.setVisible(bonus_status ? true : false);
 
     }
 
@@ -170,12 +184,27 @@ export class Background {
         this.rifle = scene.add.image(centerX, scene.scale.height, 'rifle');
         this.rifle.setOrigin(0.5, 1);
 
+        this.jetfighter_02 = scene.add.spine(centerX, centerY, 'jetfighter_02', 'jetfighter_02');     
+        this.jetfighter_02.animationState.setAnimation(0, 'jetfighter_wf_win', true);
+        this.jetfighter_02.animationState.timeScale = 0.5;
         /// bonus
-        
+    
         this.bonus_background = scene.add.image(centerX, centerY, 'mobile_bonus_background');
         this.bonus_background.setDisplaySize(width, height);
         this.bonus_background.setOrigin(0.5, 0.5);
 
+        this.dove = scene.add.spine(centerX, centerY, 'dove', 'dove');
+        this.dove.setScale(0.25);
+        this.dove.setPosition(scene.scale.width * 0.2, scene.scale.height * 0.10);
+        this.dove.animationState.setAnimation(0, 'animation', true);
+        this.dove.animationState.timeScale = 0.75
+
+        this.dove2 = scene.add.spine(centerX, centerY, 'dove', 'dove');
+        this.dove2.setScale(-0.25, 0.25);
+        this.dove2.setPosition(scene.scale.width * 0.8, scene.scale.height * 0.10);
+        this.dove2.animationState.setAnimation(0, 'animation', true);
+        this.dove2.animationState.timeScale = 0.75
+        
         this.arch = scene.add.image(centerX, scene.scale.height, 'arch');
         const archRatio = scene.scale.width / this.arch.width;1
         this.arch.setScale(archRatio);

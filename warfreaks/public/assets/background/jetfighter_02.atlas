@@ -1,0 +1,10 @@
+jetfighter_02.png
+size:248,248
+filter:Linear,Linear
+pma:true
+firing_bullet_01
+bounds:198,178,10,65
+jetfighter_a_01
+bounds:2,105,194,138
+jetfighter_b_01
+bounds:2,2,196,101

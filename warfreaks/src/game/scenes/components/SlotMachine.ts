@@ -588,8 +588,7 @@ export class SlotMachine {
                 scene.gameData.isBonusRound = true;
                 // Show overlay first
                 this.showFreeSpinsPopup(scene, currentSpinsLeft);
-            // After overlay is dismissed, toggle background/music and UI, then start spins
-            Events.emitter.once(Events.WIN_OVERLAY_HIDE, () => {
+
                 try { scene.background.toggleBackground(scene); } catch (_e) {}
                 try { scene.audioManager.changeBackgroundMusic(scene); } catch (_e) {}
                 try {
@@ -608,7 +607,6 @@ export class SlotMachine {
                         Events.emitter.emit(Events.AUTOPLAY_START, scene.gameData.freeSpins);
                     }
                 } catch (_e) {}
-            });
             });
         }
 
@@ -1753,6 +1751,12 @@ export class SlotMachine {
                 }
             }
         }
+
+        let _tempDepth : number[] = [];
+        this.symbolGrid.forEach(v => {
+            _tempDepth.push(v[0]?.depth);
+        });
+        console.log('symbolGrid depths:', _tempDepth);
 
         // Wait for all drop animations to complete
         await Promise.all(dropPromises);

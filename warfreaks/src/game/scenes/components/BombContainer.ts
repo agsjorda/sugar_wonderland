@@ -3,6 +3,9 @@ import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { GameData } from './GameData';
 import { Events } from './Events';
 
+// Depth used to ensure bombs are always rendered in front of symbols
+const BOMB_FRONT_DEPTH = 1000000;
+
 /**
  * BombContainer class that manages bomb sprites with text overlays
  * The container handles traversal during drop and refill operations
@@ -12,6 +15,7 @@ export class BombContainer extends GameObjects.Container {
     private textOverlay: GameObjects.Text;
     private floatingText?: GameObjects.Text;
     private orbitTimer?: Phaser.Time.TimerEvent;
+    private overlayBomb?: SpineGameObject;
     private multiplier: number;
     private bombType: string;
     public scene: Scene;
@@ -81,6 +85,51 @@ export class BombContainer extends GameObjects.Container {
             bombType: this.bombType,
             position: { x, y }
         });
+        
+        // Keep this container on top; hook into the scene update loop
+        try { this.scene.events.on('postupdate', this.ensureFront, this); } catch (_e) {}
+    }
+
+    /**
+     * Ensure this container renders above sibling symbols by setting a high depth
+     * and reordering it to the top of its parent (or the scene display list).
+     */
+    private bringSelfToFront(): void {
+        try {
+            // Assign a high depth so the container sits above sibling symbols
+            this.setDepth(BOMB_FRONT_DEPTH);
+            const parent: any = (this as any).parentContainer;
+            if (parent && typeof parent.bringToTop === 'function') {
+                parent.bringToTop(this);
+            } else {
+                // Fallback to scene-level display list
+                this.scene.children.bringToTop(this);
+            }
+        } catch (_e) {
+            // no-op
+        }
+    }
+
+    /**
+     * Maintain front ordering each frame. This covers cases where new symbols are
+     * created after the bomb started animating.
+     */
+    private ensureFront(): void {
+        if (!this.active || !this.visible) return;
+        try {
+            this.setDepth(BOMB_FRONT_DEPTH);
+            const parent: any = (this as any).parentContainer;
+            if (parent && typeof parent.bringToTop === 'function') {
+                parent.bringToTop(this);
+                if (this.overlayBomb) parent.bringToTop(this.overlayBomb);
+            } else {
+                this.scene.children.bringToTop(this);
+                if (this.overlayBomb) this.scene.children.bringToTop(this.overlayBomb);
+            }
+            if (this.overlayBomb) {
+                try { this.overlayBomb.setDepth(BOMB_FRONT_DEPTH); } catch (_e) {}
+            }
+        } catch (_e) { /* no-op */ }
     }
 
     /**
@@ -140,6 +189,8 @@ export class BombContainer extends GameObjects.Container {
         const currentTimeScale = this.bombSprite.animationState.timeScale;
         
         if (currentTimeScale === 0) {
+            // When starting the animation, ensure this bomb is above other symbols
+            this.bringSelfToFront();
             // Start animation: set timescale to 1 and remove mask
             this.bombSprite.animationState.timeScale = 1;
             (this.scene as any).slotMachine.toggleBombMask(true); // isRemove = true when timeScale = 1
@@ -207,6 +258,8 @@ export class BombContainer extends GameObjects.Container {
             this.scene.audioManager.TExplosion.play();
             this.scene.audioManager.BonusBG.resume();
             } catch (_e) {}
+        // Ensure the container itself is above siblings during the explosion sequence
+        this.bringSelfToFront();
         // Pause at the 22nd frame (assuming 30 FPS)
         switch(this.bombType){
             case 'low':
@@ -225,8 +278,6 @@ export class BombContainer extends GameObjects.Container {
         // Animate text overlay
         this.scene.tweens.add({
             targets: this.bombSprite,
-            scaleX: 0.9,
-            scaleY: 0.9,
             
             duration: 500,
             ease: 'Power2',
@@ -252,13 +303,11 @@ export class BombContainer extends GameObjects.Container {
             // Match visual size of the original bomb sprite
             //overlay.setScale(this.bombSprite.scaleX, this.bombSprite.scaleY);
             overlay.setAlpha(1);
-            overlay.setDepth(10000);
+            overlay.setDepth(BOMB_FRONT_DEPTH);
             // Scale down overlay from 100% to 50% at animation start
             try {
                 this.scene.tweens.add({
                     targets: overlay,
-                    scaleX: overlay.scaleX * 2,
-                    scaleY: overlay.scaleY * 2,
                     duration: 800,
                     ease: 'Power2'
                 });
@@ -271,8 +320,9 @@ export class BombContainer extends GameObjects.Container {
                 }
             } else {
                 // Fallback: set a very high depth on scene root
-                overlay.setDepth(10000);
+                overlay.setDepth(BOMB_FRONT_DEPTH);
             }
+            this.overlayBomb = overlay;
 
             // Play the requested animation on the overlay
             overlay.animationState.timeScale = 1;
@@ -320,8 +370,6 @@ export class BombContainer extends GameObjects.Container {
                 try {
                     this.scene.tweens.add({
                         targets: this.bombSprite,
-                        scaleX: this.bombSprite.scaleX * .75,
-                        scaleY: this.bombSprite.scaleY * .75,
                         duration: 400,
                         ease: 'Power2'
                     });
@@ -377,6 +425,8 @@ export class BombContainer extends GameObjects.Container {
     destroy(): void {
         // console.log('Destroying bomb container');
         
+        try { this.scene.events.off('postupdate', this.ensureFront, this); } catch (_e) {}
+
         if (this.orbitTimer) {
             try { this.orbitTimer.remove(false); } catch (_e) {}
             this.orbitTimer = undefined;
@@ -384,6 +434,10 @@ export class BombContainer extends GameObjects.Container {
         if (this.floatingText) {
             try { this.floatingText.destroy(); } catch (_e) {}
             this.floatingText = undefined;
+        }
+        if (this.overlayBomb) {
+            try { this.overlayBomb.destroy(); } catch (_e) {}
+            this.overlayBomb = undefined;
         }
         
         if (this.bombSprite) {  

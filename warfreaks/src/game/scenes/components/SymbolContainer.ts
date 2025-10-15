@@ -56,6 +56,24 @@ export class SymbolContainer extends GameObjects.Container {
     }
 
     /**
+     * Ensure this container renders above sibling symbols by setting a high depth
+     * and reordering it to the top of its parent (or the scene display list).
+     */
+    private bringSelfToFront(): void {
+        try {
+            this.setDepth(10000);
+            const parent: any = (this as any).parentContainer;
+            if (parent && typeof parent.bringToTop === 'function') {
+                parent.bringToTop(this);
+            } else {
+                this.scene.children.bringToTop(this);
+            }
+        } catch (_e) {
+            // no-op
+        }
+    }
+
+    /**
      * Set the display size for the symbol sprite
      */
     setSymbolDisplaySize(width: number, height: number): void {
@@ -76,6 +94,8 @@ export class SymbolContainer extends GameObjects.Container {
             this.gameData.debugLog('Playing win animation for symbol', { symbolValue: this.symbolValue });
             
             try {
+                // Ensure this symbol is above other siblings while animating
+                this.bringSelfToFront();
                 if (this.isHighPaying) {
                     // Symbols 1-5: Use win animation from the same atlas
                     const spineSprite = this.symbolSprite as SpineGameObject;
