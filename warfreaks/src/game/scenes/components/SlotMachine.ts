@@ -87,7 +87,8 @@ export class SlotMachine {
 
     public winOverlayContainers: any[] = [];
     private bombPopupContainer: GameObjects.Container | null = null;
-    private winOverlayQueue: { totalWin: number; overlayType: string }[] = [];
+    private winOverlayQueue: { totalWin: number; overlayType: string; onDone?: () => void }[] = [];
+    private currentOverlayDoneCallback?: () => void;
     private onOverlayHide?: () => void;
     private onSpinListener?: (data: SpinData) => Promise<void>;
     private onStartListener?: (data: SpinData) => void;
@@ -164,7 +165,16 @@ export class SlotMachine {
         this.winAnimation.create();
         
         // Process queued overlays whenever one closes
-        this.onOverlayHide = () => this.tryShowNextOverlay(scene as GameScene);
+        this.onOverlayHide = () => {
+            try {
+                if (this.currentOverlayDoneCallback) {
+                    const cb = this.currentOverlayDoneCallback;
+                    this.currentOverlayDoneCallback = undefined;
+                    cb();
+                }
+            } catch (_e) {}
+            this.tryShowNextOverlay(scene as GameScene);
+        };
         Events.emitter.on(Events.WIN_OVERLAY_HIDE, this.onOverlayHide);
     }
 
@@ -474,7 +484,7 @@ export class SlotMachine {
         }
         
         console.log("result", result);
-        // console.log("Tumbles", result.slot.tumbles);
+        // console.log("Tumbles", result.slot.tumble.items);
 
         let toBet = parseFloat(result.bet);
         if(isBuyFeature){
@@ -496,7 +506,7 @@ export class SlotMachine {
         scene.gameData.bet = result.bet;
         
         // If backend returned free spin sequence, store it to drive the bonus round from API data
-        const apiFs = result?.slot?.freeSpin?.items || result?.slot?.freeSpins?.items || [];
+        const apiFs = result?.slot?.freeSpin || result?.slot?.freeSpins || result?.slot?.freeSpin?.items || result?.slot?.freeSpins?.items || [];
         scene.gameData.totalBonusWin = result.slot.totalWin;
 
         if (Array.isArray(apiFs) && apiFs.length > 0) {
@@ -532,7 +542,7 @@ export class SlotMachine {
             apiFs.forEach((v)=>{
                 scene.gameData.totalWinFreeSpin.push(v.totalWin);
                 let totalWinFreeSpinPerTumble = 0;
-                v.tumbles?.forEach((t: any)=>{
+                v.tumble.items?.forEach((t: any)=>{
                     totalWinFreeSpinPerTumble += t?.win;
                 });
 
@@ -630,10 +640,21 @@ export class SlotMachine {
     await this.playSpinAnimations(scene, newValues, data)
     {
     }
-    
-        if (Array.isArray(result.slot.tumbles) && result.slot.tumbles.length > 0) {
-            try { (scene.gameData as any).lastTumbles = result.slot.tumbles; } catch (_e) {}
-            await this.processMatchesSequentially(scene, newValues, result.slot.tumbles);
+        if ((Array.isArray(result.slot.tumble?.items) || (Array.isArray(result.slot.tumbles)))  && ((result.slot.tumble?.items?.length > 0) || (result.slot.tumbles?.length > 0))) {
+            try {
+                if(result.slot.tumble.items) {
+                    (scene.gameData as any).lastTumbles = result.slot.tumble.items; 
+                }
+                else if(result.slot.tumbles) {
+                    (scene.gameData as any).lastTumbles = result.slot.tumbles;
+                }
+            } catch (_e) {}
+            if(result.slot.tumble.items) {
+                await this.processMatchesSequentially(scene, newValues, result.slot.tumble.items);
+            }
+            else if(result.slot.tumbles) {
+                await this.processMatchesSequentially(scene, newValues, result.slot.tumbles);
+            }
         } else {
             // No tumbles; emit end events and reset spin state so autoplay won't advance early
             Events.emitter.emit(Events.WIN, {});
@@ -684,7 +705,7 @@ export class SlotMachine {
 
         // Use API-provided area and tumbles
         const newValues = transpose(fs.area);
-        const tumbles: Tumble[] = fs.tumbles || [];
+        const tumbles: Tumble[] = fs.tumble.items || fs.tumbles || [];
 
         // Set per-spin total win from tumbles sum for UI and aggregate bonus
         const spinTotalWin = Array.isArray(tumbles) ? tumbles.reduce((sum, t: any) => sum + (t?.win || 0), 0) : 0;
@@ -900,7 +921,12 @@ export class SlotMachine {
         let offsetDelay = 1100;
         
         if(scene.gameData.turbo){
-            scene.audioManager.TurboDrop.play();
+            if(scene.gameData.isBonusRound){
+                scene.audioManager.Turbo2Drop.play();
+            }
+            else{
+                scene.audioManager.TurboDrop.play();
+            }
         }
 
         const animationPromises: Promise<void>[] = [];
@@ -1031,7 +1057,12 @@ export class SlotMachine {
                             onComplete: () => {
                                 if(row === 4){
                                     if(!scene.gameData.turbo){
-                                        scene.audioManager.ReelDrop.play();
+                                        if(scene.gameData.isBonusRound){
+                                            scene.audioManager.Reel2Drop.play();
+                                        }
+                                        else{
+                                            scene.audioManager.ReelDrop.play();
+                                        }
                                     }
                                 }
                                 resolve();
@@ -1065,7 +1096,6 @@ export class SlotMachine {
     private async processMatchesSequentially(scene: GameScene, symbolGrid: number[][], SymbolsIn : Tumble[]): Promise<void> {
         let continueMatching = true;
         let lastResult: string | undefined = undefined;
-        // console.log("SymbolsIn", SymbolsIn);
         try {
             while (continueMatching) {
                 const result = await this.checkMatchAsync(symbolGrid, scene, SymbolsIn[this.currentIndex]);
@@ -1483,9 +1513,9 @@ export class SlotMachine {
     }
 
     private showRetriggerPopup(scene: GameScene, addFreeSpins: number): void {
-        // Use overlay-style popup with brief pause similar to WinOverlayContainer
-        const overlay = new RetriggerOverlayContainer(scene as any);
-        overlay.show(addFreeSpins, () => {
+        // Queue: 1) FreeSpin WinOverlay, 2) Scatter intro + Retrigger overlay, then continue spin
+        this.enqueueWinOverlay(scene, addFreeSpins, 'FreeSpin');
+        this.enqueueWinOverlay(scene, 0, 'Retrigger', () => {
             // In API-driven FS, allow the API scheduler to advance after overlay hide
             if (scene.gameData.useApiFreeSpins) {
                 return;
@@ -1509,7 +1539,9 @@ export class SlotMachine {
                     scene.audioManager.playRandomQuickWinBonus();
                 }
                 else {
-                    scene.audioManager.playRandomQuickWin();
+                    setTimeout(() => {
+                        scene.audioManager.playRandomQuickWin();
+                    }, 333);
                 }
             }
             const symbolSprite = this.symbolGrid[row][col];
@@ -1919,12 +1951,14 @@ export class SlotMachine {
     }
 
 	private showFreeSpinsPopup(scene: GameScene, freeSpins: number): void {
-		// Helper to animate Symbol0 first, then show the FreeSpin overlay
-		const proceedToOverlay = () => {
-			this.playSymbol0GridIntro(scene).then(() => {
-				this.showWinOverlay(scene, freeSpins, -1);
-			});
-		};
+        // Helper to animate Symbol0 + nuclear intro first, then show the FreeSpin overlay
+        const proceedToOverlay = () => {
+            this.playSymbol0GridIntro(scene).then(() => {
+                this.playNuclearIntro(scene).then(() => {
+                    this.showWinOverlay(scene, freeSpins, -1);
+                });
+            });
+        };
 
 		// Check if there's an active win overlay
 		if (this.activeWinOverlay) {
@@ -2069,6 +2103,61 @@ export class SlotMachine {
         this.enqueueWinOverlay(scene, totalWin, overlayType);
     }
 
+    // Plays the nuclear intro animation with missile then nuke sounds (non-looping), resolves when complete
+    private async playNuclearIntro(scene: GameScene): Promise<void> {
+        return new Promise<void>((resolve) => {
+            try {
+                const cx = scene.scale.width * 0.5;
+                const cy = scene.scale.height * 0.5;
+                const spine = scene.add.spine(cx, cy, 'nuclearAnim', 'nuclearAnim') as SpineGameObject;
+                spine.setDepth(10002);
+                spine.setOrigin(0.5, 0.5);
+                spine.setPosition(cx - 10, cy + 50);
+                spine.setScale(1.1, 1.2);
+                try { (spine as any).setScale?.(scene.gameData?.isBonusRound ? 1 : 1); } catch (_e) {}
+
+                // Play missile first, then nuke slightly after
+                try { scene.audioManager.ScatterSFX.play({ volume: scene.audioManager.getSFXVolume?.() || 1 }); } catch (_e) {}
+                scene.time.delayedCall(400, () => {
+                    try { (scene.audioManager as any).NukeSFX?.play({ volume: scene.audioManager.getSFXVolume?.() || 1 }); } catch (_e) {}
+                });
+
+                // Play the single-shot animation named 'animation'
+                try {
+                    const track = spine.animationState.setAnimation(0, 'animation', false);
+                    if (track) {
+                        track.listener = {
+                            complete: () => {
+                                try { (track as any).listener = null; } catch (_e) {}
+                                try { spine.destroy(); } catch (_e) {}
+                                resolve();
+                            }
+                        } as any;
+                        // Failsafe in case no complete event fires
+                        scene.time.delayedCall(4500, () => {
+                            try { (track as any).listener = null; } catch (_e) {}
+                            try { spine.destroy(); } catch (_e) {}
+                            resolve();
+                        });
+                    } else {
+                        // No track returned; resolve quickly
+                        scene.time.delayedCall(100, () => {
+                            try { spine.destroy(); } catch (_e) {}
+                            resolve();
+                        });
+                    }
+                } catch (_e) {
+                    scene.time.delayedCall(50, () => {
+                        try { spine.destroy(); } catch (_e2) {}
+                        resolve();
+                    });
+                }
+            } catch (_e) {
+                scene.time.delayedCall(10, () => resolve());
+            }
+        });
+    }
+
     public destroyWinOverlay(scene: GameScene): void {
         // Destroy all win overlay containers
         // Note: Each container will remove itself from the array when destroyed
@@ -2082,8 +2171,8 @@ export class SlotMachine {
         Events.emitter.emit(Events.WIN_OVERLAY_HIDE);
     }
 
-    private enqueueWinOverlay(scene: GameScene, totalWin: number, overlayType: string): void {
-        this.winOverlayQueue.push({ totalWin, overlayType });
+    private enqueueWinOverlay(scene: GameScene, totalWin: number, overlayType: string, onDone?: () => void): void {
+        this.winOverlayQueue.push({ totalWin, overlayType, onDone });
         this.tryShowNextOverlay(scene);
     }
 
@@ -2101,14 +2190,25 @@ export class SlotMachine {
             overlayInstance = new FreeSpinOverlayContainer(scene as any);
             this.winOverlayContainers.push(overlayInstance);
             overlayInstance.show();
+            this.currentOverlayDoneCallback = next.onDone;
         } else if (next.overlayType === 'Congrats') {
             overlayInstance = new CongratsOverlayContainer(scene as any);
             this.winOverlayContainers.push(overlayInstance);
             overlayInstance.show(next.totalWin);
+            this.currentOverlayDoneCallback = next.onDone;
+        } else if (next.overlayType === 'Retrigger') {
+            // Play scatter intro before showing retrigger overlay
+            this.playSymbol0GridIntro(scene).then(() => {
+                const overlay = new RetriggerOverlayContainer(scene as any);
+                this.winOverlayContainers.push(overlay);
+                this.currentOverlayDoneCallback = next.onDone;
+                overlay.show();
+            });
         } else {
             const winOverlay = new WinOverlayContainer(scene as any, this.winAnimation);
             this.winOverlayContainers.push(winOverlay);
             winOverlay.show(next.totalWin, next.overlayType);
+            this.currentOverlayDoneCallback = next.onDone;
         }
     }
 

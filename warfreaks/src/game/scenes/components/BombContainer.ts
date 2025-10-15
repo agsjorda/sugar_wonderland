@@ -33,8 +33,9 @@ export class BombContainer extends GameObjects.Container {
         this.bombSprite = scene.add.spine(0, 0, 'Symbol10_SW', 'Symbol10_SW');
         this.bombSprite.setVisible(true);
         this.bombSprite.setScale(1, 1.5);
+        this.bombSprite.setDepth(10000);
         
-        // Set the animation time scale to 1
+        // Set the animation time scale to 0
         this.bombSprite.animationState.timeScale = 0;
 
         // Set the animation based on the bomb type
@@ -251,6 +252,7 @@ export class BombContainer extends GameObjects.Container {
             // Match visual size of the original bomb sprite
             //overlay.setScale(this.bombSprite.scaleX, this.bombSprite.scaleY);
             overlay.setAlpha(1);
+            overlay.setDepth(10000);
             // Scale down overlay from 100% to 50% at animation start
             try {
                 this.scene.tweens.add({

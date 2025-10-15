@@ -1,7 +1,7 @@
 import { Scene, Sound } from 'phaser';
 
 export class AudioManager {
-    private musicVolume: number = 1; // Default music volume (0.0 - 1.0)
+    private musicVolume: number = 0.5; // Default music volume (0.0 - 1.0)
     private sfxVolume: number = 1;   // Default SFX volume (0.0 - 1.0)
     public winIsPlaying: boolean = false;
     private winSFXQueue: string[] = []; // Queue for win SFX
@@ -17,9 +17,14 @@ export class AudioManager {
     public hitWin: Sound.WebAudioSound;
     public ReelDrop: Sound.WebAudioSound;
     public TurboDrop: Sound.WebAudioSound;
+
+    public Reel2Drop: Sound.WebAudioSound;
+    public Turbo2Drop: Sound.WebAudioSound;
+
     public SpinSFX: Sound.WebAudioSound;
     public UtilityButtonSFX: Sound.WebAudioSound;
     public ScatterSFX: Sound.WebAudioSound;
+    public MultiSFX: Sound.WebAudioSound;
     public TExplosion: Sound.WebAudioSound;
     public TWin1: Sound.WebAudioSound;
     public TWin2: Sound.WebAudioSound;
@@ -67,11 +72,16 @@ export class AudioManager {
         // SFX
         scene.load.audio('ClickSFX', `${prefixAudio}/click_wf${fileType}`);
         scene.load.audio('ReelDrop', `${prefixAudio}/reeldrop_wf${fileType}`);
-        scene.load.audio('ReelStart', `${prefixAudio}/reeldrop2_wf${fileType}`);
+        scene.load.audio('Reel2Drop', `${prefixAudio}/reeldrop2_wf${fileType}`);
+
         scene.load.audio('TurboDrop', `${prefixAudio}/turbodrop_wf${fileType}`);
+        scene.load.audio('Turbo2Drop', `${prefixAudio}/turbo2_wf${fileType}`);
+
         scene.load.audio('SpinSFX', `${prefixAudio}/spin_wf${fileType}`);
         scene.load.audio('UtilityButtonSFX', `${prefixAudio}/ub_wf${fileType}`);
         scene.load.audio('ScatterSFX', `${prefixAudio}/missile_wf${fileType}`); // scatter_wf
+        scene.load.audio('MultiSFX', `${prefixAudio}/multi_wf${fileType}`);
+        scene.load.audio('NukeSFX', `${prefixAudio}/nuke_wf${fileType}`);
         scene.load.audio('TExplosion', `${prefixAudio}/explosion_wf${fileType}`); // texplosion_wf
 
         scene.load.audio('TWin1', `${prefixAudio}/twin1_wf${fileType}`);
@@ -116,9 +126,18 @@ export class AudioManager {
 
         this.ReelDrop = scene.sound.add('ReelDrop', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.TurboDrop = scene.sound.add('TurboDrop', { volume: this.sfxVolume }) as Sound.WebAudioSound;
+
+        this.Reel2Drop = scene.sound.add('Reel2Drop', { volume: this.sfxVolume }) as Sound.WebAudioSound;
+        this.Turbo2Drop = scene.sound.add('Turbo2Drop', { volume: this.sfxVolume }) as Sound.WebAudioSound;
+
         this.SpinSFX = scene.sound.add('SpinSFX', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.UtilityButtonSFX = scene.sound.add('UtilityButtonSFX', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.ScatterSFX = scene.sound.add('ScatterSFX', { volume: this.sfxVolume }) as Sound.WebAudioSound;
+        this.MultiSFX = scene.sound.add('MultiSFX', { volume: this.sfxVolume }) as Sound.WebAudioSound;
+        // Additional SFX for nuclear sequence
+        const NukeSFX = scene.sound.add('NukeSFX', { volume: this.sfxVolume }) as Sound.WebAudioSound;
+        // Expose via any to keep class shape stable without adding new public field
+        (this as any).NukeSFX = NukeSFX;
         this.TExplosion = scene.sound.add('TExplosion', { volume: this.sfxVolume }) as Sound.WebAudioSound;
         this.FreeSpinWon = scene.sound.add('FreeSpinWon', { volume: this.sfxVolume, loop: true }) as Sound.WebAudioSound;
         this.WinSkip = scene.sound.add('WinSkip', { volume: this.sfxVolume }) as Sound.WebAudioSound;

@@ -1,9 +1,11 @@
 import { Scene, GameObjects } from 'phaser';
+import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { Events } from './Events';
 
 interface GameScene extends Scene {
 	buttons: any;
 	slotMachine: any;
+	audioManager: any;
 }
 
 export class RetriggerOverlayContainer {
@@ -11,16 +13,14 @@ export class RetriggerOverlayContainer {
 	private container: GameObjects.Container;
 	private contentContainer: GameObjects.Container;
 	private buttonZone: GameObjects.Zone;
-	private isMobile: boolean = false;
 	private inputLocked: boolean = false;
 	private onSpaceDown?: (event: KeyboardEvent) => void;
 
 	constructor(scene: GameScene) {
 		this.scene = scene;
-		this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
 		this.container = this.scene.add.container(0, 0);
 		this.container.setDepth(10000);
-		this.container.setScale(this.isMobile ? 0.5 : 1);
+		this.container.setScale(0.5);
 
 		// Semi-transparent fullscreen dimmer
 		const dim = this.scene.add.graphics();
@@ -41,25 +41,21 @@ export class RetriggerOverlayContainer {
 		this.container.add(this.buttonZone);
 	}
 
-	public show(addFreeSpins: number, onClose?: () => void): void {
-		// Build popup visuals (reuse Buy Feature BG and texts similar to showRetriggerPopup)
-		const bg = this.scene.add.image(0, 0, 'buyFeatBG');
-		bg.setOrigin(0.5, 0.5);
-		if ((this.scene.sys.game.renderer as any).pipelines) {
-			bg.setPipeline('BlurPostFX');
+	public show(onClose?: () => void): void {
+		// Play Free Spin retrigger animation
+		let retriggerAnim: SpineGameObject | undefined;
+		try {
+			retriggerAnim = this.scene.add.spine(0, 0, 'freeSpinAnim', 'freeSpinAnim') as SpineGameObject;
+			retriggerAnim.setOrigin(0.5, 0.5);
+			retriggerAnim.setScale(2);
+			// Ensure the animation sits above bg but below text
+			this.contentContainer.addAt(retriggerAnim, 1);
+			retriggerAnim.animationState.setAnimation(0, 'free5spin_WF_idle', false);
+			// Play multi_wf.ogg instead of missile_wf.ogg for retrigger
+			try { (this.scene.audioManager as any).MultiSFX?.play({ volume: this.scene.audioManager.getSFXVolume?.() || 1 }); } catch (_e) {}
+		} catch (_e) {
+			// Fallback: if spine not available, keep bg+text only
 		}
-		const text = this.scene.add.text(0, 0, `You won \n${addFreeSpins}\n more free spins`, {
-			fontSize: '48px',
-			color: '#FFFFFF',
-			fontFamily: 'Poppins',
-			fontStyle: 'bold',
-			align: 'center'
-		});
-		text.setOrigin(0.5, 0.5);
-
-		// Add to container (centered under buttonZone)
-		this.contentContainer.add(bg);
-		this.contentContainer.add(text);
 
 		// Brief pause before allowing skip
 		this.inputLocked = true;
@@ -67,20 +63,11 @@ export class RetriggerOverlayContainer {
 			this.inputLocked = false;
 		});
 
-		// Keyboard skip on desktop
-		if (!this.isMobile && this.scene.input.keyboard) {
-			this.onSpaceDown = () => this.tryClose(onClose);
-			this.scene.input.keyboard.on('keydown-SPACE', this.onSpaceDown);
-		}
-
 		// Pointer skip
 		//this.buttonZone.on('pointerdown', () => this.tryClose(onClose));
 
-		// Auto-close in autoplay/API-driven scenarios after a short pause
-		const shouldAutoClose = (this.scene as any).buttons?.autoplay?.isAutoPlaying || (this.scene as any).gameData?.useApiFreeSpins;
-		if (shouldAutoClose) {
-			this.scene.time.delayedCall(750, () => this.tryClose(onClose));
-		}
+		// Auto-close after a brief moment (retrigger overlay auto-dismiss)
+		this.scene.time.delayedCall(666, () => this.tryClose(onClose));
 
 		// Notify overlay shown and block win overlay queue in slotMachine
 		if (this.scene.slotMachine) {

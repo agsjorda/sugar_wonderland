@@ -27,6 +27,10 @@ export class WinAnimation {
         this.scene.load.spineAtlas('totalWinAnim', 'assets/Win/total_win.atlas');
         this.scene.load.spineJson('totalWinAnim', 'assets/Win/total_win.json');
 
+        // New: nuclear intro animation for FreeSpin
+        this.scene.load.spineAtlas('nuclearAnim', 'assets/Win/nuclear.atlas');
+        this.scene.load.spineJson('nuclearAnim', 'assets/Win/nuclear.json');
+
         this.scene.load.spineAtlas('Symbol10_SW', 'assets/Symbols/Bomb/multiplier_WF.atlas');
         this.scene.load.spineJson('Symbol10_SW', 'assets/Symbols/Bomb/multiplier_WF.json');
         
