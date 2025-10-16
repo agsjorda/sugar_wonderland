@@ -1938,7 +1938,7 @@ export class Buttons {
                 
                 // text1.setText('TOTAL WIN');
                 // if(!scene.gameData.isBonusRound){
-                // text2.setText(`${scene.gameData.currency}` + (0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                text2.setText(`${scene.gameData.currency} `+ (0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
                 //     text1.setText('WIN');
                 // }
             //}
