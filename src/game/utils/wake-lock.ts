@@ -3,18 +3,18 @@ let wakeLockSentinel: any | null = null;
 
 export async function requestWakeLock() {
   if (!('wakeLock' in navigator)){
-    console.log('[WakeLock] not supported');
+    // console.log('[WakeLock] not supported');
     return; // not supported
   } 
   try {
     wakeLockSentinel = await (navigator as any).wakeLock.request('screen');
     wakeLockSentinel.addEventListener('release', () => {
-      console.log('[WakeLock] released');
+      // console.log('[WakeLock] released');
       wakeLockSentinel = null;
     });
-    console.log('[WakeLock] acquired');
+    // console.log('[WakeLock] acquired');
   } catch (err) {
-    console.warn('[WakeLock] request failed:', err);
+    // console.warn('[WakeLock] request failed:', err);
   }
 }
 
