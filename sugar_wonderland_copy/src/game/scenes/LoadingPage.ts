@@ -29,6 +29,7 @@ export class LoadingPage extends Scene {
 
     private components: any[];
     private deferAudio: boolean = true;
+    private isInitialLoad: boolean = true;
 
     constructor() {
         super('LoadingPage');
@@ -141,6 +142,7 @@ export class LoadingPage extends Scene {
 
         // Set up loading events
         this.load.on('progress', (value: number) => {
+            if (!this.isInitialLoad) return; // suppress second pass (deferred audio)
             if(value > 0.1)
                 this.loadingBar.setAlpha(1);
             this.loadingBar.clear();
@@ -152,12 +154,14 @@ export class LoadingPage extends Scene {
         });         
 
         this.load.on('complete', () => {
+            if (!this.isInitialLoad) return; // ignore completes after first load
             this.loadingBar.clear();
             this.loadingBar.fillStyle(0x222222, 0.8);
             this.loadingBar.fillRoundedRect(this.barX - 5, this.barY - 5, barWidth + 10, height, borderRadius);
             this.loadingBar.fillStyle(0x4CAF50, 1);
             this.loadingBar.fillRoundedRect(this.barX, this.barY, barWidth, innerHeight, borderRadius);
             this.progressText.setText('100%');
+            this.isInitialLoad = false;
         });
     }
 
