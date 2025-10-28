@@ -58,7 +58,7 @@ export class Game extends Scene
 	private autoplayOptions: AutoplayOptions;
 	private irisTransition: IrisTransition;
 	private coinAnimation: CoinAnimation;
-	private gameAPI: GameAPI;
+	public gameAPI: GameAPI;
 	public audioManager: AudioManager;
 	private menu: Menu;
 	private scatterAnticipation: ScatterAnticipation;

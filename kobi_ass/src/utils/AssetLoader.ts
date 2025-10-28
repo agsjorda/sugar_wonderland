@@ -25,9 +25,19 @@ export class AssetLoader {
 				console.warn('[AssetLoader] Spine loader not available. Skipping spine asset group.');
 			} else {
 				Object.entries(assetGroup.spine).forEach(([key, spineData]) => {
-					console.log(`[AssetLoader] Loading spine: ${key} from ${spineData.json}`);
-					scene.load.spineAtlas(`${key}-atlas`, spineData.atlas);
-					scene.load.spineJson(key, spineData.json);
+					try {
+						const anyLoad: any = scene.load as any;
+						if (typeof anyLoad.spine === 'function') {
+							console.log(`[AssetLoader] Loading spine (combined): ${key}`);
+							anyLoad.spine(key, spineData.json, spineData.atlas);
+						} else {
+							console.log(`[AssetLoader] Loading spine (separate): ${key} from ${spineData.json}`);
+							scene.load.spineAtlas(`${key}-atlas`, spineData.atlas);
+							scene.load.spineJson(key, spineData.json);
+						}
+					} catch (e) {
+						console.warn(`[AssetLoader] Failed loading spine ${key}:`, e);
+					}
 				});
 			}
 		}

@@ -436,4 +436,23 @@ export class GameAPI {
             return defaultBalance;
         }
     }
+
+    public async getHistory(page: number, limit: number): Promise<any> {
+        const apiUrl = `${getApiBaseUrl()}/api/v1/games/me/histories`;
+        const token = localStorage.getItem('token')
+            || localStorage.getItem('token')
+            || sessionStorage.getItem('token')
+            || '';
+
+        const response = await fetch(`${apiUrl}?limit=${limit}&page=${page}`,{
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        const data = await response.json();
+        return data;
+    }
 }   

@@ -2,6 +2,7 @@ import { Scene, GameObjects, Tweens } from 'phaser';
 import { Geom } from 'phaser';
 import { GameData } from '../components/GameData';
 import { AudioManager, SoundEffectType } from '../../managers/AudioManager';
+import { GameAPI } from '../../backend/GameAPI';
 
 interface ButtonBase {
     isButton: boolean;
@@ -14,6 +15,7 @@ type ButtonText = GameObjects.Text & ButtonBase;
 interface GameScene extends Scene {
     gameData: GameData;
     audioManager: AudioManager;
+    gameAPI: GameAPI;
 }
 
 export class Menu {
@@ -320,7 +322,7 @@ export class Menu {
         this.setupScrollableRulesContent(scene);
         this.historyCurrentPage = 1;
         this.historyPageLimit = 11;
-        this.showHistoryContent(scene, this.historyContent, this.historyCurrentPage, this.historyPageLimit);
+        this.showHistoryContent(scene, this.historyCurrentPage, this.historyPageLimit);
         this.createVolumeSettingsContent(scene, this.settingsContent);
         
         // Initially hide all except rules
@@ -407,7 +409,8 @@ export class Menu {
 
 
 
-    private async showHistoryContent(scene: GameScene, contentArea: GameObjects.Container, page: number, limit: number): Promise<void> {
+    private async showHistoryContent(scene: GameScene, page: number, limit: number): Promise<void> {
+        const contentArea = this.historyContent;
         // Keep old rows until new data is ready; build containers on first run
         const historyHeaders : string[] = ['Spin', 'Currency', 'Bet', 'Win'];
         // Recreate or reparent containers if needed (handles menu reopen)
@@ -417,20 +420,24 @@ export class Menu {
             historyText.setOrigin(0, 0);
             this.historyHeaderContainer.add(historyText);
         }
-        if (!this.historyRowsContainer || !this.historyRowsContainer.scene) {
-            this.historyRowsContainer = scene.add.container(0, 0);
+        // Recreate rows and pagination containers fresh to avoid recursive destroy issues
+        if (this.historyRowsContainer && this.historyRowsContainer.scene) {
+            this.historyRowsContainer.destroy(true);
         }
-        if (!this.historyPaginationContainer || !this.historyPaginationContainer.scene) {
-            this.historyPaginationContainer = scene.add.container(0, 0);
-        }
-        if ((this.historyHeaderContainer as any).parentContainer !== contentArea) {
-            contentArea.add(this.historyHeaderContainer);
-        }
+        this.historyRowsContainer = scene.add.container(0, 0);
         if ((this.historyRowsContainer as any).parentContainer !== contentArea) {
             contentArea.add(this.historyRowsContainer);
         }
+
+        if (this.historyPaginationContainer && this.historyPaginationContainer.scene) {
+            this.historyPaginationContainer.destroy(true);
+        }
+        this.historyPaginationContainer = scene.add.container(0, 0);
         if ((this.historyPaginationContainer as any).parentContainer !== contentArea) {
             contentArea.add(this.historyPaginationContainer);
+        }
+        if ((this.historyHeaderContainer as any).parentContainer !== contentArea) {
+            contentArea.add(this.historyHeaderContainer);
         }
 
         // Prevent stacking requests
@@ -456,7 +463,7 @@ export class Menu {
 
         let result: any;
         try{
-            // result = await scene.gameAPI.getHistory(page, limit);
+            result = await scene.gameAPI.getHistory(page, limit);
         } finally {
             spinTween.stop();
             loader.destroy();
@@ -494,7 +501,6 @@ export class Menu {
 
         let contentY = 100;
         const rowsContainer = this.historyRowsContainer as GameObjects.Container;
-        rowsContainer.removeAll(true);
         result.data?.forEach((v?:any)=>{
             spinDate = this.formatISOToDMYHM(v.created_at);
             currency = v.currency == ''?'usd':v.currency;
@@ -510,7 +516,6 @@ export class Menu {
         
         // Add pagination buttons at bottom-center
         const paginationContainer = this.historyPaginationContainer as GameObjects.Container;
-        paginationContainer.removeAll(true);
         this.addHistoryPagination(scene, paginationContainer, this.historyCurrentPage, this.historyTotalPages, this.historyPageLimit);
     }
 
@@ -631,7 +636,7 @@ export class Menu {
                             img.setAlpha(0.5);
                         }
                     });
-                    this.showHistoryContent(scene, contentArea, targetPage, limit);
+                    this.showHistoryContent(scene, targetPage, limit);
                 });
             } else {
                 btn.setAlpha(0.5);
@@ -1285,7 +1290,7 @@ export class Menu {
                 this.padding, 
                 0, 
                 this.contentWidth + this.padding * 3, 
-                scaledSymbolSize * 35
+                scaledSymbolSize * 43
                 
             );
             this.contentContainer.add(freeSpinContainer);
@@ -1381,7 +1386,7 @@ export class Menu {
                     imageY: fsRoundImageTop,
                     imageOrigin: { x: 0.5, y: 0.5 },
                     imageScale: 1.1,
-                    titleOffsetY: freeSpinsTitleOffset,
+                    titleOffsetY: freeSpinsTitleOffset - 111,
                     titleX: (this.textHorizontalPadding ?? this.padding / 2) + this.padding * 3.1,
                     desc: fsRoundDesc,
                     descOffsetY: freeSpinsDescOffset,
@@ -1393,7 +1398,7 @@ export class Menu {
             const scatterSymbolImage2 = scene.add.image(0, 0, 'ScatterLabel');
             scatterSymbolImage2.setScale(0.2);
             scatterSymbolImage2.setOrigin(0.5, 0.5);
-            scatterSymbolImage2.setPosition(130, 880);
+            scatterSymbolImage2.setPosition(130, 870);
             freeSpinContainer.add(scatterSymbolImage2);
     
             const scatterSymbolImage = scene.add.image(0, 0, 'ScatterLabel');
@@ -1408,45 +1413,72 @@ export class Menu {
             scatterWinImage.setPosition(scatterSymbolImage.x - scatterSymbolImage.displayWidth/2 + this.padding * 9.1, scatterSymbolImage.y * 3/4 - scatterWinImage.height/ 4 + 20);
             freeSpinContainer.add(scatterWinImage);
             
-            this.yPosition -= scaledSymbolSize * 4.75;
+            this.yPosition -= scaledSymbolSize * 5.3;
 
             
             // this.addDivider(scene, 0x379557);
-            
+            const gameSettingsTitleOffset = this.padding * 15; // distance from image → title
+            const gameSettingsDescOffset = this.padding * 5;  
 
             // Removed Multiplier section
-            this.yPosition += this.padding * 60;
-            this.addContent(scene, 'Game Settings', 'title');
+            this.yPosition += this.padding * 55;
+            this.addTextBlock(scene, 'header2', 'Game Settings');
     
             const gamesettingsContainer = scene.add.container(-this.padding * 1.5, this.yPosition);
             this.yPosition += this.createBorder(scene, gamesettingsContainer, 
                 this.padding, 
                 0, 
                 this.contentWidth + this.padding * 3, 
-                scaledSymbolSize * 10
+                scaledSymbolSize * 10.8
             );
             this.contentContainer.add(gamesettingsContainer);
     
             //this.yPosition -= scaledSymbolSize * 9.75;
-            this.yPosition -= scaledSymbolSize * 10
+            this.yPosition -= scaledSymbolSize * 10.3;
+            
     
-            this.yPosition += this.padding;
-            this.addContent(scene, 'Paylines', 'title');
-    
-            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 0.75, gamesettingsContainer, '', 'Symbols can land anywhere on the screen.', true, this.contentWidth + this.padding * 3);
-    
-            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 2.75, gamesettingsContainer, 'paylineMobileWin', '');
-            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 5.25, gamesettingsContainer, 'paylineMobileNoWin', '');
-    
-            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 6.5, gamesettingsContainer, '', 'All wins are multiplied by the base bet.', true, this.contentWidth + this.padding * 3);
-            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 7.5, gamesettingsContainer, '', 'When multiple symbol wins occur, all values are combined into the total win.', true, this.contentWidth + this.padding * 3);
-            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 8.75, gamesettingsContainer, '', 'Free spins rewards are granted after the round ends.', true, this.contentWidth + this.padding * 3);
-    
-            this.yPosition -= scaledSymbolSize * 3.5;
-    
+            //this.yPosition += this.padding;
+            this.addTextBlock(scene, 'header2', 'Paylines', {
+                y: this.yPosition + this.padding * 0.1,
+                x: (this.textHorizontalPadding ?? this.padding / 2) + this.padding * 1.8
+            });
+
+            
+            
+            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 1, gamesettingsContainer, '', 'Symbols can land anywhere on the screen.', true, this.contentWidth + this.padding * 3);
+
+            // Place a 5x4 grid of winline thumbnails below the text
+            const gridTopY = scaledSymbolSize * 1 + this.padding * 4.8;
+            const gridBottom = this.drawWinlinesThumbnailsGrid(scene, gamesettingsContainer, gridTopY, 5, 4);
+
+            // Add payline notes text below the grid (as shown in the reference)
+            const paylineNotes = [
+                'All symbols pay left to right on \nselected paylines.',
+                'Free Spins wins are added to \npayline wins.',
+                'All wins are multiplied by the bet \nper line.',
+                'All values shown are actual wins \nin coins.',
+                'Only the highest win is paid per \nline.',
+                'Wins on multiple paylines are \nadded together.'
+            ].join('\n');
+            const notesX = this.padding * 3;
+            const notesY = gridBottom + this.padding * 3;
+            const notesText = scene.add.text(notesX, notesY, paylineNotes, {
+                ...this.textStyle,
+                wordWrap: { width: this.contentWidth + this.padding * 3 }
+            }) as ButtonText;
+            gamesettingsContainer.add(notesText);
+
+            // Immediately continue with text after the notes block (examples removed)
+            const textStartY = notesText.y + notesText.displayHeight + this.padding * 6;
+            // Removed extra bullet texts per request
+
+            // Compute actual bottom of Game Settings content and place How To Play after it
+            const contentBottomLocal = Math.max(gridBottom, notesText.y + notesText.displayHeight);
+            const gameSettingsBottom = gamesettingsContainer.y + contentBottomLocal + this.padding * 12;
+            this.yPosition = gameSettingsBottom;
+
             this.commonRules(scene, this.contentWidth, 153);
     
-            this.yPosition -= scaledSymbolSize * 45;
             contentArea.add(this.contentContainer);
     }
     
@@ -1455,44 +1487,94 @@ export class Menu {
         this.addContent(scene, 'How to Play', 'title');
         const commonPadding = 20;
         
-        const howToPlayContainer = scene.add.container(0, this.yPosition);
+        // Align How to Play container with other sections (same left offset and width)
+        const howToPlayContainer = scene.add.container(-this.padding * 1.5, this.yPosition);
 
+        const tableWidth = this.contentWidth + this.padding * 3;
         this.yPosition += this.createBorder(scene, howToPlayContainer, 
             this.padding, 
             0, 
-            genericTableWidth, 
+            tableWidth, 
             scaledSymbolSize * 25
         );
         this.contentContainer.add(howToPlayContainer);
 
-        this.createHeader(scene, commonPadding , commonPadding / 2, howToPlayContainer, 'Bet Controls', '#379557');
+        // Align header and entries with the same left padding used in other sections
+        const leftPad = this.padding * 3; // same as Paylines text left align
+        this.addTextBlock(scene, 'header2', 'Bet Controls', { container: howToPlayContainer, x: leftPad, y: commonPadding / 2 });
 
-        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 5 , howToPlayContainer, 'howToPlay1Mobile', '');
+        this.createHowToPlayEntry(scene, leftPad, commonPadding * 5 , howToPlayContainer, 'howToPlay1Mobile', '');
 
-        this.createHeader(scene, commonPadding, commonPadding * 9.5, howToPlayContainer, 'Game Actions', '#379557');
+        this.addTextBlock(scene, 'header2', 'Game Actions', { container: howToPlayContainer, x: leftPad, y: commonPadding * 9.5 });
         
-        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 15, howToPlayContainer, 'howToPlay2Mobile', '');
-        this.createHowToPlayEntry(scene, commonPadding / 3, commonPadding * 25, howToPlayContainer, 'howToPlay11Mobile', '');
-        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 38, howToPlayContainer, 'howToPlay12Mobile', '');
-        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 50, howToPlayContainer, 'howToPlay3Mobile', '');
-        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 60, howToPlayContainer, 'howToPlay4Mobile', '');
+        this.createHowToPlayEntry(scene, leftPad, commonPadding * 15, howToPlayContainer, 'howToPlay2Mobile', '');
+        this.createHowToPlayEntry(scene, leftPad, commonPadding * 25, howToPlayContainer, 'howToPlay11Mobile', '');
+        this.createHowToPlayEntry(scene, leftPad, commonPadding * 38, howToPlayContainer, 'howToPlay12Mobile', '');
+        this.createHowToPlayEntry(scene, leftPad, commonPadding * 50, howToPlayContainer, 'howToPlay3Mobile', '');
+        this.createHowToPlayEntry(scene, leftPad, commonPadding * 60, howToPlayContainer, 'howToPlay4Mobile', '');
 
-        this.createHeader(scene, commonPadding, commonPadding * 66, howToPlayContainer, 'Display & Stats', '#379557');
+        this.addTextBlock(scene, 'header2', 'Display & Stats', { container: howToPlayContainer, x: leftPad, y: commonPadding * 66 });
 
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 72 : commonPadding * 52, howToPlayContainer, 'howToPlay5', 'Shows your current available credits.', true, this.contentWidth - this.padding * 2);
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 82 : commonPadding * 59, howToPlayContainer, 'howToPlay6', 'Display your total winnings from the current round.', true, this.contentWidth - this.padding * 2);
-        this.createHowToPlayEntry(scene, commonPadding, this.isMobile ? commonPadding * 93 : commonPadding * 66, howToPlayContainer, 'howToPlay7', 'Adjust your wager using the - and + buttons.', true, this.contentWidth - this.padding * 2);
+        this.createHowToPlayEntry(scene, leftPad, this.isMobile ? commonPadding * 72 : commonPadding * 52, howToPlayContainer, 'howToPlay5', 'Shows your current available credits.', true, this.contentWidth - this.padding * 2);
+        this.createHowToPlayEntry(scene, leftPad, this.isMobile ? commonPadding * 82 : commonPadding * 59, howToPlayContainer, 'howToPlay6', 'Display your total winnings from the current round.', true, this.contentWidth - this.padding * 2);
+        this.createHowToPlayEntry(scene, leftPad, this.isMobile ? commonPadding * 93 : commonPadding * 66, howToPlayContainer, 'howToPlay7', 'Adjust your wager using the - and + buttons.', true, this.contentWidth - this.padding * 2);
 
-        this.createHeader(scene, commonPadding, commonPadding * 101, howToPlayContainer, 'General Controls', '#379557');
+        this.addTextBlock(scene, 'header2', 'General Controls', { container: howToPlayContainer, x: leftPad, y: commonPadding * 101 });
 
-        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 107, howToPlayContainer, 'howToPlay8Mobile', '');  
-        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 114.5, howToPlayContainer, 'howToPlay9Mobile', '');
-        this.createHowToPlayEntry(scene, commonPadding, commonPadding * 124, howToPlayContainer, 'howToPlay10Mobile', '');        
+        this.createHowToPlayEntry(scene, leftPad, commonPadding * 107, howToPlayContainer, 'howToPlay8Mobile', '');  
+        this.createHowToPlayEntry(scene, leftPad, commonPadding * 114.5, howToPlayContainer, 'howToPlay9Mobile', '');
+        this.createHowToPlayEntry(scene, leftPad, commonPadding * 124, howToPlayContainer, 'howToPlay10Mobile', '');        
 
         this.yPosition -= scaledSymbolSize * 15;
     }
+
+    // Render a grid of winline thumbnails (e.g., winlines1..winlines20). Returns bottom Y of the grid
+    private drawWinlinesThumbnailsGrid(
+        scene: GameScene,
+        container: GameObjects.Container,
+        topY: number,
+        rows: number = 5,
+        columns: number = 4
+    ): number {
+        // Frame metrics for layout
+        // @ts-ignore
+        const frameW = (container.getData && container.getData('frameW')) || (this.contentWidth + this.padding * 3);
+        // @ts-ignore
+        const frameX = (container.getData && container.getData('frameX')) || this.padding;
+
+        const inset = this.padding * 2;
+        // Horizontal and vertical gaps (vertical now ultra-tight)
+        const gapX = Math.max(4, Math.floor(this.padding * 0.6));
+        const gapY = 0;
+        const usableWidth = Math.max(0, frameW - inset * 2);
+        const cellSize = Math.floor((usableWidth - gapX * (columns - 1)) / columns);
+        const startX = frameX + inset;
+
+        let maxBottom = topY;
+        // Vertical step set to 70% of cell height for clearer separation
+        const stepY = Math.max(1, Math.floor(cellSize * 0.73 + gapY));
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < columns; c++) {
+                // Column-major ordering so images increment vertically down a column
+                const idx = c * rows + r + 1;
+                const key = `winlines${idx}`;
+                const x = startX + c * (cellSize + gapX) + cellSize / 2;
+                const y = topY + r * stepY + cellSize / 2;
+                const img = scene.add.image(x, y, key) as ButtonImage;
+                img.setOrigin(0.5, 0.5);
+                // Fit image into square cell without stretching; do not upscale beyond 1x
+                const originalW = img.width || 1;
+                const originalH = img.height || 1;
+                const fitScale = Math.min(cellSize / originalW, cellSize / originalH);
+                img.setScale(Math.min(1, fitScale));
+                container.add(img);
+            }
+        }
+        maxBottom = topY + (rows - 1) * stepY + cellSize;
+        return maxBottom;
+    }
     private createHeader(scene: GameScene, x: number, y: number, container: GameObjects.Container, text: string, color: string): void {
-        const genericTableWidth = this.viewWidth - this.padding * 2;
+        const genericTableWidth = this.contentWidth + this.padding * 3;
         
         const header = scene.add.text(0, 0,text,
             {
@@ -1857,7 +1939,7 @@ export class Menu {
         const cellPadding = 5;
 
         const tableHeight = (cellHeight + cellPadding) * 4;
-        const matchNumRange : string[] = ['12+', '10', '8'];
+        const matchNumRange : string[] = ['5', '4', '3'];
         const scatterNumRange : string[] = ['6', '5', '4'];
         const scatterText: string[] = [
             'Appears only on reels 1, 3, and 5.', 
@@ -1874,7 +1956,7 @@ export class Menu {
         // Create table background
         const graphics = scene.add.graphics();
 
-        let payoutAdjustments : [number, number, number] = [0, 0, 0];
+        let payoutAdjustments : [number, number, number] = [200.00, 10.00, 6.00];
         for (let row = 0; row < 3; row++) {
             for (let col = 0; col < 3; col++) {
                 let cellWidth = 0;
@@ -1894,7 +1976,22 @@ export class Menu {
                 if(symbolIndex != 0) {
                     // For regular symbols
                     if(col < 2) {
-                        const text2 = (0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        // Payout values per symbol (1-11) for rows ['12+', '10', '8']
+                        const payoutMap: { [key: number]: [number, number, number] } = {
+                            1: [37.50, 7.50, 2.50],
+                            2: [25.00, 5.00, 1.75],
+                            3: [15.00, 3.00, 1.25],
+                            4: [10.00, 2.00, 1.25],
+                            5: [7.50, 1.25, 0.60],
+                            6: [5.00, 1.00, 0.40],
+                            7: [2.50, 0.50, 0.25],
+                            8: [2.50, 0.50, 0.25],
+                            9: [1.25, 0.25, 0.10],
+                            10: [1.25, 0.25, 0.10],
+                            11: [1.25, 0.25, 0.10]
+                        };
+                        const payoutValue = (payoutMap[symbolIndex] && payoutMap[symbolIndex][row] !== undefined) ? payoutMap[symbolIndex][row] : 0;
+                        const text2 = payoutValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         payoutAdjustments[row] = text2.length;
 
                         let text : string;  
@@ -1910,25 +2007,26 @@ export class Menu {
                         }
 
                         let textElement : GameObjects.Text;
-                         if(col == 0){
-                            textElement = scene.add.text(cellX + cellWidth , cellY + cellHeight/2, text, {
+                        if(col == 0){
+                            textElement = scene.add.text(cellX + cellWidth + 25, cellY + cellHeight/2, text, {
                                 fontSize: '20px',
                                 color: '#FFFFFF',
                                 fontFamily: 'Poppins-Regular', 
                                 align: 'left',
                                 fontStyle: 'bold'
                             });
-                        }
-                        else{
-                            textElement = scene.add.text(cellX + cellWidth , cellY + cellHeight/2, text, {
+                            textElement.setOrigin(0, 0.5);
+                        } else {
+                            // Right-align payout values to the cell's right edge (with 2px inset)
+                            textElement = scene.add.text(cellX + cellWidth + 50, cellY + cellHeight/2, text, {
                                 fontSize: '20px',
                                 color: '#FFFFFF',
                                 fontFamily: 'Poppins-Regular', 
                                 align: 'right'
                             });
+                            textElement.setOrigin(1, 0.5);
                         }
 
-                        textElement.setOrigin(col == 0 ? 0 : 0.5, 0.5);
                         container.add(textElement);
                     }
                 } else {

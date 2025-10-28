@@ -1040,6 +1040,21 @@ export class SlotController {
 		);
 		betBg.setDepth(8);
 		this.controllerContainer.add(betBg);
+
+		// Open Bet Options when the bet background is clicked
+		betBg.setInteractive(
+			new Phaser.Geom.Rectangle(
+				betX - containerWidth / 2,
+				betY - containerHeight / 2,
+				containerWidth,
+				containerHeight
+			),
+			Phaser.Geom.Rectangle.Contains
+		);
+		betBg.on('pointerdown', () => {
+			console.log('[SlotController] Bet background clicked');
+			EventBus.emit('show-bet-options');
+		});
 		
 
 		// "BET" label (1st line)
@@ -1093,7 +1108,7 @@ export class SlotController {
 		decreaseBetButton.setInteractive();
 		decreaseBetButton.on('pointerdown', () => {
 			console.log('[SlotController] Decrease bet button clicked');
-			EventBus.emit('show-bet-options');
+			this.adjustBetByStep(-1);
 		});
 		this.buttons.set('decrease_bet', decreaseBetButton);
 		this.controllerContainer.add(decreaseBetButton);
@@ -1107,10 +1122,46 @@ export class SlotController {
 		increaseBetButton.setInteractive();
 		increaseBetButton.on('pointerdown', () => {
 			console.log('[SlotController] Increase bet button clicked');
-			EventBus.emit('show-bet-options');
+			this.adjustBetByStep(1);
 		});
 		this.buttons.set('increase_bet', increaseBetButton);
 		this.controllerContainer.add(increaseBetButton);
+	}
+
+	/** Move the bet to the next/previous level based on the BetOptions ladder */
+	private adjustBetByStep(direction: 1 | -1): void {
+		try {
+			// Keep the ladder in sync with BetOptions.ts
+			const betLevels: number[] = [
+				0.2, 0.4, 0.6, 0.8, 1,
+				1.2, 1.6, 2, 2.4, 2.8,
+				3.2, 3.6, 4, 5, 6,
+				8, 10, 14, 18, 24,
+				32, 40, 60, 80, 100,
+				110, 120, 130, 140, 150
+			];
+
+			// Use base bet (without amplify) to find current index
+			const currentBaseBet = this.getBaseBetAmount() || 0.2;
+			let idx = 0;
+			let bestDiff = Number.POSITIVE_INFINITY;
+			for (let i = 0; i < betLevels.length; i++) {
+				const diff = Math.abs(betLevels[i] - currentBaseBet);
+				if (diff < bestDiff) { bestDiff = diff; idx = i; }
+			}
+
+			const newIdx = Math.max(0, Math.min(betLevels.length - 1, idx + direction));
+			const previousBet = currentBaseBet;
+			const newBet = betLevels[newIdx];
+
+			// Update UI and internal base bet via existing API (resets amplify if active)
+			this.updateBetAmount(newBet);
+
+			// Notify rest of the system
+			gameEventManager.emit(GameEventType.BET_UPDATE, { newBet: newBet, previousBet: previousBet });
+		} catch (e) {
+			console.warn('[SlotController] adjustBetByStep failed:', e);
+		}
 	}
 
 	/**

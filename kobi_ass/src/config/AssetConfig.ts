@@ -266,7 +266,9 @@ export class AssetConfig {
 				'icon_most_left': `${prefix}/menu/icon_most_left.png`,
 				'icon_right': `${prefix}/menu/icon_right.png`,
 				'icon_most_right': `${prefix}/menu/icon_most_right.png`,
-				'loading_icon': `${prefix}/menu/loading.png`
+				'loading_icon': `${prefix}/menu/loading.png`,
+				// Close icon (portrait/high specific path)
+				'menu_close': `assets/controller/portrait/high/close.png`
 			}
 		};
 	}
@@ -311,7 +313,16 @@ export class AssetConfig {
 				'tumbleIcon': `${prefix}/help_screen/tumbleIcon.png`,
 				'tumbleWin': `${prefix}/help_screen/tumbleWin.png`,
 				'multiplierGame': `${prefix}/help_screen/multiplierGame.png`,
-				'multiplierIcon': `${prefix}/help_screen/multiplierIcon.png`
+				'multiplierIcon': `${prefix}/help_screen/multiplierIcon.png`,
+				// Winlines thumbnails (static, not dependent on screen prefix)
+				// Keys: winlines1 .. winlines20
+				...(() => {
+					const map: { [key: string]: string } = {};
+					for (let i = 1; i <= 20; i++) {
+						map[`winlines${i}`] = `assets/winlines/winline${i}.png`;
+					}
+					return map;
+				})()
 			}
 		};
 	}
