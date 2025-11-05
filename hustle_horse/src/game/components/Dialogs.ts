@@ -538,10 +538,11 @@ export class Dialogs {
 		// Create effects based on dialog type
 		this.createEffects(scene, config.type);
 		// Add Congrats fire AFTER effects are created (effects container is cleared inside createEffects)
-		if (config.type === 'Congrats_KA') {
+        if (config.type === 'Congrats_KA') {
 			try {
 				if (this.congratsFireSpine) { try { this.congratsFireSpine.destroy(); } catch {} this.congratsFireSpine = null; }
-				if (ensureSpineFactory(scene, '[Dialogs] congrats fire spine (post-effects)')) {
+                const hasFire = (scene.cache?.json as any)?.has?.('3rd_Fire');
+                if (ensureSpineFactory(scene, '[Dialogs] congrats fire spine (post-effects)') && hasFire) {
 					const centerX = scene.scale.width * 0.5;
 					const centerY = scene.scale.height * 0.5;
 					const fire = (scene.add as any).spine(centerX + this.congratsFireOffsetX, centerY + this.congratsFireOffsetY, '3rd_Fire', '3rd_Fire-atlas');

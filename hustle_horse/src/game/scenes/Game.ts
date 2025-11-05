@@ -38,8 +38,6 @@ import { SpinData } from '../../backend/SpinData';
 import { AudioManager, MusicType, SoundEffectType } from '../../managers/AudioManager';
 import { Menu } from '../components/Menu';
 import { FullScreenManager } from '../../managers/FullScreenManager';
-import { ScatterAnticipation } from '../components/ScatterAnticipation';
-import { SCATTER_ANTICIPATION2_POS_X_MUL, SCATTER_ANTICIPATION2_POS_Y_MUL, SCATTER_ANTICIPATION2_DEFAULT_SCALE } from '../../config/UIPositionConfig';
 import { ScatterWinOverlay } from '../components/ScatterWinOverlay';
 import { BigWinOverlay } from '../components/BigWinOverlay';
 import { ScatterAnimationManager } from '../../managers/ScatterAnimationManager';
@@ -70,9 +68,7 @@ export class Game extends Scene {
 	public gameAPI!: GameAPI;
 	public audioManager!: AudioManager;
 	private menu!: Menu;
-	private scatterAnticipation!: ScatterAnticipation;
     private scatterWinOverlay!: ScatterWinOverlay;
-    private scatterAnticipation2!: ScatterAnticipation;
     private bigWinOverlay!: BigWinOverlay;
 	
 	// Note: Payout data now calculated directly from paylines in WIN_STOP handler
@@ -93,9 +89,7 @@ export class Game extends Scene {
 		this.gameData = new GameData();
 		this.symbols = new Symbols();
 		this.menu = new Menu();
-		this.scatterAnticipation = new ScatterAnticipation();
         this.scatterWinOverlay = new ScatterWinOverlay();
-        this.scatterAnticipation2 = new ScatterAnticipation();
         this.bigWinOverlay = new BigWinOverlay();
 	}
 
@@ -288,19 +282,7 @@ export class Game extends Scene {
 		this.coinAnimation = new CoinAnimation(this.networkManager, this.screenModeManager);
 		this.coinAnimation.create(this);
 
-		// Create scatter anticipation component without parent so it can render above all layers
-		this.scatterAnticipation.create(this);
-		this.scatterAnticipation.hide();
-		(this as any).scatterAnticipation = this.scatterAnticipation;
 
-		// Create a second scatter anticipation effect with separate modifiers
-		const sa2x = this.scale.width * SCATTER_ANTICIPATION2_POS_X_MUL;
-		const sa2y = this.scale.height * SCATTER_ANTICIPATION2_POS_Y_MUL;
-		this.scatterAnticipation2.create(this, undefined, { x: sa2x, y: sa2y, scale: SCATTER_ANTICIPATION2_DEFAULT_SCALE });
-		this.scatterAnticipation2.hide();
-		(this as any).scatterAnticipation2 = this.scatterAnticipation2;
-
-        
 		
 		// Initialize balance on game start
 		this.initializeGameBalance();
@@ -1244,22 +1226,7 @@ export class Game extends Scene {
         
 
 		// Scatter anticipation helpers
-		(window as any).showScatterAnticipation = () => {
-			try {
-				console.log('[Game] TEST: Showing scatter anticipation');
-				(this as any).scatterAnticipation.show();
-			} catch (e) {
-				console.error('[Game] TEST: Failed to show scatter anticipation:', e);
-			}
-		};
-		(window as any).hideScatterAnticipation = () => {
-			try {
-				console.log('[Game] TEST: Hiding scatter anticipation');
-				(this as any).scatterAnticipation.hide();
-			} catch (e) {
-				console.error('[Game] TEST: Failed to hide scatter anticipation:', e);
-			}
-		};
+
 
 		// Bonus layers helpers
 		(window as any).showBonusLayers = () => {

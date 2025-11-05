@@ -10,12 +10,9 @@ export function resolveAssetUrl(path: string): string {
     if (/^(?:https?:|data:|blob:)/i.test(path)) {
         return path;
     }
-    const base = (import.meta as any).env?.BASE_URL || '/';
-    // Ensure base ends with a slash
-    const normalizedBase = base.endsWith('/') ? base : base + '/';
-    // Strip any leading './' or '/' from provided path
+    // Always construct a relative path so it works under sub-path deployments
     const normalizedPath = path.replace(/^\.\//, '').replace(/^\//, '');
-    return `${normalizedBase}${normalizedPath}`;
+    return `./${normalizedPath}`;
 }
 
 export class AssetLoader {

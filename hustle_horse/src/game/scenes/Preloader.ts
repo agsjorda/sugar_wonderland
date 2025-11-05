@@ -242,8 +242,7 @@ export class Preloader extends Scene
 		this.assetLoader.loadAssetGroup(this, this.assetConfig.getFreeSpinCardAssets());
 		// Ensure scatter win overlay assets (including fire spine) are loaded
 		this.assetLoader.loadAssetGroup(this, this.assetConfig.getScatterWinOverlayAssets());
-		// Load Scatter Anticipation spine (portrait/high only asset paths)
-		this.assetLoader.loadScatterAnticipationAssets(this);
+		// Scatter Anticipation spine disabled (assets not present)
 		this.assetLoader.loadBonusBackgroundAssets(this);
 		this.assetLoader.loadNumberAssets(this);
 		this.assetLoader.loadCoinAssets(this);

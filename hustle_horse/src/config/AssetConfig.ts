@@ -29,16 +29,12 @@ export class AssetConfig {
 
 	getBackgroundAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix();
-		// Use skeleton.png for the upper border in portrait/high only; fallback elsewhere
-		const screenConfig = this.screenModeManager.getScreenConfig();
-		const isHighSpeed = this.networkManager.getNetworkSpeed();
-		const useDragonTail = screenConfig.isPortrait && isHighSpeed;
+		// Simplified: no upper border asset usage
 		
 		return {
 			images: {
-				'BG-Normal': `${prefix}/background/BG-Normal.png`,
+				'BG-Normal': `assets/portrait/high/loading/BG-Default.png`,
 				'reel-frame': `${prefix}/background/reel-frame.png`,
-				'Border_Upper': useDragonTail ? `${prefix}/background/skeleton.png` : `${prefix}/background/Border_Upper.png`,
 				'Border_Lower': `${prefix}/background/Border_Lower.png`,
 				// Mostly for landscape bg
 				// 'balloon-01': `${prefix}/background/balloon-01.png`,
@@ -313,14 +309,10 @@ export class AssetConfig {
 				// Static background image for Congrats dialog
 				'congrats-bg': `${prefix}/dialogs/congrats-bg.png`,
 				// Congrats title image used on the congrats overlay
-				'congratulations-you-won': `${prefix}/dialogs/congratulations-you-won.png`
+				'congratulations-you-won': `${prefix}/scatter_win/congrats.png`
 			},
 			spine: {
-				// Fire background element for Congrats overlay
-				'3rd_Fire': {
-					atlas: `assets/animations/Fire/3rd_Fire.atlas`,
-					json: `assets/animations/Fire/3rd_Fire.json`
-				},
+				// Fire background element (disabled until confirmed paths)
 				'confetti_KA': {
 					atlas: `${prefix}/dialogs/confetti_KA.atlas`,
 					json: `${prefix}/dialogs/confetti_KA.json`
@@ -383,12 +375,7 @@ export class AssetConfig {
 	getScatterAnticipationAssets(): AssetGroup {
 		console.log('[AssetConfig] Loading Scatter Anticipation assets');
 		return {
-			spine: {
-				'Sparkler_Reel': {
-					atlas: `assets/portrait/high/scatterAnticipation/Sparkler_Reel.atlas`,
-					json: `assets/portrait/high/scatterAnticipation/Sparkler_Reel.json`
-				}
-			}
+            spine: {}
 		};
 	}
 
@@ -481,7 +468,6 @@ export class AssetConfig {
 				'coin_drop_ka': 'assets/sounds/SFX/coin_drop_ka.ogg',
 				// Fire SFX
 				'fire_hh': 'assets/sounds/SFX/fire_hh.ogg',
-				'blaze_hh': 'assets/sounds/SFX/blaze_hh.ogg',
 				// Hit win SFX
 				'hitwin_hh': 'assets/sounds/SFX/hitwin_hh.ogg',
 				// Wild multi SFX
@@ -496,7 +482,7 @@ export class AssetConfig {
 				// Card pick SFX when user selects a card in ScatterWinOverlay
 				'cardpick_hh': 'assets/sounds/SFX/cardpick_hh.ogg',
 				// Win dialog SFX
-				'bigw_hh': 'assets/sounds/Wins/bigw_hh.ogg',
+				'bigw_ka': 'assets/sounds/Wins/bigw_ka.ogg',
 				'megaw_ka': 'assets/sounds/Wins/megaw_ka.ogg',
 				'superw_ka': 'assets/sounds/Wins/superw_ka.ogg',
 				'epicw_ka': 'assets/sounds/Wins/epicw_ka.ogg',
