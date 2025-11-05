@@ -50,22 +50,9 @@ export class AssetConfig {
 				// 'bulb-02': `${prefix}/background/bulb-02.png`,
 				// 'bulb-03': `${prefix}/background/bulb-03.png`,
 			},
-			spine: {
-				// Base scene decorative dragon (portrait/high)
-				'dragon_default': {
-					atlas: `assets/portrait/high/background/dragon_default.atlas`,
-					json: `assets/portrait/high/background/dragon_default.json`
-				},
-				// Bonus-only border spines
-				'Dragon_Top_Bonus': {
-					atlas: `assets/portrait/high/background/Dragon_Top_Bonus.atlas`,
-					json: `assets/portrait/high/background/Dragon_Top_Bonus.json`
-				},
-				'Dragon_Bottom_Bonus': {
-					atlas: `assets/portrait/high/background/Dragon_Bottom_Bonus.atlas`,
-					json: `assets/portrait/high/background/Dragon_Bottom_Bonus.json`
-				}
-			}
+			// Spine atlases for background dragons are disabled because the files
+			// are not present under public/assets. Re-enable once assets are added.
+			spine: {}
 		};
 	}
 
@@ -76,17 +63,8 @@ export class AssetConfig {
 			images: {
 				'BG-Bonus': `${prefix}/bonus_background/BG-Bonus.png`
 			},
-			spine: {
-				// Bonus upper dragon replacement
-				'dragon_bonus': {
-					atlas: `assets/portrait/high/background/dragon_bonus.atlas`,
-					json: `assets/portrait/high/background/dragon_bonus.json`
-				},
-				'fireworks': {
-					atlas: `assets/portrait/high/bonus_background/fireworks/fireworks.atlas`,
-					json: `assets/portrait/high/bonus_background/fireworks/fireworks.json`
-				}
-			}
+			// Spine fireworks/bonus dragon disabled until atlases exist in public/assets
+			spine: {}
 		};
 	}
 
