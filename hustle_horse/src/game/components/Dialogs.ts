@@ -1,4 +1,6 @@
 import { Scene } from 'phaser';
+import { MusicType } from '../../managers/AudioManager';
+import { ensureSpineLoader, ensureSpineFactory } from '../../utils/SpineGuard';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { NumberDisplay, NumberDisplayConfig } from './NumberDisplay';
@@ -6,6 +8,7 @@ import { IrisTransition } from './IrisTransition';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
+import { resolveAssetUrl } from '../../utils/AssetLoader';
 
 export interface DialogConfig {
 	type: 'confetti_KA' | 'Congrats_KA' | 'Explosion_AK' | 'FreeSpinDialog_KA' | 'largeW_KA' | 'LargeW_KA' | 'MediumW_KA' | 'SmallW_KA' | 'SuperW_KA';
@@ -27,6 +30,11 @@ export class Dialogs {
 	// Effects container (confetti, explosion, paint)
 	private effectsContainer: Phaser.GameObjects.Container;
 	
+	// Optional background container for certain dialogs (e.g., Congrats)
+	private dialogBackgroundContainer: Phaser.GameObjects.Container;
+	// Separate container for the congrats character (independent of background)
+	private dialogCharacterContainer: Phaser.GameObjects.Container;
+	
 	// Dialog content container (the actual dialog animations)
 	private dialogContentContainer: Phaser.GameObjects.Container;
 	
@@ -35,6 +43,10 @@ export class Dialogs {
 	
 	// Number display container
 	private numberDisplayContainer: Phaser.GameObjects.Container | null = null;
+	private numberDisplayRef: NumberDisplay | null = null;
+	// Number display position offsets (modifiers)
+	private numberDisplayOffsetX: number = 0;
+	private numberDisplayOffsetY: number = -90;
 	
 
 	
@@ -57,10 +69,77 @@ export class Dialogs {
 	// Iris transition for scatter animation
 	private irisTransition: IrisTransition | null = null;
 
+	// Congrats-specific extras
+	private congratsBgImage: Phaser.GameObjects.Image | null = null;
+	private congratsBgScale: number = 1.0;
+	private congratsBgOffsetX: number = 0;
+	private congratsBgOffsetY: number = 0;
+	// Congrats background fire spine behind the PNG bg
+	private congratsFireSpine: any | null = null;
+	private congratsFireScale: number = 0.7;
+	private congratsFireOffsetX: number = 0;
+	private congratsFireOffsetY: number = -80;
+	private congratsFireTimeScale: number = 1.0;
+	private congratsFireAnimName: string = 'animation';
+	// Congrats title image (PNG) with breathing animation
+	private congratsWinTitleImage: Phaser.GameObjects.Image | null = null;
+	private congratsWinTitleScale: number = 1.0;
+	private congratsWinTitleOffsetX: number = 0;
+	private congratsWinTitleOffsetY: number = -25;
+	private congratsWinTitleBreathDurationMs: number = 120;
+	private congratsWinTitleTween: Phaser.Tweens.Tween | null = null;
+
+	// Congrats numbers defaults (editable in code)
+	private congratsNumberSpacing: number = -30 ;
+
+	// End-of-bonus fire transition (before Congrats)
+	private endTransitionContainer: Phaser.GameObjects.Container | null = null;
+	private endTransitionBg: Phaser.GameObjects.Rectangle | null = null;
+	private endTransitionSpine: any | null = null;
+	private endFireTransitionLoadState: 'unloaded' | 'loading' | 'loaded' | 'failed' = 'unloaded';
+	private endFireTransitionLoadPromise: Promise<boolean> | null = null;
+	private endFireTransitionTimeScale: number = 0.85;
+	private endFireTransitionMidTriggerRatio: number = 0.5;
+	private endBlackOverlay: Phaser.GameObjects.Rectangle | null = null;
+	// Black overlay timing to feel slightly longer than fire transition
+	private endBlackOverlayLeadMs: number = 120; // start before spine anim
+	private endBlackOverlayTailMs: number = 140; // end after spine anim
+	private endBlackOverlayFadeInMs: number = 80;
+	private endBlackOverlayHoldMs: number = 0;
+	private endBlackOverlayFadeOutMs: number = 110;
+
+	// Pre-Congrats fire transition: hold the black mask after fire completes (ms)
+	private startFireBlackHoldMs: number = 120;
+
+	// Congrats number counting speed modifier (>1 is faster, <1 is slower)
+	private congratsNumberSpeedMul: number = 1.0;
+
+	// Extra settle timers to eliminate scene glimpse
+	private blackCoverPreCleanupDelayMs: number = 50; // wait after black reaches 1 before cleanup/switch
+	private postSwitchSettleMs: number = 100; // wait after switching to base before revealing anything
+	private preFireRevealMs: number = 50; // wait after fire starts before reducing black from 1 to 0.7
+
+	// Embers anticipation (rising flakes over black)
+	private embersContainer: Phaser.GameObjects.Container | null = null;
+	private embersSpawnTimer: Phaser.Time.TimerEvent | null = null;
+	private emberParticles: Array<{ graphics: Phaser.GameObjects.Graphics; x: number; y: number; vx: number; vy: number; size: number; color: number; alpha: number; lifetime: number; age: number; } > = [];
+	private emberUpdateHandler: ((time: number, delta: number) => void) | null = null;
+
+    private congratsCharSpine: SpineGameObject | null = null;
+    private congratsCharScale: number = 0.7;
+    private congratsCharX: number | null = null;
+    private congratsCharY: number | null = null;
+    private congratsCharOffsetX: number = 120;
+    private congratsCharOffsetY: number = -20;
+    private congratsCharTimeScale: number = 1.0;
+	// Nested containers for precise transforms
+	private congratsCharRoot: Phaser.GameObjects.Container | null = null; // base position
+	private congratsCharOffsetContainer: Phaser.GameObjects.Container | null = null; // pixel offsets
+	private congratsCharScaleContainer: Phaser.GameObjects.Container | null = null; // scale/rotation
+
 	// Dialog configuration
 	private dialogScales: Record<string, number> = {
 		'confetti_KA': 0.8,
-		'Congrats_KA': 0.3,
 		'Explosion_AK': 0.8,
 		'FreeSpinDialog_KA': 0.7,
 		'largeW_KA': 0.7,
@@ -74,7 +153,6 @@ export class Dialogs {
 	// Dialog positions (relative: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom)
 	private dialogPositions: Record<string, { x: number; y: number }> = {
 		'confetti_KA': { x: 0.5, y: 0.5 },
-		'Congrats_KA': { x: 0.5, y: 0.5 },
 		'Explosion_AK': { x: 0.5, y: 0.5 },
 		'FreeSpinDialog_KA': { x: 0.5, y: 0.5 },
 		'largeW_KA': { x: 0.5, y: 0.5 },
@@ -91,7 +169,6 @@ export class Dialogs {
 		'Explosion_AK': true,
 		'Paint_KA': false,
 		// Dialog texts
-		'Congrats_KA': true,
 		'FreeSpinDialog_KA': true,
 		'largeW_KA': true,
 		'LargeW_KA': true,
@@ -103,6 +180,185 @@ export class Dialogs {
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
 		this.screenModeManager = screenModeManager;
+	}
+
+	// ===== End-of-bonus Fire Transition before Congrats =====
+	private loadEndFireTransitionIfNeeded(): Promise<boolean> {
+		if (!this.currentScene) return Promise.resolve(false);
+		if (this.endFireTransitionLoadState === 'loaded') return Promise.resolve(true);
+		if (this.endFireTransitionLoadState === 'failed') return Promise.resolve(false);
+		if (this.endFireTransitionLoadState === 'loading' && this.endFireTransitionLoadPromise) return this.endFireTransitionLoadPromise;
+
+		this.endFireTransitionLoadState = 'loading';
+		this.endFireTransitionLoadPromise = new Promise<boolean>((resolve) => {
+			try {
+				if (!ensureSpineLoader(this.currentScene!, '[Dialogs] end fire transition dynamic load')) {
+					this.endFireTransitionLoadState = 'failed';
+					resolve(false);
+					return;
+				}
+                const loader = (this.currentScene as any).load;
+                try { loader?.spineAtlas?.('fire_transition_atlas', resolveAssetUrl('/assets/animations/Fire/Fire_Transition.atlas')); } catch {}
+                try { loader?.spineJson?.('fire_transition', resolveAssetUrl('/assets/animations/Fire/Fire_Transition.json')); } catch {}
+				const onComplete = () => { this.endFireTransitionLoadState = 'loaded'; resolve(true); };
+				const onError = () => { this.endFireTransitionLoadState = 'failed'; resolve(false); };
+				try { (this.currentScene as any).load?.once('complete', onComplete); } catch {}
+				try { (this.currentScene as any).load?.once('loaderror', onError); } catch {}
+				try { (this.currentScene as any).load?.start(); } catch {}
+			} catch (e) {
+				console.warn('[Dialogs] End fire transition dynamic load failed:', e);
+				this.endFireTransitionLoadState = 'failed';
+				resolve(false);
+			}
+		});
+		return this.endFireTransitionLoadPromise;
+	}
+
+	private playEndFireTransitionThen(next: () => void): void {
+		const scene = this.currentScene;
+		if (!scene || !ensureSpineFactory(scene, '[Dialogs] end fire transition factory')) { next(); return; }
+		this.loadEndFireTransitionIfNeeded().then((loaded) => {
+			if (!loaded) { next(); return; }
+			try {
+				// Prepare elements
+				if (!this.endTransitionBg) {
+					this.endTransitionBg = scene.add.rectangle(
+						scene.cameras.main.width / 2,
+						scene.cameras.main.height / 2,
+						scene.cameras.main.width * 2,
+						scene.cameras.main.height * 2,
+						0x000000,
+						1
+					);
+					this.endTransitionBg.setOrigin(0.5);
+					this.endTransitionBg.setAlpha(1);
+					try { this.endTransitionBg.setInteractive(); } catch {}
+					this.endTransitionContainer?.add(this.endTransitionBg);
+				}
+				if (this.endTransitionSpine) { try { this.endTransitionSpine.destroy(); } catch {} this.endTransitionSpine = null; }
+				this.endTransitionSpine = (scene.add as any).spine(
+					scene.cameras.main.width * 0.5,
+					scene.cameras.main.height * 0.5,
+					'fire_transition',
+					'fire_transition_atlas'
+				);
+				try { this.endTransitionSpine.setOrigin(0.5, 0.5); } catch {}
+				try { (this.endTransitionSpine as any).setDepth?.(1); } catch {}
+				// Pin to camera space
+				try { (this.endTransitionSpine as any).setScrollFactor?.(0); } catch {}
+				try { this.endTransitionContainer?.setScrollFactor?.(0); } catch {}
+				try { this.endTransitionBg?.setScrollFactor?.(0); } catch {}
+				this.endTransitionContainer?.add(this.endTransitionSpine);
+				// Show on top
+				this.endTransitionContainer?.setVisible(true);
+				this.endTransitionContainer?.setAlpha(1);
+				try { scene.children.bringToTop(this.endTransitionContainer!); } catch {}
+				// Fast fade-in for black mask behind fire transition
+				try {
+					if (this.endTransitionBg) {
+						this.endTransitionBg.setAlpha(0);
+						scene.tweens.add({ targets: this.endTransitionBg, alpha: 0.7, duration: 80, ease: 'Cubic.easeOut' });
+					}
+				} catch {}
+				// Cover-fit scaling with slight overscan to avoid any gaps
+				try {
+					const w = scene.cameras.main.width;
+					const h = scene.cameras.main.height;
+					let bw = 0; let bh = 0;
+					try {
+						const b = (this.endTransitionSpine as any).getBounds?.();
+						bw = (b && (b.size?.x || (b as any).width)) || 0;
+						bh = (b && (b.size?.y || (b as any).height)) || 0;
+					} catch {}
+					if (!bw || !bh) { bw = (this.endTransitionSpine as any).displayWidth || 0; bh = (this.endTransitionSpine as any).displayHeight || 0; }
+					if (bw > 0 && bh > 0) {
+						const scaleToCover = Math.max(w / bw, h / bh) * 2.0;
+						(this.endTransitionSpine as any).setScale(scaleToCover);
+					}
+				} catch {}
+				// Stop any currently playing BGM defensively to avoid overlaps
+				try {
+					const audio = (window as any).audioManager;
+					if (audio && typeof audio.stopAllMusic === 'function') {
+						audio.stopAllMusic();
+					}
+				} catch {}
+				// Blaze SFX removed with fire transitions
+				// timeScale
+				try { (this.endTransitionSpine as any).animationState.timeScale = Math.max(0.05, this.endFireTransitionTimeScale); } catch {}
+				// Keep opaque mask behind spine to ensure no gaps
+				// Play animation
+				let finished = false;
+				let congratsShown = false;
+				const showCongratsIfNeeded = () => {
+					if (congratsShown) return; congratsShown = true; next();
+				};
+				const fadeOutMaskAndEmit = () => {
+					scene.tweens.add({
+						targets: this.endTransitionContainer,
+						alpha: 0,
+						duration: 200,
+						ease: 'Cubic.easeIn',
+						onComplete: () => {
+							try {
+								this.endTransitionContainer?.setVisible(false);
+								this.endTransitionContainer?.setAlpha(1);
+								if (this.endTransitionSpine) { this.endTransitionSpine.destroy(); this.endTransitionSpine = null; }
+								if (this.endTransitionBg) { this.endTransitionBg.setAlpha(0); }
+							} catch {}
+							// Mask gone → tell Congrats to start number counting
+							try { scene.events.emit('preCongratsMaskGone'); } catch {}
+							// Ensure congrats is shown
+							showCongratsIfNeeded();
+						}
+					});
+				};
+
+				const finish = () => {
+					if (finished) return; finished = true;
+					const hold = Math.max(0, this.startFireBlackHoldMs || 0);
+					if (hold > 0) {
+						scene.time.delayedCall(hold, fadeOutMaskAndEmit);
+					} else {
+						fadeOutMaskAndEmit();
+					}
+				};
+				try {
+					const state = (this.endTransitionSpine as any).animationState;
+					let entry: any = null;
+					let played = false;
+					try { entry = state.setAnimation(0, 'animation', false); played = true; } catch {}
+					if (!played) {
+						try {
+							const anims = (this.endTransitionSpine as any)?.skeleton?.data?.animations || [];
+							const first = anims[0]?.name; if (first) { entry = state.setAnimation(0, first, false); played = true; }
+						} catch {}
+					}
+					// mid trigger to show congrats
+					try {
+						const rawDurationSec = Math.max(0.1, entry?.animation?.duration || 1.2);
+						const ratio = Math.min(0.95, Math.max(0.05, this.endFireTransitionMidTriggerRatio));
+						const midDelayMs = Math.max(50, (rawDurationSec / Math.max(0.0001, this.endFireTransitionTimeScale)) * 1000 * ratio);
+						scene.time.delayedCall(midDelayMs, showCongratsIfNeeded);
+					} catch {}
+					try { state?.setListener?.({ complete: finish } as any); } catch {}
+					// Fallback complete
+					scene.time.delayedCall(1200, finish);
+				} catch {
+					finish();
+				}
+			} catch {
+				next();
+			}
+		});
+	}
+
+	public setEndFireTransitionTimeScale(scale: number = 0.85): void {
+		this.endFireTransitionTimeScale = Math.max(0.05, scale);
+	}
+
+	public setEndFireTransitionMidTriggerRatio(ratio: number = 0.5): void {
+		this.endFireTransitionMidTriggerRatio = Math.min(0.95, Math.max(0.05, ratio));
 	}
 
 	create(scene: Scene): void {
@@ -129,10 +385,39 @@ export class Dialogs {
 		this.effectsContainer.setDepth(200); // Higher depth to be in front
 		this.dialogOverlay.add(this.effectsContainer);
 		
+		// Create background container between black overlay and effects
+		this.dialogBackgroundContainer = scene.add.container(0, 0);
+		this.dialogBackgroundContainer.setDepth(150);
+		this.dialogOverlay.add(this.dialogBackgroundContainer);
+		
+		// Create character container above background (separate, not anchored to bg)
+		this.dialogCharacterContainer = scene.add.container(0, 0);
+		this.dialogCharacterContainer.setDepth(250);
+		this.dialogOverlay.add(this.dialogCharacterContainer);
+		
 		// Create dialog content container (highest depth = in front of everything)
 		this.dialogContentContainer = scene.add.container(0, 0);
 		this.dialogContentContainer.setDepth(300); // Highest depth to be in front
 		this.dialogOverlay.add(this.dialogContentContainer);
+
+		// End-of-bonus fire transition container (above everything, hidden by default)
+		this.endTransitionContainer = scene.add.container(0, 0);
+		this.endTransitionContainer.setDepth(20000);
+		this.endTransitionContainer.setVisible(false);
+		// Add shared black overlay for quick fade between congrats and base
+		this.endBlackOverlay = scene.add.rectangle(
+			scene.scale.width * 0.5,
+			scene.scale.height * 0.5,
+			scene.scale.width * 2,
+			scene.scale.height * 2,
+			0x000000,
+			1
+		);
+		this.endBlackOverlay.setOrigin(0.5);
+		this.endBlackOverlay.setAlpha(0);
+		this.endBlackOverlay.setVisible(false);
+		this.endTransitionContainer.add(this.endBlackOverlay);
+		try { this.endTransitionContainer.sendToBack(this.endBlackOverlay); } catch {}
 		
 		console.log('[Dialogs] Dialog system created');
 	}
@@ -151,6 +436,12 @@ export class Dialogs {
 		
 		// Track current dialog type for bonus mode detection
 		this.currentDialogType = config.type;
+
+		// Safety: ensure Congrats-only fire is gone when not in Congrats
+		if (this.currentDialogType !== 'Congrats_KA' && this.congratsFireSpine) {
+			try { this.congratsFireSpine.destroy(); } catch {}
+			this.congratsFireSpine = null;
+		}
 		
 		// Debug dialog type detection
 		console.log(`[Dialogs] Dialog type: ${config.type}, isWinDialog(): ${this.isWinDialog()}`);
@@ -246,7 +537,74 @@ export class Dialogs {
 
 		// Create effects based on dialog type
 		this.createEffects(scene, config.type);
+		// Add Congrats fire AFTER effects are created (effects container is cleared inside createEffects)
+		if (config.type === 'Congrats_KA') {
+			try {
+				if (this.congratsFireSpine) { try { this.congratsFireSpine.destroy(); } catch {} this.congratsFireSpine = null; }
+				if (ensureSpineFactory(scene, '[Dialogs] congrats fire spine (post-effects)')) {
+					const centerX = scene.scale.width * 0.5;
+					const centerY = scene.scale.height * 0.5;
+					const fire = (scene.add as any).spine(centerX + this.congratsFireOffsetX, centerY + this.congratsFireOffsetY, '3rd_Fire', '3rd_Fire-atlas');
+					try { fire.setOrigin(0.5, 0.5); } catch {}
+					try { fire.setScale(Math.max(0.05, this.congratsFireScale)); } catch {}
+					try {
+						const animName = this.congratsFireAnimName || 'animation';
+						let played = false;
+						try { fire.animationState.setAnimation(0, animName, true); played = true; } catch {}
+						if (!played) {
+							try {
+								const anims = (fire as any)?.skeleton?.data?.animations || [];
+								const first = anims[0]?.name; if (first) { fire.animationState.setAnimation(0, first, true); played = true; }
+							} catch {}
+						}
+					} catch {}
+					try { fire.animationState.timeScale = Math.max(0.0001, this.congratsFireTimeScale || 1.0); } catch {}
+					// Place in content container so title added later sits above it automatically
+					try { this.dialogContentContainer.add(fire); } catch {}
+					try { (this.dialogContentContainer as any).sendToBack?.(fire); } catch {}
+					this.congratsFireSpine = fire;
+				}
+			} catch {}
+		}
+		// Expose runtime setter for background fire spine options (debug)
+		try {
+			const self = this;
+			(window as any).setCongratsFire = function(opts: { offsetX?: number; offsetY?: number; scale?: number; timeScale?: number; anim?: string }) {
+				self.setCongratsFireOptions(opts || {});
+				return { offsetX: self.congratsFireOffsetX, offsetY: self.congratsFireOffsetY, scale: self.congratsFireScale, timeScale: self.congratsFireTimeScale, anim: self.congratsFireAnimName };
+			};
+		} catch {}
 		
+		// If Congrats, add the PNG title with breathing tween (after main content is created)
+		if (config.type === 'Congrats_KA') {
+			try {
+				// Clean any prior title image instance
+				if (this.congratsWinTitleImage) { try { this.congratsWinTitleImage.destroy(); } catch {} this.congratsWinTitleImage = null; }
+				if (this.congratsWinTitleTween) { try { this.congratsWinTitleTween.stop(); } catch {} this.congratsWinTitleTween = null; }
+				const centerX = scene.scale.width * 0.5;
+				const centerY = scene.scale.height * 0.5;
+				const img = scene.add.image(centerX + this.congratsWinTitleOffsetX, centerY + this.congratsWinTitleOffsetY, 'congratulations-you-won');
+				img.setOrigin(0.5, 0.5);
+				img.setScale(Math.max(0.05, this.congratsWinTitleScale));
+				img.setAlpha(1);
+				this.dialogContentContainer.add(img);
+				this.dialogContentContainer.bringToTop(img);
+				this.congratsWinTitleImage = img;
+				// Breathing tween
+				this.congratsWinTitleTween = scene.tweens.add({
+					targets: img,
+					scaleX: img.scaleX * 1.045,
+					scaleY: img.scaleY * 1.045,
+					duration: Math.max(100, this.congratsWinTitleBreathDurationMs),
+					ease: 'Sine.inOut',
+					yoyo: true,
+					repeat: -1
+				});
+			} catch (e) {
+				console.warn('[Dialogs] Failed to create congrats title image', e);
+			}
+		}
+
 		// Fade in dialog content and effects
 		if (this.currentDialog) {
 			this.currentDialog.setAlpha(0);
@@ -308,45 +666,151 @@ export class Dialogs {
 			this.currentDialog = null;
 		}
 
+		// Clear any congrats-specific background/character from previous dialog
+		if (this.congratsBgImage) { try { this.congratsBgImage.destroy(); } catch {} this.congratsBgImage = null; }
+		if (this.congratsFireSpine) { try { this.congratsFireSpine.destroy(); } catch {} this.congratsFireSpine = null; }
+		if (this.congratsCharSpine) { try { this.congratsCharSpine.destroy(); } catch {} this.congratsCharSpine = null; }
+		if (this.congratsWinTitleImage) { try { this.congratsWinTitleImage.destroy(); } catch {} this.congratsWinTitleImage = null; }
+		// Reset nested containers references
+		this.congratsCharRoot = null;
+		this.congratsCharOffsetContainer = null;
+		this.congratsCharScaleContainer = null;
+
 		const position = config.position || this.getDialogPosition(config.type, scene);
 		const scale = config.scale || this.getDialogScale(config.type);
 		
-		// Create Spine animation for the dialog
-		try {
-			console.log(`[Dialogs] Creating Spine animation for dialog: ${config.type}`);
-			console.log(`[Dialogs] Using atlas: ${config.type}-atlas`);
-			this.currentDialog = scene.add.spine(
-				position.x,
-				position.y,
-				config.type,
-				`${config.type}-atlas`
-			);
-			this.currentDialog.setOrigin(0.5, 0.5);
-			
-			// Play intro animation first, then loop idle based on configuration (fallback to idle if intro missing)
-			const shouldLoop = this.getDialogLoop(config.type);
+		// If Congrats dialog, add background fire spine, background image, and character
+		if (config.type === 'Congrats_KA') {
 			try {
-				console.log(`[Dialogs] Playing intro animation: ${config.type}_win`);
-				this.currentDialog.animationState.setAnimation(0, `${config.type}_win`, false);
-				this.currentDialog.animationState.addAnimation(0, `${config.type}_idle`, shouldLoop, 0);
-			} catch (error) {
-				console.log(`[Dialogs] Intro animation failed, falling back to idle: ${config.type}_idle`);
-				// Fallback to idle animation if intro is missing
-				this.currentDialog.animationState.setAnimation(0, `${config.type}_idle`, shouldLoop);
+				const centerX = scene.scale.width * 0.5;
+				const centerY = scene.scale.height * 0.5;
+				// (Congrats fire will be added after createEffects to avoid being cleared.)
+				// Background image scaled to cover
+				const bg = scene.add.image(centerX, centerY, 'congrats-bg');
+				bg.setOrigin(0.5, 0.5);
+				const coverScaleX = scene.scale.width / Math.max(1, bg.width);
+				const coverScaleY = scene.scale.height / Math.max(1, bg.height);
+				const coverScale = Math.max(coverScaleX, coverScaleY) * Math.max(0.05, this.congratsBgScale);
+				bg.setScale(coverScale);
+				bg.x = centerX + this.congratsBgOffsetX;
+				bg.y = centerY + this.congratsBgOffsetY;
+				// Depth within background container is relative; container depth is already 150
+				this.dialogBackgroundContainer.add(bg);
+				this.congratsBgImage = bg;
+			} catch (e) {
+				console.warn('[Dialogs] Failed to create congrats background image', e);
 			}
-		} catch (error) {
-			console.error(`[Dialogs] Error creating dialog content: ${config.type}`, error);
-			console.error(`[Dialogs] This might be due to missing assets for ${config.type}`);
-			return;
+			try {
+				// Nested containers: base position -> pixel offset -> scale
+				const baseX = (typeof this.congratsCharX === 'number' && isFinite(this.congratsCharX)) ? this.congratsCharX : scene.scale.width * 0.5;
+				const baseY = (typeof this.congratsCharY === 'number' && isFinite(this.congratsCharY)) ? this.congratsCharY : scene.scale.height * 0.5;
+				this.congratsCharRoot = scene.add.container(baseX, baseY);
+				this.congratsCharOffsetContainer = scene.add.container((this.congratsCharOffsetX || 0), (this.congratsCharOffsetY || 0));
+				this.congratsCharScaleContainer = scene.add.container(0, 0);
+				this.congratsCharRoot.add(this.congratsCharOffsetContainer);
+				this.congratsCharOffsetContainer.add(this.congratsCharScaleContainer);
+				this.dialogCharacterContainer.add(this.congratsCharRoot);
+
+				// Character at 0,0 inside the scale container for stable scaling
+				const char = scene.add.spine(0, 0, 'HustleForSpine', 'HustleForSpine-atlas') as SpineGameObject;
+				char.setOrigin(0.5, 0.5);
+				try { char.animationState.setAnimation(0, '_win', true); } catch {}
+				try { char.animationState.timeScale = Math.max(0.0001, this.congratsCharTimeScale); } catch {}
+				this.congratsCharScaleContainer.add(char);
+				this.congratsCharScaleContainer.setScale(Math.max(0.05, this.congratsCharScale));
+				this.congratsCharSpine = char;
+			} catch (e) {
+				console.warn('[Dialogs] Failed to create congrats character spine', e);
+			}
 		}
-		
-		this.currentDialog.setScale(scale);
-		this.currentDialog.setDepth(101);
-		
-		// Add to dialog content container
-		this.dialogContentContainer.add(this.currentDialog);
-		
-		console.log(`[Dialogs] Created dialog content: ${config.type}`);
+
+		// Create Spine animation for the dialog, except for Congrats_KA (now PNG-only)
+		if (config.type !== 'Congrats_KA') {
+			try {
+				console.log(`[Dialogs] Creating Spine animation for dialog: ${config.type}`);
+				console.log(`[Dialogs] Using atlas: ${config.type}-atlas`);
+				this.currentDialog = scene.add.spine(
+					position.x,
+					position.y,
+					config.type,
+					`${config.type}-atlas`
+				);
+				this.currentDialog.setOrigin(0.5, 0.5);
+				
+				// Play intro animation first, then loop idle based on configuration (fallback to idle if intro missing)
+				const shouldLoop = this.getDialogLoop(config.type);
+				try {
+					console.log(`[Dialogs] Playing intro animation: ${config.type}_win`);
+					this.currentDialog.animationState.setAnimation(0, `${config.type}_win`, false);
+					this.currentDialog.animationState.addAnimation(0, `${config.type}_idle`, shouldLoop, 0);
+				} catch (error) {
+					console.log(`[Dialogs] Intro animation failed, falling back to idle: ${config.type}_idle`);
+					// Fallback to idle animation if intro is missing
+					this.currentDialog.animationState.setAnimation(0, `${config.type}_idle`, shouldLoop);
+				}
+			} catch (error) {
+				console.error(`[Dialogs] Error creating dialog content: ${config.type}`, error);
+				console.error(`[Dialogs] This might be due to missing assets for ${config.type}`);
+				return;
+			}
+			
+			this.currentDialog.setScale(scale);
+			this.currentDialog.setDepth(101);
+			
+			// Add to dialog content container
+			this.dialogContentContainer.add(this.currentDialog);
+			
+			console.log(`[Dialogs] Created dialog content: ${config.type}`);
+		} else {
+			// For Congrats_KA, no Spine dialog; handled by PNG + effects
+			this.currentDialog = null;
+			console.log('[Dialogs] Skipping Congrats_KA Spine creation (PNG-based congrats title in use)');
+		}
+
+		// Expose console helpers when showing Congrats dialog
+		if (config.type === 'Congrats_KA') {
+			try {
+				const self = this;
+				(window as any).setCongratsBg = function(opts: { scale?: number; offsetX?: number; offsetY?: number }) {
+					self.setCongratsBgOptions(opts);
+					return { scale: self.congratsBgScale, offsetX: self.congratsBgOffsetX, offsetY: self.congratsBgOffsetY };
+				};
+                (window as any).setCongratsChar = function(opts: { x?: number; y?: number; offsetX?: number; offsetY?: number; scale?: number; timeScale?: number }) {
+					self.setCongratsCharacterOptions(opts);
+                    return { x: self.congratsCharX, y: self.congratsCharY, offsetX: self.congratsCharOffsetX, offsetY: self.congratsCharOffsetY, scale: self.congratsCharScale, timeScale: self.congratsCharTimeScale };
+				};
+                (window as any).setCongratsCharOffset = function(opts: { offsetX?: number; offsetY?: number }) {
+                    self.setCongratsCharacterOffset(opts);
+                    return { offsetX: self.congratsCharOffsetX, offsetY: self.congratsCharOffsetY };
+                };
+				(window as any).setCongratsTitle = function(opts: { offsetX?: number; offsetY?: number; scale?: number; durationMs?: number }) {
+					self.setCongratsTitleOptions(opts);
+					return { offsetX: self.congratsWinTitleOffsetX, offsetY: self.congratsWinTitleOffsetY, scale: self.congratsWinTitleScale, durationMs: self.congratsWinTitleBreathDurationMs };
+				};
+				(window as any).setCongratsTitleOffset = function(opts: { offsetX?: number; offsetY?: number }) {
+					self.setCongratsTitleOptions({ offsetX: opts.offsetX, offsetY: opts.offsetY });
+					return { offsetX: self.congratsWinTitleOffsetX, offsetY: self.congratsWinTitleOffsetY };
+				};
+				(window as any).setCongratsNumberSpacing = function(spacing: number) {
+					self.setCongratsNumberSpacing(spacing);
+					return { spacing };
+				};
+				(window as any).getCongratsNodes = function() {
+					return { bg: self.congratsBgImage, char: self.congratsCharSpine, title: self.congratsWinTitleImage };
+				};
+				(window as any).setEndBlackOverlayTiming = function(opts: { fadeInMs?: number; holdMs?: number; fadeOutMs?: number; leadMs?: number; tailMs?: number }) {
+					self.setEndBlackOverlayTiming(opts);
+					return {
+						fadeInMs: self.endBlackOverlayFadeInMs,
+						holdMs: self.endBlackOverlayHoldMs,
+						fadeOutMs: self.endBlackOverlayFadeOutMs,
+						leadMs: self.endBlackOverlayLeadMs,
+						tailMs: self.endBlackOverlayTailMs
+					};
+				};
+				console.log('[Dialogs] Console helpers available: setCongratsBg({...}), setCongratsChar({...}), setCongratsCharOffset({...}), setCongratsTitle({...}), setCongratsTitleOffset({...}), setCongratsNumberSpacing(n), getCongratsNodes()');
+			} catch {}
+		}
 	}
 
 	/**
@@ -593,11 +1057,12 @@ export class Dialogs {
 		}
 		
 		// Create number display configuration
+		const isCongrats = (this.currentDialogType === 'Congrats_KA');
 		const numberConfig: NumberDisplayConfig = {
 			x: scene.scale.width / 2,
 			y: scene.scale.height / 2 + 200,
-			scale: 0.15,
-			spacing: -8,
+			scale: isCongrats ? 0.085 : 0.15,
+			spacing: isCongrats ? this.congratsNumberSpacing : -8,
 			alignment: 'center',
 			decimalPlaces: freeSpins !== undefined ? 0 : 2, // No decimals for free spins
 			showCommas: freeSpins !== undefined ? false : true, // No commas for free spins
@@ -612,22 +1077,74 @@ export class Dialogs {
 		numberDisplay.create(scene);
 		// Display free spins if provided, otherwise display win amount
 		const displayValue = freeSpins !== undefined ? freeSpins : winAmount;
-		numberDisplay.displayValue(displayValue);
+		// For non-animated cases, we set the final value immediately. For Congrats, we'll animate below
+		if (this.currentDialogType !== 'Congrats_KA') {
+			numberDisplay.displayValue(displayValue);
+		}
+		// Keep a reference for live spacing updates
+		this.numberDisplayRef = numberDisplay;
 		
 
 		
-		// Create container for number displays
-			this.numberDisplayContainer = scene.add.container(0, 0);
+		// Create container for number displays (apply offsets via container position)
+		this.numberDisplayContainer = scene.add.container(0, 0);
 		this.numberDisplayContainer.setDepth(103);
 		this.numberDisplayContainer.add(numberDisplay.getContainer());
+		// Apply current offsets
+		this.numberDisplayContainer.x = this.numberDisplayOffsetX;
+		this.numberDisplayContainer.y = this.numberDisplayOffsetY;
 		
-		// Start with alpha 0 (invisible) - will be faded in after paint effect
+		// Start with alpha 0 (invisible) - will be faded in; for Congrats we handle fade-in here
 		this.numberDisplayContainer.setAlpha(0);
 		
 		// Add to dialog overlay
 		this.dialogOverlay.add(this.numberDisplayContainer);
 		
 		console.log('[Dialogs] Created number display');
+
+		// If Congrats overlay, wait for pre-Congrats mask to finish, then fade in and animate counting
+		if (this.currentDialogType === 'Congrats_KA') {
+			const startCounting = () => {
+				// Fade in the number display quickly
+				scene.tweens.add({ targets: this.numberDisplayContainer, alpha: 1, duration: 250, ease: 'Power2' });
+				// Animate the number from 0 to displayValue
+				try {
+					const decimals = Math.max(0, numberConfig.decimalPlaces || 0);
+					const counter = { v: 0 };
+					const baseDuration = 1500;
+					const speed = Math.max(0.05, this.congratsNumberSpeedMul || 1.0);
+					const duration = Math.max(50, Math.floor(baseDuration / speed));
+					scene.tweens.add({
+						targets: counter,
+						v: displayValue,
+						duration,
+						ease: 'Cubic.easeOut',
+						onUpdate: () => {
+							const shown = parseFloat(counter.v.toFixed(decimals));
+							numberDisplay.displayValue(shown);
+						}
+					});
+				} catch {}
+			};
+			try {
+				// Start when the pre-Congrats fire mask has fully faded out
+				scene.events.once('preCongratsMaskGone', startCounting);
+				// Fallback: if event never arrives, start after a small delay
+				scene.time.delayedCall(1200, startCounting);
+			} catch {
+				startCounting();
+			}
+		}
+	}
+
+	/** Public API: set offset modifiers for number display position (applied as container offset). */
+	public setNumberDisplayOffset(offsetX: number = 0, offsetY: number = 0): void {
+		this.numberDisplayOffsetX = offsetX | 0;
+		this.numberDisplayOffsetY = offsetY | 0;
+		if (this.numberDisplayContainer) {
+			try { this.numberDisplayContainer.x = this.numberDisplayOffsetX; } catch {}
+			try { this.numberDisplayContainer.y = this.numberDisplayOffsetY; } catch {}
+		}
 	}
 	
 	/**
@@ -729,6 +1246,16 @@ export class Dialogs {
 		if (this.numberDisplayContainer) {
 			this.numberDisplayContainer.setVisible(false);
 			console.log('[Dialogs] Number display hidden');
+		}
+		// Clear number display reference
+		this.numberDisplayRef = null;
+		// Stop and clear title tween, hide title
+		if (this.congratsWinTitleTween) {
+			try { this.congratsWinTitleTween.stop(); } catch {}
+			this.congratsWinTitleTween = null;
+		}
+		if (this.congratsWinTitleImage) {
+			this.congratsWinTitleImage.setVisible(false);
 		}
 		
 		// Hide the entire dialog overlay container
@@ -999,10 +1526,28 @@ export class Dialogs {
 	 */
 	private startNormalTransition(scene: Scene): void {
 		console.log('[Dialogs] Starting normal black screen transition');
-		
-		
-		// Store the dialog type before cleanup for bonus mode check
+
+		// Determine current dialog type before cleanup
 		const dialogTypeBeforeCleanup = this.currentDialogType;
+
+		// If closing Congrats, use end fire transition back to base
+		if (dialogTypeBeforeCleanup === 'Congrats_KA') {
+			console.log('[Dialogs] Congrats dialog closed - using end fire transition back to base');
+			// Stop effects but keep Congrats visible until mask covers
+			this.stopAllEffectAnimations();
+			this.playBlackCoverThenBaseThenFire(scene, () => {
+				try { scene.events.emit('dialogAnimationsComplete'); } catch {}
+				try {
+					const audioManager = (window as any).audioManager;
+					if (audioManager && typeof audioManager.restoreBackground === 'function') {
+						audioManager.restoreBackground();
+					}
+				} catch {}
+			});
+			return;
+		}
+		// Store the dialog type before cleanup for other transitions
+		// const dialogTypeBeforeCleanup = this.currentDialogType;
 		
 		// Stop all effect animations immediately
 		this.stopAllEffectAnimations();
@@ -1091,6 +1636,480 @@ export class Dialogs {
 					});
 				});
 			}
+		});
+	}
+
+	// End fire transition used when leaving Congrats and returning to base
+	private playEndFireTransitionOutToBase(scene: Scene, onDone?: () => void): void {
+		let overlayActive = false;
+		let baseSwitchedEarly = false;
+		const showOverlay = () => {
+			if (!this.endBlackOverlay || !scene?.tweens) {
+				overlayActive = false;
+				return;
+			}
+			try { scene.tweens.killTweensOf(this.endBlackOverlay); } catch {}
+			this.endBlackOverlay.setVisible(true);
+			this.endBlackOverlay.setAlpha(0);
+			scene.tweens.add({ targets: this.endBlackOverlay, alpha: 0.7, duration: Math.max(20, this.endBlackOverlayFadeInMs), ease: 'Cubic.easeOut', onComplete: () => {
+				// Once mask fully covers, hide congrats content to avoid snapping
+				try { this.cleanupDialog(); } catch {}
+				// While covered, switch back to base under mask so fire sits between states
+				try { scene.events.emit('setBonusMode', false); } catch {}
+				try { scene.events.emit('hideBonusBackground'); } catch {}
+				try { scene.events.emit('hideBonusHeader'); } catch {}
+				try {
+					const audio = (window as any).audioManager;
+					if (audio && typeof audio.setExclusiveBackground === 'function') {
+						audio.setExclusiveBackground(MusicType.MAIN);
+					}
+				} catch {}
+				try { gameEventManager.emit(GameEventType.WIN_STOP); } catch {}
+				try { scene.events.emit('resetSymbolsForBase'); } catch {}
+				try { scene.events.emit('enableSymbols'); } catch {}
+				baseSwitchedEarly = true;
+			}});
+			overlayActive = true;
+		};
+
+		const fadeOutOverlay = (callback?: () => void) => {
+			if (!overlayActive || !this.endBlackOverlay || !scene?.tweens) {
+				overlayActive = false;
+				if (this.endBlackOverlay) {
+					try { this.endBlackOverlay.setVisible(false); this.endBlackOverlay.setAlpha(0); } catch {}
+				}
+				callback && callback();
+				return;
+			}
+			try { scene.tweens.killTweensOf(this.endBlackOverlay); } catch {}
+			scene.tweens.add({
+				targets: this.endBlackOverlay,
+				alpha: 0,
+				duration: Math.max(20, this.endBlackOverlayFadeOutMs),
+				ease: 'Cubic.easeIn',
+				onComplete: () => {
+					try { this.endBlackOverlay?.setVisible(false); } catch {}
+					overlayActive = false;
+					callback && callback();
+				}
+			});
+		};
+
+		const complete = () => {
+			try {
+				const audio = (window as any).audioManager;
+				if (audio && typeof audio.unlockMusic === 'function') audio.unlockMusic();
+			} catch {}
+			onDone && onDone();
+		};
+
+		const runTransition = () => {
+			if (!ensureSpineFactory(scene, '[Dialogs] end fire transition factory')) {
+				fadeOutOverlay(complete);
+				return;
+			}
+			this.loadEndFireTransitionIfNeeded()
+				.then((loaded) => {
+					if (!loaded) {
+						fadeOutOverlay(complete);
+						return;
+					}
+					try {
+						try {
+							const audio = (window as any).audioManager;
+							if (audio) {
+								if (typeof audio.lockMusicTo === 'function') audio.lockMusicTo(MusicType.MAIN);
+								if (typeof audio.stopAllMusic === 'function') audio.stopAllMusic();
+							}
+						} catch {}
+
+						if (!this.endTransitionContainer) {
+							this.endTransitionContainer = scene.add.container(0, 0);
+							this.endTransitionContainer.setDepth(20000);
+						}
+					if (this.endBlackOverlay && this.endTransitionContainer && this.endBlackOverlay.parentContainer !== this.endTransitionContainer) {
+						try { this.endTransitionContainer.add(this.endBlackOverlay); } catch {}
+					}
+						if (!this.endTransitionBg) {
+						this.endTransitionBg = scene.add.rectangle(
+								scene.cameras.main.width / 2,
+								scene.cameras.main.height / 2,
+								scene.cameras.main.width * 2,
+								scene.cameras.main.height * 2,
+							0x000000,
+							1
+							);
+							this.endTransitionBg.setOrigin(0.5);
+						this.endTransitionBg.setAlpha(1);
+							try { this.endTransitionBg.setInteractive(); } catch {}
+							this.endTransitionContainer.add(this.endTransitionBg);
+						}
+						if (this.endTransitionSpine) { try { this.endTransitionSpine.destroy(); } catch {} this.endTransitionSpine = null; }
+						this.endTransitionSpine = (scene.add as any).spine(
+							scene.cameras.main.width * 0.5,
+							scene.cameras.main.height * 0.5,
+							'fire_transition',
+							'fire_transition_atlas'
+						);
+						try { this.endTransitionSpine.setOrigin(0.5, 0.5); } catch {}
+					try { (this.endTransitionSpine as any).setDepth?.(1); } catch {}
+					// Pin to camera space
+					try { (this.endTransitionSpine as any).setScrollFactor?.(0); } catch {}
+					try { this.endTransitionContainer?.setScrollFactor?.(0); } catch {}
+					try { this.endTransitionBg?.setScrollFactor?.(0); } catch {}
+					this.endTransitionContainer.add(this.endTransitionSpine);
+						this.endTransitionContainer.setVisible(true);
+						this.endTransitionContainer.setAlpha(1);
+						try { scene.children.bringToTop(this.endTransitionContainer); } catch {}
+					// Ensure layering inside the container: black overlay behind, fire spine on top
+					try {
+						if (this.endBlackOverlay) this.endTransitionContainer?.sendToBack(this.endBlackOverlay);
+						if (this.endTransitionSpine) this.endTransitionContainer?.bringToTop(this.endTransitionSpine);
+					} catch {}
+						if (this.endBlackOverlay) { showOverlay(); }
+				// Cover-fit scaling with slight overscan to avoid any gaps
+				try {
+					const w = scene.cameras.main.width;
+					const h = scene.cameras.main.height;
+					let bw = 0; let bh = 0;
+					try {
+						const b = (this.endTransitionSpine as any).getBounds?.();
+						bw = (b && (b.size?.x || (b as any).width)) || 0;
+						bh = (b && (b.size?.y || (b as any).height)) || 0;
+					} catch {}
+					if (!bw || !bh) { bw = (this.endTransitionSpine as any).displayWidth || 0; bh = (this.endTransitionSpine as any).displayHeight || 0; }
+					if (bw > 0 && bh > 0) {
+						const scaleToCover = Math.max(w / bw, h / bh) * 2.0;
+						(this.endTransitionSpine as any).setScale(scaleToCover);
+					}
+				} catch {}
+						// Blaze SFX removed with fire transitions
+						try { (this.endTransitionSpine as any).animationState.timeScale = Math.max(0.05, this.endFireTransitionTimeScale); } catch {}
+					// Keep opaque mask behind spine to ensure no gaps
+
+						let finished = false;
+						let baseSwitched = false;
+						const switchToBaseIfNeeded = () => {
+							if (baseSwitched || baseSwitchedEarly) return;
+							baseSwitched = true;
+							try { scene.events.emit('setBonusMode', false); } catch {}
+							try { scene.events.emit('hideBonusBackground'); } catch {}
+							try { scene.events.emit('hideBonusHeader'); } catch {}
+							try {
+								const audio = (window as any).audioManager;
+								if (audio && typeof audio.setExclusiveBackground === 'function') {
+									audio.setExclusiveBackground(MusicType.MAIN);
+								}
+							} catch {}
+							try {
+								gameEventManager.emit(GameEventType.WIN_STOP);
+								console.log('[Dialogs] Emitted WIN_STOP during end fire transition');
+							} catch {}
+							try { scene.events.emit('resetSymbolsForBase'); } catch {}
+							try { scene.events.emit('enableSymbols'); } catch {}
+						};
+
+						const finish = () => {
+							if (finished) return;
+							finished = true;
+							scene.tweens.add({
+								targets: this.endTransitionContainer,
+								alpha: 0,
+								duration: 200,
+								ease: 'Cubic.easeIn',
+								onComplete: () => {
+									try {
+										this.endTransitionContainer?.setVisible(false);
+										this.endTransitionContainer?.setAlpha(1);
+										if (this.endTransitionSpine) { this.endTransitionSpine.destroy(); this.endTransitionSpine = null; }
+										if (this.endTransitionBg) { this.endTransitionBg.setAlpha(0); }
+									} catch {}
+									const tail = Math.max(0, this.endBlackOverlayTailMs || 0);
+									if (tail > 0) {
+										scene.time.delayedCall(tail, () => fadeOutOverlay(complete));
+									} else {
+										fadeOutOverlay(complete);
+									}
+								}
+							});
+						};
+
+						try {
+						const startAnim = () => {
+								const state = (this.endTransitionSpine as any).animationState;
+								let entry: any = null;
+								let played = false;
+								try { entry = state.setAnimation(0, 'animation', false); played = true; } catch {}
+								if (!played) {
+									try {
+										const anims = (this.endTransitionSpine as any)?.skeleton?.data?.animations || [];
+										const first = anims[0]?.name;
+										if (first) { entry = state.setAnimation(0, first, false); played = true; }
+									} catch {}
+								}
+								try {
+									const rawDurationSec = Math.max(0.1, entry?.animation?.duration || 1.2);
+									const ratio = Math.min(0.95, Math.max(0.05, this.endFireTransitionMidTriggerRatio));
+									const midDelayMs = Math.max(50, (rawDurationSec / Math.max(0.0001, this.endFireTransitionTimeScale)) * 1000 * ratio);
+									scene.time.delayedCall(midDelayMs, switchToBaseIfNeeded);
+								} catch {}
+								try { state?.setListener?.({ complete: finish } as any); } catch {}
+								// Fallback complete safety, include lead time
+								scene.time.delayedCall(Math.max(1200, this.endBlackOverlayLeadMs + 1200), finish);
+							};
+							const lead = Math.max(0, this.endBlackOverlayLeadMs || 0);
+							if (lead > 0) {
+								scene.time.delayedCall(lead, startAnim);
+							} else {
+								startAnim();
+							}
+						} catch {
+							switchToBaseIfNeeded();
+							fadeOutOverlay(complete);
+						}
+					} catch {
+						fadeOutOverlay(complete);
+					}
+				})
+				.catch(() => fadeOutOverlay(complete));
+		};
+
+		runTransition();
+	}
+
+	/**
+	 * Flow requested: Fade to black → switch to base under cover → fade black out → play fire (no mask) → done.
+	 */
+	private playBlackCoverThenBaseThenFire(scene: Scene, onDone?: () => void): void {
+		// Ensure container and black overlay exist
+		if (!this.endTransitionContainer) {
+			this.endTransitionContainer = scene.add.container(0, 0);
+			this.endTransitionContainer.setDepth(20000);
+		}
+		if (!this.endBlackOverlay) {
+			this.endBlackOverlay = scene.add.rectangle(
+				scene.scale.width * 0.5,
+				scene.scale.height * 0.5,
+				scene.scale.width * 2,
+				scene.scale.height * 2,
+				0x000000,
+				1
+			);
+			this.endBlackOverlay.setOrigin(0.5);
+			this.endBlackOverlay.setAlpha(0);
+			try { this.endTransitionContainer.add(this.endBlackOverlay); } catch {}
+		}
+		try {
+			if (this.endBlackOverlay.parentContainer !== this.endTransitionContainer) {
+				this.endTransitionContainer.add(this.endBlackOverlay);
+			}
+		} catch {}
+		this.endTransitionContainer.setVisible(true);
+		try { scene.children.bringToTop(this.endTransitionContainer); } catch {}
+		try { scene.tweens.killTweensOf(this.endBlackOverlay); } catch {}
+		this.endBlackOverlay.setVisible(true);
+		this.endBlackOverlay.setAlpha(0);
+		// 1) Fade in to black
+		scene.tweens.add({
+			targets: this.endBlackOverlay,
+			alpha: 1,
+			duration: 350,
+			ease: 'Cubic.easeOut',
+			onComplete: () => {
+				// Small extra wait to ensure draw cycle finishes at full black
+				scene.time.delayedCall(Math.max(1, this.blackCoverPreCleanupDelayMs), () => {
+					// 2) Under full black, cleanup congrats and switch to base visuals/music (embers will run post-fire)
+					try { this.cleanupDialog(); } catch {}
+					try { scene.events.emit('setBonusMode', false); } catch {}
+					try { scene.events.emit('hideBonusBackground'); } catch {}
+					try { scene.events.emit('hideBonusHeader'); } catch {}
+					try {
+						const audio = (window as any).audioManager;
+						if (audio && typeof audio.setExclusiveBackground === 'function') {
+							audio.setExclusiveBackground(MusicType.MAIN);
+						}
+					} catch {}
+					try { gameEventManager.emit(GameEventType.WIN_STOP); } catch {}
+					try { scene.events.emit('resetSymbolsForBase'); } catch {}
+					try { scene.events.emit('enableSymbols'); } catch {}
+					// Allow systems to settle under cover
+					scene.time.delayedCall(Math.max(1, this.postSwitchSettleMs), () => {
+						// 3) Start fire (still fully black) and fade black out over 0.5s simultaneously
+						this.playFireTransitionNoMask(scene, () => {
+							// Fire ended: embers will run for 2s from playFireTransitionNoMask, then container will be hidden
+							try { this.endBlackOverlay!.setVisible(false); } catch {}
+							onDone && onDone();
+						});
+						scene.tweens.add({ targets: this.endBlackOverlay!, alpha: 0, duration: 500, ease: 'Cubic.easeOut' });
+					});
+				});
+			}
+		});
+	}
+
+	// ========= Embers anticipation helpers =========
+	private startEmbers(scene: Scene): void {
+		try {
+			if (!this.endTransitionContainer) {
+				this.endTransitionContainer = scene.add.container(0, 0);
+				this.endTransitionContainer.setDepth(20000);
+			}
+			if (this.embersContainer) { try { this.embersContainer.destroy(true); } catch {} this.embersContainer = null; }
+			this.embersContainer = scene.add.container(0, 0);
+			this.embersContainer.setAlpha(0);
+			scene.tweens.add({ targets: this.embersContainer, alpha: 1, duration: 220, ease: 'Cubic.easeOut' });
+			try { this.endTransitionContainer.add(this.embersContainer); } catch {}
+			// Reset particles and start update loop
+			this.emberParticles = [];
+			if (this.emberUpdateHandler) { try { scene.events.off('update', this.emberUpdateHandler); } catch {} this.emberUpdateHandler = null; }
+			this.emberUpdateHandler = (_t: number, d: number) => this.updateEmbers(scene, d);
+			scene.events.on('update', this.emberUpdateHandler);
+			// Spawn loop
+			if (this.embersSpawnTimer) { try { this.embersSpawnTimer.remove(false); } catch {} this.embersSpawnTimer = null; }
+			this.embersSpawnTimer = scene.time.addEvent({ delay: 90, loop: true, callback: () => this.spawnOneEmber(scene) });
+			// Bring layering: black at back, embers in middle, fire on top later
+			try {
+				if (this.endBlackOverlay) this.endTransitionContainer?.sendToBack(this.endBlackOverlay);
+				this.endTransitionContainer?.bringToTop(this.embersContainer!);
+			} catch {}
+		} catch {}
+	}
+
+	private stopEmbers(): void {
+		try {
+			if (this.embersSpawnTimer) { this.embersSpawnTimer.remove(false); this.embersSpawnTimer = null; }
+			if (this.emberUpdateHandler && this.currentScene) { try { this.currentScene.events.off('update', this.emberUpdateHandler); } catch {} this.emberUpdateHandler = null; }
+			if (this.embersContainer) {
+				const cont = this.embersContainer;
+				this.currentScene?.tweens.add({
+					targets: cont,
+					alpha: 0,
+					duration: 300,
+					ease: 'Cubic.easeOut',
+					onComplete: () => {
+						try { cont.getAll().forEach((child: any) => { try { child.destroy(); } catch {} }); } catch {}
+						try { cont.destroy(true); } catch {}
+						this.embersContainer = null;
+					}
+				});
+			}
+		} catch {}
+	}
+
+private spawnOneEmber(scene: Scene): void {
+    try {
+        if (!this.embersContainer) return;
+        const w = scene.cameras.main.width;
+        const h = scene.cameras.main.height;
+        const g = scene.add.graphics();
+        this.embersContainer.add(g);
+        // Start near bottom, rising up across the whole screen
+        const x = Math.random() * w;
+        const y = h + 30 + Math.random() * 40;
+        // Bigger embers for anticipation
+        const size = Math.random() * 2.5 + 3.0;
+        const colors = [0xffd700, 0xffe04a, 0xfff0a0, 0xffc107];
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        const alpha = Math.random() * 0.5 + 0.4;
+        // Longer life so they traverse screen
+        const lifetime = 1800 + Math.random() * 1200; // 1.8s – 3.0s
+        const totalFramesAt60 = lifetime / (1000 / 60);
+        const vy = -(h + 60) / Math.max(1, totalFramesAt60); // reach above top by end of life
+        const vx = (Math.random() - 0.5) * 0.9; // gentle horizontal drift
+        const particle = { graphics: g, x, y, vx, vy, size, color, alpha, lifetime, age: 0 };
+        this.emberParticles.push(particle);
+        this.drawEmberParticle(particle);
+    } catch {}
+}
+
+private drawEmberParticle(p: { graphics: Phaser.GameObjects.Graphics; x: number; y: number; size: number; color: number; alpha: number; }): void {
+    const { graphics, x, y, size, color, alpha } = p;
+    graphics.clear();
+    const w = size * (Math.random() * 0.8 + 0.6);
+    const h = size * (Math.random() * 1.2 + 0.8);
+    graphics.fillStyle(color, alpha * 0.10); graphics.fillEllipse(x, y, w * 3.0, h * 3.0);
+    graphics.fillStyle(color, alpha * 0.20); graphics.fillEllipse(x, y, w * 2.2, h * 2.2);
+    graphics.fillStyle(color, alpha * 0.40); graphics.fillEllipse(x, y, w * 1.5, h * 1.5);
+    graphics.fillStyle(color, alpha * 0.70); graphics.fillEllipse(x, y, w * 0.8, h * 0.8);
+    graphics.fillStyle(0xffffaa, alpha * 0.30); graphics.fillEllipse(x, y, w * 0.35, h * 0.35);
+}
+
+private updateEmbers(scene: Scene, delta: number): void {
+    // Move, age, fade
+    for (let i = this.emberParticles.length - 1; i >= 0; i--) {
+        const p = this.emberParticles[i];
+        p.age += delta;
+        if (p.age >= p.lifetime) {
+            try { p.graphics.destroy(); } catch {}
+            this.emberParticles.splice(i, 1);
+            continue;
+        }
+        // Integrate (scale velocities by delta vs 60fps)
+        const dt = delta / (1000 / 60);
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        // Fade by age
+        const ageRatio = p.age / p.lifetime;
+        p.alpha = Math.max(0.05, 1 - ageRatio);
+        this.drawEmberParticle(p);
+    }
+}
+
+	/** Play the fire transition overlay without internal black mask. */
+	private playFireTransitionNoMask(scene: Scene, onDone?: () => void): void {
+		if (!ensureSpineFactory(scene, '[Dialogs] fire transition (no mask)')) { onDone && onDone(); return; }
+		this.loadEndFireTransitionIfNeeded().then((loaded) => {
+			if (!loaded) { onDone && onDone(); return; }
+			try {
+				if (!this.endTransitionContainer) {
+					this.endTransitionContainer = scene.add.container(0, 0);
+					this.endTransitionContainer.setDepth(20000);
+				}
+				// Ensure any background mask is hidden
+				if (this.endTransitionBg) { try { this.endTransitionBg.setAlpha(0); this.endTransitionBg.setVisible(false); } catch {} }
+				if (this.endTransitionSpine) { try { this.endTransitionSpine.destroy(); } catch {} this.endTransitionSpine = null; }
+				this.endTransitionSpine = (scene.add as any).spine(
+					scene.cameras.main.width * 0.5,
+					scene.cameras.main.height * 0.5,
+					'fire_transition',
+					'fire_transition_atlas'
+				);
+				try { this.endTransitionSpine.setOrigin(0.5, 0.5); } catch {}
+				try { (this.endTransitionSpine as any).setDepth?.(1); } catch {}
+				try { (this.endTransitionSpine as any).setScrollFactor?.(0); } catch {}
+				try { this.endTransitionContainer?.setScrollFactor?.(0); } catch {}
+				this.endTransitionContainer.add(this.endTransitionSpine);
+				this.endTransitionContainer.setVisible(true);
+				this.endTransitionContainer.setAlpha(1);
+				try { scene.children.bringToTop(this.endTransitionContainer); } catch {}
+				// Cover-fit
+				try {
+					const w = scene.cameras.main.width; const h = scene.cameras.main.height;
+					let bw = 0, bh = 0;
+					try { const b = (this.endTransitionSpine as any).getBounds?.(); bw = (b && (b.size?.x || (b as any).width)) || 0; bh = (b && (b.size?.y || (b as any).height)) || 0; } catch {}
+					if (!bw || !bh) { bw = (this.endTransitionSpine as any).displayWidth || 0; bh = (this.endTransitionSpine as any).displayHeight || 0; }
+					if (bw > 0 && bh > 0) { (this.endTransitionSpine as any).setScale(Math.max(w / bw, h / bh) * 2.0); }
+				} catch {}
+				try { (this.endTransitionSpine as any).animationState.timeScale = Math.max(0.05, this.endFireTransitionTimeScale); } catch {}
+				let finished = false;
+				const finish = () => {
+					if (finished) return; finished = true;
+					// Remove fire and clean up immediately (embers removed)
+					try { if (this.endTransitionSpine) { this.endTransitionSpine.destroy(); this.endTransitionSpine = null; } } catch {}
+					try { this.endTransitionContainer?.setVisible(false); this.endTransitionContainer?.setAlpha(1); } catch {}
+					onDone && onDone();
+				};
+				try {
+					const state = (this.endTransitionSpine as any).animationState;
+					let entry: any = null; let played = false;
+					try { entry = state.setAnimation(0, 'animation', false); played = true; } catch {}
+					if (!played) {
+						try { const anims = (this.endTransitionSpine as any)?.skeleton?.data?.animations || []; const first = anims[0]?.name; if (first) { entry = state.setAnimation(0, first, false); played = true; } } catch {}
+					}
+					try { state?.setListener?.({ complete: finish } as any); } catch {}
+					scene.time.delayedCall(1200, finish);
+				} catch { finish(); }
+			} catch { onDone && onDone(); }
 		});
 	}
 
@@ -1376,6 +2395,35 @@ export class Dialogs {
 	private performDialogCleanup(): void {
 		console.log('[Dialogs] Starting dialog cleanup');
 		
+		// Clean up congrats-specific extras if present
+		if (this.congratsBgImage) {
+			try { this.congratsBgImage.destroy(); } catch {}
+			this.congratsBgImage = null;
+		}
+		if (this.congratsCharSpine) {
+			try { this.congratsCharSpine.destroy(); } catch {}
+			this.congratsCharSpine = null;
+		}
+		if (this.dialogBackgroundContainer) {
+			try { this.dialogBackgroundContainer.removeAll(true); } catch {}
+		}
+		if (this.dialogCharacterContainer) {
+			try { this.dialogCharacterContainer.removeAll(true); } catch {}
+			// Also clear nested container references to avoid stale pointers
+			this.congratsCharRoot = null;
+			this.congratsCharOffsetContainer = null;
+			this.congratsCharScaleContainer = null;
+		}
+		// Destroy title image if present
+		if (this.congratsWinTitleImage) {
+			try { this.congratsWinTitleImage.destroy(); } catch {}
+			this.congratsWinTitleImage = null;
+		}
+		if (this.congratsFireSpine) {
+			try { this.congratsFireSpine.destroy(); } catch {}
+			this.congratsFireSpine = null;
+		}
+		
 		// Clean up current dialog
 		if (this.currentDialog) {
 			console.log('[Dialogs] Destroying current dialog');
@@ -1396,6 +2444,7 @@ export class Dialogs {
 			this.numberDisplayContainer.destroy();
 			this.numberDisplayContainer = null;
 		}
+		this.numberDisplayRef = null;
 		
 		// Clean up click area
 		if (this.clickArea) {
@@ -1516,6 +2565,32 @@ export class Dialogs {
 			this.blackOverlay.fillStyle(0x000000, 0.7);
 			this.blackOverlay.fillRect(0, 0, scene.scale.width, scene.scale.height);
 		}
+		
+		// Re-apply background cover scaling and positions on resize
+		if (this.congratsBgImage) {
+			const centerX = scene.scale.width * 0.5;
+			const centerY = scene.scale.height * 0.5;
+			const coverScaleX = scene.scale.width / Math.max(1, this.congratsBgImage.width);
+			const coverScaleY = scene.scale.height / Math.max(1, this.congratsBgImage.height);
+			const coverScale = Math.max(coverScaleX, coverScaleY) * Math.max(0.05, this.congratsBgScale);
+			this.congratsBgImage.setScale(coverScale);
+			this.congratsBgImage.x = centerX + this.congratsBgOffsetX;
+			this.congratsBgImage.y = centerY + this.congratsBgOffsetY;
+		}
+		// Reposition title image on resize
+		if (this.congratsWinTitleImage) {
+			const centerX = scene.scale.width * 0.5;
+			const centerY = scene.scale.height * 0.5;
+			this.congratsWinTitleImage.x = centerX + this.congratsWinTitleOffsetX;
+			this.congratsWinTitleImage.y = centerY + this.congratsWinTitleOffsetY;
+		}
+		if (this.congratsCharSpine) {
+			const baseX = (typeof this.congratsCharX === 'number' && isFinite(this.congratsCharX)) ? this.congratsCharX : scene.scale.width * 0.5;
+			const baseY = (typeof this.congratsCharY === 'number' && isFinite(this.congratsCharY)) ? this.congratsCharY : scene.scale.height * 0.5;
+			if (this.congratsCharRoot) { this.congratsCharRoot.x = baseX; this.congratsCharRoot.y = baseY; }
+			if (this.congratsCharOffsetContainer) { this.congratsCharOffsetContainer.x = (this.congratsCharOffsetX || 0); this.congratsCharOffsetContainer.y = (this.congratsCharOffsetY || 0); }
+			if (this.congratsCharScaleContainer) { this.congratsCharScaleContainer.setScale(Math.max(0.05, this.congratsCharScale)); }
+		}
 	}
 
 	/**
@@ -1557,9 +2632,193 @@ export class Dialogs {
 		return this.dialogLoops[dialogType] || false;
 		}
 		
+	// Public modifiers for Congrats extras
+	public setStartFireBlackHoldMs(ms: number): void {
+		this.startFireBlackHoldMs = Math.max(0, ms | 0);
+	}
+
+	public setCongratsNumberSpeed(speedMul: number): void {
+		this.congratsNumberSpeedMul = Math.max(0.05, speedMul);
+	}
+	public setEndBlackOverlayTiming(opts: { fadeInMs?: number; holdMs?: number; fadeOutMs?: number; leadMs?: number; tailMs?: number }): void {
+		if (opts.fadeInMs !== undefined) this.endBlackOverlayFadeInMs = Math.max(20, opts.fadeInMs);
+		if (opts.holdMs !== undefined) this.endBlackOverlayHoldMs = Math.max(0, opts.holdMs);
+		if (opts.fadeOutMs !== undefined) this.endBlackOverlayFadeOutMs = Math.max(20, opts.fadeOutMs);
+		if (opts.leadMs !== undefined) this.endBlackOverlayLeadMs = Math.max(0, opts.leadMs);
+		if (opts.tailMs !== undefined) this.endBlackOverlayTailMs = Math.max(0, opts.tailMs);
+		console.log('[Dialogs] Updated end black overlay timing:', {
+			fadeInMs: this.endBlackOverlayFadeInMs,
+			holdMs: this.endBlackOverlayHoldMs,
+			fadeOutMs: this.endBlackOverlayFadeOutMs,
+			leadMs: this.endBlackOverlayLeadMs,
+			tailMs: this.endBlackOverlayTailMs
+		});
+	}
+	public setCongratsBgOptions(opts: { scale?: number; offsetX?: number; offsetY?: number }): void {
+		if (opts.scale !== undefined) this.congratsBgScale = Math.max(0.05, opts.scale);
+		if (opts.offsetX !== undefined) this.congratsBgOffsetX = opts.offsetX;
+		if (opts.offsetY !== undefined) this.congratsBgOffsetY = opts.offsetY;
+		// Apply live if image exists
+		if (this.currentScene && this.congratsBgImage) {
+			const coverScaleX = this.currentScene.scale.width / Math.max(1, this.congratsBgImage.width);
+			const coverScaleY = this.currentScene.scale.height / Math.max(1, this.congratsBgImage.height);
+			const coverScale = Math.max(coverScaleX, coverScaleY) * Math.max(0.05, this.congratsBgScale);
+			this.congratsBgImage.setScale(coverScale);
+			this.congratsBgImage.x = this.currentScene.scale.width * 0.5 + this.congratsBgOffsetX;
+			this.congratsBgImage.y = this.currentScene.scale.height * 0.5 + this.congratsBgOffsetY;
+		}
+	}
+
+	public setCongratsNumberSpacing(spacing: number): void {
+		if (!this.numberDisplayRef) return;
+		try {
+			(this.numberDisplayRef as any).updateConfig({ spacing });
+			console.log('[Dialogs] Updated congrats number spacing to', spacing);
+		} catch (e) {
+			console.warn('[Dialogs] Failed to update number spacing:', e);
+		}
+	}
+
+	public setCongratsTitleOptions(opts: { offsetX?: number; offsetY?: number; scale?: number; durationMs?: number }): void {
+		if (opts.offsetX !== undefined) this.congratsWinTitleOffsetX = opts.offsetX;
+		if (opts.offsetY !== undefined) this.congratsWinTitleOffsetY = opts.offsetY;
+		if (opts.scale !== undefined) this.congratsWinTitleScale = Math.max(0.05, opts.scale);
+		if (opts.durationMs !== undefined) this.congratsWinTitleBreathDurationMs = Math.max(100, opts.durationMs);
+		if (this.currentScene && this.congratsWinTitleImage) {
+			const centerX = this.currentScene.scale.width * 0.5;
+			const centerY = this.currentScene.scale.height * 0.5;
+			this.congratsWinTitleImage.x = centerX + this.congratsWinTitleOffsetX;
+			this.congratsWinTitleImage.y = centerY + this.congratsWinTitleOffsetY;
+			this.congratsWinTitleImage.setScale(Math.max(0.05, this.congratsWinTitleScale));
+			// Rebuild tween with new speed if provided
+			if (this.congratsWinTitleTween) { try { this.congratsWinTitleTween.stop(); } catch {} this.congratsWinTitleTween = null; }
+			this.congratsWinTitleTween = this.currentScene.tweens.add({
+				targets: this.congratsWinTitleImage,
+				scaleX: this.congratsWinTitleImage.scaleX * 1.045,
+				scaleY: this.congratsWinTitleImage.scaleY * 1.045,
+				duration: Math.max(100, this.congratsWinTitleBreathDurationMs),
+				ease: 'Sine.inOut',
+				yoyo: true,
+				repeat: -1
+			});
+		}
+	}
+
+	public setCongratsFireOptions(opts: { offsetX?: number; offsetY?: number; scale?: number; timeScale?: number; anim?: string }): void {
+		if (opts.offsetX !== undefined) this.congratsFireOffsetX = opts.offsetX;
+		if (opts.offsetY !== undefined) this.congratsFireOffsetY = opts.offsetY;
+		if (opts.scale !== undefined) this.congratsFireScale = Math.max(0.05, opts.scale);
+		if (opts.timeScale !== undefined) this.congratsFireTimeScale = Math.max(0.0001, opts.timeScale);
+		if (opts.anim !== undefined) this.congratsFireAnimName = opts.anim || 'animation';
+		if (this.currentScene && this.congratsFireSpine) {
+			try { this.congratsFireSpine.x = this.currentScene.scale.width * 0.5 + this.congratsFireOffsetX; } catch {}
+			try { this.congratsFireSpine.y = this.currentScene.scale.height * 0.5 + this.congratsFireOffsetY; } catch {}
+			try { this.congratsFireSpine.setScale(Math.max(0.05, this.congratsFireScale)); } catch {}
+			try { this.congratsFireSpine.animationState.timeScale = Math.max(0.0001, this.congratsFireTimeScale); } catch {}
+			try { if (opts.anim) this.congratsFireSpine.animationState.setAnimation(0, this.congratsFireAnimName, true); } catch {}
+		}
+	}
+
+    public setCongratsCharacterOptions(opts: { x?: number; y?: number; offsetX?: number; offsetY?: number; scale?: number; timeScale?: number }): void {
+        if (opts.x !== undefined) this.congratsCharX = opts.x;
+        if (opts.y !== undefined) this.congratsCharY = opts.y;
+        if (opts.offsetX !== undefined) this.congratsCharOffsetX = opts.offsetX;
+        if (opts.offsetY !== undefined) this.congratsCharOffsetY = opts.offsetY;
+        if (opts.scale !== undefined) this.congratsCharScale = Math.max(0.05, opts.scale);
+        if (opts.timeScale !== undefined) this.congratsCharTimeScale = Math.max(0.0001, opts.timeScale);
+        if (this.currentScene && this.congratsCharSpine) {
+            const baseX = (typeof this.congratsCharX === 'number' && isFinite(this.congratsCharX)) ? this.congratsCharX : this.currentScene.scale.width * 0.5;
+            const baseY = (typeof this.congratsCharY === 'number' && isFinite(this.congratsCharY)) ? this.congratsCharY : this.currentScene.scale.height * 0.5;
+            if (this.congratsCharRoot) { this.congratsCharRoot.x = baseX; this.congratsCharRoot.y = baseY; }
+            if (this.congratsCharOffsetContainer) { this.congratsCharOffsetContainer.x = (this.congratsCharOffsetX || 0); this.congratsCharOffsetContainer.y = (this.congratsCharOffsetY || 0); }
+            if (this.congratsCharScaleContainer) { this.congratsCharScaleContainer.setScale(Math.max(0.05, this.congratsCharScale)); }
+            try { this.congratsCharSpine.animationState.timeScale = Math.max(0.0001, this.congratsCharTimeScale); } catch {}
+        }
+    }
+
+    /** Convenience: set only offset for congrats character. */
+    public setCongratsCharacterOffset(opts: { offsetX?: number; offsetY?: number }): void {
+        if (opts.offsetX !== undefined) this.congratsCharOffsetX = opts.offsetX;
+        if (opts.offsetY !== undefined) this.congratsCharOffsetY = opts.offsetY;
+        if (this.currentScene && this.congratsCharSpine) {
+            const baseX = (typeof this.congratsCharX === 'number' && isFinite(this.congratsCharX)) ? this.congratsCharX : this.currentScene.scale.width * 0.5;
+            const baseY = (typeof this.congratsCharY === 'number' && isFinite(this.congratsCharY)) ? this.congratsCharY : this.currentScene.scale.height * 0.5;
+            if (this.congratsCharRoot) { this.congratsCharRoot.x = baseX; this.congratsCharRoot.y = baseY; }
+            if (this.congratsCharOffsetContainer) { this.congratsCharOffsetContainer.x = (this.congratsCharOffsetX || 0); this.congratsCharOffsetContainer.y = (this.congratsCharOffsetY || 0); }
+        }
+    }
+		
+	/** Entering Congrats with new flow: fade to black → build Congrats under cover → fade out with fire + embers. */
+	private playEnterFireTransitionThen(next: () => void): void {
+		const scene = this.currentScene;
+		if (!scene || !ensureSpineFactory(scene, '[Dialogs] enter fire transition')) { next(); return; }
+		this.loadEndFireTransitionIfNeeded().then((loaded) => {
+			if (!loaded) { next(); return; }
+			try {
+				if (!this.endTransitionContainer) {
+					this.endTransitionContainer = scene.add.container(0, 0);
+					this.endTransitionContainer.setDepth(20000);
+				}
+				if (!this.endBlackOverlay) {
+					this.endBlackOverlay = scene.add.rectangle(
+						scene.scale.width * 0.5,
+						scene.scale.height * 0.5,
+						scene.scale.width * 2,
+						scene.scale.height * 2,
+						0x000000,
+						1
+					);
+					this.endBlackOverlay.setOrigin(0.5);
+					this.endBlackOverlay.setAlpha(0);
+					try { this.endTransitionContainer.add(this.endBlackOverlay); } catch {}
+				} else {
+					try {
+						if (this.endBlackOverlay.parentContainer !== this.endTransitionContainer) {
+							this.endTransitionContainer.add(this.endBlackOverlay);
+						}
+					} catch {}
+				}
+				this.endTransitionContainer.setVisible(true);
+				try { scene.children.bringToTop(this.endTransitionContainer!); } catch {}
+				try { scene.tweens.killTweensOf(this.endBlackOverlay); } catch {}
+				this.endBlackOverlay.setVisible(true);
+				this.endBlackOverlay.setAlpha(0);
+
+				// Fade to black (0.35s)
+				scene.tweens.add({
+					targets: this.endBlackOverlay!,
+					alpha: 1,
+					duration: 350,
+					ease: 'Cubic.easeOut',
+					onComplete: () => {
+						// small wait to ensure full black is painted
+						scene.time.delayedCall(Math.max(1, this.blackCoverPreCleanupDelayMs), () => {
+							// build Congrats under cover
+							try { next(); } catch {}
+							// settle
+							scene.time.delayedCall(Math.max(1, this.postSwitchSettleMs), () => {
+								// start fire (no mask) and fade black out over 0.5s
+							this.playFireTransitionNoMask(scene, () => {
+								try { this.endBlackOverlay!.setVisible(false); } catch {}
+								try { scene.events.emit('preCongratsMaskGone'); } catch {}
+							});
+								scene.tweens.add({ targets: this.endBlackOverlay!, alpha: 0, duration: 500, ease: 'Cubic.easeOut' });
+							});
+						});
+					}
+				});
+			} catch {
+				next();
+			}
+		});
+	}
+
 	// Convenience methods for specific dialog types
-	showCongrats(scene: Scene, config?: Partial<DialogConfig>): void {
-		this.showDialog(scene, { type: 'Congrats_KA', ...config });
+showCongrats(scene: Scene, config?: Partial<DialogConfig>): void {
+		// New flow: fade to black → build Congrats under cover → fade out with fire + embers
+		this.playEnterFireTransitionThen(() => {
+			this.showDialog(scene, { type: 'Congrats_KA', ...config });
+		});
 	}
 
 	showFreeSpinDialog(scene: Scene, config?: Partial<DialogConfig>): void {
@@ -1582,3 +2841,4 @@ export class Dialogs {
 		this.showDialog(scene, { type: 'SuperW_KA', ...config });
 	}
 }
+

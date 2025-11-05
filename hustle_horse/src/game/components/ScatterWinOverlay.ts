@@ -1,7 +1,9 @@
 import { Scene } from 'phaser';
 import { ensureSpineLoader, ensureSpineFactory } from '../../utils/SpineGuard';
+import { MusicType } from '../../managers/AudioManager';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
+import { resolveAssetUrl } from '../../utils/AssetLoader';
 import type { SpinData } from '../../backend/SpinData';
 
 export class ScatterWinOverlay {
@@ -13,9 +15,10 @@ export class ScatterWinOverlay {
     private chooseText: Phaser.GameObjects.Text | null = null;
     private imagesContainer: Phaser.GameObjects.Container | null = null;
     private fireContainer: Phaser.GameObjects.Container | null = null;
+  private bottomFireContainer: Phaser.GameObjects.Container | null = null;
     private cardsContainer: Phaser.GameObjects.Container | null = null;
     private cards: Phaser.GameObjects.GameObject[] = [];
-    private pngCardScale: number = 0.85;
+    private pngCardScale: number = 0.95;
     private pngCenterEnlargeMultiplier: number = 2;
     private flippedCardScaleMultiplier: number = 1; // applied to pngCardScale after flip
     private moveToCenterDurationMs: number = 350;
@@ -26,12 +29,28 @@ export class ScatterWinOverlay {
     // Duration for moving the flipped card to its final upper-center position
     private moveToUpperCenterDurationMs: number = 600;
     // Overlay text (Free-spin-text.png) placement options
-    private overlayTextOffsetX: number = -35; // px offset from card center
-    private overlayTextOffsetY: number = -140; // px offset from card center
+    private overlayTextOffsetX: number = -40; // px offset from card center
+    private overlayTextOffsetY: number = -155; // px offset from card center
     private overlayTextScaleFactor: number = 1; // relative to card scale
     private overlayTextRef: Phaser.GameObjects.Image | null = null;
     private congratsRef: Phaser.GameObjects.Image | null = null;
     private pressAnyText: Phaser.GameObjects.Text | null = null;
+  // Final transition overlay elements
+  private transitionContainer: Phaser.GameObjects.Container | null = null;
+  private transitionBg: Phaser.GameObjects.Rectangle | null = null;
+  private transitionSpine: any | null = null;
+  private fireTransitionLoadState: 'unloaded' | 'loading' | 'loaded' | 'failed' = 'unloaded';
+  private fireTransitionLoadPromise: Promise<boolean> | null = null;
+  private fireTransitionTimeScale: number = 0.85;
+  // Ratio in [0,1] at which to switch to bonus during Fire_Transition (0.5 = midway)
+  private fireTransitionMidTriggerRatio: number = 0.5;
+    // Delay before starting free-spin autoplay after entering bonus (ms)
+    private freeSpinAutoplayDelayMs: number = 800;
+  // Embers anticipation (post-fire)
+  private overlayEmbersContainer: Phaser.GameObjects.Container | null = null;
+  private overlayEmbersSpawnTimer: Phaser.Time.TimerEvent | null = null;
+  private overlayEmberParticles: Array<{ graphics: Phaser.GameObjects.Graphics; x: number; y: number; vx: number; vy: number; size: number; color: number; alpha: number; lifetime: number; age: number; }> = [];
+  private overlayEmbersUpdateHandler: ((time: number, delta: number) => void) | null = null;
     // Congrats popup options
     private congratsBaseScale: number = 0.66;
     private congratsOffsetX: number = 0;
@@ -49,8 +68,8 @@ export class ScatterWinOverlay {
     private pressAnyScale: number = 1;
     // Card animation timing (ms)
     private cardIntroInitialDelayMs: number = 1200; // wait after overlay shows
-    private cardPerCardIntervalMs: number = 400;    // delay between each card
-    private cardThrowDurationMs: number = 900;      // single card fly-in duration
+    private cardPerCardIntervalMs: number = 300;    // delay between each card
+    private cardThrowDurationMs: number = 700;      // single card fly-in duration
     // Card layout defaults (ratios and angles) – tuned to reference image
     private cardTargetYRatio: number = 0.59;
     private cardSpacingRatio: number = 0.28;
@@ -79,10 +98,33 @@ export class ScatterWinOverlay {
     private fireSpineLoadState: 'unloaded' | 'loading' | 'loaded' | 'failed' = 'unloaded';
     private fireLoadPromise: Promise<boolean> | null = null;
     private fsDigitSprites: Phaser.GameObjects.Image[] = [];
+  // Main_Fire spine at bottom
+  private mainFireSpines: any[] = [];
+  private mainFireLoadState: 'unloaded' | 'loading' | 'loaded' | 'failed' = 'unloaded';
+  private mainFireLoadPromise: Promise<boolean> | null = null;
+  private mainFireHeightScale: number = 1.1; // vertical stretch factor for bottom fire
+  // Bottom corner fire placement and transforms (individual modifiers)
+  private bottomLeftFireMarginX: number = -90;   // px from left edge
+  private bottomLeftFireMarginY: number = 6;    // px from bottom edge
+  private bottomLeftFireRotationDeg: number = 20; // counter-clockwise tilt
+  private bottomLeftFireScaleMul: number = 1.8; // extra uniform scale multiplier
+
+  private bottomRightFireMarginX: number = 0;  // px from right edge
+  private bottomRightFireMarginY: number = 0;   // px from bottom edge
+
+  private bottomRightFireRotationDeg: number = -20; // clockwise tilt
+  private bottomRightFireScaleMul: number = 1.8; // extra uniform scale multiplier
+
+  private bottomLeftFireOffsetX: number = -160;    // additional offset from computed corner target
+  private bottomLeftFireOffsetY: number = 20;
+
+  private bottomRightFireOffsetX: number = 160;   // additional offset from computed corner target
+  private bottomRightFireOffsetY: number = 20;
+  // Glow overlay removed (will be replaced by PNG later)
     // Free spin digits display options
     private fsDigitsScaleFactor: number = 1.1; // multiplier for manual descaling/rescaling
     private fsDigitsOffsetX: number = -16;       // extra offset from default base
-    private fsDigitsOffsetY: number = 0;       // extra offset from default base
+    private fsDigitsOffsetY: number = 10;       // extra offset from default base
     private fsDigitsSpacing: number = -30;       // extra spacing in px between digits (after scaling)
     private fsDigitsAlign: 'left' | 'center' | 'right' = 'center';
     private fsDigitsRelativeToCard: boolean = true; // fit digits to a fraction of card width
@@ -156,6 +198,12 @@ export class ScatterWinOverlay {
             this.fireContainer = this.scene.add.container(0, 0);
             this.fireContainer.setAlpha(1);
 
+      // Container for bottom main fire (initially hidden)
+      this.bottomFireContainer = this.scene.add.container(0, 0);
+      this.bottomFireContainer.setAlpha(0);
+
+      // Glow overlay removed; will be replaced by PNG later
+
             // Container that groups the overlay text images for shared animations
             this.imagesContainer = this.scene.add.container(0, 0);
             this.imagesContainer.setAlpha(1);
@@ -202,15 +250,21 @@ export class ScatterWinOverlay {
                 this.chooseText
             ]);
 
-            // Add elements to container
+      // Add elements to container (place fire above cards)
             this.container.add([
                 this.background,
                 this.fireContainer,
                 this.imagesContainer,
-                this.cardsContainer
+        this.cardsContainer,
+        this.bottomFireContainer
             ]);
             
             this.container.setVisible(false);
+
+      // Create separate container for the final transition overlay above everything
+      this.transitionContainer = this.scene.add.container(0, 0);
+      this.transitionContainer.setDepth(20000);
+      this.transitionContainer.setVisible(false);
             
             // Set up pointer down handler after the background is created
             this.background.on('pointerdown', (pointer: Phaser.Input.Pointer, x: number, y: number, event: any) => {
@@ -228,13 +282,15 @@ export class ScatterWinOverlay {
     }
 
     public show(color: number = 0x4A148C, alpha: number = 0.9, duration: number = 800, onComplete?: () => void): void {
-        if (this.isShowing || !this.scene || !this.container || !this.background || !this.pickACard) {
+        if (this.isShowing || !this.scene || !this.container || !this.background) {
             if (onComplete) onComplete();
             return;
         }
         
         // Clear any existing animations
         this.clearAnimations();
+        // Ensure no transient elements from a previous run remain
+        this.clearTransientOverlayElements();
         
         this.isShowing = true;
         this.onCompleteCallback = onComplete;
@@ -245,13 +301,52 @@ export class ScatterWinOverlay {
         // Ensure fill is fully opaque and tween the display alpha for proper fade effect
         this.background.setFillStyle(color, 1);
         this.background.setAlpha(0);
+        // Stop any existing BG music and start pick-a-card BG (single-slot)
+        try {
+            const audio = (window as any).audioManager;
+            if (audio) {
+                if (typeof audio.lockMusicTo === 'function') audio.lockMusicTo(MusicType.PICK_A_CARD);
+                if (typeof audio.setExclusiveBackground === 'function') audio.setExclusiveBackground(MusicType.PICK_A_CARD);
+            }
+        } catch {}
         // Reset any previous fire object state; we'll create it after loading
         if (this.winFont) {
             try { this.winFont.destroy?.(); } catch {}
             this.winFont = null;
         }
+        // Recreate headline UI if it was destroyed in a previous run
+        if (!this.pickACard) {
+            this.pickACard = this.scene.add.image(
+                this.scene.cameras.main.width * this.pickACardPosRatio.x,
+                this.scene.cameras.main.height * this.pickACardPosRatio.y,
+                'PickACard'
+            );
+            this.pickACard.setOrigin(0.5);
+            try { this.imagesContainer?.add(this.pickACard); } catch {}
+        }
+        if (!this.chooseText) {
+            this.chooseText = this.scene.add.text(
+                this.scene.cameras.main.width * this.chooseTextPosRatio.x,
+                this.scene.cameras.main.height * this.chooseTextPosRatio.y,
+                'Choose one card',
+                {
+                    fontFamily: 'Poppins-SemiBold, Poppins-Regular, Arial, sans-serif',
+                    fontSize: '20px',
+                    color: '#FFFFFF',
+                    align: 'center'
+                }
+            );
+            this.chooseText.setOrigin(0.5, 0.5);
+            try { this.chooseText.setStroke('#379557', 4); } catch {}
+            try { this.chooseText.setShadow(0, 2, '#000000', 4, true, true); } catch {}
+            try { this.imagesContainer?.add(this.chooseText); } catch {}
+        }
+
+        // Reset initial states for headline UI
+        if (this.pickACard) {
         this.pickACard.setScale(0);
         this.pickACard.setAlpha(0);
+        }
         if (this.chooseText) {
             this.chooseText.setScale(0);
             this.chooseText.setAlpha(0);
@@ -277,7 +372,11 @@ export class ScatterWinOverlay {
             targets: this.background,
             alpha: alpha,
             duration: duration,
-            ease: 'Cubic.easeOut'
+            ease: 'Cubic.easeOut',
+            onComplete: () => {
+                // After the tint overlay fade-in finishes, slide in the bottom fire
+                this.showMainFire();
+            }
         });
         this.animations.push(bgTween);
         
@@ -312,6 +411,8 @@ export class ScatterWinOverlay {
                     );
                     this.winFont = spineObj;
                     try { spineObj.setOrigin(0.5, 0.5); } catch {}
+                    // Start animating immediately upon instantiation
+                    try { (spineObj as any).animationState?.setAnimation(0, 'animation', true); } catch {}
                     // Start hidden (scale 0) to mimic PickACard pop-up
                     try { spineObj.setScale(0); } catch {}
                     try { spineObj.setAlpha(0); } catch {}
@@ -437,8 +538,8 @@ export class ScatterWinOverlay {
                 }
                 // Queue files
                 const loader = (this.scene as any).load;
-                try { loader?.spineAtlas?.('overlay_fire_atlas', '/assets/animations/Fire/fireanimation01_HTBH.atlas'); } catch {}
-                try { loader?.spineJson?.('overlay_fire', '/assets/animations/Fire/fireanimation01_HTBH.json'); } catch {}
+                try { loader?.spineAtlas?.('overlay_fire_atlas', resolveAssetUrl('/assets/animations/Fire/fireanimation01_HTBH.atlas')); } catch {}
+                try { loader?.spineJson?.('overlay_fire', resolveAssetUrl('/assets/animations/Fire/fireanimation01_HTBH.json')); } catch {}
 
                 const onComplete = () => {
                     this.fireSpineLoadState = 'loaded';
@@ -488,72 +589,32 @@ export class ScatterWinOverlay {
             return;
         }
         
-        // Fade out all elements
-        const fadeOutTweens: Phaser.Tweens.Tween[] = [];
         // Stop idle animation when hiding
         this.isIdleAnimating = false;
-        
-        if (this.background) {
-            const bgTween = this.scene.tweens.add({
-                targets: this.background,
+        // Fade entire overlay container simultaneously
+        if (this.container) {
+            this.scene.tweens.add({
+                targets: this.container,
                 alpha: 0,
                 duration: duration,
-                ease: 'Cubic.easeIn'
-            });
-            fadeOutTweens.push(bgTween);
-        }
-        
-        if (this.winFont) {
-            const winTween = this.scene.tweens.add({
-                targets: this.winFont,
-                alpha: 0,
-                scaleX: this.fireScale * 0.8,
-                scaleY: this.fireScale * 0.8,
-                duration: duration,
-                ease: 'Cubic.easeIn'
-            });
-            fadeOutTweens.push(winTween);
-        }
-        
-        if (this.pickACard) {
-            const cardTween = this.scene.tweens.add({
-                targets: this.pickACard,
-                alpha: 0,
-                scale: 0.5,
-                duration: duration - 100,
-                ease: 'Cubic.easeIn'
-            });
-            fadeOutTweens.push(cardTween);
-        }
-        
-        if (this.chooseText) {
-            const textTween = this.scene.tweens.add({
-                targets: this.chooseText,
-                alpha: 0,
-                scale: 0.5,
-                duration: duration - 100,
-                ease: 'Cubic.easeIn'
-            });
-            fadeOutTweens.push(textTween);
-        }
-        
-        // Wait for all tweens to complete
-        this.scene.tweens.add({
-            targets: { value: 0 },
-            value: 1,
-            duration: duration,
-            onComplete: () => {
-                if (this.container) this.container.setVisible(false);
-                this.isShowing = false;
-                this.clearAnimations();
-                if (onComplete) onComplete();
-                if (this.dismissResolver) {
-                    const resolve = this.dismissResolver;
-                    this.dismissResolver = undefined;
-                    resolve();
+                ease: 'Cubic.easeIn',
+                onComplete: () => {
+                    this.container?.setVisible(false);
+                    this.container?.setAlpha(1);
+                    this.isShowing = false;
+                    this.clearAnimations();
+                    // Destroy transient elements so a second show starts clean
+                    this.clearTransientOverlayElements();
+                    // Keep music lock through transition; will unlock after BONUS starts
+                    if (onComplete) onComplete();
+                    if (this.dismissResolver) {
+                        const resolve = this.dismissResolver;
+                        this.dismissResolver = undefined;
+                        resolve();
+                    }
                 }
-            }
-        });
+            });
+        }
     }
 
     /** Wait until the user dismisses the overlay (pointer down triggers hide). */
@@ -564,6 +625,26 @@ export class ScatterWinOverlay {
         return new Promise<void>((resolve) => {
             this.dismissResolver = resolve;
         });
+    }
+
+    /** Remove transient elements created during a run (digits, overlay text, congrats, hint). */
+    private clearTransientOverlayElements(): void {
+        try {
+            if (this.overlayTextRef) { try { this.overlayTextRef.destroy(); } catch {}; this.overlayTextRef = null; }
+            if (this.congratsRef) { try { this.congratsRef.destroy(); } catch {}; this.congratsRef = null; }
+            if (this.pressAnyText) { try { this.pressAnyText.destroy(); } catch {}; this.pressAnyText = null; }
+            if (this.fsDigitSprites && this.fsDigitSprites.length) {
+                for (const spr of this.fsDigitSprites) { try { spr.destroy(); } catch {} }
+                this.fsDigitSprites = [];
+            }
+      // Clear bottom main fire
+      if (this.mainFireSpines && this.mainFireSpines.length) {
+        for (const s of this.mainFireSpines) { try { s.destroy(); } catch {} }
+        this.mainFireSpines = [];
+      }
+      if (this.bottomFireContainer) { try { this.bottomFireContainer.setAlpha(0); this.bottomFireContainer.removeAll(true); } catch {} }
+      // Glow overlay removed
+        } catch {}
     }
 
     /**
@@ -666,10 +747,20 @@ export class ScatterWinOverlay {
                 duration: this.cardThrowDurationMs,
                 ease: 'Cubic.easeOut',
                 delay: i * baseDelay,
-                onStart: () => { if (this.cardsContainer) this.cardsContainer.setAlpha(1); },
+                onStart: () => {
+                    if (this.cardsContainer) this.cardsContainer.setAlpha(1);
+                    // Play card deal SFX on each card slide
+                    try {
+                        const audio = (window as any).audioManager;
+                        if (audio && typeof audio.playSoundEffect === 'function') {
+                            audio.playSoundEffect('carddeal_hh');
+                        }
+                    } catch {}
+                },
                 onComplete: () => {
                     completed++;
                     if (completed === 3) {
+              // Cards are ready – enable selection (bottom fire is now handled after tint fade-in)
                         this.enableCardSelection();
                     }
                 }
@@ -700,6 +791,14 @@ export class ScatterWinOverlay {
         if (!this.scene || this.hasUserSelected) return;
         this.hasUserSelected = true;
         this.selectedCardIndex = index;
+
+        // Play card pick SFX
+        try {
+            const audio = (window as any).audioManager;
+            if (audio && typeof audio.playSoundEffect === 'function') {
+                audio.playSoundEffect('cardpick_hh' as any);
+            }
+        } catch {}
 
         // Disable further input
         this.cards.forEach((go) => { try { (go as any).disableInteractive?.(); } catch {} });
@@ -780,6 +879,7 @@ export class ScatterWinOverlay {
                                             try { (overlay as any).setDepth?.(10003); } catch {}
                                             overlay.setAlpha(1);
                                             this.overlayTextRef = overlay;
+                                            try { this.container?.add(overlay); } catch {}
                                         } catch {}
                                         // If free spins count is known, compose digit sprites using number assets
                                         try {
@@ -824,6 +924,7 @@ export class ScatterWinOverlay {
                                                     const s = tempSprites[i];
                                                     s.setPosition(cursorX + s.displayWidth / 2, baseY);
                                                     this.fsDigitSprites.push(s);
+                                                    try { this.container?.add(s); } catch {}
                                                     cursorX += s.displayWidth + (i < tempSprites.length - 1 ? this.fsDigitsSpacing : 0);
                                                 }
                                             }
@@ -1232,6 +1333,14 @@ export class ScatterWinOverlay {
                 this.container.destroy(true);
                 this.container = null;
             }
+      if (this.bottomFireContainer) {
+        try { this.bottomFireContainer.destroy(true); } catch {}
+        this.bottomFireContainer = null;
+      }
+      if (this.mainFireSpines && this.mainFireSpines.length) {
+        for (const s of this.mainFireSpines) { try { s.destroy(); } catch {} }
+        this.mainFireSpines = [];
+            }
             // Destroy digit sprites if any
             if (this.fsDigitSprites && this.fsDigitSprites.length) {
                 for (const spr of this.fsDigitSprites) { try { spr.destroy(); } catch {} }
@@ -1269,6 +1378,7 @@ export class ScatterWinOverlay {
             img.setScale(this.congratsBaseScale * 0.9);
             try { (img as any).setDepth?.(10005); } catch {}
             this.congratsRef = img;
+            try { this.container?.add(img); } catch {}
 
             // Pop-in tween
             this.scene.tweens.add({
@@ -1319,6 +1429,7 @@ export class ScatterWinOverlay {
             try { txt.setShadow(0, 2, '#000000', 4, true, true); } catch {}
             try { (txt as any).setDepth?.(10005); } catch {}
             this.pressAnyText = txt;
+            try { this.container?.add(txt); } catch {}
 
             // Animate in similar to chooseText
             this.scene.tweens.add({
@@ -1344,21 +1455,596 @@ export class ScatterWinOverlay {
             this.background.setInteractive();
             const onceHandler = () => {
                 try { this.background?.off('pointerdown', onceHandler); } catch {}
-                // Hide overlay
-                this.hide(300);
+        // Hide overlay, then play full-screen fire transition into bonus
+        this.hide(300, () => {
+          this.playFireTransitionThenEnterBonus();
+        });
+            };
+            this.background.once('pointerdown', onceHandler);
+        } catch {}
+    }
+
+  /** Load Fire_Transition spine assets dynamically if needed. */
+  private loadFireTransitionIfNeeded(): Promise<boolean> {
+    if (!this.scene) return Promise.resolve(false);
+    if (this.fireTransitionLoadState === 'loaded') return Promise.resolve(true);
+    if (this.fireTransitionLoadState === 'failed') return Promise.resolve(false);
+    if (this.fireTransitionLoadState === 'loading' && this.fireTransitionLoadPromise) return this.fireTransitionLoadPromise;
+
+    this.fireTransitionLoadState = 'loading';
+    this.fireTransitionLoadPromise = new Promise<boolean>((resolve) => {
+      try {
+        if (!ensureSpineLoader(this.scene!, '[ScatterWinOverlay] fire transition dynamic load')) {
+          this.fireTransitionLoadState = 'failed';
+          resolve(false);
+          return;
+        }
+        const loader = (this.scene as any).load;
+        try { loader?.spineAtlas?.('fire_transition_atlas', resolveAssetUrl('/assets/animations/Fire/Fire_Transition.atlas')); } catch {}
+        try { loader?.spineJson?.('fire_transition', resolveAssetUrl('/assets/animations/Fire/Fire_Transition.json')); } catch {}
+
+        const onComplete = () => { this.fireTransitionLoadState = 'loaded'; resolve(true); };
+        const onError = () => { this.fireTransitionLoadState = 'failed'; resolve(false); };
+        try { (this.scene as any).load?.once('complete', onComplete); } catch {}
+        try { (this.scene as any).load?.once('loaderror', onError); } catch {}
+        try { (this.scene as any).load?.start(); } catch {}
+      } catch (e) {
+        console.warn('[ScatterWinOverlay] Fire_Transition dynamic load failed:', e);
+        this.fireTransitionLoadState = 'failed';
+        resolve(false);
+      }
+    });
+    return this.fireTransitionLoadPromise;
+  }
+
+  /** Dynamically load Main_Fire spine (atlas+json). */
+  private loadMainFireIfNeeded(): Promise<boolean> {
+    if (!this.scene) return Promise.resolve(false);
+    if (this.mainFireLoadState === 'loaded') return Promise.resolve(true);
+    if (this.mainFireLoadState === 'failed') return Promise.resolve(false);
+    if (this.mainFireLoadState === 'loading' && this.mainFireLoadPromise) return this.mainFireLoadPromise;
+
+    this.mainFireLoadState = 'loading';
+    this.mainFireLoadPromise = new Promise<boolean>((resolve) => {
+      try {
+        if (!ensureSpineLoader(this.scene!, '[ScatterWinOverlay] main fire dynamic load')) {
+          this.mainFireLoadState = 'failed';
+          resolve(false);
+          return;
+        }
+        const loader = (this.scene as any).load;
+        try { loader?.spineAtlas?.('main_fire_atlas', resolveAssetUrl('/assets/animations/Fire/Main_Fire.atlas')); } catch {}
+        try { loader?.spineJson?.('main_fire', resolveAssetUrl('/assets/animations/Fire/Main_Fire.json')); } catch {}
+
+        const onComplete = () => { this.mainFireLoadState = 'loaded'; resolve(true); };
+        const onError = () => { this.mainFireLoadState = 'failed'; resolve(false); };
+        try { (this.scene as any).load?.once('complete', onComplete); } catch {}
+        try { (this.scene as any).load?.once('loaderror', onError); } catch {}
+        try { (this.scene as any).load?.start(); } catch {}
+      } catch (e) {
+        console.warn('[ScatterWinOverlay] Main_Fire dynamic load failed:', e);
+        this.mainFireLoadState = 'failed';
+        resolve(false);
+      }
+    });
+    return this.mainFireLoadPromise;
+  }
+
+  /** Create and show the Main_Fire spine at the bottom center. */
+  private async showMainFire(): Promise<void> {
+    if (!this.scene || !ensureSpineFactory(this.scene, '[ScatterWinOverlay] main fire factory')) return;
+    const loaded = await this.loadMainFireIfNeeded();
+    if (!loaded) return;
+
+    try {
+      // Clear prior instance
+      if (this.mainFireSpines && this.mainFireSpines.length) { for (const s of this.mainFireSpines) { try { s.destroy(); } catch {} } this.mainFireSpines = []; }
+      if (!this.bottomFireContainer) return;
+
+      const w = this.scene.cameras.main.width;
+      const h = this.scene.cameras.main.height;
+      // Corner targets with margins from edges, plus per-side offsets
+      const leftBaseX = Math.max(0, this.bottomLeftFireMarginX);
+      const rightBaseX = Math.max(0, w - this.bottomRightFireMarginX);
+      const baseY = Math.max(0, h - Math.max(this.bottomLeftFireMarginY, this.bottomRightFireMarginY));
+      const leftTargetX = leftBaseX + (this.bottomLeftFireOffsetX || 0);
+      const rightTargetX = rightBaseX + (this.bottomRightFireOffsetX || 0);
+      const leftTargetY = baseY + (this.bottomLeftFireOffsetY || 0);
+      const rightTargetY = baseY + (this.bottomRightFireOffsetY || 0);
+      // Start just off-screen at bottom and slide upward
+      const startY = h + 80;
+
+      // Create two spines (left and right), start at off-screen bottom near their target X
+      const left = (this.scene.add as any).spine(leftTargetX, startY, 'main_fire', 'main_fire_atlas');
+      const right = (this.scene.add as any).spine(rightTargetX, startY, 'main_fire', 'main_fire_atlas');
+      try { (left as any).setDepth?.(1); (right as any).setDepth?.(1); } catch {}
+      // Anchor to bottom corners for precise corner placement
+      try { (left as any).setOrigin?.(0.0, 1.0); } catch {}
+      try { (right as any).setOrigin?.(1.0, 1.0); } catch {}
+      // Initial hint angles
+      try { (left as any).setAngle?.(this.bottomLeftFireRotationDeg || 0); } catch {}
+      try { (right as any).setAngle?.(this.bottomRightFireRotationDeg || 0); } catch {}
+      this.bottomFireContainer.add(left);
+      this.bottomFireContainer.add(right);
+      this.mainFireSpines = [left, right];
+      try { this.container?.bringToTop(this.bottomFireContainer!); } catch {}
+
+      // Play loop for both
+      const playLoop = (sp: any) => {
+        try {
+          const state = sp.animationState;
+          let played = false;
+          try { state.setAnimation(0, 'animation', true); played = true; } catch {}
+          if (!played) {
+            const anims = sp?.skeleton?.data?.animations || [];
+            const first = anims[0]?.name;
+            if (first) { state.setAnimation(0, first, true); }
+          }
+        } catch {}
+      };
+      playLoop(left); playLoop(right);
+
+      // Fit each to half screen width without distorting aspect ratio, then apply per-corner scale/rotation
+      this.bottomFireContainer.setAlpha(0);
+      this.scene.time.delayedCall(0, () => {
+        const fitHalf = (sp: any, mul: number) => {
+          try {
+            const getBounds = sp?.getBounds?.bind(sp);
+            let width = 0;
+            if (typeof getBounds === 'function') {
+              const b = getBounds();
+              width = (b && b.size && b.size.x) ? b.size.x : (b && b.width) ? b.width : 0;
+            }
+            if (!width || width <= 0) width = sp.displayWidth || 0;
+            if (width && width > 0) {
+              const currentScaleX = sp.scaleX || 1;
+              const scaledWidth = width * currentScaleX;
+              const desiredScale = scaledWidth > 0 ? ((w * 0.5) / scaledWidth) * currentScaleX : currentScaleX;
+              // Apply height modifier while preserving width fit and per-corner extra multiplier
+              const uniform = desiredScale * Math.max(0.1, mul || 1);
+              const yScale = uniform * Math.max(0.1, this.mainFireHeightScale || 1);
+              sp.setScale(uniform, yScale);
+            }
+          } catch {}
+        };
+        fitHalf(left, this.bottomLeftFireScaleMul || 1);
+        fitHalf(right, this.bottomRightFireScaleMul || 1);
+
+        // Slide both up to their corner targets and fade in (individual Y targets)
+        this.scene?.tweens.add({ targets: left, x: leftTargetX, y: leftTargetY, duration: 450, ease: 'Cubic.easeOut' });
+        this.scene?.tweens.add({ targets: right, x: rightTargetX, y: rightTargetY, duration: 450, ease: 'Cubic.easeOut' });
+        this.scene?.tweens.add({ targets: this.bottomFireContainer, alpha: 1, duration: 250, ease: 'Cubic.easeOut' });
+      });
+    } catch (e) {
+      console.warn('[ScatterWinOverlay] Failed to show Main_Fire spine:', e);
+    }
+  }
+
+  /** Individual modifiers for bottom-left corner fire. */
+  public setBottomLeftFireOptions(options: { marginX?: number; marginY?: number; rotationDeg?: number; scaleMul?: number; offsetX?: number; offsetY?: number; }): void {
+    if (options.marginX !== undefined) this.bottomLeftFireMarginX = Math.max(0, options.marginX);
+    if (options.marginY !== undefined) this.bottomLeftFireMarginY = Math.max(0, options.marginY);
+    if (options.rotationDeg !== undefined) this.bottomLeftFireRotationDeg = options.rotationDeg;
+    if (options.scaleMul !== undefined) this.bottomLeftFireScaleMul = Math.max(0.1, options.scaleMul);
+    if (options.offsetX !== undefined) this.bottomLeftFireOffsetX = options.offsetX;
+    if (options.offsetY !== undefined) this.bottomLeftFireOffsetY = options.offsetY;
+  }
+
+  /** Individual modifiers for bottom-right corner fire. */
+  public setBottomRightFireOptions(options: { marginX?: number; marginY?: number; rotationDeg?: number; scaleMul?: number; offsetX?: number; offsetY?: number; }): void {
+    if (options.marginX !== undefined) this.bottomRightFireMarginX = Math.max(0, options.marginX);
+    if (options.marginY !== undefined) this.bottomRightFireMarginY = Math.max(0, options.marginY);
+    if (options.rotationDeg !== undefined) this.bottomRightFireRotationDeg = options.rotationDeg;
+    if (options.scaleMul !== undefined) this.bottomRightFireScaleMul = Math.max(0.1, options.scaleMul);
+    if (options.offsetX !== undefined) this.bottomRightFireOffsetX = options.offsetX;
+    if (options.offsetY !== undefined) this.bottomRightFireOffsetY = options.offsetY;
+  }
+
+  /** Public API: set vertical height scale for Main_Fire (1 = original, >1 taller). */
+  public setMainFireHeightScale(scale: number = 1.7): void {
+    this.mainFireHeightScale = Math.max(0.1, scale);
+    try {
+      if (this.mainFireSpines && this.mainFireSpines.length) {
+        for (const sp of this.mainFireSpines) {
+          if (sp) {
+            const sx = sp.scaleX || 1;
+            sp.setScale(sx, sx * this.mainFireHeightScale);
+          }
+        }
+      }
+    } catch {}
+  }
+
+  /** Play the Fire_Transition overlay, then enter bonus and start autoplay. */
+  private async playFireTransitionThenEnterBonus(): Promise<void> {
+    if (!this.scene || !ensureSpineFactory(this.scene, '[ScatterWinOverlay] fire transition factory')) {
+      // Fallback: proceed without transition
+      this.enterBonusAndStartAutoplay();
+      return;
+    }
+    // Lock to BONUS during transition and stop current BGM to avoid MAIN blips
+    try {
+      const audio = (window as any).audioManager;
+      if (audio) {
+        if (typeof audio.lockMusicTo === 'function') audio.lockMusicTo(MusicType.BONUS);
+        if (typeof audio.stopCurrentMusic === 'function') audio.stopCurrentMusic();
+      }
+    } catch {}
+    const loaded = await this.loadFireTransitionIfNeeded();
+    if (!loaded) {
+      this.enterBonusAndStartAutoplay();
+      return;
+    }
+
+    // Create transition container elements if missing
+    try {
+      if (!this.transitionBg) {
+        this.transitionBg = this.scene.add.rectangle(
+          this.scene.cameras.main.width / 2,
+          this.scene.cameras.main.height / 2,
+          this.scene.cameras.main.width * 2,
+          this.scene.cameras.main.height * 2,
+          0x000000,
+          0 // initially zero fill; we'll set opaque fill when transition starts
+        );
+        this.transitionBg.setOrigin(0.5);
+        this.transitionBg.setAlpha(1);
+        try { this.transitionBg.setInteractive(); } catch {}
+        this.transitionContainer?.add(this.transitionBg);
+      }
+
+      // Spine object
+      try { if (this.transitionSpine) { this.transitionSpine.destroy(); this.transitionSpine = null; } } catch {}
+      this.transitionSpine = (this.scene.add as any).spine(
+        this.scene.cameras.main.width * 0.5,
+        this.scene.cameras.main.height * 0.5,
+        'fire_transition',
+        'fire_transition_atlas'
+      );
+      try { this.transitionSpine.setOrigin(0.5, 0.5); } catch {}
+      try { (this.transitionSpine as any).setDepth?.(1); } catch {}
+      // Pin transition elements to camera (screen space)
+      try { (this.transitionSpine as any).setScrollFactor?.(0); } catch {}
+      try { this.transitionContainer?.setScrollFactor?.(0); } catch {}
+      try { this.transitionBg?.setScrollFactor?.(0); } catch {}
+      this.transitionContainer?.add(this.transitionSpine);
+
+			// Ensure the transition spine covers the full viewport (no gaps at top/bottom)
+			try {
+				const w = this.scene.cameras.main.width;
+				const h = this.scene.cameras.main.height;
+				let bw = 0;
+				let bh = 0;
+				try {
+					const b = this.transitionSpine.getBounds();
+					bw = (b && (b.size?.x || (b as any).width)) || 0;
+					bh = (b && (b.size?.y || (b as any).height)) || 0;
+				} catch {}
+				if (bw > 0 && bh > 0) {
+					const scaleToCover = Math.max(w / bw, h / bh) * 2.0; // larger overscan to eliminate gaps
+					this.transitionSpine.setScale(scaleToCover);
+				}
+			} catch {}
+
+      // Ensure the background is an opaque fullscreen mask during transition (fast fade-in)
+      try {
+        this.transitionBg.setFillStyle(0x000000, 1);
+        this.transitionBg.setAlpha(0);
+        this.scene?.tweens.add({ targets: this.transitionBg, alpha: 0.7, duration: 80, ease: 'Cubic.easeOut' });
+      } catch {}
+
+      // Show container and ensure it renders above everything
+      this.transitionContainer?.setVisible(true);
+      this.transitionContainer?.setAlpha(1);
+      try { this.scene.children.bringToTop(this.transitionContainer!); } catch {}
+
+      // Aggressively stop any BGM to avoid overlaps before switching
+      try {
+        const audio = (window as any).audioManager;
+        if (audio && typeof audio.stopAllMusic === 'function') {
+          audio.stopAllMusic();
+        }
+      } catch {}
+
+      // Blaze SFX removed with fire transitions
+
+      // Apply optional timeScale modifier
+      let s = 1.0;
+      try {
+        s = Math.max(0.05, this.fireTransitionTimeScale || 1.0);
+        (this.transitionSpine as any).animationState.timeScale = s;
+      } catch {}
+
+       // Ensure transition background covers any edge gaps behind the spine
+       try { this.transitionBg.setAlpha(1); } catch {}
+
+      // Play transition animation (try named, else first available)
+      let finished = false;
+      let bonusEntered = false;
+      const enterIfNeeded = () => {
+        if (bonusEntered) return;
+        bonusEntered = true;
+        this.enterBonusAndStartAutoplay();
+      };
+      const finish = () => {
+        if (finished) return; finished = true;
+        // Fade out quickly and proceed
+        this.scene?.tweens.add({
+          targets: this.transitionContainer,
+          alpha: 0,
+          duration: 200,
+          ease: 'Cubic.easeIn',
+          onComplete: () => {
+            try {
+              this.transitionContainer?.setVisible(false);
+              this.transitionContainer?.setAlpha(1);
+              if (this.transitionSpine) { this.transitionSpine.destroy(); this.transitionSpine = null; }
+              if (this.transitionBg) { this.transitionBg.setAlpha(0); }
+              // Remove per-frame refit binding
+              try {
+                if ((this as any).__transitionRefit) {
+                  this.scene?.events.off('update', (this as any).__transitionRefit);
+                  (this as any).__transitionRefit = undefined;
+                }
+              } catch {}
+            } catch {}
+            // Only enter bonus if we haven't already switched mid-animation
+            enterIfNeeded();
+            // Embers anticipation removed
+          }
+        });
+      };
+
+      try {
+        const state = (this.transitionSpine as any).animationState;
+        let played = false;
+        let entry: any = null;
+        try {
+          entry = state.setAnimation(0, 'animation', false);
+          played = true;
+        } catch {}
+        if (!played) {
+          try {
+            const anims = (this.transitionSpine as any)?.skeleton?.data?.animations || [];
+            const first = anims[0]?.name;
+            if (first) {
+              entry = state.setAnimation(0, first, false);
+              played = true;
+            }
+          } catch {}
+        }
+        // After animation selection, re-fit to cover again (bounds may change post-setup)
+        try {
+          const refit = () => {
+            try {
+              const w = this.scene!.cameras.main.width;
+              const h = this.scene!.cameras.main.height;
+              const b = this.transitionSpine.getBounds();
+              const bw = (b && (b.size?.x || (b as any).width)) || 0;
+              const bh = (b && (b.size?.y || (b as any).height)) || 0;
+              if (bw > 0 && bh > 0) {
+                const scaleToCover = Math.max(w / bw, h / bh) * 2.0;
+                this.transitionSpine.setScale(scaleToCover);
+                // Also adjust vertical position so the top of the spine extends beyond the top edge
+                try {
+                  const offsetX = (b.offset?.x || (b as any).x || 0);
+                  const offsetY = (b.offset?.y || (b as any).y || 0);
+                  const s = (this.transitionSpine.scaleY || this.transitionSpine.scale || 1);
+                  // World-space top of the bounds
+                  const topWorld = (this.transitionSpine.y || 0) + offsetY * s;
+                  const pad = Math.max(8, h * 0.02);
+                  if (topWorld > -pad) {
+                    const dy = topWorld + pad; // amount we need to move up
+                    this.transitionSpine.y = (this.transitionSpine.y || 0) - dy;
+                  }
+                } catch {}
+              }
+            } catch {}
+          };
+          // Refit now and after a short delay (in case bounds update)
+          refit();
+          this.scene!.time.delayedCall(50, refit);
+          this.scene!.time.delayedCall(200, refit);
+          // Keep refitting each frame during the transition window
+          try {
+            if ((this as any).__transitionRefit) {
+              this.scene!.events.off('update', (this as any).__transitionRefit);
+            }
+            (this as any).__transitionRefit = refit;
+            this.scene!.events.on('update', (this as any).__transitionRefit);
+          } catch {}
+        } catch {}
+
+        // Schedule mid-transition bonus entry based on animation duration and timeScale
+        try {
+          const rawDurationSec = Math.max(0.1, entry?.animation?.duration || 1.2);
+          const ratio = Math.min(0.95, Math.max(0.05, this.fireTransitionMidTriggerRatio || 0.5));
+          const midDelayMs = Math.max(50, (rawDurationSec / Math.max(0.0001, s)) * 1000 * ratio);
+          this.scene.time.delayedCall(midDelayMs, enterIfNeeded);
+        } catch {}
+        try { state?.setListener?.({ complete: finish } as any); } catch {}
+        // Fallback timeout in case listener not available
+        this.scene.time.delayedCall(1200, finish);
+      } catch {
+        // If anything fails, proceed immediately
+        finish();
+      }
+    } catch {
+      this.enterBonusAndStartAutoplay();
+    }
+  }
+
+  /** Enter bonus stage and start free-spin autoplay, same behavior as previous flow. */
+  private enterBonusAndStartAutoplay(): void {
+    // Switch to bonus background music exclusively
+    try {
+      const audio = (window as any).audioManager;
+      if (audio && typeof audio.setExclusiveBackground === 'function') {
+        audio.setExclusiveBackground(MusicType.BONUS);
+      }
+      // Now that BONUS is active, release lock
+      try { if (audio && typeof audio.unlockMusic === 'function') audio.unlockMusic(); } catch {}
+    } catch {}
                 // Mark bonus mode if not already
                 gameStateManager.isBonus = true;
-                // Kick off free spin autoplay via Symbols
+                // Notify systems of bonus mode (triggers Symbols to recreate dragon spines)
+                try { this.scene?.events.emit('setBonusMode', true); } catch {}
+                // Show bonus layers immediately
+                try {
+                    this.scene?.events.emit('showBonusBackground');
+                    this.scene?.events.emit('showBonusHeader');
+                } catch {}
+                // Signal that dialog/overlay animations are complete so free-spin UI (counter) can show
+                try { this.scene?.events.emit('dialogAnimationsComplete'); } catch {}
+                // Emit legacy scatter bonus activation event for listeners (SlotController/Symbols)
+                let actualFreeSpins = this.lastFreeSpinsCount || 0;
+                try {
+                    const scatterIndex = (gameStateManager as any).scatterIndex || 0;
+                    this.scene?.events.emit('scatterBonusActivated', { scatterIndex, actualFreeSpins });
+                } catch {}
+                // Ensure reels/symbols are visible while waiting for autoplay delay
+                try { this.scene?.events.emit('enableSymbols'); } catch {}
+                // Also directly show the free spin counter via SlotController (immediate UX)
+                try {
+                    const slotCtrl = (this.scene as any)?.slotController;
+                    if (slotCtrl && typeof slotCtrl.showFreeSpinDisplayWithActualValue === 'function') {
+                        slotCtrl.showFreeSpinDisplayWithActualValue(actualFreeSpins);
+                    }
+                } catch {}
+
+                // Kick off free spin autoplay via Symbols after optional delay
                 const gameScene = this.scene as any;
-                if (gameScene.symbols && typeof gameScene.symbols.triggerAutoplayForFreeSpins === 'function') {
+                const startAutoplay = () => {
+                    if (gameScene?.symbols && typeof gameScene.symbols.triggerAutoplayForFreeSpins === 'function') {
                     gameScene.symbols.triggerAutoplayForFreeSpins();
                 } else {
                     // Fallback: emit a generic event SlotController listens to
                     gameEventManager.emit(GameEventType.FREE_SPIN_AUTOPLAY);
                 }
             };
-            this.background.once('pointerdown', onceHandler);
+                try {
+                    this.scene?.time.delayedCall(Math.max(0, this.freeSpinAutoplayDelayMs), startAutoplay);
+                } catch {
+                    startAutoplay();
+                }
+  }
+
+  // ======== Embers anticipation helpers (post-fire) ========
+  private startOverlayEmbers(): void {
+    if (!this.scene) return;
+    try {
+      if (this.overlayEmbersSpawnTimer) { try { this.overlayEmbersSpawnTimer.remove(false); } catch {} this.overlayEmbersSpawnTimer = null; }
+      if (this.overlayEmbersContainer) { try { this.overlayEmbersContainer.destroy(true); } catch {} this.overlayEmbersContainer = null; }
+      this.overlayEmbersContainer = this.scene.add.container(0, 0);
+      this.overlayEmbersContainer.setAlpha(0);
+      // fade in container for smooth start
+      this.scene.tweens.add({ targets: this.overlayEmbersContainer, alpha: 1, duration: 220, ease: 'Cubic.easeOut' });
+      // reset particles and spawn loop
+      this.overlayEmberParticles = [];
+      if (this.overlayEmbersUpdateHandler) { try { this.scene.events.off('update', this.overlayEmbersUpdateHandler); } catch {} this.overlayEmbersUpdateHandler = null; }
+      this.overlayEmbersUpdateHandler = (_t: number, d: number) => this.updateOverlayEmbers(d);
+      this.scene.events.on('update', this.overlayEmbersUpdateHandler);
+      this.overlayEmbersSpawnTimer = this.scene.time.addEvent({ delay: 90, loop: true, callback: () => this.spawnOneOverlayEmber() });
+      try { this.scene.children.bringToTop(this.overlayEmbersContainer); } catch {}
+    } catch {}
+  }
+
+  private stopOverlayEmbers(): void {
+    if (!this.scene) return;
+    try {
+      if (this.overlayEmbersSpawnTimer) { this.overlayEmbersSpawnTimer.remove(false); this.overlayEmbersSpawnTimer = null; }
+      if (this.overlayEmbersUpdateHandler) { try { this.scene.events.off('update', this.overlayEmbersUpdateHandler); } catch {} this.overlayEmbersUpdateHandler = null; }
+      if (this.overlayEmbersContainer) {
+        const cont = this.overlayEmbersContainer;
+        this.scene.tweens.add({
+          targets: cont,
+          alpha: 0,
+          duration: 300,
+          ease: 'Cubic.easeOut',
+          onComplete: () => {
+            try { cont.getAll().forEach((child: any) => { try { child.destroy(); } catch {} }); } catch {}
+            try { cont.destroy(true); } catch {}
+            this.overlayEmbersContainer = null;
+          }
+        });
+      }
+    } catch {}
+  }
+
+  private spawnOneOverlayEmber(): void {
+    if (!this.scene || !this.overlayEmbersContainer) return;
+    try {
+      const w = this.scene.cameras.main.width;
+      const h = this.scene.cameras.main.height;
+      const g = this.scene.add.graphics();
+      this.overlayEmbersContainer.add(g);
+      const x = Math.random() * w;
+      const y = h + 30 + Math.random() * 40;
+      // Bigger embers for anticipation
+      const size = Math.random() * 2.5 + 3.0;
+      const colors = [0xffd700, 0xffe04a, 0xfff0a0, 0xffc107];
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const alpha = Math.random() * 0.5 + 0.4;
+      const lifetime = 1800 + Math.random() * 1200; // 1.8s – 3.0s
+      const totalFramesAt60 = lifetime / (1000 / 60);
+      const vy = -(h + 60) / Math.max(1, totalFramesAt60);
+      const vx = (Math.random() - 0.5) * 0.9;
+      const p = { graphics: g, x, y, vx, vy, size, color, alpha, lifetime, age: 0 };
+      this.overlayEmberParticles.push(p);
+      this.drawOverlayEmber(p);
+    } catch {}
+  }
+
+  private drawOverlayEmber(p: { graphics: Phaser.GameObjects.Graphics; x: number; y: number; size: number; color: number; alpha: number; }): void {
+    const { graphics, x, y, size, color, alpha } = p;
+    graphics.clear();
+    const w = size * (Math.random() * 0.8 + 0.6);
+    const h = size * (Math.random() * 1.2 + 0.8);
+    graphics.fillStyle(color, alpha * 0.10); graphics.fillEllipse(x, y, w * 3.0, h * 3.0);
+    graphics.fillStyle(color, alpha * 0.20); graphics.fillEllipse(x, y, w * 2.2, h * 2.2);
+    graphics.fillStyle(color, alpha * 0.40); graphics.fillEllipse(x, y, w * 1.5, h * 1.5);
+    graphics.fillStyle(color, alpha * 0.70); graphics.fillEllipse(x, y, w * 0.8, h * 0.8);
+    graphics.fillStyle(0xffffaa, alpha * 0.30); graphics.fillEllipse(x, y, w * 0.35, h * 0.35);
+  }
+
+  private updateOverlayEmbers(delta: number): void {
+    for (let i = this.overlayEmberParticles.length - 1; i >= 0; i--) {
+      const p = this.overlayEmberParticles[i];
+      p.age += delta;
+      if (p.age >= p.lifetime) {
+        try { p.graphics.destroy(); } catch {}
+        this.overlayEmberParticles.splice(i, 1);
+        continue;
+      }
+      const dt = delta / (1000 / 60);
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      const ageRatio = p.age / p.lifetime;
+      p.alpha = Math.max(0.05, 1 - ageRatio);
+      this.drawOverlayEmber(p);
+    }
+  }
+
+  // Glow overlay removed (placeholder for future PNG-based implementation)
+
+  /** Public API: set Fire_Transition time scale (e.g., 0.5 = slower, 2 = faster). */
+  public setFireTransitionTimeScale(scale: number = 0.5): void {
+    this.fireTransitionTimeScale = Math.max(0.05, scale);
+    try {
+      if (this.transitionSpine && (this.transitionSpine as any).animationState) {
+        (this.transitionSpine as any).animationState.timeScale = this.fireTransitionTimeScale;
+      }
         } catch {}
+    }
+
+  /** Public API: set when to switch to bonus during Fire_Transition (0..1 of animation). */
+  public setFireTransitionMidTriggerRatio(ratio: number = 0.5): void {
+    this.fireTransitionMidTriggerRatio = Math.min(0.95, Math.max(0.05, ratio));
+    }
+
+    /** Public API: set delay (ms) before starting free-spin autoplay after bonus begins. */
+    public setFreeSpinAutoplayDelay(delayMs: number = 0): void {
+        this.freeSpinAutoplayDelayMs = Math.max(0, delayMs);
     }
 
     /** Configure the press-anywhere hint options. */

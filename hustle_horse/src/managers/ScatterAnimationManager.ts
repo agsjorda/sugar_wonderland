@@ -111,21 +111,7 @@ export class ScatterAnimationManager {
     this.isAnimating = true;
     console.log('[ScatterAnimationManager] Starting scatter animation sequence');
 
-    // Switch BG music to Free Spin track when scatter animation starts
-    try {
-      const audioMgr = (window as any).audioManager;
-      if (audioMgr) {
-        if (typeof audioMgr.crossfadeTo === 'function') {
-          audioMgr.crossfadeTo('freespin', 500);
-          console.log('[ScatterAnimationManager] Crossfading to free spin background music');
-        } else if (typeof audioMgr.switchToFreeSpinMusic === 'function') {
-          audioMgr.switchToFreeSpinMusic();
-          console.log('[ScatterAnimationManager] Requested switch to free spin background music');
-        }
-      }
-    } catch (e) {
-      console.warn('[ScatterAnimationManager] Failed to switch to free spin music', e);
-    }
+    // Defer background music control to overlays/scenes to avoid overlap
 
     try {
       // Step 1: Wait for player to see scatter symbols
@@ -165,20 +151,7 @@ export class ScatterAnimationManager {
               console.log('[ScatterAnimationManager] Scatter win overlay dismissed by user');
             }
 
-            // Step 5: Show the free spins dialog only after overlay flow completes
-            if (this.useSpinner) {
-              // Original spinner flow
-              await this.slideSpinnerIn();
-              await this.delay(this.config.spinDelay);
-              this.triggerSpinnerRotation(data);
-              await this.waitForSpinnerAndShowDialog(data);
-            } else {
-              // Show overlay instead of spinner and proceed to free spins dialog
-              console.log('[ScatterAnimationManager] Showing free spins dialog after scatter win');
-              try { this.overlayComponent?.show?.(400, 0.6); } catch {}
-              await this.delay(this.config.dialogDelay);
-              this.showFreeSpinsDialog(data);
-            }
+            // Step 5: Skip legacy free spins dialog/spinner; overlay will transition directly to bonus autoplay
 
             // Step 6: Hide scatter win overlay after dialog is shown
             this.scatterWinOverlay.hide(300, () => {
@@ -189,19 +162,8 @@ export class ScatterAnimationManager {
         });
       } else {
         // Fallback in case scatterWinOverlay is not available
-        console.warn('[ScatterAnimationManager] ScatterWinOverlay not available, falling back to direct flow');
+        console.warn('[ScatterAnimationManager] ScatterWinOverlay not available, skipping legacy free spins dialog');
         await this.disableSymbols();
-        
-        if (this.useSpinner) {
-          await this.slideSpinnerIn();
-          await this.delay(this.config.spinDelay);
-          this.triggerSpinnerRotation(data);
-          await this.waitForSpinnerAndShowDialog(data);
-        } else {
-          try { this.overlayComponent?.show?.(400, 0.6); } catch {}
-          await this.delay(this.config.dialogDelay);
-          this.showFreeSpinsDialog(data);
-        }
       }
 
       // Note: Symbol reset will happen after dialog animations complete
@@ -655,24 +617,12 @@ export class ScatterAnimationManager {
     console.log('[ScatterAnimationManager] Resetting all symbols and animations...');
 
     try {
-      // If free spin music is playing, stop it and switch to bonus music when entering bonus mode
+      // Ensure no conflicting BG music during overlay/transition; overlay will manage BGM exclusively
       try {
         const audioMgr = (window as any).audioManager;
-        const currentType = audioMgr && typeof audioMgr.getCurrentMusicType === 'function' ? audioMgr.getCurrentMusicType() : null;
-        if (currentType === 'freespin') {
-          if (typeof audioMgr.stopCurrentMusic === 'function') {
-            audioMgr.stopCurrentMusic();
-            console.log('[ScatterAnimationManager] Stopped free spin music after scatter animation finishes');
-          }
-          if (gameStateManager.isBonus) {
-            if (typeof audioMgr.crossfadeTo === 'function') {
-              audioMgr.crossfadeTo('bonus', 600);
-              console.log('[ScatterAnimationManager] Crossfading to bonus background music after scatter animation');
-            } else if (typeof audioMgr.playBackgroundMusic === 'function') {
-              audioMgr.playBackgroundMusic('bonus');
-              console.log('[ScatterAnimationManager] Started bonus background music after scatter animation');
-            }
-          }
+        if (audioMgr && typeof audioMgr.stopCurrentMusic === 'function') {
+          audioMgr.stopCurrentMusic();
+          console.log('[ScatterAnimationManager] Stopped current background music to defer control to overlay');
         }
       } catch {}
 

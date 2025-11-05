@@ -24,18 +24,21 @@ export class AssetConfig {
 		const orientation = screenConfig.isPortrait ? 'portrait' : 'landscape';
 		const quality = isHighSpeed ? 'high' : 'low';
 		
-		return `/assets/${orientation}/${quality}`;
+		return `assets/${orientation}/${quality}`;
 	}
 
 	getBackgroundAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix();
+		// Use skeleton.png for the upper border in portrait/high only; fallback elsewhere
+		const screenConfig = this.screenModeManager.getScreenConfig();
+		const isHighSpeed = this.networkManager.getNetworkSpeed();
+		const useDragonTail = screenConfig.isPortrait && isHighSpeed;
 		
 		return {
 			images: {
-				'BG-Default': `${prefix}/background/BG-Default.png`,
-				'BG-BrickWall': `${prefix}/background/BG-BrickWall.png`,
+				'BG-Normal': `${prefix}/background/BG-Normal.png`,
 				'reel-frame': `${prefix}/background/reel-frame.png`,
-				'Border_Upper': `${prefix}/background/Border_Upper.png`,
+				'Border_Upper': useDragonTail ? `${prefix}/background/skeleton.png` : `${prefix}/background/Border_Upper.png`,
 				'Border_Lower': `${prefix}/background/Border_Lower.png`,
 				// Mostly for landscape bg
 				// 'balloon-01': `${prefix}/background/balloon-01.png`,
@@ -46,6 +49,22 @@ export class AssetConfig {
 				// 'bulb-01': `${prefix}/background/bulb-01.png`,
 				// 'bulb-02': `${prefix}/background/bulb-02.png`,
 				// 'bulb-03': `${prefix}/background/bulb-03.png`,
+			},
+			spine: {
+				// Base scene decorative dragon (portrait/high)
+				'dragon_default': {
+					atlas: `assets/portrait/high/background/dragon_default.atlas`,
+					json: `assets/portrait/high/background/dragon_default.json`
+				},
+				// Bonus-only border spines
+				'Dragon_Top_Bonus': {
+					atlas: `assets/portrait/high/background/Dragon_Top_Bonus.atlas`,
+					json: `assets/portrait/high/background/Dragon_Top_Bonus.json`
+				},
+				'Dragon_Bottom_Bonus': {
+					atlas: `assets/portrait/high/background/Dragon_Bottom_Bonus.atlas`,
+					json: `assets/portrait/high/background/Dragon_Bottom_Bonus.json`
+				}
 			}
 		};
 	}
@@ -55,9 +74,19 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				'bonus_background': `${prefix}/bonus_background/BG-Bonus.png`
+				'BG-Bonus': `${prefix}/bonus_background/BG-Bonus.png`
 			},
-			spine: {}
+			spine: {
+				// Bonus upper dragon replacement
+				'dragon_bonus': {
+					atlas: `assets/portrait/high/background/dragon_bonus.atlas`,
+					json: `assets/portrait/high/background/dragon_bonus.json`
+				},
+				'fireworks': {
+					atlas: `assets/portrait/high/bonus_background/fireworks/fireworks.atlas`,
+					json: `assets/portrait/high/bonus_background/fireworks/fireworks.json`
+				}
+			}
 		};
 	}
 
@@ -98,8 +127,8 @@ export class AssetConfig {
 			spine: {
 				// Studio loading spine (DI JOKER) – only available in portrait/high
 				'di_joker': {
-					atlas: `/assets/portrait/high/dijoker_loading/DI JOKER.atlas`,
-					json: `/assets/portrait/high/dijoker_loading/DI JOKER.json`
+					atlas: `assets/portrait/high/dijoker_loading/DI JOKER.atlas`,
+					json: `assets/portrait/high/dijoker_loading/DI JOKER.json`
 				}
 			}
 		};
@@ -120,15 +149,15 @@ export class AssetConfig {
 			const isHigh = this.networkManager.getNetworkSpeed();
 			const quality = isHigh ? 'high' : 'low';
 			// HTBH PNGs are organized by quality only (no orientation)
-			const spritePath = `/assets/symbols/${quality}/Symbol${i}_HTBH.png`;
+			const spritePath = `assets/symbols/${quality}/Symbol${i}_HTBH.png`;
 			symbolImages[spriteKey] = spritePath;
 			
 			// Spine animations for hit effects (HTBH set)
 			const spineKey = `symbol_${i}_spine`;
 			const symbolName = `Symbol${i}_HTBH`;
 			// HTBH symbol atlases are not organized by orientation/quality; use non-prefixed root
-			const atlasPath = `/assets/Symbols_HTBH/${symbolName}.atlas`;
-			const jsonPath = `/assets/Symbols_HTBH/${symbolName}.json`;
+			const atlasPath = `assets/Symbols_HTBH/${symbolName}.atlas`;
+			const jsonPath = `assets/Symbols_HTBH/${symbolName}.json`;
 			
 			symbolSpine[spineKey] = {
 				atlas: atlasPath,
@@ -155,43 +184,43 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				'autoplay_off': `/assets/controller/${screenMode}/${quality}/autoplay_off.png`,
-				'autoplay_on': `/assets/controller/${screenMode}/${quality}/autoplay_on.png`,
-				'decrease_bet': `/assets/controller/${screenMode}/${quality}/decrease_bet.png`,
-				'increase_bet': `/assets/controller/${screenMode}/${quality}/increase_bet.png`,
-				'menu': `/assets/controller/${screenMode}/${quality}/menu.png`,
-				'spin': `/assets/controller/${screenMode}/${quality}/spin_bg.png`,
-				'spin_icon': `/assets/controller/${screenMode}/${quality}/spin_icon.png`,
-				'autoplay_stop_icon': `/assets/controller/${screenMode}/${quality}/autoplay_stop_icon.png`,
-				'turbo_off': `/assets/controller/${screenMode}/${quality}/turbo_off.png`,
-				'turbo_on': `/assets/controller/${screenMode}/${quality}/turbo_on.png`,
-				'amplify': `/assets/controller/${screenMode}/${quality}/amplify.png`,
-				'feature': `/assets/controller/${screenMode}/${quality}/feature.png`,
-				'long_button': `/assets/controller/${screenMode}/${quality}/long_button.png`,
-				'maximize': `/assets/controller/${screenMode}/${quality}/maximize.png`,
-				'minimize': `/assets/controller/${screenMode}/${quality}/minimize.png`,
+				'autoplay_off': `assets/controller/${screenMode}/${quality}/autoplay_off.png`,
+				'autoplay_on': `assets/controller/${screenMode}/${quality}/autoplay_on.png`,
+				'decrease_bet': `assets/controller/${screenMode}/${quality}/decrease_bet.png`,
+				'increase_bet': `assets/controller/${screenMode}/${quality}/increase_bet.png`,
+				'menu': `assets/controller/${screenMode}/${quality}/menu.png`,
+				'spin': `assets/controller/${screenMode}/${quality}/spin_bg.png`,
+				'spin_icon': `assets/controller/${screenMode}/${quality}/spin_icon.png`,
+				'autoplay_stop_icon': `assets/controller/${screenMode}/${quality}/autoplay_stop_icon.png`,
+				'turbo_off': `assets/controller/${screenMode}/${quality}/turbo_off.png`,
+				'turbo_on': `assets/controller/${screenMode}/${quality}/turbo_on.png`,
+				'amplify': `assets/controller/${screenMode}/${quality}/amplify.png`,
+				'feature': `assets/controller/${screenMode}/${quality}/feature.png`,
+				'long_button': `assets/controller/${screenMode}/${quality}/long_button.png`,
+				'maximize': `assets/controller/${screenMode}/${quality}/maximize.png`,
+				'minimize': `assets/controller/${screenMode}/${quality}/minimize.png`,
 			},
 			spine: {
 				'spin_button_animation': {
-					atlas: `/assets/controller/${screenMode}/${quality}/spin_button_anim/spin_button_anim.atlas`,
-					json: `/assets/controller/${screenMode}/${quality}/spin_button_anim/spin_button_anim.json`
+					atlas: `assets/controller/${screenMode}/${quality}/spin_button_anim/spin_button_anim.atlas`,
+					json: `assets/controller/${screenMode}/${quality}/spin_button_anim/spin_button_anim.json`
 				},
 				'button_animation_idle': {
-					atlas: `/assets/controller/${screenMode}/${quality}/button_animation_idle/button_animation_idle.atlas`,
-					json: `/assets/controller/${screenMode}/${quality}/button_animation_idle/button_animation_idle.json`
+					atlas: `assets/controller/${screenMode}/${quality}/button_animation_idle/button_animation_idle.atlas`,
+					json: `assets/controller/${screenMode}/${quality}/button_animation_idle/button_animation_idle.json`
 				},
 				'amplify_bet': {
-					atlas: `/assets/portrait/high/amplify_bet/Amplify Bet.atlas`,
-					json: `/assets/portrait/high/amplify_bet/Amplify Bet.json`
+					atlas: `assets/portrait/high/amplify_bet/Amplify Bet.atlas`,
+					json: `assets/portrait/high/amplify_bet/Amplify Bet.json`
 				},
 				// Enhance Bet idle loop (available only in portrait/high for now)
 				'enhance_bet_idle_on': {
-					atlas: `/assets/controller/portrait/high/enhanceBet_idle_on/Amplify Bet.atlas`,
-					json: `/assets/controller/portrait/high/enhanceBet_idle_on/Amplify Bet.json`
+					atlas: `assets/controller/portrait/high/enhanceBet_idle_on/Amplify Bet.atlas`,
+					json: `assets/controller/portrait/high/enhanceBet_idle_on/Amplify Bet.json`
 				},
 				'turbo_animation': {
-					atlas: `/assets/controller/${screenMode}/${quality}/turbo_animation/Turbo_Spin.atlas`,
-					json: `/assets/controller/${screenMode}/${quality}/turbo_animation/Turbo_Spin.json`
+					atlas: `assets/controller/${screenMode}/${quality}/turbo_animation/Turbo_Spin.atlas`,
+					json: `assets/controller/${screenMode}/${quality}/turbo_animation/Turbo_Spin.json`
 				}
 			}
 		};
@@ -202,9 +231,9 @@ export class AssetConfig {
 		
 		return {
 			fonts: {
-				'poppins-thin': '/assets/fonts/poppins/Poppins-Thin.ttf',
-				'poppins-bold': '/assets/fonts/poppins/Poppins-Bold.ttf',
-				'poppins-regular': '/assets/fonts/poppins/Poppins-Regular.ttf'
+				'poppins-thin': 'assets/fonts/poppins/Poppins-Thin.ttf',
+				'poppins-bold': 'assets/fonts/poppins/Poppins-Bold.ttf',
+				'poppins-regular': 'assets/fonts/poppins/Poppins-Regular.ttf'
 				
 			}
 		};
@@ -240,54 +269,60 @@ export class AssetConfig {
 				'icon_most_right': `${prefix}/menu/icon_most_right.png`,
 				'loading_icon': `${prefix}/menu/loading.png`,
 				// Close icon (portrait/high specific path)
-				'menu_close': `/assets/controller/portrait/high/close.png`
+				'menu_close': `assets/controller/portrait/high/close.png`
 			}
 		};
 	}
 
 	getHelpScreenAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix();
-		return {
-			images: {
-				// HowToPlay images
-				'howToPlay1': `${prefix}/help_screen/HowToPlay1.png`,
-				'howToPlay1Mobile': `${prefix}/help_screen/HowToPlay1Mobile.png`,
-				'howToPlay2': `${prefix}/help_screen/HowToPlay2.png`,
-				'howToPlay2Mobile': `${prefix}/help_screen/HowToPlay2Mobile.png`,
-				'howToPlay3': `${prefix}/help_screen/HowToPlay3.png`,
-				'howToPlay3Mobile': `${prefix}/help_screen/HowToPlay3Mobile.png`,
-				'howToPlay4': `${prefix}/help_screen/HowToPlay4.png`,
-				'howToPlay4Mobile': `${prefix}/help_screen/HowToPlay4Mobile.png`,
-				'howToPlay5': `${prefix}/help_screen/HowToPlay5.png`,
-				'howToPlay6': `${prefix}/help_screen/HowToPlay6.png`,
-				'howToPlay7': `${prefix}/help_screen/HowToPlay7.png`,
-				'howToPlay8': `${prefix}/help_screen/HowToPlay8.png`,
-				'howToPlay8Mobile': `${prefix}/help_screen/HowToPlay8Mobile.png`,
-				'howToPlay9': `${prefix}/help_screen/HowToPlay9.png`,
-				'howToPlay9Mobile': `${prefix}/help_screen/HowToPlay9Mobile.png`,
-				'howToPlay10': `${prefix}/help_screen/HowToPlay10.png`,
-				'howToPlay10Mobile': `${prefix}/help_screen/HowToPlay10Mobile.png`,
-				// Feature help
-				'BuyFeatHelp': `${prefix}/help_screen/BuyFeatHelp.png`,
-				'BuyFeatMobile': `${prefix}/help_screen/BuyFeatMobile.png`,
-				'DoubleHelp': `${prefix}/help_screen/DoubleHelp.png`,
-				'DoubleHelpMobile': `${prefix}/help_screen/DoubleHelpMobile.png`,
-				// Payline visuals
-				'paylineMobileWin': `${prefix}/help_screen/paylineMobileWin.png`,
-				'paylineMobileNoWin': `${prefix}/help_screen/paylineMobileNoWin.png`,
-				// Scatter / Tumble / Multiplier visuals
-				'scatterGame': `${prefix}/help_screen/scatterGame.png`,
-				'scatterIcon': `${prefix}/help_screen/scatterIcon.png`,
-				'scatterWin': `${prefix}/help_screen/scatterWin.png`,
-				'ScatterLabel': `${prefix}/help_screen/ScatterSymbol.png`,
-				'wheelSpin_helper': `assets/portrait/high/help_screen/wheelSpin_helper.png`,
-				'freeSpin_round': `assets/portrait/high/help_screen/freeSpin_round.png`,
-				'tumbleIcon': `${prefix}/help_screen/tumbleIcon.png`,
-				'tumbleWin': `${prefix}/help_screen/tumbleWin.png`,
-				'multiplierGame': `${prefix}/help_screen/multiplierGame.png`,
-				'multiplierIcon': `${prefix}/help_screen/multiplierIcon.png`
-			}
+		// Build images map
+		const images: { [key: string]: string } = {
+			// HowToPlay images
+			'howToPlay1': `${prefix}/help_screen/HowToPlay1.png`,
+			'howToPlay1Mobile': `${prefix}/help_screen/HowToPlay1Mobile.png`,
+			'howToPlay2': `${prefix}/help_screen/HowToPlay2.png`,
+			'howToPlay2Mobile': `${prefix}/help_screen/HowToPlay2Mobile.png`,
+			'howToPlay3': `${prefix}/help_screen/HowToPlay3.png`,
+			'howToPlay3Mobile': `${prefix}/help_screen/HowToPlay3Mobile.png`,
+			'howToPlay4': `${prefix}/help_screen/HowToPlay4.png`,
+			'howToPlay4Mobile': `${prefix}/help_screen/HowToPlay4Mobile.png`,
+			'howToPlay5': `${prefix}/help_screen/HowToPlay5.png`,
+			'howToPlay6': `${prefix}/help_screen/HowToPlay6.png`,
+			'howToPlay7': `${prefix}/help_screen/HowToPlay7.png`,
+			'howToPlay8': `${prefix}/help_screen/HowToPlay8.png`,
+			'howToPlay8Mobile': `${prefix}/help_screen/HowToPlay8Mobile.png`,
+			'howToPlay9': `${prefix}/help_screen/HowToPlay9.png`,
+			'howToPlay9Mobile': `${prefix}/help_screen/HowToPlay9Mobile.png`,
+			'howToPlay10': `${prefix}/help_screen/HowToPlay10.png`,
+			'howToPlay10Mobile': `${prefix}/help_screen/HowToPlay10Mobile.png`,
+			// Feature help
+			'BuyFeatHelp': `${prefix}/help_screen/BuyFeatHelp.png`,
+			'BuyFeatMobile': `${prefix}/help_screen/BuyFeatMobile.png`,
+			'DoubleHelp': `${prefix}/help_screen/DoubleHelp.png`,
+			'DoubleHelpMobile': `${prefix}/help_screen/DoubleHelpMobile.png`,
+			// Payline visuals
+			'paylineMobileWin': `${prefix}/help_screen/paylineMobileWin.png`,
+			'paylineMobileNoWin': `${prefix}/help_screen/paylineMobileNoWin.png`,
+			// Scatter / Tumble / Multiplier visuals
+			'scatterGame': `${prefix}/help_screen/scatterGame.png`,
+			'scatterIcon': `${prefix}/help_screen/scatterIcon.png`,
+			'scatterWin': `${prefix}/help_screen/scatterWin.png`,
+			'ScatterLabel': `${prefix}/help_screen/ScatterSymbol.png`,
+			'wheelSpin_helper': `assets/portrait/high/help_screen/wheelSpin_helper.png`,
+			'freeSpin_round': `assets/portrait/high/help_screen/freeSpin_round.png`,
+			'tumbleIcon': `${prefix}/help_screen/tumbleIcon.png`,
+			'tumbleWin': `${prefix}/help_screen/tumbleWin.png`,
+			'multiplierGame': `${prefix}/help_screen/multiplierGame.png`,
+			'multiplierIcon': `${prefix}/help_screen/multiplierIcon.png`
 		};
+
+		// Map winlines1..20 -> public/assets/winlines/winline1..20.png
+		for (let i = 1; i <= 20; i++) {
+			images[`winlines${i}`] = `assets/winlines/winline${i}.png`;
+		}
+
+		return { images };
 	}
 
 	getDialogAssets(): AssetGroup {
@@ -296,7 +331,18 @@ export class AssetConfig {
 		console.log(`[AssetConfig] Loading dialog assets with prefix: ${prefix}`);
 		
 		return {
+			images: {
+				// Static background image for Congrats dialog
+				'congrats-bg': `${prefix}/dialogs/congrats-bg.png`,
+				// Congrats title image used on the congrats overlay
+				'congratulations-you-won': `${prefix}/dialogs/congratulations-you-won.png`
+			},
 			spine: {
+				// Fire background element for Congrats overlay
+				'3rd_Fire': {
+					atlas: `assets/animations/Fire/3rd_Fire.atlas`,
+					json: `assets/animations/Fire/3rd_Fire.json`
+				},
 				'confetti_KA': {
 					atlas: `${prefix}/dialogs/confetti_KA.atlas`,
 					json: `${prefix}/dialogs/confetti_KA.json`
@@ -304,10 +350,6 @@ export class AssetConfig {
 				'Paint_KA': {
 					atlas: `${prefix}/dialogs/Paint_KA.atlas`,
 					json: `${prefix}/dialogs/Paint_KA.json`
-				},
-				'Congrats_KA': {
-					atlas: `${prefix}/dialogs/Congrats_KA.atlas`,
-					json: `${prefix}/dialogs/Congrats_KA.json`
 				},
 				'Explosion_AK': {
 					atlas: `${prefix}/dialogs/Explosion_AK.atlas`,
@@ -332,6 +374,11 @@ export class AssetConfig {
 				'FreeSpinDialog_KA': {
 					atlas: `${prefix}/dialogs/FreeSpinDialog_KA.atlas`,
 					json: `${prefix}/dialogs/FreeSpinDialog_KA.json`
+				},
+				// Character spine used on top of the congrats background
+				'HustleForSpine': {
+					atlas: `assets/characters/HustleForSpine.atlas`,
+					json: `assets/characters/HustleForSpine.json`
 				}
 			}
 		};
@@ -343,10 +390,10 @@ export class AssetConfig {
 		return {
 			images: {
 				// Back and front PNGs used for code-based flip
-				'free_spin_card': `/assets/free_spin/Card-idle.png`,
-				'free_spin_card_front': `/assets/free_spin/Card-flip.png`,
+				'free_spin_card': `assets/free_spin/Card-idle.png`,
+				'free_spin_card_front': `assets/free_spin/Card-flip.png`,
 				// Overlay text shown on the flipped card
-				'free_spin_text': `/assets/free_spin/Free-spin-text.png`
+				'free_spin_text': `assets/free_spin/Free-spin-text.png`
 			}
 		};
 	}
@@ -359,9 +406,9 @@ export class AssetConfig {
 		console.log('[AssetConfig] Loading Scatter Anticipation assets');
 		return {
 			spine: {
-				'reelanim_KA': {
-					atlas: `assets/portrait/high/scatterAnticipation/reelanim_KA.atlas`,
-					json: `assets/portrait/high/scatterAnticipation/reelanim_KA.json`
+				'Sparkler_Reel': {
+					atlas: `assets/portrait/high/scatterAnticipation/Sparkler_Reel.atlas`,
+					json: `assets/portrait/high/scatterAnticipation/Sparkler_Reel.json`
 				}
 			}
 		};
@@ -410,7 +457,7 @@ export class AssetConfig {
 	getBuyFeatureAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix();
 		// Force high-quality portrait paths for logo assets to avoid missing files on low quality
-		const portraitHighPrefix = `/assets/portrait/high`;
+		const portraitHighPrefix = `assets/portrait/high`;
 		
 		console.log(`[AssetConfig] Loading buy feature assets with prefix: ${prefix} (logos forced to ${portraitHighPrefix})`);
 		
@@ -431,7 +478,7 @@ export class AssetConfig {
 				'PickACard': `${prefix}/scatter_win/PickACard.png`,
 				'congrats': `${prefix}/scatter_win/congrats.png`,
 				// Fire animation will use sprite-based fallback to avoid multi-page atlas issues
-				'fireanimation01_HTBH_img': `/assets/animations/Fire/fireanimation01_HTBH.png`
+				'fireanimation01_HTBH_img': `assets/animations/Fire/fireanimation01_HTBH.png`
 			}
 		};
 	}
@@ -442,41 +489,47 @@ export class AssetConfig {
 		return {
 			audio: {
 				// Menu/UI clicks
-				'click_sw': '/assets/sounds/click_sw.ogg',
-				'mainbg_hh': '/assets/sounds/BG/mainbg_hh.ogg',
-				'bonusbg_hh': '/assets/sounds/BG/bonusbg_hh.ogg',
-				'freespinbg_ka': '/assets/sounds/Wins/freespin_ka.ogg',
-				'ambience_hh': '/assets/sounds/SFX/ambience_hh.ogg',
-				'spin_hh': '/assets/sounds/SFX/spin_hh.ogg',
-				'reeldrop_hh': '/assets/sounds/SFX/reeldrop_hh.ogg',
-				'turbodrop_hh': '/assets/sounds/SFX/turbodrop_hh.ogg',
-				'wheelspin_ka': '/assets/sounds/SFX/wheelspin_ka.ogg',
-				'coin_throw_ka': '/assets/sounds/SFX/coin_throw_ka.ogg',
-				'coin_drop_ka': '/assets/sounds/SFX/coin_drop_ka.ogg',
-				// Fire SFX for overlay pop
-				'fire_hh': '/assets/sounds/SFX/fire_hh.ogg',
+				'click_sw': 'assets/sounds/click_sw.ogg',
+				'mainbg_hh': 'assets/sounds/BG/mainbg_hh.ogg',
+				'bonusbg_hh': 'assets/sounds/BG/bonusbg_hh.ogg',
+				'freespinbg_ka': 'assets/sounds/Wins/freespin_ka.ogg',
+				// Pick-a-card overlay background music
+				'bgpickacard_hh': 'assets/sounds/BG/bgpickacard_hh.ogg',
+				'ambience_hh': 'assets/sounds/SFX/ambience_hh.ogg',
+				'spin_hh': 'assets/sounds/SFX/spin_hh.ogg',
+				'reeldrop_hh': 'assets/sounds/SFX/reeldrop_hh.ogg',
+				'turbodrop_hh': 'assets/sounds/SFX/turbodrop_hh.ogg',
+				'wheelspin_ka': 'assets/sounds/SFX/wheelspin_ka.ogg',
+				'coin_drop_ka': 'assets/sounds/SFX/coin_drop_ka.ogg',
+				// Fire SFX
+				'fire_hh': 'assets/sounds/SFX/fire_hh.ogg',
+				'blaze_hh': 'assets/sounds/SFX/blaze_hh.ogg',
 				// Hit win SFX
-				'hitwin_hh': '/assets/sounds/SFX/hitwin_hh.ogg',
+				'hitwin_hh': 'assets/sounds/SFX/hitwin_hh.ogg',
 				// Wild multi SFX
-				'wildmulti_hh': '/assets/sounds/SFX/wildmulti_hh.ogg',
-				'scatter_hh': '/assets/sounds/SFX/scatter_hh.ogg',
-				'anticipation_ka': '/assets/sounds/SFX/anticipation_ka.ogg',
+				'wildmulti_hh': 'assets/sounds/SFX/wildmulti_hh.ogg',
+				'scatter_hh': 'assets/sounds/SFX/scatter_hh.ogg',
+				'anticipation_hh': 'assets/sounds/SFX/anticipation_hh.ogg',
 				// Winline SFX
-				'winline_1_ka': '/assets/sounds/SFX/winline_1_ka.ogg',
-				'winline_2_ka': '/assets/sounds/SFX/winline_2_ka.ogg',
+				'winline_1_ka': 'assets/sounds/SFX/winline_1_ka.ogg',
+				'winline_2_ka': 'assets/sounds/SFX/winline_2_ka.ogg',
+				// Card deal SFX for ScatterWinOverlay card slide
+				'carddeal_hh': 'assets/sounds/SFX/carddeal_hh.ogg',
+				// Card pick SFX when user selects a card in ScatterWinOverlay
+				'cardpick_hh': 'assets/sounds/SFX/cardpick_hh.ogg',
 				// Win dialog SFX
-				'bigw_ka': '/assets/sounds/Wins/bigw_ka.ogg',
-				'megaw_ka': '/assets/sounds/Wins/megaw_ka.ogg',
-				'superw_ka': '/assets/sounds/Wins/superw_ka.ogg',
-				'epicw_ka': '/assets/sounds/Wins/epicw_ka.ogg',
-				'freespin_ka': '/assets/sounds/Wins/freespin_ka.ogg',
-				'congrats_ka': '/assets/sounds/Wins/congrats_ka.ogg',
-
+				'bigw_hh': 'assets/sounds/Wins/bigw_hh.ogg',
+				'megaw_ka': 'assets/sounds/Wins/megaw_ka.ogg',
+				'superw_ka': 'assets/sounds/Wins/superw_ka.ogg',
+				'epicw_ka': 'assets/sounds/Wins/epicw_ka.ogg',
+				'freespin_ka': 'assets/sounds/Wins/freespin_ka.ogg',
+				'congrats_ka': 'assets/sounds/Wins/congrats_ka.ogg',
+				
 				// Win dialog SFX
-				'bigwskip_ka': '/assets/sounds/Wins/bigwskip_ka.ogg',
-				'megawskip_ka': '/assets/sounds/Wins/megawskip_ka.ogg',
-				'superwskip_ka': '/assets/sounds/Wins/superwskip_ka.ogg',
-				'epicwskip_ka': '/assets/sounds/Wins/epicwskip_ka.ogg'
+				'bigwskip_ka': 'assets/sounds/Wins/bigwskip_ka.ogg',
+				'megawskip_ka': 'assets/sounds/Wins/megawskip_ka.ogg',
+				'superwskip_ka': 'assets/sounds/Wins/superwskip_ka.ogg',
+				'epicwskip_ka': 'assets/sounds/Wins/epicwskip_ka.ogg'
 			}
 		};
 	}

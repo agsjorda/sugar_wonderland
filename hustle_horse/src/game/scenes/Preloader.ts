@@ -252,12 +252,6 @@ export class Preloader extends Scene
 		this.assetLoader.loadHelpScreenAssets(this);
 		
 		console.log(`[Preloader] Loading assets for Preloader and Game scenes`);
-		
-		// Load some dummy assets for loading simulation
-		const prefix = this.assetConfig['getAssetPrefix']();
-		for (let i = 0; i < 10; i++) {
-			this.load.image(`dummy ${i}`, prefix + '/loading/image.png');
-		}
 	}
 
     async create ()

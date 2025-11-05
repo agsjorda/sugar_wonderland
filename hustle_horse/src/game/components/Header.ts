@@ -7,6 +7,7 @@ import { gameStateManager } from '../../managers/GameStateManager';
 import { PaylineData } from '../../backend/SpinData';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
+import { HEADER_YOUWIN_OFFSET_X, HEADER_YOUWIN_OFFSET_Y, HEADER_AMOUNT_OFFSET_X, HEADER_AMOUNT_OFFSET_Y } from '../../config/UIPositionConfig';
 
 
 export class Header {
@@ -104,7 +105,7 @@ export class Header {
 
 	private createWinBarText(scene: Scene, x: number, y: number): void {
 		// Line 1: "YOU WON"
-		this.youWonText = scene.add.text(x, y - 7, 'YOU WIN', {
+		this.youWonText = scene.add.text(x + HEADER_YOUWIN_OFFSET_X, y - 7 + HEADER_YOUWIN_OFFSET_Y, 'YOU WIN', {
 			fontSize: '16px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
@@ -112,7 +113,7 @@ export class Header {
 		this.headerContainer.add(this.youWonText);
 
 		// Line 2: "$ 160.00" with bold formatting
-		this.amountText = scene.add.text(x, y + 14, '$ 0.00', {
+		this.amountText = scene.add.text(x + HEADER_AMOUNT_OFFSET_X, y + 14 + HEADER_AMOUNT_OFFSET_Y, '$ 0.00', {
 			fontSize: '20px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'

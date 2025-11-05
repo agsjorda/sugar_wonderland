@@ -2,6 +2,22 @@ import { Scene } from "phaser";
 import { AssetConfig, AssetGroup } from "../config/AssetConfig";
 import { ensureSpineLoader } from "./SpineGuard";
 
+export function resolveAssetUrl(path: string): string {
+    if (!path) {
+        return path;
+    }
+    // Do not touch fully-qualified or special scheme URLs
+    if (/^(?:https?:|data:|blob:)/i.test(path)) {
+        return path;
+    }
+    const base = (import.meta as any).env?.BASE_URL || '/';
+    // Ensure base ends with a slash
+    const normalizedBase = base.endsWith('/') ? base : base + '/';
+    // Strip any leading './' or '/' from provided path
+    const normalizedPath = path.replace(/^\.\//, '').replace(/^\//, '');
+    return `${normalizedBase}${normalizedPath}`;
+}
+
 export class AssetLoader {
 	private assetConfig: AssetConfig;
 
@@ -14,7 +30,7 @@ export class AssetLoader {
 		if (assetGroup.images) {
 		Object.entries(assetGroup.images).forEach(([key, path]) => {
 				console.log(`[AssetLoader] Loading image: ${key} from ${path}`);
-			scene.load.image(key, path);
+			scene.load.image(key, resolveAssetUrl(path));
 		});
 		}
 
@@ -26,8 +42,8 @@ export class AssetLoader {
 			} else {
 				Object.entries(assetGroup.spine).forEach(([key, spineData]) => {
 					console.log(`[AssetLoader] Loading spine: ${key} from ${spineData.json}`);
-					scene.load.spineAtlas(`${key}-atlas`, spineData.atlas);
-					scene.load.spineJson(key, spineData.json);
+					scene.load.spineAtlas(`${key}-atlas`, resolveAssetUrl(spineData.atlas));
+					scene.load.spineJson(key, resolveAssetUrl(spineData.json));
 				});
 			}
 		}
@@ -36,7 +52,7 @@ export class AssetLoader {
 		if (assetGroup.audio) {
 			Object.entries(assetGroup.audio).forEach(([key, path]) => {
 				console.log(`[AssetLoader] Loading audio: ${key} from ${path}`);
-				scene.load.audio(key, path);
+				scene.load.audio(key, resolveAssetUrl(path));
 			});
 		}
 
@@ -44,7 +60,7 @@ export class AssetLoader {
 		if (assetGroup.fonts) {
 			Object.entries(assetGroup.fonts).forEach(([key, path]) => {
 				console.log(`[AssetLoader] Preloading font: ${key} from ${path}`);
-				this.preloadFont(key, path);
+				this.preloadFont(key, resolveAssetUrl(path));
 			});
 		}
 	}
@@ -137,7 +153,7 @@ export class AssetLoader {
 		// Load coin as a sprite sheet with frame configuration
 		const coinAssets = this.assetConfig.getCoinAssets();
 		if (coinAssets.images && coinAssets.images.coin) {
-			const coinPath = coinAssets.images.coin;
+			const coinPath = resolveAssetUrl(coinAssets.images.coin);
 			console.log(`[AssetLoader] Loading coin sprite sheet: ${coinPath}`);
 			
 			// Load as sprite sheet with frame configuration
@@ -181,7 +197,7 @@ export class AssetLoader {
 		link.rel = 'preload';
 		link.as = 'font';
 		link.type = 'font/ttf';
-		link.href = fontPath;
+		link.href = resolveAssetUrl(fontPath);
 		link.crossOrigin = 'anonymous';
 		
 		// Add to document head
@@ -192,7 +208,7 @@ export class AssetLoader {
 		style.textContent = `
 			@font-face {
 				font-family: '${fontFamily}';
-				src: url('${fontPath}') format('truetype');
+				src: url('${resolveAssetUrl(fontPath)}') format('truetype');
 				font-display: swap;
 			}
 		`;

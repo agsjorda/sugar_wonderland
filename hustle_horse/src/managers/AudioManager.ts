@@ -3,7 +3,9 @@ import { gameStateManager } from './GameStateManager';
 export enum MusicType {
 	MAIN = 'main',
 	BONUS = 'bonus', 
-	FREE_SPIN = 'freespin'
+	FREE_SPIN = 'freespin',
+	PICK_A_CARD = 'pickacard',
+	BIG_WIN = 'bigwin'
 }
 
 export enum SoundEffectType {
@@ -38,6 +40,7 @@ export enum SoundEffectType {
 export class AudioManager {
 	private scene: Phaser.Scene;
 	private currentMusic: MusicType | null = null;
+	private lockedMusic: MusicType | null = null;
 	private musicVolume: number = 0.2;
 	private sfxVolume: number = 0.55;
 	private ambientVolume: number = 0.3; // Volume for ambient audio layer
@@ -55,7 +58,9 @@ export class AudioManager {
 	private readonly musicKeyByType: Record<string, string> = {
 		[MusicType.MAIN]: 'mainbg_hh',
 		[MusicType.BONUS]: 'bonusbg_hh',
-		[MusicType.FREE_SPIN]: 'freespinbg_ka'
+		[MusicType.FREE_SPIN]: 'freespinbg_ka',
+		[MusicType.PICK_A_CARD]: 'bgpickacard_hh',
+		[MusicType.BIG_WIN]: 'bigw_hh'
 	};
 
 	constructor(scene: Phaser.Scene) {
@@ -77,18 +82,22 @@ export class AudioManager {
 		
 		// Free spin background music
 		this.scene.load.audio('freespinbg_ka', 'assets/sounds/BG/freespinbg_ka.ogg');
+		// Pick-a-card background music
+		this.scene.load.audio('bgpickacard_hh', 'assets/sounds/BG/bgpickacard_hh.ogg');
+		// Big Win background music
+		this.scene.load.audio('bigw_hh', 'assets/sounds/Wins/bigw_hh.ogg');
 		
 		// Ambient audio
 		this.scene.load.audio('ambience_hh', 'assets/sounds/SFX/ambience_hh.ogg');
 		// Fire SFX
 		this.scene.load.audio('fire_hh', 'assets/sounds/SFX/fire_hh.ogg');
+		// Blaze SFX removed with fire transitions
 		
 		// Sound effects
 		this.scene.load.audio('spin_hh', 'assets/sounds/SFX/spin_hh.ogg');
 		this.scene.load.audio('click_sw', 'assets/sounds/click_sw.ogg');
 		this.scene.load.audio('reeldrop_hh', 'assets/sounds/SFX/reeldrop_hh.ogg');
 		this.scene.load.audio('turbodrop_hh', 'assets/sounds/SFX/turbodrop_hh.ogg');
-		this.scene.load.audio('coin_throw_ka', 'assets/sounds/SFX/coin_throw_ka.ogg');
 		this.scene.load.audio('coin_drop_ka', 'assets/sounds/SFX/coin_drop_ka.ogg');
 		
 		console.log('[AudioManager] Audio files preloaded successfully');
@@ -125,6 +134,15 @@ export class AudioManager {
 			this.musicInstances.set(MusicType.FREE_SPIN, freespinMusic);
 			console.log('[AudioManager] Free spin background music instance created');
 
+			// Create pick-a-card background music
+			try {
+				const pickMusic = this.scene.sound.add('bgpickacard_hh', { volume: this.musicVolume, loop: true });
+				this.musicInstances.set(MusicType.PICK_A_CARD, pickMusic);
+				console.log('[AudioManager] Pick-a-card background music instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create bgpickacard_hh music instance:', e);
+			}
+
 			// Create sound effect instances
 			const spinSfx = this.scene.sound.add('spin_hh', {
 				volume: this.sfxVolume,
@@ -140,6 +158,14 @@ export class AudioManager {
 			} catch (e) {
 				console.warn('[AudioManager] Failed to create fire_hh SFX instance:', e);
 			}
+			// Blaze SFX for Fire_Transition
+			try {
+				const blazeSfx = this.scene.sound.add('blaze_hh', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set('blaze_hh' as any, blazeSfx);
+				console.log('[AudioManager] Blaze SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create blaze_hh SFX instance:', e);
+			}
 			console.log('[AudioManager] Spin sound effect instance created');
 
 			// Menu click SFX
@@ -149,6 +175,25 @@ export class AudioManager {
 				console.log('[AudioManager] Menu click SFX instance created');
 			} catch (e) {
 				console.warn('[AudioManager] Failed to create click_sw SFX instance:', e);
+			}
+
+			// Card deal SFX for ScatterWinOverlay
+			try {
+				const cardDeal = this.scene.sound.add('carddeal_hh', { volume: this.sfxVolume, loop: false });
+				// store under raw key to allow playSoundEffect('carddeal_hh') calls
+				this.sfxInstances.set('carddeal_hh' as any, cardDeal);
+				console.log('[AudioManager] Card deal SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create carddeal_hh SFX instance:', e);
+			}
+
+			// Card pick SFX for ScatterWinOverlay
+			try {
+				const cardPick = this.scene.sound.add('cardpick_hh', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set('cardpick_hh' as any, cardPick);
+				console.log('[AudioManager] Card pick SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create cardpick_hh SFX instance:', e);
 			}
 
 			const reelDropSfx = this.scene.sound.add('reeldrop_hh', {
@@ -180,14 +225,7 @@ export class AudioManager {
 			this.sfxInstances.set(SoundEffectType.WIN_LINE_2, winline2);
 			console.log('[AudioManager] Winline SFX instances created');
 
-			// Create coin throw SFX instance
-			try {
-				const coinThrow = this.scene.sound.add('coin_throw_ka', { volume: this.sfxVolume, loop: false });
-				this.sfxInstances.set(SoundEffectType.COIN_THROW, coinThrow);
-				console.log('[AudioManager] Coin throw SFX instance created');
-			} catch (e) {
-				console.warn('[AudioManager] Failed to create coin_throw_ka SFX instance:', e);
-			}
+			// coin_throw_ka removed per request
 
 			// Create coin drop SFX instance
 			try {
@@ -227,15 +265,15 @@ export class AudioManager {
 
 			// Create anticipation SFX instance (looping)
 			try {
-				const anticipation = this.scene.sound.add('anticipation_ka', { volume: this.sfxVolume, loop: true });
+				const anticipation = this.scene.sound.add('anticipation_hh', { volume: this.sfxVolume, loop: true });
 				this.sfxInstances.set(SoundEffectType.ANTICIPATION, anticipation);
 				console.log('[AudioManager] Anticipation SFX instance created');
 			} catch (e) {
-				console.warn('[AudioManager] Failed to create anticipation_ka SFX instance:', e);
+				console.warn('[AudioManager] Failed to create anticipation_hh SFX instance:', e);
 			}
 
 			// Create win dialog SFX instances
-			const bigWinSfx = this.scene.sound.add('bigw_ka', { volume: this.sfxVolume, loop: false });
+			const bigWinSfx = this.scene.sound.add('bigw_hh', { volume: this.sfxVolume, loop: false });
 			this.sfxInstances.set(SoundEffectType.WIN_BIG, bigWinSfx);
 			const megaWinSfx = this.scene.sound.add('megaw_ka', { volume: this.sfxVolume, loop: false });
 			this.sfxInstances.set(SoundEffectType.WIN_MEGA, megaWinSfx);
@@ -253,6 +291,18 @@ export class AudioManager {
 			const epicWinSfxTurbo = this.scene.sound.add('epicwskip_ka', { volume: this.sfxVolume, loop: false });
 			this.sfxInstances.set(SoundEffectType.WIN_EPIC_TURBO, epicWinSfxTurbo);
 			console.log('[AudioManager] Win dialog SFX instances created');
+
+			// Create Big Win background music instance
+			try {
+				const bigWinMusic = this.scene.sound.add('bigw_hh', {
+					volume: this.musicVolume,
+					loop: true
+				});
+				this.musicInstances.set(MusicType.BIG_WIN, bigWinMusic);
+				console.log('[AudioManager] Big Win background music instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create bigw_hh music instance:', e);
+			}
 
 			// Create dialog-specific SFX instances
 			try {
@@ -299,6 +349,12 @@ export class AudioManager {
 	crossfadeTo(nextType: MusicType, durationMs: number = 500): void {
 		if (this.isMuted) return;
 		if (this.currentMusic === nextType) return;
+
+		// Respect music lock
+		if (this.lockedMusic && nextType !== this.lockedMusic) {
+			console.log(`[AudioManager] Music locked to ${this.lockedMusic}, ignoring crossfade to ${nextType}`);
+			return;
+		}
 
 		const currentType = this.currentMusic;
 		const from = currentType ? this.musicInstances.get(currentType) : null;
@@ -389,6 +445,12 @@ export class AudioManager {
 			return;
 		}
 
+		// Respect music lock
+		if (this.lockedMusic && musicType !== this.lockedMusic) {
+			console.log(`[AudioManager] Music locked to ${this.lockedMusic}, ignoring request for ${musicType}`);
+			return;
+		}
+
 		// Stop any music that might still be playing (defensive against scene overlays)
 		this.stopAllMusicByKeys();
 
@@ -405,6 +467,21 @@ export class AudioManager {
 		} else {
 			console.warn(`[AudioManager] Music instance not found for type: ${musicType}`);
 		}
+	}
+
+	/**
+	 * Single-slot background music: stop any playing tracks and start the requested one.
+	 * Optional fade-out duration for the currently playing track(s) can be added later; for now it's immediate.
+	 */
+	setExclusiveBackground(musicType: MusicType): void {
+		if (this.isMuted) return;
+		// Respect lock
+		if (this.lockedMusic && musicType !== this.lockedMusic) {
+			console.log(`[AudioManager] Music locked to ${this.lockedMusic}, ignoring exclusive set to ${musicType}`);
+			return;
+		}
+		this.stopAllMusicByKeys();
+		this.playBackgroundMusic(musicType);
 	}
 
 	/**
@@ -436,6 +513,35 @@ export class AudioManager {
 		this.stopAmbientAudio();
 	}
 
+	/** Stop a specific background music instance by type. */
+	stopMusicByType(type: MusicType): void {
+		try {
+			const music = this.musicInstances.get(type);
+			if (music && music.isPlaying) {
+				music.stop();
+				console.log(`[AudioManager] Stopped music by type: ${type}`);
+			}
+			// Also stop any stray instances with the same key
+			const key = this.musicKeyByType[type as any];
+			if (key) {
+				try {
+					const sounds: Phaser.Sound.BaseSound[] = (this.scene.sound as any).sounds || [];
+					for (const s of sounds) {
+						if ((s as any).key === key && s.isPlaying) {
+							s.stop();
+							console.log(`[AudioManager] Force-stopped stray instance for key: ${key}`);
+						}
+					}
+				} catch {}
+			}
+			if (this.currentMusic === type) {
+				this.currentMusic = null;
+			}
+		} catch (e) {
+			console.warn('[AudioManager] stopMusicByType failed:', e);
+		}
+	}
+
 	/**
 	 * Defensive: stop any potentially playing BGM by audio key, even if spawned by another scene
 	 */
@@ -443,17 +549,46 @@ export class AudioManager {
 		try {
 			const keys = Object.values(this.musicKeyByType);
 			for (const key of keys) {
-				const instance = this.scene.sound.get(key) as Phaser.Sound.BaseSound | null;
-				if (instance && instance.isPlaying) {
-					instance.stop();
-					console.log(`[AudioManager] Force-stopped playing music by key: ${key}`);
-				}
+				try {
+					// Stop ALL instances with this key, not just the first
+					const sounds: Phaser.Sound.BaseSound[] = (this.scene.sound as any).sounds || [];
+					for (const s of sounds) {
+						if ((s as any).key === key && s.isPlaying) {
+							s.stop();
+							console.log(`[AudioManager] Force-stopped music by key: ${key}`);
+						}
+					}
+				} catch {}
 			}
 			this.currentMusic = null;
 			this.stopAmbientAudio();
 		} catch (e) {
 			console.warn('[AudioManager] stopAllMusicByKeys failed:', e);
 		}
+	}
+
+	/** Returns true if any background music instance is currently playing. */
+	isAnyMusicPlaying(): boolean {
+		try {
+			for (const music of this.musicInstances.values()) {
+				if (music && music.isPlaying) return true;
+			}
+			return false;
+		} catch {
+			return false;
+		}
+	}
+
+	/** Prevent any music other than the specified type from playing until unlocked. */
+	lockMusicTo(type: MusicType): void {
+		this.lockedMusic = type;
+		console.log(`[AudioManager] Music locked to: ${type}`);
+	}
+
+	/** Clear the music lock to allow normal music changes. */
+	unlockMusic(): void {
+		console.log('[AudioManager] Music lock cleared');
+		this.lockedMusic = null;
 	}
 
 	/**

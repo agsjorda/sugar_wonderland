@@ -20,7 +20,7 @@ import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { AssetConfig } from '../../config/AssetConfig';
 import { PaylineData } from '../../backend/SpinData';
-import { AssetLoader } from '../../utils/AssetLoader';
+import { AssetLoader, resolveAssetUrl } from '../../utils/AssetLoader';
 import { Symbols } from '../components/Symbols';
 import { GameData } from '../components/GameData';
 import { BonusBackground } from '../components/BonusBackground';
@@ -39,6 +39,7 @@ import { AudioManager, MusicType, SoundEffectType } from '../../managers/AudioMa
 import { Menu } from '../components/Menu';
 import { FullScreenManager } from '../../managers/FullScreenManager';
 import { ScatterAnticipation } from '../components/ScatterAnticipation';
+import { SCATTER_ANTICIPATION2_POS_X_MUL, SCATTER_ANTICIPATION2_POS_Y_MUL, SCATTER_ANTICIPATION2_DEFAULT_SCALE } from '../../config/UIPositionConfig';
 import { ScatterWinOverlay } from '../components/ScatterWinOverlay';
 import { BigWinOverlay } from '../components/BigWinOverlay';
 import { ScatterAnimationManager } from '../../managers/ScatterAnimationManager';
@@ -66,11 +67,12 @@ export class Game extends Scene {
 	private autoplayOptions!: AutoplayOptions;
 	private irisTransition!: IrisTransition;
 	private coinAnimation!: CoinAnimation;
-	private gameAPI!: GameAPI;
+	public gameAPI!: GameAPI;
 	public audioManager!: AudioManager;
 	private menu!: Menu;
 	private scatterAnticipation!: ScatterAnticipation;
     private scatterWinOverlay!: ScatterWinOverlay;
+    private scatterAnticipation2!: ScatterAnticipation;
     private bigWinOverlay!: BigWinOverlay;
 	
 	// Note: Payout data now calculated directly from paylines in WIN_STOP handler
@@ -93,6 +95,7 @@ export class Game extends Scene {
 		this.menu = new Menu();
 		this.scatterAnticipation = new ScatterAnticipation();
         this.scatterWinOverlay = new ScatterWinOverlay();
+        this.scatterAnticipation2 = new ScatterAnticipation();
         this.bigWinOverlay = new BigWinOverlay();
 	}
 
@@ -199,6 +202,8 @@ export class Game extends Scene {
 		//Create symbols
 		console.log(`[Game] Creating symbols...`);
 		this.symbols.create(this);
+		// Expose symbols on the scene for cross-component access (e.g., ScatterAnticipation)
+		try { (this as any).symbols = this.symbols; } catch {}
 
 		// Initialize AudioManager
 		this.audioManager = new AudioManager(this);
@@ -210,7 +215,10 @@ export class Game extends Scene {
 			this.load.on('complete', () => {
 				try {
 					this.audioManager.createMusicInstances();
-					this.audioManager.playBackgroundMusic(MusicType.MAIN);
+					// Only start MAIN if nothing else is already playing (e.g., pick-a-card overlay music)
+					if (!this.audioManager.isAnyMusicPlaying()) {
+						this.audioManager.setExclusiveBackground(MusicType.MAIN);
+					}
 					console.log('[Game] Audio assets loaded and background music started');
 				} catch (e) {
 					console.warn('[Game] Failed to initialize or start audio after load:', e);
@@ -220,7 +228,7 @@ export class Game extends Scene {
 			const audioAssets = new AssetConfig(this.networkManager, this.screenModeManager).getAudioAssets();
 			if (audioAssets.audio) {
 				Object.entries(audioAssets.audio).forEach(([key, path]) => {
-					try { this.load.audio(key, path as string); } catch {}
+					try { this.load.audio(key, resolveAssetUrl(path as string)); } catch {}
 				});
 			}
 			this.load.start();
@@ -280,10 +288,17 @@ export class Game extends Scene {
 		this.coinAnimation = new CoinAnimation(this.networkManager, this.screenModeManager);
 		this.coinAnimation.create(this);
 
-		// Create scatter anticipation component inside background container to avoid symbol mask and stay behind symbols
-		this.scatterAnticipation.create(this, this.background.getContainer());
+		// Create scatter anticipation component without parent so it can render above all layers
+		this.scatterAnticipation.create(this);
 		this.scatterAnticipation.hide();
 		(this as any).scatterAnticipation = this.scatterAnticipation;
+
+		// Create a second scatter anticipation effect with separate modifiers
+		const sa2x = this.scale.width * SCATTER_ANTICIPATION2_POS_X_MUL;
+		const sa2y = this.scale.height * SCATTER_ANTICIPATION2_POS_Y_MUL;
+		this.scatterAnticipation2.create(this, undefined, { x: sa2x, y: sa2y, scale: SCATTER_ANTICIPATION2_DEFAULT_SCALE });
+		this.scatterAnticipation2.hide();
+		(this as any).scatterAnticipation2 = this.scatterAnticipation2;
 
         
 		
@@ -690,9 +705,29 @@ export class Game extends Scene {
 		} else if (multiplier >= 45) {
 			console.log(`[Game] Super Win! Showing SuperW_KA dialog for ${multiplier.toFixed(2)}x multiplier`);
 			this.dialogs.showSuperWin(this, { winAmount: payout });
-		} else if (multiplier >= 30) {
-			console.log(`[Game] Medium Win! Showing MediumW_KA dialog for ${multiplier.toFixed(2)}x multiplier`);
-			this.dialogs.showMediumWin(this, { winAmount: payout });
+        } else if (multiplier >= 30) {
+            console.log(`[Game] Medium/Big Win! Showing BigWinOverlay for ${multiplier.toFixed(2)}x multiplier`);
+            try {
+                if (this.bigWinOverlay) {
+                    // Mark dialog state and show overlay
+                    gameStateManager.isShowingWinDialog = true;
+                    this.bigWinOverlay.show(payout);
+                    // When user dismisses overlay, clear state and process any queued wins
+                    this.bigWinOverlay.waitUntilDismissed().then(() => {
+                        try { gameStateManager.isShowingWinDialog = false; } catch {}
+                        try { this.processWinQueue(); } catch {}
+                    }).catch(() => {
+                        try { gameStateManager.isShowingWinDialog = false; } catch {}
+                        try { this.processWinQueue(); } catch {}
+                    });
+                } else {
+                    // Fallback to previous dialog behavior
+                    this.dialogs.showMediumWin(this, { winAmount: payout });
+                }
+            } catch (e) {
+                console.warn('[Game] Failed to show BigWinOverlay, falling back to MediumW_KA:', e);
+                this.dialogs.showMediumWin(this, { winAmount: payout });
+            }
 		} else if (multiplier >= 20) {
 			console.log(`[Game] Small Win! Showing SmallW_KA dialog for ${multiplier.toFixed(2)}x multiplier`);
 			this.dialogs.showSmallWin(this, { winAmount: payout });
@@ -760,13 +795,6 @@ export class Game extends Scene {
 	public spawnCoins(count: number = 3): void {
 		if (this.coinAnimation) {
 			this.coinAnimation.spawnCoins(count);
-			// Play coin throw SFX once when coins spawn
-			try {
-				const audio = (window as any).audioManager as AudioManager | undefined;
-				if (audio && typeof audio.playSoundEffect === 'function') {
-					audio.playSoundEffect(SoundEffectType.COIN_THROW);
-				}
-			} catch {}
 		}
 	}
 
@@ -806,13 +834,6 @@ export class Game extends Scene {
 		}
 		// Delay 1 second before spawning coins and playing SFX
 		this.time.delayedCall(500, () => {
-			// Play coin throw SFX once at start of win-based coin spawn
-			try {
-				const audio = (window as any).audioManager as AudioManager | undefined;
-				if (audio && typeof audio.playSoundEffect === 'function') {
-					audio.playSoundEffect(SoundEffectType.COIN_THROW);
-				}
-			} catch {}
 			// Spawn coins over 1.5 seconds
 			this.spawnCoinsOverTime(coinCount, 1500);
 		});
@@ -903,8 +924,8 @@ export class Game extends Scene {
 
 				// Switch to bonus background music
 				if (this.audioManager) {
-					this.audioManager.playBackgroundMusic(MusicType.BONUS);
-					console.log('[Game] Switched to bonus background music');
+					this.audioManager.setExclusiveBackground(MusicType.BONUS);
+					console.log('[Game] Switched to bonus background music (exclusive)');
 				}
 			} else {
 				console.log('[Game] Bonus mode ended - enabling winningsDisplay');
@@ -941,8 +962,8 @@ export class Game extends Scene {
 				gameEventManager.emit(GameEventType.AUTO_STOP);
 				// Switch back to main background music
 				if (this.audioManager) {
-					this.audioManager.playBackgroundMusic(MusicType.MAIN);
-					console.log('[Game] Switched to main background music');
+					this.audioManager.setExclusiveBackground(MusicType.MAIN);
+					console.log('[Game] Switched to main background music (exclusive)');
 				}
 			}
 			
@@ -1139,18 +1160,54 @@ export class Game extends Scene {
 			}
 		};
 
-        // Big Win now uses custom overlay (reusing fire/title/sfx). Amount value unchanged.
-        (window as any).showBigWin = (amount: number = 2500000.5) => {
+        // Big Win overlay debug helpers
+        // Backwards-compatible helper (still works with just amount), now accepts optional opts
+        // opts: { color?: number, alpha?: number, durationMs?: number, pickScale?: number, titleScaleMin?: number, titleScaleMax?: number }
+        (window as any).showBigWin = (amount: number = 2500000.5, opts?: { color?: number; alpha?: number; durationMs?: number; pickScale?: number; titleScale?: number; bigWinScale?: number; titleScaleMin?: number; titleScaleMax?: number; }) => {
             try {
+                const color = opts?.color ?? 0x0c2121;
+                const alpha = opts?.alpha ?? 0.92;
+                const durationMs = opts?.durationMs ?? 700;
+                const titleScaleOpt = (opts && (opts as any).titleScale);
+                const bigWinScaleOpt = (opts && (opts as any).bigWinScale);
+                if (typeof opts?.pickScale === 'number') {
+                    this.bigWinOverlay.setPickScale(opts!.pickScale);
+                } else if (typeof titleScaleOpt === 'number') {
+                    (this.bigWinOverlay as any).setTitleScale?.(titleScaleOpt);
+                } else if (typeof bigWinScaleOpt === 'number') {
+                    (this.bigWinOverlay as any).setTitleScale?.(bigWinScaleOpt);
+                }
+                if (typeof opts?.titleScaleMin === 'number' || typeof opts?.titleScaleMax === 'number') {
+                    const min = typeof opts?.titleScaleMin === 'number' ? opts!.titleScaleMin! : 0.2;
+                    const max = typeof opts?.titleScaleMax === 'number' ? opts!.titleScaleMax! : 1.2;
+                    this.bigWinOverlay.setTitleScaleBounds(min, max);
+                }
+
                 console.log(`[Game] TEST: Showing Big Win overlay with amount: $${amount}`);
                 if (this.bigWinOverlay) {
-                    this.bigWinOverlay.show(amount);
+                    this.bigWinOverlay.show(amount, color, alpha, durationMs);
                 } else {
                     // Fallback to previous behavior if overlay unavailable
                     this.dialogs.showMediumWin(this, { winAmount: amount });
                 }
             } catch (e) {
                 console.error('[Game] TEST: Failed to show Big Win overlay:', e);
+            }
+        };
+
+        // Convenience console namespace for quick tweaks: window.BigWin
+        (window as any).BigWin = {
+            overlay: this.bigWinOverlay,
+            show: (amount: number = 2500000.5, opts?: { color?: number; alpha?: number; durationMs?: number; pickScale?: number; titleScaleMin?: number; titleScaleMax?: number; }) => (window as any).showBigWin(amount, opts),
+            hide: (duration: number = 300) => { try { this.bigWinOverlay.hide(duration); } catch (e) { console.warn(e); } },
+            setPickScale: (scale: number) => { try { this.bigWinOverlay.setPickScale(scale); } catch (e) { console.warn(e); } },
+            setTitleScale: (scale: number) => { try { (this.bigWinOverlay as any).setTitleScale?.(scale); } catch (e) { console.warn(e); } },
+            setBigWinScale: (scale: number) => { try { (this.bigWinOverlay as any).setTitleScale?.(scale); } catch (e) { console.warn(e); } },
+            setTitleScaleBounds: (min: number, max: number) => { try { this.bigWinOverlay.setTitleScaleBounds(min, max); } catch (e) { console.warn(e); } },
+            wait: () => this.bigWinOverlay.waitUntilDismissed(),
+            preview: (opts?: { amount?: number; color?: number; alpha?: number; durationMs?: number; pickScale?: number; titleScaleMin?: number; titleScaleMax?: number; }) => {
+                const a = opts?.amount ?? 2500000.5;
+                (window as any).showBigWin(a, opts);
             }
         };
 

@@ -33,6 +33,7 @@ export class WinLineDrawer {
   private originalLineDisplayTime?: number;
   private originalCycleEndPause?: number;
   private originalAnimationSpeed?: number;
+  private turboApplied: boolean = false;
 
   constructor(scene: Game, symbolsReference: any) {
     this.scene = scene;
@@ -1174,31 +1175,35 @@ export class WinLineDrawer {
    */
   public setTurboMode(isEnabled: boolean): void {
     if (isEnabled) {
-      // Store original values for restoration (only if not already stored)
-      if (this.originalLineDisplayTime === undefined) {
+      // Only store and apply once per turbo session
+      if (!this.turboApplied) {
         this.originalLineDisplayTime = this.lineDisplayTime;
         this.originalCycleEndPause = this.cycleEndPause;
         this.originalAnimationSpeed = this.animationSpeed;
+        
+        // Apply turbo speed using centralized TurboConfig
+        this.setTimingIntervals({
+          lineDisplayTime: Math.max(this.minLineDisplayTime, this.lineDisplayTime * TurboConfig.TURBO_DURATION_MULTIPLIER),
+          cycleEndPause: Math.max(this.minCycleEndPause, this.cycleEndPause * TurboConfig.TURBO_DURATION_MULTIPLIER),
+          animationSpeed: this.animationSpeed * TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER
+        });
+        this.turboApplied = true;
       }
-      
-      // Apply turbo speed using centralized TurboConfig
-      this.setTimingIntervals({
-        lineDisplayTime: Math.max(this.minLineDisplayTime, this.lineDisplayTime * TurboConfig.TURBO_DURATION_MULTIPLIER),
-        cycleEndPause: Math.max(this.minCycleEndPause, this.cycleEndPause * TurboConfig.TURBO_DURATION_MULTIPLIER),
-        animationSpeed: this.animationSpeed * TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER
-      });
-      
     } else {
-      // Restore original values
-      if (this.originalLineDisplayTime !== undefined && this.originalCycleEndPause !== undefined && this.originalAnimationSpeed !== undefined) {
+      // Restore original values only if turbo was applied
+      if (this.turboApplied && this.originalLineDisplayTime !== undefined && this.originalCycleEndPause !== undefined && this.originalAnimationSpeed !== undefined) {
         this.setTimingIntervals({
           lineDisplayTime: Math.max(this.minLineDisplayTime, this.originalLineDisplayTime),
           cycleEndPause: Math.max(this.minCycleEndPause, this.originalCycleEndPause),
           animationSpeed: this.originalAnimationSpeed
         });
-        
+        // Clear stored original values and flag
+        this.originalLineDisplayTime = undefined;
+        this.originalCycleEndPause = undefined;
+        this.originalAnimationSpeed = undefined;
+        this.turboApplied = false;
       } else {
-        console.warn('[WinLineDrawer] No original values stored, cannot restore timing');
+        // Nothing to restore; ignore silently to avoid log spam during free-spin flows
       }
     }
   }
@@ -1215,6 +1220,7 @@ export class WinLineDrawer {
     this.originalLineDisplayTime = undefined;
     this.originalCycleEndPause = undefined;
     this.originalAnimationSpeed = undefined;
+    this.turboApplied = false;
   }
 
   /**

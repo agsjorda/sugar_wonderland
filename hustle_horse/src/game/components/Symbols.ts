@@ -8,10 +8,11 @@ import { WinLineDrawer } from './WinLineDrawer';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { TurboConfig } from '../../config/TurboConfig';
-import { SLOT_ROWS, SLOT_COLUMNS, DELAY_BETWEEN_SPINS, WILDCARD_SYMBOLS } from '../../config/GameConfig';
+import { SLOT_ROWS, SLOT_COLUMNS, DELAY_BETWEEN_SPINS } from '../../config/GameConfig';
 import { SoundEffectType } from '../../managers/AudioManager';
 import { BORDER_UPPER_OFFSET_Y, BORDER_LOWER_OFFSET_Y } from '../../config/UIPositionConfig';
 import { DebugSymbolProbe } from './DebugSymbolProbe';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 
 export class Symbols {
   
@@ -34,13 +35,68 @@ export class Symbols {
   public winLineDrawer!: WinLineDrawer;
   private overlayRect?: Phaser.GameObjects.Graphics;
   private baseOverlayRect?: Phaser.GameObjects.Graphics;
-  private baseOverlayBorderUpper?: Phaser.GameObjects.Image;
-  private baseOverlayBorderLower?: Phaser.GameObjects.Image;
+  private baseOverlayBounds?: Phaser.Geom.Rectangle;
+  private baseOverlayBorderUpper?: any;
+  private baseOverlayBorderLower?: any;
+  // Keep separate references for base vs bonus dragons
+  private baseTopDragon?: any;
+  private baseBottomDragon?: any;
+  private bonusTopDragon?: any;
+  private bonusBottomDragon?: any;
+  private hasEmittedScatterWinStart: boolean = false;
+  private baseBorderContainer?: Phaser.GameObjects.Container;
   public currentSpinData: any = null; // Store current spin data for access by other components
   
-  // Sticky wilds (persist across bonus free spins)
-  public stickyWilds: Map<string, any> = new Map();
-  public stickyWildsContainer?: Phaser.GameObjects.Container;
+  
+
+  // Grid mask configuration and references
+  public gridMaskShape?: Phaser.GameObjects.Graphics;
+  public gridMask?: Phaser.Display.Masks.GeometryMask;
+  public gridMaskPaddingLeft: number = 10;
+  public gridMaskPaddingRight: number = 20;
+  public gridMaskPaddingTop: number = 11;
+  public gridMaskPaddingBottom: number = 25;
+
+  // Bonus dragon border spine Y-offsets (apply only to spines/images in bonus)
+  public bonusDragonTopOffsetY: number = 0;
+  public bonusDragonBottomOffsetY: number = 0;
+
+  // Base overlay (light grey behind symbols) padding in pixels
+  public baseOverlayPaddingLeft: number = 20;
+  public baseOverlayPaddingRight: number = 20;
+  public baseOverlayPaddingTop: number = 10;
+  public baseOverlayPaddingBottom: number = 27; // slightly larger bottom by default
+
+  // PNG border offsets (apply to image-based borders in any mode)
+  public borderTopOffsetY: number = 0;
+  public borderBottomOffsetY: number = -14;
+
+  // Modifier for base-scene upper border skeleton (scale and position offsets)
+  private baseBorderSkeletonScale: number = 3;
+  private baseBorderSkeletonOffsetX: number = 420;
+  private baseBorderSkeletonOffsetY: number = -15;
+  private baseBorderSkeletonUseAbsoluteScale: boolean = false;
+  private baseBorderSkeletonAbsoluteScale: number = 1.0;
+  private baseBorderSkeletonHalfOffscreen: boolean = false;
+  private baseBorderSkeletonOffscreenSide: 'left' | 'right' = 'left';
+  private baseBorderSkeletonTimeScale: number = 1.5;
+  private baseBorderSkeletonFrameStep: number = 1;
+  private baseBorderSkeletonFrameCounter: number = 0;
+
+  // Separate modifiers for bottom mirrored dragon_default
+  private baseBorderBottomScale: number = 3.9;
+  private baseBorderBottomOffsetX: number = 620;
+  private baseBorderBottomOffsetY: number = 8;
+  private baseBorderBottomUseAbsoluteScale: boolean = false;
+  private baseBorderBottomAbsoluteScale: number = 1.0;
+  private baseBorderBottomTimeScale: number = 1.5;
+  private baseBorderBottomFrameStep: number = 1;
+  private baseBorderBottomFrameCounter: number = 0;
+
+  // Extra bonus-only offset for bottom dragon (applied on top of base bottom offsets)
+  private bonusBottomExtraOffsetY: number = -15;
+
+  private __borderUpdateHandler?: (time: number, delta: number) => void;
 
   // Configuration for Spine symbol scales - adjust these values manually
   private spineSymbolScales: { [key: number]: number } = {
@@ -98,9 +154,103 @@ export class Symbols {
   private freeSpinAutoplayTriggered: boolean = false;
   private dialogListenerSetup: boolean = false;
 
+  // Flash overlay configuration
+  private flashOverlayAlphaStart: number = 0.5;
+  private flashOverlayFadeTo: number = 0.0;
+  private flashOverlayDurationMs: number = 200;
+  private flashOverlaySpeedMultiplier: number = 1.0; // >1 = faster, <1 = slower
+
   constructor() { 
     this.scatterAnimationManager = ScatterAnimationManager.getInstance();
     this.symbolDetector = new SymbolDetector();
+  }
+
+  /** Accessor: container that holds dragon_default and related base border visuals */
+  public getBaseBorderContainer(): Phaser.GameObjects.Container | undefined {
+    return this.baseBorderContainer;
+  }
+
+  /** Animate top dragon (upper) to a target X */
+  public animateTopDragonToX(targetX: number, durationMs: number = 1200, ease: string = 'Sine.easeInOut'): void {
+    try {
+      const target: any = this.baseTopDragon || this.baseOverlayBorderUpper; // fallback to current upper
+      if (!target) return;
+      this.scene.tweens.add({ targets: target, x: targetX, duration: Math.max(0, durationMs), ease });
+    } catch {}
+  }
+
+  /** Animate bottom dragon (lower) to a target X */
+  public animateBottomDragonToX(targetX: number, durationMs: number = 1200, ease: string = 'Sine.easeInOut'): void {
+    try {
+      const target: any = this.baseBottomDragon || this.baseOverlayBorderLower; // fallback to current lower
+      if (!target) return;
+      this.scene.tweens.add({ targets: target, x: targetX, duration: Math.max(0, durationMs), ease });
+    } catch {}
+  }
+
+  /** Bonus-only: set extra offset Y for bottom dragon (applied on top of base bottom offsets) */
+  public setBonusBottomExtraOffsetY(offsetY: number): void {
+    this.bonusBottomExtraOffsetY = offsetY || 0;
+    try {
+      const d: any = this.bonusBottomDragon;
+      if (d) {
+        const baseY = (d as any).__bonusBottomBaseY ?? (d.y - (this.baseBorderBottomOffsetY || 0) - (this.bonusBottomExtraOffsetY || 0));
+        d.y = baseY + (this.baseBorderBottomOffsetY || 0) + this.bonusBottomExtraOffsetY;
+      }
+    } catch {}
+  }
+
+  /**
+   * Update base-scene border skeleton modifier values.
+   * Provide any subset; omitted fields remain unchanged.
+   */
+  public setBaseBorderSkeletonModifier(mod: { scale?: number; offsetX?: number; offsetY?: number; useAbsoluteScale?: boolean; absoluteScale?: number; halfOffscreen?: boolean; offscreenSide?: 'left' | 'right'; timeScale?: number }): void {
+    if (typeof mod.scale === 'number') this.baseBorderSkeletonScale = mod.scale;
+    if (typeof mod.offsetX === 'number') this.baseBorderSkeletonOffsetX = mod.offsetX;
+    if (typeof mod.offsetY === 'number') this.baseBorderSkeletonOffsetY = mod.offsetY;
+    if (typeof mod.useAbsoluteScale === 'boolean') this.baseBorderSkeletonUseAbsoluteScale = mod.useAbsoluteScale;
+    if (typeof mod.absoluteScale === 'number') this.baseBorderSkeletonAbsoluteScale = mod.absoluteScale;
+    if (typeof mod.halfOffscreen === 'boolean') this.baseBorderSkeletonHalfOffscreen = mod.halfOffscreen;
+    if (mod.offscreenSide === 'left' || mod.offscreenSide === 'right') this.baseBorderSkeletonOffscreenSide = mod.offscreenSide;
+    if (typeof mod.timeScale === 'number') {
+      this.baseBorderSkeletonTimeScale = Math.max(0.0001, mod.timeScale);
+      try {
+        const st = (this.baseOverlayBorderUpper as any)?.animationState;
+        if (st) st.timeScale = this.baseBorderSkeletonTimeScale;
+      } catch {}
+    }
+    if (typeof (mod as any).frameStep === 'number') {
+      const step = Math.max(1, Math.floor((mod as any).frameStep));
+      this.baseBorderSkeletonFrameStep = step;
+      try {
+        const st = (this.baseOverlayBorderUpper as any)?.animationState;
+        if (st) st.timeScale = (step > 1) ? 0 : this.baseBorderSkeletonTimeScale;
+      } catch {}
+    }
+  }
+
+  /** Update bottom mirrored dragon modifiers */
+  public setBaseBorderBottomModifier(mod: { scale?: number; offsetX?: number; offsetY?: number; useAbsoluteScale?: boolean; absoluteScale?: number; timeScale?: number; frameStep?: number }): void {
+    if (typeof mod.scale === 'number') this.baseBorderBottomScale = mod.scale;
+    if (typeof mod.offsetX === 'number') this.baseBorderBottomOffsetX = mod.offsetX;
+    if (typeof mod.offsetY === 'number') this.baseBorderBottomOffsetY = mod.offsetY;
+    if (typeof mod.useAbsoluteScale === 'boolean') this.baseBorderBottomUseAbsoluteScale = mod.useAbsoluteScale;
+    if (typeof mod.absoluteScale === 'number') this.baseBorderBottomAbsoluteScale = mod.absoluteScale;
+    if (typeof mod.timeScale === 'number') {
+      this.baseBorderBottomTimeScale = Math.max(0.0001, mod.timeScale);
+      try {
+        const st = (this.baseOverlayBorderLower as any)?.animationState;
+        if (st) st.timeScale = this.baseBorderBottomTimeScale;
+      } catch {}
+    }
+    if (typeof mod.frameStep === 'number') {
+      const step = Math.max(1, Math.floor(mod.frameStep));
+      this.baseBorderBottomFrameStep = step;
+      try {
+        const st = (this.baseOverlayBorderLower as any)?.animationState;
+        if (st) st.timeScale = (step > 1) ? 0 : this.baseBorderBottomTimeScale;
+      } catch {}
+    }
   }
 
   /** Compute the canonical center of a grid cell (col,row) in scene coordinates */
@@ -147,6 +297,37 @@ export class Symbols {
     } catch {}
   }
 
+  /**
+   * Re-center a Spine instance to the desired cell center on the next tick, after animations update bounds.
+   * Useful when skeleton animation changes bounds from setup pose and initial centering is no longer accurate.
+   */
+  public reCenterSpineNextTick(spine: any, targetCenterX: number, targetCenterY: number, nudge?: { x: number; y: number }): void {
+    try {
+      this.scene.time.delayedCall(0, () => {
+        try { spine.update?.(0); } catch {}
+        try {
+          const b = spine?.getBounds?.();
+          const sizeX = (b?.size?.width ?? b?.size?.x ?? 0);
+          const sizeY = (b?.size?.height ?? b?.size?.y ?? 0);
+          const offX = (b?.offset?.x ?? 0);
+          const offY = (b?.offset?.y ?? 0);
+          if (sizeX > 0 && sizeY > 0) {
+            const centerWorldX = offX + sizeX * 0.5;
+            const centerWorldY = offY + sizeY * 0.5;
+            const dx = targetCenterX - centerWorldX;
+            const dy = targetCenterY - centerWorldY;
+            spine.x += dx;
+            spine.y += dy;
+          }
+          if (nudge) {
+            spine.x += nudge.x;
+            spine.y += nudge.y;
+          }
+        } catch {}
+      });
+    } catch {}
+  }
+
   /** Optional per-symbol micro adjustments (in pixels) after centering) - legacy alias (idle by default) */
   public getSymbolNudge(symbolValue: number): { x: number; y: number } | undefined {
     return this.getIdleSymbolNudge(symbolValue);
@@ -156,7 +337,7 @@ export class Symbols {
   public getIdleSymbolNudge(symbolValue: number): { x: number; y: number } | undefined {
     const nudges: { [k: number]: { x: number; y: number } } = {
       // Tweak these to align idle placement precisely per symbol
-      1:  { x: -22, y: -22 },
+      1:  { x: -11.5, y: -10.5 },
       13: { x: 0, y: 0 },
       14: { x: 0, y: 0 }
     };
@@ -167,7 +348,7 @@ export class Symbols {
   public getWinSymbolNudge(symbolValue: number): { x: number; y: number } | undefined {
     const nudges: { [k: number]: { x: number; y: number } } = {
       // Provide separate offsets for win/hit animations if their bounds differ
-      1:  { x: 0, y: 0 },
+      1:  { x: 4, y: 4 },
       13: { x: 0, y: 0 },
       14: { x: 0, y: 0 }
     };
@@ -178,9 +359,34 @@ export class Symbols {
   private getOverlayNudge(symbolValue: number): { x: number; y: number } | undefined {
     const nudges: { [k: number]: { x: number; y: number } } = {
       // Adjust these to fine-tune overlay alignment without affecting Spine placement
-      1: { x: 32, y: 25 }, // Symbol1_HTBH overlay-only nudge (edit here)
+      1: { x: 5, y: 5 }, // Symbol1_HTBH overlay-only nudge (edit here)
     };
     return nudges[symbolValue];
+  }
+
+  // Manually step border animations when frameStep > 1
+  private stepBorderAnimations(delta: number): void {
+    const dtSec = Math.max(0, (delta || 0) / 1000);
+    try {
+      const upper: any = this.baseOverlayBorderUpper;
+      const stepU = Math.max(1, Math.floor(this.baseBorderSkeletonFrameStep || 1));
+      if (upper && upper.animationState && stepU > 1) {
+        this.baseBorderSkeletonFrameCounter = (this.baseBorderSkeletonFrameCounter + 1) % stepU;
+        if (this.baseBorderSkeletonFrameCounter === 0) {
+          try { upper.update(dtSec * Math.max(0.0001, this.baseBorderSkeletonTimeScale)); } catch {}
+        }
+      }
+    } catch {}
+    try {
+      const lower: any = this.baseOverlayBorderLower;
+      const stepL = Math.max(1, Math.floor(this.baseBorderBottomFrameStep || 1));
+      if (lower && lower.animationState && stepL > 1) {
+        this.baseBorderBottomFrameCounter = (this.baseBorderBottomFrameCounter + 1) % stepL;
+        if (this.baseBorderBottomFrameCounter === 0) {
+          try { lower.update(dtSec * Math.max(0.0001, this.baseBorderBottomTimeScale)); } catch {}
+        }
+      }
+    } catch {}
   }
 
   /** 
@@ -196,14 +402,22 @@ export class Symbols {
 
       this.baseOverlayRect.fillStyle(0xE5E5E5, 0.2);
       const gridBounds = this.getSymbolGridBounds();
-    
-      const expandX = 20; // pixels to expand horizontally
-      const expandY = 10; // pixels to expand vertically
+
+      const padL = this.baseOverlayPaddingLeft;
+      const padR = this.baseOverlayPaddingRight;
+      const padT = this.baseOverlayPaddingTop;
+      const padB = this.baseOverlayPaddingBottom;
       this.baseOverlayRect.fillRect(
-        gridBounds.x - expandX,
-        gridBounds.y - expandY,
-        gridBounds.width + expandX * 2,
-        gridBounds.height + expandY * 3.4
+        gridBounds.x - padL,
+        gridBounds.y - padT,
+        gridBounds.width + padL + padR,
+        gridBounds.height + padT + padB
+      );
+      this.baseOverlayBounds = new Phaser.Geom.Rectangle(
+        gridBounds.x - padL,
+        gridBounds.y - padT,
+        gridBounds.width + padL + padR,
+        gridBounds.height + padT + padB
       );
       // Scene-level depth to sit between background (at -10) and symbols (0)
       this.baseOverlayRect.setDepth(-5);
@@ -211,38 +425,246 @@ export class Symbols {
       console.log('[Symbols] Base light grey grid background created (visible)');
 
       // Create/top border aligned to the top edge of the base overlay (with adjustable offsets)
-      const baseTopY = gridBounds.y - expandY;
-      const baseBottomY = gridBounds.y - expandY + (gridBounds.height + expandY * 2);
+      const baseTopY = gridBounds.y - padT;
+      const baseBottomY = gridBounds.y + gridBounds.height + padB;
       const topY = baseTopY + BORDER_UPPER_OFFSET_Y; // positive moves downward
       const bottomY = baseBottomY + BORDER_LOWER_OFFSET_Y; // negative moves upward
-      const totalWidth = gridBounds.width + expandX * 2;
+      const totalWidth = gridBounds.width + padL + padR;
 
       // Destroy existing borders if recreating
       try { this.baseOverlayBorderUpper?.destroy?.(); } catch {}
       try { this.baseOverlayBorderLower?.destroy?.(); } catch {}
 
-      // Upper border: origin bottom center at the top edge
-      this.baseOverlayBorderUpper = this.scene.add.image(
-        this.scene.scale.width * 0.5,
-        topY,
-        'Border_Upper'
-      ).setOrigin(0.5, 1.0);
-      this.baseOverlayBorderUpper.setDepth(2); // render above symbols
-      // Scale to match overlay width
-      const upperScaleX = totalWidth / this.baseOverlayBorderUpper.width;
-      this.baseOverlayBorderUpper.setScale(upperScaleX);
-      this.baseOverlayBorderUpper.setVisible(true);
+      // Create borders depending on bonus mode
+      const isBonus = !!gameStateManager.isBonus;
+      const centerX = this.scene.scale.width * 0.5;
+      if (isBonus && ensureSpineFactory(this.scene as any, '[Symbols] bonus border spines')) {
+        // Use spine borders in bonus stage
+        try { this.baseOverlayBorderUpper?.destroy?.(); } catch {}
+        try { this.baseOverlayBorderLower?.destroy?.(); } catch {}
+        // Upper spine
+        let upper: any = null;
+        try { upper = (this.scene.add as any).spine(centerX, topY + this.bonusDragonTopOffsetY, 'Dragon_Top_Bonus', 'Dragon_Top_Bonus-atlas'); } catch {}
+        if (upper) {
+          try { upper.setOrigin(0.5, 1.0); } catch {}
+          try { upper.setDepth(2); } catch {}
+          // Play its single available animation (looping)
+          try {
+            const state = (upper as any).animationState;
+            let played = false;
+            try { state.setAnimation(0, 'animation', true); played = true; } catch {}
+            if (!played) {
+              try {
+                const anims = (upper as any)?.skeleton?.data?.animations || [];
+                const first = anims[0]?.name; if (first) state.setAnimation(0, first, true);
+              } catch {}
+            }
+          } catch {}
+          // Fit width using bounds
+          try {
+            const b = upper.getBounds?.();
+            const width = b && (b.size?.x || b.width) ? (b.size?.x || b.width) : (upper.displayWidth || 0);
+            if (width > 0) {
+              const currentScaleX = upper.scaleX || 1;
+              const scaledWidth = width * currentScaleX;
+              const desiredScale = scaledWidth > 0 ? (totalWidth / scaledWidth) * currentScaleX : currentScaleX;
+              upper.setScale(desiredScale * this.baseBorderSkeletonScale);
+            }
+          } catch {}
+          // Apply position offsets
+          try { upper.x += this.baseBorderSkeletonOffsetX; upper.y += this.baseBorderSkeletonOffsetY; } catch {}
+          this.baseOverlayBorderUpper = upper;
+          this.baseTopDragon = upper;
+        } else {
+          // Fallback to PNG if spine not available
+          this.baseOverlayBorderUpper = this.scene.add.image(centerX, topY + this.borderTopOffsetY, 'Border_Upper').setOrigin(0.5, 1.0);
+          this.baseOverlayBorderUpper.setDepth(2);
+          const upperScaleX = totalWidth / this.baseOverlayBorderUpper.width;
+          this.baseOverlayBorderUpper.setScale(upperScaleX);
+          this.baseOverlayBorderUpper.setVisible(true);
+        }
+        // Lower spine
+        let lower: any = null;
+        try { lower = (this.scene.add as any).spine(centerX, bottomY + this.bonusDragonBottomOffsetY, 'dragon_bonus', 'dragon_bonus-atlas'); } catch {}
+        if (lower) {
+          try { lower.setOrigin(0.5, 0.0); } catch {}
+          try { lower.setDepth(2); } catch {}
+          // Play its single available animation (looping)
+          try {
+            const state = (lower as any).animationState;
+            let played = false;
+            try { state.setAnimation(0, 'animation', true); played = true; } catch {}
+            if (!played) {
+              try {
+                const anims = (lower as any)?.skeleton?.data?.animations || [];
+                const first = anims[0]?.name; if (first) state.setAnimation(0, first, true);
+              } catch {}
+            }
+          } catch {}
+          try {
+            const b = lower.getBounds?.();
+            const width = b && (b.size?.x || b.width) ? (b.size?.x || b.width) : (lower.displayWidth || 0);
+            if (width > 0) {
+              const currentScaleX = lower.scaleX || 1;
+              const scaledWidth = width * currentScaleX;
+              const desiredScale = scaledWidth > 0 ? (totalWidth / scaledWidth) * currentScaleX : currentScaleX;
+              const finalScale = this.baseBorderBottomUseAbsoluteScale
+                ? this.baseBorderBottomAbsoluteScale
+                : (desiredScale * this.baseBorderBottomScale);
+              // Mirror horizontally for bottom bonus dragon while using base bottom modifiers
+              lower.setScale(-finalScale, finalScale);
+            }
+          } catch {}
+          // Apply base bottom offsets
+          try { lower.x += this.baseBorderBottomOffsetX; lower.y += this.baseBorderBottomOffsetY; } catch {}
+          // Remember base Y before extra bonus offset, then apply extra bonus-only offset
+          try { (lower as any).__bonusBottomBaseY = lower.y - this.bonusBottomExtraOffsetY; } catch {}
+          try { lower.y += this.bonusBottomExtraOffsetY; } catch {}
+          this.baseOverlayBorderLower = lower;
+          this.bonusBottomDragon = lower;
+        } else {
+          // Fallback to PNG if spine not available
+          this.baseOverlayBorderLower = this.scene.add.image(centerX, bottomY + this.borderBottomOffsetY, 'Border_Lower').setOrigin(0.5, 0.0);
+          this.baseOverlayBorderLower.setDepth(2);
+          const lowerScaleX = totalWidth / this.baseOverlayBorderLower.width;
+          this.baseOverlayBorderLower.setScale(lowerScaleX);
+          this.baseOverlayBorderLower.setVisible(true);
+        }
+      } else {
+        // Base scene: try animated dragon_default spine, fallback to PNG
+        // Ensure a dedicated container exists for the base border so it can be moved independently
+        if (!this.baseBorderContainer) {
+          try {
+            this.baseBorderContainer = this.scene.add.container(0, 0);
+            try { this.baseBorderContainer.setDepth(2); } catch {}
+          } catch {}
+        }
+        let upper: any = null;
+        if (ensureSpineFactory(this.scene as any, '[Symbols] base border spine dragon_tail')) {
+          try { upper = (this.scene.add as any).spine(centerX, topY + this.borderTopOffsetY, 'dragon_default', 'dragon_default-atlas'); } catch {}
+        }
+        if (upper) {
+          try { upper.setOrigin(0.5, 1.0); } catch {}
+          try { upper.setDepth(2); } catch {}
+          // Play available animation (looping), fallback to first
+          try {
+            const state = (upper as any).animationState;
+            let played = false;
+            try { state.setAnimation(0, 'animation', true); played = true; } catch {}
+            if (!played) {
+              try {
+                const anims = (upper as any)?.skeleton?.data?.animations || [];
+                const first = anims[0]?.name; if (first) state.setAnimation(0, first, true);
+              } catch {}
+            }
+            // Apply configured timeScale / frame stepping
+            try {
+              const ts = Math.max(0.0001, this.baseBorderSkeletonTimeScale);
+              const step = Math.max(1, Math.floor(this.baseBorderSkeletonFrameStep || 1));
+              state.timeScale = (step > 1) ? 0 : ts;
+            } catch {}
+          } catch {}
+          // Fit/scale and position modifiers
+          try {
+            const b = upper.getBounds?.();
+            const width = b && (b.size?.x || b.width) ? (b.size?.x || b.width) : (upper.displayWidth || 0);
+            if (width > 0) {
+              const currentScaleX = upper.scaleX || 1;
+              const scaledWidth = width * currentScaleX;
+              const desiredScale = scaledWidth > 0 ? (totalWidth / scaledWidth) * currentScaleX : currentScaleX;
+              const finalScale = this.baseBorderSkeletonUseAbsoluteScale
+                ? this.baseBorderSkeletonAbsoluteScale
+                : (desiredScale * this.baseBorderSkeletonScale);
+              upper.setScale(finalScale);
+            }
+          } catch {}
+          // Apply offsets and optional half-offscreen placement
+          try { upper.x += this.baseBorderSkeletonOffsetX; upper.y += this.baseBorderSkeletonOffsetY; } catch {}
+          try {
+            if (this.baseBorderSkeletonHalfOffscreen) {
+              upper.x = this.baseBorderSkeletonOffscreenSide === 'right' ? this.scene.scale.width : 0;
+              upper.x += this.baseBorderSkeletonOffsetX;
+            }
+          } catch {}
+          // Add to the dedicated container so future movement/animation is simple
+          try { this.baseBorderContainer?.add(upper); } catch {}
+          this.baseOverlayBorderUpper = upper;
+        } else {
+          // Fallback PNG (mapped to skeleton.png in portrait/high)
+          this.baseOverlayBorderUpper = this.scene.add.image(
+            centerX,
+            topY + this.borderTopOffsetY,
+            'Border_Upper'
+          ).setOrigin(0.5, 1.0);
+          this.baseOverlayBorderUpper.setDepth(2);
+          const upperScaleX = totalWidth / this.baseOverlayBorderUpper.width;
+          this.baseOverlayBorderUpper.setScale(upperScaleX);
+          this.baseOverlayBorderUpper.setVisible(true);
+          // Add to container for consistency
+          try { this.baseBorderContainer?.add(this.baseOverlayBorderUpper); } catch {}
+          this.baseTopDragon = this.baseOverlayBorderUpper;
+        }
 
-      // Lower border: origin top center at the bottom edge
-      this.baseOverlayBorderLower = this.scene.add.image(
-        this.scene.scale.width * 0.5,
-        bottomY,
-        'Border_Lower'
-      ).setOrigin(0.5, 0.0);
-      this.baseOverlayBorderLower.setDepth(2); // render above symbols
-      const lowerScaleX = totalWidth / this.baseOverlayBorderLower.width;
-      this.baseOverlayBorderLower.setScale(lowerScaleX);
-      this.baseOverlayBorderLower.setVisible(true);
+        // Try mirrored dragon_default at the bottom; fallback to PNG
+        let lowerDragon: any = null;
+        if (ensureSpineFactory(this.scene as any, '[Symbols] base border spine dragon_tail bottom')) {
+          try { lowerDragon = (this.scene.add as any).spine(centerX, bottomY + this.borderBottomOffsetY, 'dragon_default', 'dragon_default-atlas'); } catch {}
+        }
+        if (lowerDragon) {
+          try { lowerDragon.setOrigin(0.5, 0.0); } catch {}
+          try { lowerDragon.setDepth(2); } catch {}
+          // Play available animation (looping), fallback to first
+          try {
+            const state = (lowerDragon as any).animationState;
+            let played = false;
+            try { state.setAnimation(0, 'animation', true); played = true; } catch {}
+            if (!played) {
+              try {
+                const anims = (lowerDragon as any)?.skeleton?.data?.animations || [];
+                const first = anims[0]?.name; if (first) state.setAnimation(0, first, true);
+              } catch {}
+            }
+            // Apply bottom timeScale / frame stepping
+            try {
+              const ts = Math.max(0.0001, this.baseBorderBottomTimeScale);
+              const step = Math.max(1, Math.floor(this.baseBorderBottomFrameStep || 1));
+              state.timeScale = (step > 1) ? 0 : ts;
+            } catch {}
+          } catch {}
+          // Fit/scale to width and mirror horizontally
+          try {
+            const b = lowerDragon.getBounds?.();
+            const width = b && (b.size?.x || b.width) ? (b.size?.x || b.width) : (lowerDragon.displayWidth || 0);
+            if (width > 0) {
+              const currentScaleX = lowerDragon.scaleX || 1;
+              const scaledWidth = width * currentScaleX;
+              const desiredScale = scaledWidth > 0 ? (totalWidth / scaledWidth) * currentScaleX : currentScaleX;
+              const finalScale = this.baseBorderBottomUseAbsoluteScale
+                ? this.baseBorderBottomAbsoluteScale
+                : (desiredScale * this.baseBorderBottomScale);
+              lowerDragon.setScale(-finalScale, finalScale);
+            }
+          } catch {}
+          // Apply bottom offsets
+          try { lowerDragon.x += this.baseBorderBottomOffsetX; lowerDragon.y += this.baseBorderBottomOffsetY; } catch {}
+          // Add to container for independent movement
+          try { this.baseBorderContainer?.add(lowerDragon); } catch {}
+          this.baseOverlayBorderLower = lowerDragon;
+          this.baseBottomDragon = lowerDragon;
+        } else {
+          this.baseOverlayBorderLower = this.scene.add.image(
+            centerX,
+            bottomY + this.borderBottomOffsetY,
+            'Border_Lower'
+          ).setOrigin(0.5, 0.0);
+          this.baseOverlayBorderLower.setDepth(2);
+          const lowerScaleX = totalWidth / this.baseOverlayBorderLower.width;
+          this.baseOverlayBorderLower.setScale(lowerScaleX);
+          this.baseOverlayBorderLower.setVisible(true);
+          try { this.baseBorderContainer?.add(this.baseOverlayBorderLower); } catch {}
+          this.baseBottomDragon = this.baseOverlayBorderLower;
+        }
+      }
     } catch (e) {
       console.warn('[Symbols] Failed to create base grid background:', e);
     }
@@ -259,22 +681,31 @@ export class Symbols {
     this.setupDialogEventListeners();
     this.setupSpinEventListener(); // Re-enabled to clean up symbols at spin start
     
+    // External trigger to flash all symbols with white overlay at spin-click time
+    this.scene.events.on('flashAllSymbolsNow', () => {
+      try {
+        // Ensure PNGs so overlay aligns perfectly
+        this.ensureCleanSymbolState();
+        // Avoid briefly revealing symbols during scatter/overlay transitions
+        if (!gameStateManager.isScatter) {
+          this.restoreSymbolVisibility();
+        }
+        this.flashAllSymbolsOverlay();
+      } catch {}
+    });
+    
     // Create a persistent light grey, semi-transparent background behind the symbol grid
     this.createBaseOverlayRect();
-    
-    // Prepare overlay container for sticky wilds above base symbols
-    this.ensureStickyWildsContainer();
-    
-    // Clear sticky wilds when bonus mode ends
-    this.scene.events.on('setBonusMode', (isBonus: boolean) => {
-      if (!isBonus) {
-        this.clearStickyWilds();
-      }
-    });
-    // Also clear on bonus UI hide events
-    this.scene.events.on('hideBonusBackground', () => this.clearStickyWilds());
-    this.scene.events.on('hideBonusHeader', () => this.clearStickyWilds());
-    this.scene.events.on('scatterBonusCompleted', () => this.clearStickyWilds());
+
+    // Install border stepper for frame-skipping if needed
+    if (!this.__borderUpdateHandler) {
+      this.__borderUpdateHandler = (_time: number, delta: number) => this.stepBorderAnimations(delta);
+      try { this.scene.events.on('update', this.__borderUpdateHandler, this); } catch {}
+      this.scene.events.once('shutdown', () => {
+        try { this.scene.events.off('update', this.__borderUpdateHandler!, this); } catch {}
+        this.__borderUpdateHandler = undefined;
+      });
+    }
 
     // Listen for a full free spin reset request (after congrats/bonus end)
     this.scene.events.on('resetFreeSpinState', () => {
@@ -290,115 +721,143 @@ export class Symbols {
       this.freeSpinAutoplayTriggered = false;
       this.dialogListenerSetup = false;
     });
-  }
 
-  // Ensure sticky wilds container exists (rendered above regular symbols and overlays)
-  public ensureStickyWildsContainer(): void {
-    if (!this.stickyWildsContainer) {
-      this.stickyWildsContainer = this.scene.add.container(0, 0);
-      // Add under the main symbols container so it inherits reel movement
-      if (this.container) {
-        this.container.add(this.stickyWildsContainer);
-      }
-      // Ensure high child depth inside the container to render above base symbols and overlays
-      this.stickyWildsContainer.setDepth(700);
-    }
-  }
-
-  private getStickyKey(col: number, row: number): string {
-    return `${col}_${row}`;
-  }
-
-  public hasStickyWildAt(col: number, row: number): boolean {
-    return this.stickyWilds.has(this.getStickyKey(col, row));
-  }
-
-  public addStickyWildAt(col: number, row: number, symbolValue: number): void {
-    // Only valid during bonus
-    if (!gameStateManager.isBonus) return;
-    // Only for rows 2-4 (0-indexed 1..3)
-    if (row < 1 || row > 3) return;
-    // Only for wildcard symbols
-    if (!WILDCARD_SYMBOLS.includes(symbolValue)) return;
-    
-    this.ensureStickyWildsContainer();
-    const key = this.getStickyKey(col, row);
-    if (this.stickyWilds.has(key)) {
-      // Sticky already exists here; hide the newly dropped wildcard sprite underneath
-      const existingBase = this.symbols?.[col]?.[row];
-      try {
-        if (existingBase?.setVisible) existingBase.setVisible(false);
-        else if (existingBase?.setAlpha) existingBase.setAlpha(0);
-      } catch {}
-      return;
-    }
-    
-    const baseSymbol = this.symbols?.[col]?.[row];
-    if (!baseSymbol) return;
-    const x = baseSymbol.x;
-    const y = baseSymbol.y;
-    
+    // Apply turbo timeScale to active symbol Spine animations when turbo toggles
     try {
-      const spineKey = `symbol_${symbolValue}_spine`;
-      const spineAtlasKey = spineKey + '-atlas';
-      const spine = this.scene.add.spine(x, y, spineKey, spineAtlasKey);
-      spine.setOrigin(0.5, 0.5);
-      // Use controlled scaling from configuration, then center and fit to cell
-      const configuredScale = this.getSpineSymbolScale(symbolValue);
-      // Remember the original PNG home position so PNG can restore it later
-      try { (spine as any).__pngHome = { x, y }; } catch {}
-      // Set canonical measurement pose before centering
-      try { spine.skeleton.setToSetupPose(); spine.update(0); } catch {}
-      this.centerAndFitSpine(spine, x, y, this.displayWidth, this.displayHeight, configuredScale, this.getWinSymbolNudge(symbolValue));
-      try { const m = this.getSpineScaleMultiplier(symbolValue); if (m !== 1) spine.setScale(spine.scaleX * m, spine.scaleY * m); } catch {}
-      // Prefer *_win if present, else fallback to *_hit
-      const symbolName = `Symbol${symbolValue}_HTBH`;
-      let anim = `${symbolName}_win`;
-      try {
-        const anims = spine.skeleton?.data?.animations?.map((a: any) => a?.name) || [];
-        if (!anims.includes(anim)) {
-          const fallback = `${symbolName}_hit`;
-          anim = anims.includes(fallback) ? fallback : anim;
-        }
-      } catch {}
-      spine.animationState.setAnimation(0, anim, true);
-      
-      // // Dev toggle: force sticky wild placement to match the debug probe exactly (rarely needed but useful for parity)
-      // try {
-      //   const forceMatch = (window as any).DEV_MATCH_PROBE === true;
-      //   if (forceMatch && symbolValue === 1) {
-      //     const probe = (this as any).__debugProbe?.spine;
-      //     if (probe) {
-      //       spine.x = probe.x;
-      //       spine.y = probe.y;
-      //       try { spine.setScale(probe.scaleX, probe.scaleY); } catch {}
-      //     }
-      //   }
-      // } catch {}
-      // this.stickyWildsContainer?.add(spine);
-      // this.stickyWilds.set(key, spine);
-
-      // Hide the base wildcard sprite underneath so only the sticky spine is visible
-      try {
-        if (baseSymbol?.setVisible) baseSymbol.setVisible(false);
-        else if (baseSymbol?.setAlpha) baseSymbol.setAlpha(0);
-      } catch {}
-    } catch (e) {
-      console.warn('[Symbols] Failed to create sticky wild spine at', col, row, e);
-    }
+      gameEventManager.on(GameEventType.TURBO_ON, () => this.applyTurboToActiveSymbolSpines());
+      gameEventManager.on(GameEventType.TURBO_OFF, () => this.applyTurboToActiveSymbolSpines());
+    } catch {}
+    // Console helpers for live tuning (mask padding and dragon offsets)
+    try {
+      (window as any).setGridMaskPadding = (opts: { left?: number; right?: number; top?: number; bottom?: number }) => {
+        this.setGridMaskPadding(opts);
+        return { left: this.gridMaskPaddingLeft, right: this.gridMaskPaddingRight, top: this.gridMaskPaddingTop, bottom: this.gridMaskPaddingBottom };
+      };
+      (window as any).setBonusDragonOffsets = (opts: { topY?: number; bottomY?: number }) => {
+        this.setBonusDragonOffsets(opts);
+        return { topY: this.bonusDragonTopOffsetY, bottomY: this.bonusDragonBottomOffsetY };
+      };
+      (window as any).setBaseOverlayPadding = (opts: { left?: number; right?: number; top?: number; bottom?: number }) => {
+        this.setBaseOverlayPadding(opts);
+        return { left: this.baseOverlayPaddingLeft, right: this.baseOverlayPaddingRight, top: this.baseOverlayPaddingTop, bottom: this.baseOverlayPaddingBottom };
+      };
+      (window as any).setBorderOffsets = (opts: { topY?: number; bottomY?: number }) => {
+        this.setBorderOffsets(opts);
+        return { topY: this.borderTopOffsetY, bottomY: this.borderBottomOffsetY };
+      };
+      console.log('[Symbols] Console helpers available: setGridMaskPadding({...}), setBonusDragonOffsets({...}), setBaseOverlayPadding({...}), setBorderOffsets({...})');
+    } catch {}
   }
 
-  public clearStickyWilds(): void {
-    if (this.stickyWilds) {
-      for (const spine of this.stickyWilds.values()) {
-        try { spine?.destroy?.(); } catch {}
+  /** Update the grid mask padding and re-apply the mask. */
+  private setGridMaskPadding(opts: { left?: number; right?: number; top?: number; bottom?: number }): void {
+    if (opts.left !== undefined) this.gridMaskPaddingLeft = opts.left;
+    if (opts.right !== undefined) this.gridMaskPaddingRight = opts.right;
+    if (opts.top !== undefined) this.gridMaskPaddingTop = opts.top;
+    if (opts.bottom !== undefined) this.gridMaskPaddingBottom = opts.bottom;
+    if (!this.gridMaskShape) return;
+    try {
+      this.gridMaskShape.clear();
+      this.gridMaskShape.fillRect(
+        this.slotX - this.totalGridWidth * 0.5 - this.gridMaskPaddingLeft,
+        this.slotY - this.totalGridHeight * 0.5 - this.gridMaskPaddingTop,
+        this.totalGridWidth + this.gridMaskPaddingLeft + this.gridMaskPaddingRight,
+        this.totalGridHeight + this.gridMaskPaddingTop + this.gridMaskPaddingBottom
+      );
+      console.log('[Symbols] Updated mask padding:', {
+        left: this.gridMaskPaddingLeft,
+        right: this.gridMaskPaddingRight,
+        top: this.gridMaskPaddingTop,
+        bottom: this.gridMaskPaddingBottom
+      });
+    } catch {}
+  }
+
+  /** Update bonus dragon border Y offsets and apply to existing borders if present. */
+  private setBonusDragonOffsets(opts: { topY?: number; bottomY?: number }): void {
+    if (opts.topY !== undefined) this.bonusDragonTopOffsetY = opts.topY;
+    if (opts.bottomY !== undefined) this.bonusDragonBottomOffsetY = opts.bottomY;
+    // Reposition existing borders if we have bounds
+    try {
+      if (!this.baseOverlayBounds) return;
+      const gridBounds = this.baseOverlayBounds;
+      const expandX = 0;
+      const expandY = 0;
+      const baseTopY = gridBounds.y - expandY;
+      const baseBottomY = gridBounds.y - expandY + (gridBounds.height + expandY * 2);
+      const topY = baseTopY + BORDER_UPPER_OFFSET_Y + this.bonusDragonTopOffsetY;
+      const bottomY = baseBottomY + BORDER_LOWER_OFFSET_Y + this.bonusDragonBottomOffsetY;
+      if (this.baseOverlayBorderUpper && typeof this.baseOverlayBorderUpper.setY === 'function') {
+        this.baseOverlayBorderUpper.setY(topY);
       }
-      this.stickyWilds.clear();
-    }
-    if (this.stickyWildsContainer) {
-      try { this.stickyWildsContainer.removeAll(true); } catch {}
-    }
+      if (this.baseOverlayBorderLower && typeof this.baseOverlayBorderLower.setY === 'function') {
+        this.baseOverlayBorderLower.setY(bottomY);
+      }
+      console.log('[Symbols] Applied dragon Y offsets:', { topY: this.bonusDragonTopOffsetY, bottomY: this.bonusDragonBottomOffsetY });
+    } catch {}
   }
+
+  /** Update base overlay paddings and rebuild the overlay and borders to reflect changes. */
+  private setBaseOverlayPadding(opts: { left?: number; right?: number; top?: number; bottom?: number }): void {
+    if (opts.left !== undefined) this.baseOverlayPaddingLeft = opts.left;
+    if (opts.right !== undefined) this.baseOverlayPaddingRight = opts.right;
+    if (opts.top !== undefined) this.baseOverlayPaddingTop = opts.top;
+    if (opts.bottom !== undefined) this.baseOverlayPaddingBottom = opts.bottom;
+    try {
+      // Recreate the base overlay and borders with new paddings
+      this.createBaseOverlayRect();
+      console.log('[Symbols] Updated base overlay paddings:', {
+        left: this.baseOverlayPaddingLeft,
+        right: this.baseOverlayPaddingRight,
+        top: this.baseOverlayPaddingTop,
+        bottom: this.baseOverlayPaddingBottom
+      });
+    } catch {}
+  }
+
+  /** Update PNG border Y offsets and apply to existing PNG borders immediately. */
+  private setBorderOffsets(opts: { topY?: number; bottomY?: number }): void {
+    if (opts.topY !== undefined) this.borderTopOffsetY = opts.topY;
+    if (opts.bottomY !== undefined) this.borderBottomOffsetY = opts.bottomY;
+    try {
+      if (!this.baseOverlayBounds) return;
+      const gridBounds = this.baseOverlayBounds;
+      const padT = this.baseOverlayPaddingTop;
+      const padB = this.baseOverlayPaddingBottom;
+      const baseTopY = gridBounds.y; // already includes padding top in bounds origin
+      const baseBottomY = gridBounds.y + gridBounds.height; // includes bottom padding
+      const topY = baseTopY + BORDER_UPPER_OFFSET_Y + this.borderTopOffsetY;
+      const bottomY = baseBottomY + BORDER_LOWER_OFFSET_Y + this.borderBottomOffsetY;
+      if (this.baseOverlayBorderUpper && typeof this.baseOverlayBorderUpper.setY === 'function') {
+        this.baseOverlayBorderUpper.setY(topY);
+      }
+      if (this.baseOverlayBorderLower && typeof this.baseOverlayBorderLower.setY === 'function') {
+        this.baseOverlayBorderLower.setY(bottomY);
+      }
+      console.log('[Symbols] Applied PNG border Y offsets:', { topY: this.borderTopOffsetY, bottomY: this.borderBottomOffsetY });
+    } catch {}
+  }
+
+  // Turbo helpers: apply timeScale to existing symbol Spine animations
+  private applyTurboToActiveSymbolSpines(): void {
+    try {
+      if (!this.symbols || !this.symbols.length) return;
+      const isTurbo = (window as any)?.gameStateManager?.isTurbo ?? false;
+      const speed = isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1.0;
+      for (let col = 0; col < this.symbols.length; col++) {
+        const column = this.symbols[col];
+        for (let row = 0; row < column.length; row++) {
+          const obj: any = column[row];
+          if (obj && obj.animationState) {
+            try { obj.animationState.timeScale = Math.max(0.0001, speed); } catch {}
+          }
+        }
+      }
+      console.log(`[Symbols] Applied turbo timeScale ${speed} to active symbol Spine animations (isTurbo=${isTurbo})`);
+    } catch {}
+  }
+
+  
 
   /**
    * Applies a subtle flash effect to all symbols
@@ -438,13 +897,111 @@ export class Symbols {
     }
   }
 
+  /**
+   * Flash all PNG symbols with a white overlay pulse (same style as reel overlay)
+   */
+  private flashAllSymbolsOverlay(): void {
+    try {
+      if (!this.symbols || !this.symbols.length || !this.symbols[0] || !this.symbols[0].length) return;
+      let overlaysCreated = 0;
+
+      // Flash per reel (group of 3 symbols vertically), retaining the same visual output
+      const reelsCount = this.symbols[0].length; // horizontal count
+      for (let reelIndex = 0; reelIndex < reelsCount; reelIndex++) {
+        for (let col = 0; col < this.symbols.length; col++) {
+          const obj = this.symbols[col][reelIndex];
+          if (!obj) continue;
+          if ((obj as any).animationState) continue; // only PNGs
+
+          // Determine symbol value to find its PNG texture
+          let symbolValue: number | undefined;
+          try {
+            const key: string | undefined = (obj as any)?.texture?.key;
+            if (key && key.startsWith('symbol_')) {
+              const parts = key.split('_');
+              const parsed = parseInt(parts[1], 10);
+              if (!Number.isNaN(parsed)) symbolValue = parsed;
+            }
+          } catch {}
+          const pngKey = symbolValue !== undefined ? `symbol_${symbolValue}` : ((obj as any)?.texture?.key || '');
+          if (!pngKey || !this.scene.textures.exists(pngKey)) continue;
+
+          // Prefer aligning to the original PNG anchor and size, plus the same nudge used for Spine
+          const home = (obj as any).__pngHome as { x: number; y: number } | undefined;
+          const size = (obj as any).__pngSize as { w: number; h: number } | undefined;
+          const nudge = (obj as any).__pngNudge as { x: number; y: number } | undefined;
+          const overlayOnly = (symbolValue !== undefined ? this.getOverlayNudge(symbolValue) : undefined) || { x: 0, y: 0 };
+          const centerX = (home?.x ?? obj.x) + (nudge?.x ?? 0) + overlayOnly.x;
+          const centerY = (home?.y ?? obj.y) + (nudge?.y ?? 0) + overlayOnly.y;
+          const w = Math.max(2, size?.w ?? obj.displayWidth ?? 0);
+          const h = Math.max(2, size?.h ?? obj.displayHeight ?? 0);
+
+          const overlayImg = this.scene.add.image(centerX, centerY, pngKey);
+          overlayImg.setOrigin(0.5, 0.5);
+          overlayImg.setDisplaySize(w, h);
+          // Draw on scene root (not in symbols container) so it can render above the dark overlay
+          try { overlayImg.setDepth(1005); } catch {}
+          if (typeof (overlayImg as any).setBlendMode === 'function') {
+            (overlayImg as any).setBlendMode(Phaser.BlendModes.ADD);
+          }
+          // Ensure it's bright white regardless of source
+          if (typeof (overlayImg as any).setTintFill === 'function') {
+            (overlayImg as any).setTintFill(0xffffff);
+          } else if (typeof (overlayImg as any).setTint === 'function') {
+            (overlayImg as any).setTint(0xffffff);
+          }
+          overlayImg.setAlpha(Math.max(0, Math.min(1, this.flashOverlayAlphaStart)));
+          overlayImg.setVisible(true);
+          overlaysCreated++;
+
+          const effectiveSpeed = Math.max(0.05, this.flashOverlaySpeedMultiplier);
+          const dur = Math.max(20, Math.floor(this.flashOverlayDurationMs / effectiveSpeed));
+          this.scene.tweens.add({
+            targets: overlayImg,
+            alpha: Math.max(0, Math.min(1, this.flashOverlayFadeTo)),
+            duration: dur,
+            ease: 'Sine.easeOut',
+            onComplete: () => {
+              try { overlayImg.destroy(); } catch {}
+            }
+          });
+        }
+      }
+      console.log(`[Symbols] flashAllSymbolsOverlay created overlays (per reel): ${overlaysCreated}`);
+    } catch {}
+  }
+
+  /**
+   * Configure the flash overlay effect
+   * - alphaStart: starting opacity (0..1)
+   * - fadeTo: target opacity to fade to (0..1)
+   * - durationMs: base duration in ms (before applying speedMultiplier)
+   * - speedMultiplier: >1 speeds up, <1 slows down
+   */
+  public setFlashOverlayOptions(options: {
+    alphaStart?: number;
+    fadeTo?: number;
+    durationMs?: number;
+    speedMultiplier?: number;
+  }): void {
+    if (options.alphaStart !== undefined) {
+      this.flashOverlayAlphaStart = Math.max(0, Math.min(1, options.alphaStart));
+    }
+    if (options.fadeTo !== undefined) {
+      this.flashOverlayFadeTo = Math.max(0, Math.min(1, options.fadeTo));
+    }
+    if (options.durationMs !== undefined) {
+      this.flashOverlayDurationMs = Math.max(20, Math.floor(options.durationMs));
+    }
+    if (options.speedMultiplier !== undefined) {
+      this.flashOverlaySpeedMultiplier = Math.max(0.05, options.speedMultiplier);
+    }
+  }
+
   private setupSpinEventListener() {
     // Listen for spin events to reset any lingering Spine symbols
     gameEventManager.on(GameEventType.SPIN, () => {
       console.log('[Symbols] Spin event detected, ensuring clean state');
-      
-      // Add flash effect when spin starts
-      this.flashSymbols();
       
       // CRITICAL: Block autoplay spin actions if win dialog is showing, but allow manual spins
       // This fixes the timing issue where manual spin symbol cleanup was blocked
@@ -461,6 +1018,7 @@ export class Symbols {
         return;
       }
       
+      // First convert any Spine symbols back to PNG so the flash applies to PNG sprites
       this.ensureCleanSymbolState();
       
       // Only clear winlines if they're not still animating or if this is a manual spin
@@ -483,10 +1041,9 @@ export class Symbols {
       this.resetSymbolDepths();
       // Restore symbol visibility for new spin
       this.restoreSymbolVisibility();
-      // Keep sticky wilds visible during bonus
-      if (gameStateManager.isBonus) {
-        this.restoreStickyWildsVisibility();
-      }
+
+      // Flash all symbols with white overlay after PNG restoration
+      this.flashAllSymbolsOverlay();
     });
     
     // Listen for winline completion to resume autoplay
@@ -554,11 +1111,6 @@ export class Symbols {
     for (let col = 0; col < this.symbols.length; col++) {
       for (let row = 0; row < this.symbols[col].length; row++) {
         const symbol = this.symbols[col][row];
-        
-        // Skip sticky wilds during bonus mode so they persist
-        if (gameStateManager.isBonus && this.hasStickyWildAt(col, row)) {
-          continue;
-        }
         
         if (symbol && symbol.animationState) {
           // This is a Spine symbol, convert it back to PNG
@@ -638,6 +1190,225 @@ export class Symbols {
     this.scene.events.on('scatterBonusActivated', (data: { scatterIndex: number; actualFreeSpins: number }) => {
       console.log(`[Symbols] Scatter bonus activated with ${data.actualFreeSpins} free spins - storing data for autoplay`);
       this.pendingFreeSpinsData = data;
+    });
+
+    // Listen for bonus mode toggles to recreate borders with correct assets
+    this.scene.events.on('setBonusMode', (isBonus: boolean) => {
+      try {
+        // Recreate borders if base overlay exists
+        if (this.baseOverlayRect && this.baseOverlayBounds) {
+          // Use stored bounds from creation time
+          const gridBounds = this.baseOverlayBounds;
+          const expandX = 0;
+          const expandY = 0;
+          const baseTopY = gridBounds.y - expandY;
+          const baseBottomY = gridBounds.y - expandY + (gridBounds.height + expandY * 2);
+          const topY = baseTopY + BORDER_UPPER_OFFSET_Y;
+          const bottomY = baseBottomY + BORDER_LOWER_OFFSET_Y;
+          const totalWidth = gridBounds.width + expandX * 2;
+
+          // Destroy old borders
+          try { this.baseOverlayBorderUpper?.destroy?.(); } catch {}
+          try { this.baseOverlayBorderLower?.destroy?.(); } catch {}
+
+          const centerX = this.scene.scale.width * 0.5;
+          if (isBonus && ensureSpineFactory(this.scene as any, '[Symbols] bonus border spines (toggle)')) {
+            // Create spine borders
+            let upper: any = null;
+            try { upper = (this.scene.add as any).spine(centerX, topY + this.bonusDragonTopOffsetY, 'dragon_bonus', 'dragon_bonus-atlas'); } catch {}
+            if (upper) {
+              try { upper.setOrigin(0.5, 1.0); upper.setDepth(2); } catch {}
+              // Play its single available animation (looping)
+              try {
+                const state = (upper as any).animationState;
+                let played = false;
+                try { state.setAnimation(0, 'animation', true); played = true; } catch {}
+                if (!played) {
+                  try {
+                    const anims = (upper as any)?.skeleton?.data?.animations || [];
+                    const first = anims[0]?.name; if (first) state.setAnimation(0, first, true);
+                  } catch {}
+                }
+              } catch {}
+              try {
+                const b = upper.getBounds?.();
+                const width = b && (b.size?.x || b.width) ? (b.size?.x || b.width) : (upper.displayWidth || 0);
+                if (width > 0) {
+                  const currentScaleX = upper.scaleX || 1;
+                  const scaledWidth = width * currentScaleX;
+                  const desiredScale = scaledWidth > 0 ? (totalWidth / scaledWidth) * currentScaleX : currentScaleX;
+                  const finalScale = this.baseBorderSkeletonUseAbsoluteScale
+                    ? this.baseBorderSkeletonAbsoluteScale
+                    : (desiredScale * this.baseBorderSkeletonScale);
+                  upper.setScale(finalScale);
+                }
+              } catch {}
+              // Apply offsets and optional half-offscreen placement
+              try { upper.x += this.baseBorderSkeletonOffsetX; upper.y += this.baseBorderSkeletonOffsetY; } catch {}
+              try {
+                if (this.baseBorderSkeletonHalfOffscreen) {
+                  upper.x = this.baseBorderSkeletonOffscreenSide === 'right' ? this.scene.scale.width : 0;
+                  upper.x += this.baseBorderSkeletonOffsetX;
+                }
+              } catch {}
+              this.baseOverlayBorderUpper = upper;
+              this.bonusTopDragon = upper;
+            }
+
+            let lower: any = null;
+            try { lower = (this.scene.add as any).spine(centerX, bottomY + this.bonusDragonBottomOffsetY, 'dragon_bonus', 'dragon_bonus-atlas'); } catch {}
+            if (lower) {
+              try { lower.setOrigin(0.5, 0.0); lower.setDepth(2); } catch {}
+              // Play its single available animation (looping)
+              try {
+                const state = (lower as any).animationState;
+                let played = false;
+                try { state.setAnimation(0, 'animation', true); played = true; } catch {}
+                if (!played) {
+                  try {
+                    const anims = (lower as any)?.skeleton?.data?.animations || [];
+                    const first = anims[0]?.name; if (first) state.setAnimation(0, first, true);
+                  } catch {}
+                }
+              } catch {}
+              try {
+                const b = lower.getBounds?.();
+                const width = b && (b.size?.x || b.width) ? (b.size?.x || b.width) : (lower.displayWidth || 0);
+                if (width > 0) {
+                  const currentScaleX = lower.scaleX || 1;
+                  const scaledWidth = width * currentScaleX;
+                  const desiredScale = scaledWidth > 0 ? (totalWidth / scaledWidth) * currentScaleX : currentScaleX;
+                  const finalScale = this.baseBorderBottomUseAbsoluteScale
+                    ? this.baseBorderBottomAbsoluteScale
+                    : (desiredScale * this.baseBorderBottomScale);
+                  // Mirror horizontally for bottom bonus dragon and apply base-bottom modifiers
+                  lower.setScale(-finalScale, finalScale);
+                }
+              } catch {}
+              // Apply base bottom offsets
+              try { lower.x += this.baseBorderBottomOffsetX; lower.y += this.baseBorderBottomOffsetY; } catch {}
+              // Remember base Y before extra bonus offset, then apply extra bonus-only offset
+              try { (lower as any).__bonusBottomBaseY = lower.y; } catch {}
+              try { lower.y += this.bonusBottomExtraOffsetY; } catch {}
+              this.baseOverlayBorderLower = lower;
+              this.bonusBottomDragon = lower;
+            }
+          } else {
+            // Base scene after toggle: try animated dragon_default spine, fallback to PNG
+            if (!this.baseBorderContainer) {
+              try {
+                this.baseBorderContainer = this.scene.add.container(0, 0);
+                try { this.baseBorderContainer.setDepth(2); } catch {}
+              } catch {}
+            }
+            let upper: any = null;
+            if (ensureSpineFactory(this.scene as any, '[Symbols] base border spine dragon_tail (toggle)')) {
+              try { upper = (this.scene.add as any).spine(centerX, topY, 'dragon_default', 'dragon_default-atlas'); } catch {}
+            }
+            if (upper) {
+              try { upper.setOrigin(0.5, 1.0); upper.setDepth(2); } catch {}
+              // Play animation loop or first available
+              try {
+                const state = (upper as any).animationState;
+                let played = false;
+                try { state.setAnimation(0, 'animation', true); played = true; } catch {}
+                if (!played) {
+                  try {
+                    const anims = (upper as any)?.skeleton?.data?.animations || [];
+                    const first = anims[0]?.name; if (first) state.setAnimation(0, first, true);
+                  } catch {}
+                }
+                // Apply configured timeScale / frame stepping
+                try {
+                  const ts = Math.max(0.0001, this.baseBorderSkeletonTimeScale);
+                  const step = Math.max(1, Math.floor(this.baseBorderSkeletonFrameStep || 1));
+                  state.timeScale = (step > 1) ? 0 : ts;
+                } catch {}
+              } catch {}
+              try {
+                const b = upper.getBounds?.();
+                const width = b && (b.size?.x || b.width) ? (b.size?.x || b.width) : (upper.displayWidth || 0);
+                if (width > 0) {
+                  const currentScaleX = upper.scaleX || 1;
+                  const scaledWidth = width * currentScaleX;
+                  const desiredScale = scaledWidth > 0 ? (totalWidth / scaledWidth) * currentScaleX : currentScaleX;
+                  const finalScale = this.baseBorderSkeletonUseAbsoluteScale
+                    ? this.baseBorderSkeletonAbsoluteScale
+                    : (desiredScale * this.baseBorderSkeletonScale);
+                  upper.setScale(finalScale);
+                }
+              } catch {}
+              // Apply offsets and optional half-offscreen placement
+              try { upper.x += this.baseBorderSkeletonOffsetX; upper.y += this.baseBorderSkeletonOffsetY; } catch {}
+              try {
+                if (this.baseBorderSkeletonHalfOffscreen) {
+                  upper.x = this.baseBorderSkeletonOffscreenSide === 'right' ? this.scene.scale.width : 0;
+                  upper.x += this.baseBorderSkeletonOffsetX;
+                }
+              } catch {}
+              try { this.baseBorderContainer?.add(upper); } catch {}
+              this.baseOverlayBorderUpper = upper;
+              this.baseTopDragon = upper;
+            } else {
+              this.baseOverlayBorderUpper = this.scene.add.image(centerX, topY, 'Border_Upper').setOrigin(0.5, 1.0);
+              this.baseOverlayBorderUpper.setDepth(2);
+              const upperScaleX = totalWidth / this.baseOverlayBorderUpper.width;
+              this.baseOverlayBorderUpper.setScale(upperScaleX);
+              this.baseOverlayBorderUpper.setVisible(true);
+              try { this.baseBorderContainer?.add(this.baseOverlayBorderUpper); } catch {}
+              this.baseTopDragon = this.baseOverlayBorderUpper;
+            }
+
+            // Bottom: try mirrored dragon_default; fallback to PNG
+            let lowerDragon: any = null;
+            if (ensureSpineFactory(this.scene as any, '[Symbols] base border spine dragon_tail bottom (toggle)')) {
+              try { lowerDragon = (this.scene.add as any).spine(centerX, bottomY, 'dragon_default', 'dragon_default-atlas'); } catch {}
+            }
+            if (lowerDragon) {
+              try { lowerDragon.setOrigin(0.5, 0.0); lowerDragon.setDepth(2); } catch {}
+              try {
+                const state = (lowerDragon as any).animationState;
+                let played = false;
+                try { state.setAnimation(0, 'animation', true); played = true; } catch {}
+                if (!played) {
+                  try { const anims = (lowerDragon as any)?.skeleton?.data?.animations || []; const first = anims[0]?.name; if (first) state.setAnimation(0, first, true); } catch {}
+                }
+                try {
+                  const ts = Math.max(0.0001, this.baseBorderBottomTimeScale);
+                  const step = Math.max(1, Math.floor(this.baseBorderBottomFrameStep || 1));
+                  state.timeScale = (step > 1) ? 0 : ts;
+                } catch {}
+              } catch {}
+              try {
+                const b = lowerDragon.getBounds?.();
+                const width = b && (b.size?.x || b.width) ? (b.size?.x || b.width) : (lowerDragon.displayWidth || 0);
+                if (width > 0) {
+                  const currentScaleX = lowerDragon.scaleX || 1;
+                  const scaledWidth = width * currentScaleX;
+                  const desiredScale = scaledWidth > 0 ? (totalWidth / scaledWidth) * currentScaleX : currentScaleX;
+                  const finalScale = this.baseBorderBottomUseAbsoluteScale ? this.baseBorderBottomAbsoluteScale : (desiredScale * this.baseBorderBottomScale);
+                  lowerDragon.setScale(-finalScale, finalScale);
+                }
+              } catch {}
+              try { lowerDragon.x += this.baseBorderBottomOffsetX; lowerDragon.y += this.baseBorderBottomOffsetY; } catch {}
+              // Remember base Y before extra bonus offset, then apply extra bonus-only offset
+              try { (lowerDragon as any).__bonusBottomBaseY = lowerDragon.y; } catch {}
+              try { lowerDragon.y += this.bonusBottomExtraOffsetY; } catch {}
+              try { this.baseBorderContainer?.add(lowerDragon); } catch {}
+              this.baseOverlayBorderLower = lowerDragon;
+              this.baseBottomDragon = lowerDragon;
+            } else {
+              this.baseOverlayBorderLower = this.scene.add.image(centerX, bottomY, 'Border_Lower').setOrigin(0.5, 0.0);
+              this.baseOverlayBorderLower.setDepth(2);
+              const lowerScaleX = totalWidth / this.baseOverlayBorderLower.width;
+              this.baseOverlayBorderLower.setScale(lowerScaleX);
+              this.baseOverlayBorderLower.setVisible(true);
+              try { this.baseBorderContainer?.add(this.baseOverlayBorderLower); } catch {}
+              this.baseBottomDragon = this.baseOverlayBorderLower;
+            }
+          }
+        }
+      } catch {}
     });
 
     // Listen for scatter bonus completion to restore symbol visibility
@@ -780,18 +1551,6 @@ export class Symbols {
         continue;
       }
 
-      // Skip if this is a sticky wild during bonus
-      try {
-        if (gameStateManager.isBonus && this.hasStickyWildAt(col, reelIndex)) {
-          const val = (this.scene as any)?.currentSymbolData?.[col]?.[reelIndex];
-          if (typeof val === 'number' && WILDCARD_SYMBOLS.includes(val)) {
-            if (symbol?.setVisible) symbol.setVisible(false);
-            else if (symbol?.setAlpha) symbol.setAlpha(0);
-            continue;
-          }
-        }
-      } catch {}
-
       try {
         // Get symbol value from current data
         const symbolValue = (this.scene as any)?.currentSymbolData?.[col]?.[reelIndex];
@@ -849,6 +1608,8 @@ export class Symbols {
         
         // Play idle animation (loop)
         spineSymbol.animationState.setAnimation(0, idleAnim, true);
+        // Re-center on next tick to compensate for bounds changes after animation starts
+        this.reCenterSpineNextTick(spineSymbol, x, y, this.getIdleSymbolNudge(symbolValue));
         console.log(`[Symbols] Set NEW symbol at (${reelIndex}, ${col}) to idle animation: ${idleAnim}`);
       } catch (e) {
         console.warn(`[Symbols] Failed to set idle Spine on NEW symbol at (${reelIndex}, ${col}):`, e);
@@ -1069,18 +1830,6 @@ export class Symbols {
         continue;
       }
 
-      // Skip if this is a sticky wild during bonus
-      try {
-        if (gameStateManager.isBonus && this.hasStickyWildAt(col, reelIndex)) {
-          const val = (this.scene as any)?.currentSymbolData?.[col]?.[reelIndex];
-          if (typeof val === 'number' && WILDCARD_SYMBOLS.includes(val)) {
-            if (symbol?.setVisible) symbol.setVisible(false);
-            else if (symbol?.setAlpha) symbol.setAlpha(0);
-            continue;
-          }
-        }
-      } catch {}
-
       try {
         // Get symbol value from current data
         const symbolValue = (this.scene as any)?.currentSymbolData?.[col]?.[reelIndex];
@@ -1117,7 +1866,7 @@ export class Symbols {
         const baseScale = this.getIdleSpineSymbolScale(symbolValue);
         try { (spineSymbol as any).__pngHome = { x, y }; } catch {}
         try { spineSymbol.skeleton.setToSetupPose(); spineSymbol.update(0); } catch {}
-        this.centerAndFitSpine(spineSymbol, x, y, displayWidth, displayHeight, baseScale, this.getSymbolNudge(symbolValue));
+        this.centerAndFitSpine(spineSymbol, x, y, displayWidth, displayHeight, baseScale, this.getIdleSymbolNudge(symbolValue));
         try { const m = this.getSpineScaleMultiplier(symbolValue) * this.getIdleScaleMultiplier(symbolValue); if (m !== 1) spineSymbol.setScale(spineSymbol.scaleX * m, spineSymbol.scaleY * m); } catch {}
         // Dev toggle: force reel symbol placement to match the debug probe exactly
         try {
@@ -1136,6 +1885,8 @@ export class Symbols {
         
         // Play idle animation (loop)
         spineSymbol.animationState.setAnimation(0, idleAnim, true);
+        // Re-center on next tick to compensate for bounds changes after animation starts
+        this.reCenterSpineNextTick(spineSymbol, x, y, this.getIdleSymbolNudge(symbolValue));
         console.log(`[Symbols] Set symbol at (${reelIndex}, ${col}) to idle animation: ${idleAnim}`);
       } catch (e) {
         console.warn(`[Symbols] Failed to set idle Spine on symbol at (${reelIndex}, ${col}):`, e);
@@ -1154,6 +1905,14 @@ export class Symbols {
       this.container.setAlpha(1);
       console.log('[Symbols] Container alpha reset to 1');
     }
+    // Restore base overlay visibility and opacity
+    try {
+      if (this.baseOverlayRect) {
+        this.scene.tweens.killTweensOf(this.baseOverlayRect);
+        this.baseOverlayRect.setVisible(true);
+        this.baseOverlayRect.setAlpha(1);
+      }
+    } catch {}
     
     // Reset visibility of any symbols that might have been hidden
     if (this.symbols && this.symbols.length > 0) {
@@ -1171,24 +1930,7 @@ export class Symbols {
           }
           resetCount++;
 
-          // During bonus, if a sticky wild Spine exists here AND this PNG is a wildcard, keep it hidden
-          if (gameStateManager.isBonus && this.hasStickyWildAt(col, row)) {
-            try {
-              const textureKey: string | undefined = symbol.texture?.key;
-              const isWildByTexture = typeof textureKey === 'string' && (/^symbol_\d+$/).test(textureKey)
-                ? (() => { const n = parseInt(textureKey.split('_')[1], 10); return WILDCARD_SYMBOLS.includes(n); })()
-                : false;
-              const valueFromData = this.currentSymbolData?.[col]?.[row];
-              const isWildByData = typeof valueFromData === 'number' && WILDCARD_SYMBOLS.includes(valueFromData);
-              if (isWildByTexture || isWildByData) {
-                if (typeof symbol.setAlpha === 'function') {
-                  symbol.setAlpha(0);
-                } else if (typeof symbol.setVisible === 'function') {
-                  symbol.setVisible(false);
-                }
-              }
-            } catch {}
-          }
+          
         }
       }
       console.log(`[Symbols] Restored visibility for ${resetCount} symbols, set ${visibleCount} to visible`);
@@ -1517,23 +2259,7 @@ export class Symbols {
       for (let col = 0; col < this.symbols.length; col++) {
         for (let row = 0; row < this.symbols[col].length; row++) {
           const symbol = this.symbols[col][row];
-          // Skip resetting sticky wild spines during bonus mode
-          if (gameStateManager.isBonus && this.hasStickyWildAt(col, row)) {
-            // Ensure underlying wildcard PNG stays hidden if present
-            try {
-              const textureKey: string | undefined = symbol?.texture?.key;
-              const isWildByTexture = typeof textureKey === 'string' && (/^symbol_\d+$/).test(textureKey)
-                ? (() => { const n = parseInt(textureKey.split('_')[1], 10); return WILDCARD_SYMBOLS.includes(n); })()
-                : false;
-              const valueFromData = this.currentSymbolData?.[col]?.[row];
-              const isWildByData = typeof valueFromData === 'number' && WILDCARD_SYMBOLS.includes(valueFromData);
-              if (isWildByTexture || isWildByData) {
-                if (symbol?.setAlpha) symbol.setAlpha(0);
-                else if (symbol?.setVisible) symbol.setVisible(false);
-              }
-            } catch {}
-            continue;
-          }
+          
           if (symbol && symbol.active) {
             // Check if symbol has the required methods before calling them
             if (typeof symbol.clearTint === 'function') {
@@ -1578,10 +2304,7 @@ export class Symbols {
    * Ensure sticky wild overlay stays visible across spins during bonus
    */
   public restoreStickyWildsVisibility(): void {
-    if (this.stickyWildsContainer) {
-      this.stickyWildsContainer.setVisible(true);
-      this.stickyWildsContainer.setAlpha(1);
-    }
+    // removed sticky wilds support
   }
 
   /**
@@ -1609,7 +2332,7 @@ export class Symbols {
     this.overlayRect = this.scene.add.graphics();
     
     // Set semi-transparent black fill
-    this.overlayRect.fillStyle(0x000000, 0.7);
+    this.overlayRect.fillStyle(0x000000, 0.3);
     
     // Fill rectangle covering the symbol grid area
     const gridBounds = this.getSymbolGridBounds();
@@ -1897,6 +2620,9 @@ export class Symbols {
       return;
     }
 
+    // Reset one-shot event flag per scatter animation sequence
+    this.hasEmittedScatterWinStart = false;
+
     console.log(`[Symbols] Starting scatter symbol Spine animation for ${scatterGrids.length} symbols`);
 
     // Replace scatter symbols with Spine animations
@@ -1959,7 +2685,7 @@ export class Symbols {
                 try { (spineSymbol as any).__pngHome = { x, y }; } catch {}
                 // Set canonical measurement pose before centering
                 try { spineSymbol.skeleton.setToSetupPose(); spineSymbol.update(0); } catch {}
-                this.centerAndFitSpine(spineSymbol, x, y, displayWidth, displayHeight, configuredScale, this.getSymbolNudge(symbolValue));
+                this.centerAndFitSpine(spineSymbol, x, y, displayWidth, displayHeight, configuredScale, this.getWinSymbolNudge(symbolValue));
                 try { const m = this.getSpineScaleMultiplier(symbolValue); if (m !== 1) spineSymbol.setScale(spineSymbol.scaleX * m, spineSymbol.scaleY * m); } catch {}
                 // Keep scatter Spine on the scene root and render above all gameplay layers
                 // Do not reparent into the masked symbols container
@@ -1978,6 +2704,15 @@ export class Symbols {
                 
                 // Play the hit animation (looped)
                 spineSymbol.animationState.setAnimation(0, hitAnimationName, true);
+                // Notify listeners exactly when Symbol0 winning animation starts (base-only)
+                try {
+                  if (!gameStateManager.isBonus && !this.hasEmittedScatterWinStart) {
+                    this.hasEmittedScatterWinStart = true;
+                    this.scene.events.emit('symbol0-win-start');
+                  }
+                } catch {}
+                // Re-center on next tick to compensate for bounds changes after animation starts
+                this.reCenterSpineNextTick(spineSymbol, x, y, this.getWinSymbolNudge(symbolValue));
                 console.log(`[Symbols] Playing looped scatter animation: ${hitAnimationName}`);
                 
                 // Create smooth scale tween to increase size by 20%
@@ -2078,6 +2813,23 @@ export class Symbols {
       console.log('[Symbols] Hiding all symbols by setting container alpha to 0');
       this.container.setAlpha(0);
     }
+    // Also fade out the base overlay (light grey background behind symbols)
+    try {
+      if (this.baseOverlayRect) {
+        this.scene.tweens.killTweensOf(this.baseOverlayRect);
+        if (!this.baseOverlayRect.visible || this.baseOverlayRect.alpha <= 0) {
+          this.baseOverlayRect.setVisible(false);
+        } else {
+          this.scene.tweens.add({
+            targets: this.baseOverlayRect,
+            alpha: 0,
+            duration: 200,
+            ease: 'Power2',
+            onComplete: () => { try { this.baseOverlayRect?.setVisible(false); } catch {} }
+          });
+        }
+      }
+    } catch {}
   }
 
   /**
@@ -2607,26 +3359,19 @@ function initVariables(self: Symbols) {
 function createContainer(self: Symbols) {
   self.container = self.scene.add.container(0, 0);
 
-  const maskShape = self.scene.add.graphics();
-  
-  // Add padding to prevent sprite cutoff, especially on the right side
-  const maskPaddingLeft = 10;
-  const maskPaddingRight = 20; // Extra padding on right side
-  const maskPaddingTop = 2;
-  const maskPaddingBottom = 25;
-  
-  maskShape.fillRect(
-    self.slotX - self.totalGridWidth * 0.5 - maskPaddingLeft, 
-    self.slotY - self.totalGridHeight * 0.5 - maskPaddingTop, 
-    self.totalGridWidth + maskPaddingLeft + maskPaddingRight, 
-    self.totalGridHeight + maskPaddingTop + maskPaddingBottom
+  // Create and store a geometry mask with configurable padding
+  self.gridMaskShape = self.scene.add.graphics();
+  self.gridMaskShape.clear();
+  self.gridMaskShape.fillRect(
+    self.slotX - self.totalGridWidth * 0.5 - self.gridMaskPaddingLeft,
+    self.slotY - self.totalGridHeight * 0.5 - self.gridMaskPaddingTop,
+    self.totalGridWidth + self.gridMaskPaddingLeft + self.gridMaskPaddingRight,
+    self.totalGridHeight + self.gridMaskPaddingTop + self.gridMaskPaddingBottom
   );
-
-  const mask = maskShape.createGeometryMask();
-  self.container.setMask(mask);
-  maskShape.setVisible(false);
-  
-  console.log(`[Symbols] Mask created with padding - Left: ${maskPaddingLeft}, Right: ${maskPaddingRight}, Top: ${maskPaddingTop}, Bottom: ${maskPaddingBottom}`);
+  self.gridMask = self.gridMaskShape.createGeometryMask();
+  self.container.setMask(self.gridMask);
+  self.gridMaskShape.setVisible(false);
+  console.log(`[Symbols] Mask created with padding - Left: ${self.gridMaskPaddingLeft}, Right: ${self.gridMaskPaddingRight}, Top: ${self.gridMaskPaddingTop}, Bottom: ${self.gridMaskPaddingBottom}`);
 }
 
 function onStart(self: Symbols) {
@@ -2684,13 +3429,7 @@ function createInitialSymbols(self: Symbols) {
       try {
         if (gameStateManager.isBonus && row >= 1 && row <= 3) {
           const val = symbols[col][row];
-          if (typeof val === 'number' && WILDCARD_SYMBOLS.includes(val) && self.hasStickyWildAt(col, row)) {
-            if (typeof symbol.setAlpha === 'function') {
-              symbol.setAlpha(0);
-            } else if (typeof symbol.setVisible === 'function') {
-              symbol.setVisible(true);
-            }
-          }
+          // sticky wilds removed: no special-case hiding
         }
       } catch {}
 
@@ -2813,29 +3552,7 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
     // No wins case: idle animations are now handled per-reel in dropNewSymbols
   } catch {}
   
-  // Add sticky wilds during bonus mode on rows 2-4 (rows index 1..3)
-  try {
-    if (gameStateManager.isBonus && self.symbols && mockData.symbols) {
-      for (let col = 0; col < mockData.symbols.length; col++) {
-        for (let row = 1; row <= 3 && row < mockData.symbols[col].length; row++) {
-          const val = mockData.symbols[col][row];
-          if (typeof val === 'number' && WILDCARD_SYMBOLS.includes(val)) {
-            if (typeof (self as any).addStickyWildAt === 'function') {
-              (self as any).addStickyWildAt(col, row, val);
-              // Ensure the newly dropped base symbol is hidden if sticky already exists
-              try {
-                const base = self.symbols?.[col]?.[row];
-                if (base?.setVisible) base.setVisible(false);
-                else if (base?.setAlpha) base.setAlpha(0);
-              } catch {}
-            }
-          }
-        }
-      }
-    }
-  } catch (e) {
-    console.warn('[Symbols] Error while adding sticky wilds:', e);
-  }
+  
   
   // Check for scatter symbols and trigger scatter bonus if found
   console.log('[Symbols] Checking for scatter symbols...');
@@ -2927,6 +3644,8 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   if (scatterGrids.length >= 3) {
     console.log(`[Symbols] Scatter detected! Found ${scatterGrids.length} scatter symbols`);
     gameStateManager.isScatter = true;
+    // Disable spin/controls immediately during scatter anticipation/transition
+    try { (self.scene as any)?.events?.emit('scatterTransitionStart'); } catch {}
 
     // If there are no normal wins (no paylines), play scatter SFX now
     try {
@@ -3357,8 +4076,12 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
                     const sa = (self.scene as any)?.scatterAnticipation;
                     if (sa && typeof sa.show === 'function') {
                       sa.show();
-                      console.log('[Symbols] Scatter anticipation shown after 3rd reel drop');
                     }
+                    const sa2 = (self.scene as any)?.scatterAnticipation2;
+                    if (sa2 && typeof sa2.show === 'function') {
+                      sa2.show();
+                    }
+                    console.log('[Symbols] Scatter anticipation shown after 3rd reel drop');
                   }
                 } catch {}
 
@@ -3369,8 +4092,12 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
                     const sa = (self.scene as any)?.scatterAnticipation;
                     if (sa && typeof sa.hide === 'function') {
                       sa.hide();
-                      console.log('[Symbols] Scatter anticipation hidden after last reel drop');
                     }
+                    const sa2 = (self.scene as any)?.scatterAnticipation2;
+                    if (sa2 && typeof sa2.hide === 'function') {
+                      sa2.hide();
+                    }
+                    console.log('[Symbols] Scatter anticipation hidden after last reel drop');
                     // Reset anticipation flag for safety
                     (self.scene as any).__isScatterAnticipationActive = false;
                   }
@@ -3436,21 +4163,7 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
   console.log(`[Symbols] Processing ${wins.allMatching.size} winning patterns for Spine animations`);
   console.log(`[Symbols] Current symbols array dimensions: ${self.symbols.length} columns x ${self.symbols[0].length} rows`);
   
-  // Determine if any winning symbol is a wildcard and prepare SFX selection
-  let hasWildcardInWin = false;
-  try {
-    const wildcardSet = new Set<number>(WILDCARD_SYMBOLS);
-    for (const win of wins.allMatching.values()) {
-      for (const grid of win) {
-        const valueAtGrid = data.symbols?.[grid.y]?.[grid.x];
-        if (typeof valueAtGrid === 'number' && wildcardSet.has(valueAtGrid)) {
-          hasWildcardInWin = true;
-          break;
-        }
-      }
-      if (hasWildcardInWin) break;
-    }
-  } catch {}
+  
   
   // Ensure we only play the win SFX once per win animation start
   let hasPlayedWinSfx = false;
@@ -3474,18 +4187,7 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
         // Get the symbol value and construct the Spine key
         const symbolValue = data.symbols[grid.y][grid.x];
 
-        // If this grid already has a sticky wild during bonus, ensure base is hidden and skip replacement
-        if (gameStateManager.isBonus && self.hasStickyWildAt(grid.y, grid.x) && WILDCARD_SYMBOLS.includes(symbolValue)) {
-          try {
-            // Hide underlying base symbol to avoid double visuals
-            const base = self.symbols?.[grid.y]?.[grid.x];
-            if (base?.setVisible) base.setVisible(false);
-            else if (base?.setAlpha) base.setAlpha(0);
-            // Reconfirm sticky wild at this cell
-            (self as any).addStickyWildAt(grid.y, grid.x, symbolValue);
-          } catch {}
-          continue;
-        }
+        
         const spineKey = `symbol_${symbolValue}_spine`;
         const spineAtlasKey = spineKey + '-atlas';
         const symbolName = `Symbol${symbolValue}_HTBH`;
@@ -3521,12 +4223,19 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
           try { (spineSymbol as any).__pngHome = { x, y }; } catch {}
           // Set canonical measurement pose before centering
           try { spineSymbol.skeleton.setToSetupPose(); spineSymbol.update(0); } catch {}
-          self.centerAndFitSpine(spineSymbol, x, y, self.displayWidth, self.displayHeight, configuredScale, self.getSymbolNudge(symbolValue));
+          self.centerAndFitSpine(spineSymbol, x, y, self.displayWidth, self.displayHeight, configuredScale, self.getWinSymbolNudge(symbolValue));
           try { const m = self.getSpineScaleMultiplier(symbolValue); if (m !== 1) spineSymbol.setScale(spineSymbol.scaleX * m, spineSymbol.scaleY * m); } catch {}
           console.log(`[Symbols] Applied scale ${configuredScale} to symbol ${symbolValue}`);
           
           // Play the hit animation (looped)
           spineSymbol.animationState.setAnimation(0, hitAnimationName, true);
+          // Apply turbo timeScale to win symbol animations
+          try {
+            const speed = (window as any)?.gameStateManager?.isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1.0;
+            (spineSymbol as any).animationState.timeScale = Math.max(0.0001, speed);
+          } catch {}
+          // Re-center on next tick to compensate for bounds changes after animation starts
+          self.reCenterSpineNextTick(spineSymbol, x, y, self.getWinSymbolNudge(symbolValue));
           console.log(`[Symbols] Playing looped animation: ${hitAnimationName}`);
 
           // Play win SFX once when winning symbol animations start
@@ -3534,13 +4243,10 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
             if (!hasPlayedWinSfx) {
               const audio = (window as any)?.audioManager;
               if (audio && typeof audio.playSoundEffect === 'function') {
-                const sfx = hasWildcardInWin ? SoundEffectType.WILD_MULTI : SoundEffectType.HIT_WIN;
-                audio.playSoundEffect(sfx);
+                audio.playSoundEffect(SoundEffectType.HIT_WIN);
                 hasPlayedWinSfx = true;
-                // If this spin triggered scatter, chain play scatter_ka after hit/wildmulti
                 try {
                   if (gameStateManager.isScatter) {
-                    // short chain delay to ensure ordering
                     self.scene.time.delayedCall(100, () => {
                       try { audio.playSoundEffect(SoundEffectType.SCATTER); } catch {}
                     });
@@ -3624,4 +4330,5 @@ function resetSymbolsVisibility(self: Symbols): void {
     self.container.setAlpha(1);
   }
 }
+
 

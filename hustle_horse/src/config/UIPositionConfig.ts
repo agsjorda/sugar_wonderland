@@ -5,6 +5,16 @@ export const SPINNER_POS_Y_MUL = 0.82;
 export const SPINNER_WHEEL_OFFSET_X = 0;
 export const SPINNER_WHEEL_OFFSET_Y = -90;
 
+// Scatter Anticipation (Sparkler_Reel) default placement and scale
+export const SCATTER_ANTICIPATION_POS_X_MUL = 0.78;
+export const SCATTER_ANTICIPATION_POS_Y_MUL = 0.49;
+export const SCATTER_ANTICIPATION_DEFAULT_SCALE = 0.85;
+
+// Secondary Scatter Anticipation defaults (independent modifiers)
+export const SCATTER_ANTICIPATION2_POS_X_MUL = 0.965;
+export const SCATTER_ANTICIPATION2_POS_Y_MUL = 0.49;
+export const SCATTER_ANTICIPATION2_DEFAULT_SCALE = 0.85;
+
 export function getSpinnerPosition(scene: Scene) {
   return {
     x: scene.scale.width * SPINNER_POS_X_MUL,
@@ -49,6 +59,10 @@ export const CONTROLLER_BUTTON_OFFSET_Y = 0;
 export const CONTROLLER_LABEL_OFFSET_X = 0;
 export const CONTROLLER_LABEL_OFFSET_Y = 0;
 
+// Single container-level offset applied to the entire controller UI (buttons + labels)
+export const CONTROLLER_CONTAINER_OFFSET_X = 0;
+export const CONTROLLER_CONTAINER_OFFSET_Y = 22;
+
 // Amplify description ("Double Chance" / "For Feature") block offsets
 export const AMPLIFY_DESCRIPTION_OFFSET_X = 0;
 export const AMPLIFY_DESCRIPTION_OFFSET_Y = 0;
@@ -65,6 +79,12 @@ export const AMPLIFY_LABEL_OFFSET_Y = 90;
 
 export const MENU_LABEL_OFFSET_X = 0;
 export const MENU_LABEL_OFFSET_Y = 85;
+
+// Header winnings display offsets (applies to both base and bonus headers)
+export const HEADER_YOUWIN_OFFSET_X = 0;
+export const HEADER_YOUWIN_OFFSET_Y = 16;
+export const HEADER_AMOUNT_OFFSET_X = 0;
+export const HEADER_AMOUNT_OFFSET_Y = 21;
 
 // BUY FEATURE label offsets
 export const FEATURE_LABEL1_OFFSET_X = 0;

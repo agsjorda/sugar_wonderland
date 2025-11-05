@@ -1,5 +1,7 @@
 import { Scene } from 'phaser';
+import { resolveAssetUrl } from '../../utils/AssetLoader';
 import { SlotController } from './SlotController';
+import { SoundEffectType } from '../../managers/AudioManager';
 
 export interface BuyFeatureConfig {
 	position?: { x: number; y: number };
@@ -186,8 +188,8 @@ export class BuyFeature {
 		console.log('[BuyFeature] Checking background texture', { key: bgKey, exists: hasBg, availableKeys });
         if (!hasBg) {
 			// Fallback: load it dynamically at runtime from the known path and render after load completes
-			const runtimeKey = 'scatter_logo_background_runtime';
-			const runtimePath = '/assets/portrait/high/buy_feature/scatter_logo_background.png';
+            const runtimeKey = 'scatter_logo_background_runtime';
+            const runtimePath = resolveAssetUrl('/assets/portrait/high/buy_feature/scatter_logo_background.png');
 			console.warn('[BuyFeature] Background not preloaded. Loading at runtime from', runtimePath);
 			try {
 				// Avoid duplicate loads
@@ -391,6 +393,13 @@ export class BuyFeature {
 
 	private confirmPurchase(): void {
 		console.log(`[BuyFeature] Confirming purchase`);
+		// Play spin sound immediately when buy feature is confirmed
+		try {
+			const am: any = (window as any).audioManager;
+			if (am && typeof am.playSoundEffect === 'function') {
+				am.playSoundEffect(SoundEffectType.SPIN);
+			}
+		} catch {}
 		
 		if (this.onConfirmCallback) {
 			this.onConfirmCallback();

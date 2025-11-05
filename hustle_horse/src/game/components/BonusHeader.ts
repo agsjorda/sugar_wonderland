@@ -3,6 +3,7 @@ import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
+import { HEADER_YOUWIN_OFFSET_X, HEADER_YOUWIN_OFFSET_Y, HEADER_AMOUNT_OFFSET_X, HEADER_AMOUNT_OFFSET_Y } from '../../config/UIPositionConfig';
 
 export class BonusHeader {
     private bonusHeaderContainer: Phaser.GameObjects.Container;
@@ -98,7 +99,7 @@ export class BonusHeader {
 
 	private createWinBarText(scene: Scene, x: number, y: number): void {
 		// Line 1: "YOU WON"
-		this.youWonText = scene.add.text(x, y - 7, 'YOU WON', {
+		this.youWonText = scene.add.text(x + HEADER_YOUWIN_OFFSET_X, y - 7 + HEADER_YOUWIN_OFFSET_Y, 'YOU WON', {
 			fontSize: '16px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
@@ -106,7 +107,7 @@ export class BonusHeader {
 		this.bonusHeaderContainer.add(this.youWonText);
 
 		// Line 2: "$ 0.00" with bold formatting
-		this.amountText = scene.add.text(x, y + 14, '$ 0.00', {
+		this.amountText = scene.add.text(x + HEADER_AMOUNT_OFFSET_X, y + 14 + HEADER_AMOUNT_OFFSET_Y, '$ 0.00', {
 			fontSize: '20px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'

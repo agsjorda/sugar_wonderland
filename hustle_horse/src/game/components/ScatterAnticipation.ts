@@ -1,5 +1,9 @@
 import { Scene } from 'phaser';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
+import { gameEventManager, GameEventType } from '../../event/EventManager';
+import { TurboConfig } from '../../config/TurboConfig';
+import { gameStateManager } from '../../managers/GameStateManager';
+import { SCATTER_ANTICIPATION_POS_X_MUL, SCATTER_ANTICIPATION_POS_Y_MUL, SCATTER_ANTICIPATION_DEFAULT_SCALE } from '../../config/UIPositionConfig';
 
 export class ScatterAnticipation {
 	private scene: Scene;
@@ -7,6 +11,10 @@ export class ScatterAnticipation {
 	private spineObject: any | null = null;
 	private ownsContainer: boolean = false;
 	private retryCount: number = 0;
+	// Optional desired overrides applied on create or via setters
+	private desiredX?: number;
+	private desiredY?: number;
+	private desiredScale?: number;
 
 	private playDefaultLoop(): void {
 		if (!this.spineObject) return;
@@ -33,7 +41,7 @@ export class ScatterAnticipation {
 
 	constructor() {}
 
-	public create(scene: Scene, parentContainer?: Phaser.GameObjects.Container): void {
+	public create(scene: Scene, parentContainer?: Phaser.GameObjects.Container, options?: { x?: number; y?: number; scale?: number }): void {
 		this.scene = scene;
 
 		// Guard against missing spine factory
@@ -47,26 +55,33 @@ export class ScatterAnticipation {
 			this.container = parentContainer;
 			this.ownsContainer = false;
 		} else {
-			// Fallback: create our own container at a safe depth above background
+			// Fallback: create our own container; place above all other layers
 			this.container = scene.add.container(0, 0);
-			this.container.setDepth(1);
+			this.container.setDepth(30000);
 			this.ownsContainer = true;
 		}
 
 
-		const centerX = scene.scale.width * 0.87;
-		const centerY = scene.scale.height * 0.49;
+		// Capture desired overrides if provided
+		this.desiredX = options?.x ?? this.desiredX;
+		this.desiredY = options?.y ?? this.desiredY;
+		this.desiredScale = options?.scale ?? this.desiredScale;
+
+		const centerX = (this.desiredX !== undefined ? this.desiredX : scene.scale.width * SCATTER_ANTICIPATION_POS_X_MUL);
+		const centerY = (this.desiredY !== undefined ? this.desiredY : scene.scale.height * SCATTER_ANTICIPATION_POS_Y_MUL);
 
 		this.tryCreateSpine(centerX, centerY);
+		this.setupTurboListeners();
+		this.setupWinListeners();
 	}
 
 	private tryCreateSpine(centerX: number, centerY: number): void {
 		if (!this.container) return;
 		// Ensure spine data is in cache; if not, retry a few times
-		if (!(this.scene.cache.json as any).has('reelanim_KA')) {
+		if (!(this.scene.cache.json as any).has('Sparkler_Reel')) {
 			if (this.retryCount < 5) {
 				this.retryCount++;
-				console.warn(`[ScatterAnticipation] Spine json 'reelanim_KA' not ready. Retrying (${this.retryCount}/5)...`);
+				console.warn(`[ScatterAnticipation] Spine json 'Sparkler_Reel' not ready. Retrying (${this.retryCount}/5)...`);
 				this.scene.time.delayedCall(250, () => this.tryCreateSpine(centerX, centerY));
 				return;
 			} else {
@@ -76,16 +91,32 @@ export class ScatterAnticipation {
 		}
 
 		try {
-			this.spineObject = this.scene.add.spine(centerX, centerY, 'reelanim_KA', 'reelanim_KA-atlas');
+			this.spineObject = this.scene.add.spine(centerX, centerY, 'Sparkler_Reel', 'Sparkler_Reel-atlas');
 			this.spineObject.setOrigin(0.5, 0.5);
-			this.spineObject.setScale(0.42);
+			this.spineObject.setScale(this.desiredScale !== undefined ? this.desiredScale : SCATTER_ANTICIPATION_DEFAULT_SCALE);
 			this.spineObject.setDepth(0);
 			this.playDefaultLoop();
+			this.applyTurboToAnticipation();
 			this.container.add(this.spineObject);
 			// Do not change visibility here; Game controls start visibility
 			console.log('[ScatterAnticipation] Created spine animation at center');
 		} catch (error) {
 			console.error('[ScatterAnticipation] Failed to create spine animation', error);
+		}
+	}
+
+	public setPosition(x: number, y: number): void {
+		this.desiredX = x;
+		this.desiredY = y;
+		if (this.spineObject) {
+			this.spineObject.setPosition(x, y);
+		}
+	}
+
+	public setScale(scale: number): void {
+		this.desiredScale = scale;
+		if (this.spineObject) {
+			this.spineObject.setScale(scale);
 		}
 	}
 
@@ -96,8 +127,9 @@ export class ScatterAnticipation {
 			} else if (this.spineObject) {
 				this.spineObject.setVisible(true);
 			}
-			// Ensure animation is playing when shown
+			// Ensure animation is playing when shown and turbo applied
 			this.playDefaultLoop();
+			this.applyTurboToAnticipation();
 			// Play anticipation loop SFX
 			try {
 				const audio = (window as any)?.audioManager;
@@ -106,6 +138,66 @@ export class ScatterAnticipation {
 				}
 			} catch {}
 		}
+	}
+
+	private applyTurboToAnticipation(): void {
+		try {
+			if (this.spineObject && this.spineObject.animationState) {
+				// Increase timeScale when turbo is ON
+				const isTurbo = (window as any)?.gameStateManager?.isTurbo ?? false;
+				const speed = isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1.0;
+				this.spineObject.animationState.timeScale = Math.max(0.0001, speed);
+			}
+		} catch {}
+	}
+
+	private setupTurboListeners(): void {
+		try {
+			gameEventManager.on(GameEventType.TURBO_ON, () => this.applyTurboToAnticipation());
+			gameEventManager.on(GameEventType.TURBO_OFF, () => this.applyTurboToAnticipation());
+		} catch {}
+	}
+
+	// On win: shake camera, send bottom dragon to right edge, then top to left after 0.9s
+	private setupWinListeners(): void {
+		try {
+			const triggerSequence = () => {
+				// Only run this movement in BASE scene, not during bonus
+				try {
+					if (gameStateManager?.isBonus) { return; }
+					// Only when scatter is actually hit on the base spin
+					if (!gameStateManager?.isScatter) { return; }
+				} catch {}
+				try {
+					const turboMul = gameStateManager?.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1.0;
+					const shakeMs = Math.max(50, Math.floor(2500 * turboMul));
+					const cam = this.scene.cameras?.main;
+					cam?.shake(shakeMs, 0.004);
+				} catch {}
+				try {
+					const sceneAny = this.scene as any;
+					const symbols = sceneAny?.symbols;
+					if (symbols && typeof symbols.animateBottomDragonToX === 'function' && typeof symbols.animateTopDragonToX === 'function') {
+						const turboMul = gameStateManager?.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1.0;
+						const moveDur = Math.max(100, Math.floor(1200 * turboMul));
+						const delayTop = Math.max(0, Math.floor(500 * turboMul));
+						const rightX = this.scene.scale.width + 900;
+						symbols.animateBottomDragonToX(rightX, moveDur, 'Sine.easeInOut');
+						this.scene.time.delayedCall(delayTop, () => {
+							const leftX = -900;
+							symbols.animateTopDragonToX(leftX, moveDur, 'Sine.easeInOut');
+						});
+					}
+				} catch {}
+			};
+
+			// General win (kept, but base-only gate inside trigger)
+			gameEventManager.on(GameEventType.WIN_START, triggerSequence);
+			// Scene-level scatter activation (kept)
+			try { this.scene.events.on('scatterBonusActivated', triggerSequence); } catch {}
+			// Precise: when Symbol0_HTBH actually starts its winning animation
+			try { this.scene.events.on('symbol0-win-start', triggerSequence); } catch {}
+		} catch {}
 	}
 
 	public hide(): void {
