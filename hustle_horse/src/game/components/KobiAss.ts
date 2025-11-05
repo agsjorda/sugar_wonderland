@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
+import { resolveAssetUrl } from '../../utils/AssetLoader';
 
 export class KobiAss {
   public scene: Scene;
@@ -12,10 +13,10 @@ export class KobiAss {
 
 		const prefix = 'assets/animations/kobi';
 		scene.load.spineAtlas(
-			'kobiass-atlas', `${prefix}/kobiass_character.atlas`
+			'kobiass-atlas', resolveAssetUrl(`${prefix}/kobiass_character.atlas`)
 		);
 
-    scene.load.spineJson('kobiass', `${prefix}/kobiass_character.json`);
+		scene.load.spineJson('kobiass', resolveAssetUrl(`${prefix}/kobiass_character.json`));
 
 		// scene.load.spineAtlas('symbol-1-atlas', 'assets/animations/symbol_1/Symbol1_KA.atlas');
 		// scene.load.spineJson('symbol-1', 'assets/animations/symbol_1/Symbol1_KA.json');

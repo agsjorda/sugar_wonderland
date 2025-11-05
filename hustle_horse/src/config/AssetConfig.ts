@@ -29,12 +29,16 @@ export class AssetConfig {
 
 	getBackgroundAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix();
-		// Simplified: no upper border asset usage
+		// Use skeleton.png for the upper border in portrait/high only; fallback elsewhere
+		const screenConfig = this.screenModeManager.getScreenConfig();
+		const isHighSpeed = this.networkManager.getNetworkSpeed();
+		const useDragonTail = screenConfig.isPortrait && isHighSpeed;
 		
 		return {
 			images: {
-				'BG-Normal': `assets/portrait/high/loading/BG-Default.png`,
+				'BG-Normal': `${prefix}/background/BG-Normal.png`,
 				'reel-frame': `${prefix}/background/reel-frame.png`,
+				'Border_Upper': useDragonTail ? `${prefix}/background/skeleton.png` : `${prefix}/background/Border_Upper.png`,
 				'Border_Lower': `${prefix}/background/Border_Lower.png`,
 				// Mostly for landscape bg
 				// 'balloon-01': `${prefix}/background/balloon-01.png`,
@@ -46,9 +50,22 @@ export class AssetConfig {
 				// 'bulb-02': `${prefix}/background/bulb-02.png`,
 				// 'bulb-03': `${prefix}/background/bulb-03.png`,
 			},
-			// Spine atlases for background dragons are disabled because the files
-			// are not present under public/assets. Re-enable once assets are added.
-			spine: {}
+			spine: {
+				// Base scene decorative dragon (portrait/high)
+				'dragon_default': {
+					atlas: `${prefix}/background/dragon_default.atlas`,
+					json: `${prefix}/background/dragon_default.json`
+				},
+				// Bonus-only border spines
+				'Dragon_Top_Bonus': {
+					atlas: `${prefix}/background/Dragon_Top_Bonus.atlas`,
+					json: `${prefix}/background/Dragon_Top_Bonus.json`
+				},
+				'Dragon_Bottom_Bonus': {
+					atlas: `${prefix}/background/Dragon_Bottom_Bonus.atlas`,
+					json: `${prefix}/background/Dragon_Bottom_Bonus.json`
+				}
+			}
 		};
 	}
 
@@ -59,8 +76,17 @@ export class AssetConfig {
 			images: {
 				'BG-Bonus': `${prefix}/bonus_background/BG-Bonus.png`
 			},
-			// Spine fireworks/bonus dragon disabled until atlases exist in public/assets
-			spine: {}
+			spine: {
+				// Bonus upper dragon replacement
+				'dragon_bonus': {
+					atlas: `${prefix}/background/dragon_bonus.atlas`,
+					json: `${prefix}/background/dragon_bonus.json`
+				},
+				'fireworks': {
+					atlas: `${prefix}/bonus_background/fireworks/fireworks.atlas`,
+					json: `${prefix}/bonus_background/fireworks/fireworks.json`
+				}
+			}
 		};
 	}
 
@@ -101,8 +127,8 @@ export class AssetConfig {
 			spine: {
 				// Studio loading spine (DI JOKER) – only available in portrait/high
 				'di_joker': {
-					atlas: `assets/portrait/high/dijoker_loading/DI JOKER.atlas`,
-					json: `assets/portrait/high/dijoker_loading/DI JOKER.json`
+					atlas: `${prefix}/dijoker_loading/DI JOKER.atlas`,
+					json: `${prefix}/dijoker_loading/DI JOKER.json`
 				}
 			}
 		};
@@ -184,8 +210,8 @@ export class AssetConfig {
 					json: `assets/controller/${screenMode}/${quality}/button_animation_idle/button_animation_idle.json`
 				},
 				'amplify_bet': {
-					atlas: `assets/portrait/high/amplify_bet/Amplify Bet.atlas`,
-					json: `assets/portrait/high/amplify_bet/Amplify Bet.json`
+					atlas: `assets/${screenMode}/${quality}/amplify_bet/Amplify Bet.atlas`,
+					json: `assets/${screenMode}/${quality}/amplify_bet/Amplify Bet.json`
 				},
 				// Enhance Bet idle loop (available only in portrait/high for now)
 				'enhance_bet_idle_on': {
@@ -283,8 +309,8 @@ export class AssetConfig {
 			'scatterIcon': `${prefix}/help_screen/scatterIcon.png`,
 			'scatterWin': `${prefix}/help_screen/scatterWin.png`,
 			'ScatterLabel': `${prefix}/help_screen/ScatterSymbol.png`,
-			'wheelSpin_helper': `assets/portrait/high/help_screen/wheelSpin_helper.png`,
-			'freeSpin_round': `assets/portrait/high/help_screen/freeSpin_round.png`,
+			'wheelSpin_helper': `${prefix}/help_screen/wheelSpin_helper.png`,
+			'freeSpin_round': `${prefix}/help_screen/freeSpin_round.png`,
 			'tumbleIcon': `${prefix}/help_screen/tumbleIcon.png`,
 			'tumbleWin': `${prefix}/help_screen/tumbleWin.png`,
 			'multiplierGame': `${prefix}/help_screen/multiplierGame.png`,
@@ -309,10 +335,14 @@ export class AssetConfig {
 				// Static background image for Congrats dialog
 				'congrats-bg': `${prefix}/dialogs/congrats-bg.png`,
 				// Congrats title image used on the congrats overlay
-				'congratulations-you-won': `${prefix}/scatter_win/congrats.png`
+				'congratulations-you-won': `${prefix}/dialogs/congratulations-you-won.png`
 			},
 			spine: {
-				// Fire background element (disabled until confirmed paths)
+				// Fire background element for Congrats overlay
+				'3rd_Fire': {
+					atlas: `${prefix}/fire_animations/3rd_Fire.atlas`,
+					json: `${prefix}/fire_animations/3rd_Fire.json`
+				},
 				'confetti_KA': {
 					atlas: `${prefix}/dialogs/confetti_KA.atlas`,
 					json: `${prefix}/dialogs/confetti_KA.json`
@@ -373,9 +403,15 @@ export class AssetConfig {
 	 * We intentionally do not use getAssetPrefix() to avoid missing assets on low quality.
 	 */
 	getScatterAnticipationAssets(): AssetGroup {
+		const prefix = this.getAssetPrefix();
 		console.log('[AssetConfig] Loading Scatter Anticipation assets');
 		return {
-            spine: {}
+			spine: {
+				'Sparkler_Reel': {
+					atlas: `${prefix}/scatterAnticipation/Sparkler_Reel.atlas`,
+					json: `${prefix}/scatterAnticipation/Sparkler_Reel.json`
+				}
+			}
 		};
 	}
 
@@ -468,6 +504,7 @@ export class AssetConfig {
 				'coin_drop_ka': 'assets/sounds/SFX/coin_drop_ka.ogg',
 				// Fire SFX
 				'fire_hh': 'assets/sounds/SFX/fire_hh.ogg',
+				'blaze_hh': 'assets/sounds/SFX/blaze_hh.ogg',
 				// Hit win SFX
 				'hitwin_hh': 'assets/sounds/SFX/hitwin_hh.ogg',
 				// Wild multi SFX
@@ -482,7 +519,7 @@ export class AssetConfig {
 				// Card pick SFX when user selects a card in ScatterWinOverlay
 				'cardpick_hh': 'assets/sounds/SFX/cardpick_hh.ogg',
 				// Win dialog SFX
-				'bigw_ka': 'assets/sounds/Wins/bigw_ka.ogg',
+				'bigw_hh': 'assets/sounds/Wins/bigw_hh.ogg',
 				'megaw_ka': 'assets/sounds/Wins/megaw_ka.ogg',
 				'superw_ka': 'assets/sounds/Wins/superw_ka.ogg',
 				'epicw_ka': 'assets/sounds/Wins/epicw_ka.ogg',

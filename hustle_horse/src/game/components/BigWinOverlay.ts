@@ -639,10 +639,10 @@ export class BigWinOverlay {
             try {
                 const audio = (window as any).audioManager;
                 if (audio && typeof audio.playSoundEffect === 'function') {
-                    audio.playSoundEffect('fire_hh' as any);
+                    audio.playSoundEffect('blaze_hh' as any);
                 } else {
                     // Fallback direct play
-                    try { (this.scene as any).sound?.play?.('fire_hh'); } catch {}
+                    try { (this.scene as any).sound?.play?.('blaze_hh'); } catch {}
                 }
             } catch {}
 

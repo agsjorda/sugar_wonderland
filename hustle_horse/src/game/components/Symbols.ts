@@ -442,7 +442,47 @@ export class Symbols {
         // Use spine borders in bonus stage
         try { this.baseOverlayBorderUpper?.destroy?.(); } catch {}
         try { this.baseOverlayBorderLower?.destroy?.(); } catch {}
-        // Upper border disabled
+        // Upper spine
+        let upper: any = null;
+        try { upper = (this.scene.add as any).spine(centerX, topY + this.bonusDragonTopOffsetY, 'Dragon_Top_Bonus', 'Dragon_Top_Bonus-atlas'); } catch {}
+        if (upper) {
+          try { upper.setOrigin(0.5, 1.0); } catch {}
+          try { upper.setDepth(2); } catch {}
+          // Play its single available animation (looping)
+          try {
+            const state = (upper as any).animationState;
+            let played = false;
+            try { state.setAnimation(0, 'animation', true); played = true; } catch {}
+            if (!played) {
+              try {
+                const anims = (upper as any)?.skeleton?.data?.animations || [];
+                const first = anims[0]?.name; if (first) state.setAnimation(0, first, true);
+              } catch {}
+            }
+          } catch {}
+          // Fit width using bounds
+          try {
+            const b = upper.getBounds?.();
+            const width = b && (b.size?.x || b.width) ? (b.size?.x || b.width) : (upper.displayWidth || 0);
+            if (width > 0) {
+              const currentScaleX = upper.scaleX || 1;
+              const scaledWidth = width * currentScaleX;
+              const desiredScale = scaledWidth > 0 ? (totalWidth / scaledWidth) * currentScaleX : currentScaleX;
+              upper.setScale(desiredScale * this.baseBorderSkeletonScale);
+            }
+          } catch {}
+          // Apply position offsets
+          try { upper.x += this.baseBorderSkeletonOffsetX; upper.y += this.baseBorderSkeletonOffsetY; } catch {}
+          this.baseOverlayBorderUpper = upper;
+          this.baseTopDragon = upper;
+        } else {
+          // Fallback to PNG if spine not available
+          this.baseOverlayBorderUpper = this.scene.add.image(centerX, topY + this.borderTopOffsetY, 'Border_Upper').setOrigin(0.5, 1.0);
+          this.baseOverlayBorderUpper.setDepth(2);
+          const upperScaleX = totalWidth / this.baseOverlayBorderUpper.width;
+          this.baseOverlayBorderUpper.setScale(upperScaleX);
+          this.baseOverlayBorderUpper.setVisible(true);
+        }
         // Lower spine
         let lower: any = null;
         try { lower = (this.scene.add as any).spine(centerX, bottomY + this.bonusDragonBottomOffsetY, 'dragon_bonus', 'dragon_bonus-atlas'); } catch {}
@@ -499,7 +539,71 @@ export class Symbols {
             try { this.baseBorderContainer.setDepth(2); } catch {}
           } catch {}
         }
-        // Upper border disabled
+        let upper: any = null;
+        if (ensureSpineFactory(this.scene as any, '[Symbols] base border spine dragon_tail')) {
+          try { upper = (this.scene.add as any).spine(centerX, topY + this.borderTopOffsetY, 'dragon_default', 'dragon_default-atlas'); } catch {}
+        }
+        if (upper) {
+          try { upper.setOrigin(0.5, 1.0); } catch {}
+          try { upper.setDepth(2); } catch {}
+          // Play available animation (looping), fallback to first
+          try {
+            const state = (upper as any).animationState;
+            let played = false;
+            try { state.setAnimation(0, 'animation', true); played = true; } catch {}
+            if (!played) {
+              try {
+                const anims = (upper as any)?.skeleton?.data?.animations || [];
+                const first = anims[0]?.name; if (first) state.setAnimation(0, first, true);
+              } catch {}
+            }
+            // Apply configured timeScale / frame stepping
+            try {
+              const ts = Math.max(0.0001, this.baseBorderSkeletonTimeScale);
+              const step = Math.max(1, Math.floor(this.baseBorderSkeletonFrameStep || 1));
+              state.timeScale = (step > 1) ? 0 : ts;
+            } catch {}
+          } catch {}
+          // Fit/scale and position modifiers
+          try {
+            const b = upper.getBounds?.();
+            const width = b && (b.size?.x || b.width) ? (b.size?.x || b.width) : (upper.displayWidth || 0);
+            if (width > 0) {
+              const currentScaleX = upper.scaleX || 1;
+              const scaledWidth = width * currentScaleX;
+              const desiredScale = scaledWidth > 0 ? (totalWidth / scaledWidth) * currentScaleX : currentScaleX;
+              const finalScale = this.baseBorderSkeletonUseAbsoluteScale
+                ? this.baseBorderSkeletonAbsoluteScale
+                : (desiredScale * this.baseBorderSkeletonScale);
+              upper.setScale(finalScale);
+            }
+          } catch {}
+          // Apply offsets and optional half-offscreen placement
+          try { upper.x += this.baseBorderSkeletonOffsetX; upper.y += this.baseBorderSkeletonOffsetY; } catch {}
+          try {
+            if (this.baseBorderSkeletonHalfOffscreen) {
+              upper.x = this.baseBorderSkeletonOffscreenSide === 'right' ? this.scene.scale.width : 0;
+              upper.x += this.baseBorderSkeletonOffsetX;
+            }
+          } catch {}
+          // Add to the dedicated container so future movement/animation is simple
+          try { this.baseBorderContainer?.add(upper); } catch {}
+          this.baseOverlayBorderUpper = upper;
+        } else {
+          // Fallback PNG (mapped to skeleton.png in portrait/high)
+          this.baseOverlayBorderUpper = this.scene.add.image(
+            centerX,
+            topY + this.borderTopOffsetY,
+            'Border_Upper'
+          ).setOrigin(0.5, 1.0);
+          this.baseOverlayBorderUpper.setDepth(2);
+          const upperScaleX = totalWidth / this.baseOverlayBorderUpper.width;
+          this.baseOverlayBorderUpper.setScale(upperScaleX);
+          this.baseOverlayBorderUpper.setVisible(true);
+          // Add to container for consistency
+          try { this.baseBorderContainer?.add(this.baseOverlayBorderUpper); } catch {}
+          this.baseTopDragon = this.baseOverlayBorderUpper;
+        }
 
         // Try mirrored dragon_default at the bottom; fallback to PNG
         let lowerDragon: any = null;

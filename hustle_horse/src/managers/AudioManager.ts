@@ -60,7 +60,7 @@ export class AudioManager {
 		[MusicType.BONUS]: 'bonusbg_hh',
 		[MusicType.FREE_SPIN]: 'freespinbg_ka',
 		[MusicType.PICK_A_CARD]: 'bgpickacard_hh',
-		[MusicType.BIG_WIN]: 'bigw_ka'
+		[MusicType.BIG_WIN]: 'bigw_hh'
 	};
 
 	constructor(scene: Phaser.Scene) {
@@ -85,7 +85,7 @@ export class AudioManager {
 		// Pick-a-card background music
 		this.scene.load.audio('bgpickacard_hh', 'assets/sounds/BG/bgpickacard_hh.ogg');
 		// Big Win background music
-		this.scene.load.audio('bigw_ka', 'assets/sounds/Wins/bigw_ka.ogg');
+		this.scene.load.audio('bigw_hh', 'assets/sounds/Wins/bigw_hh.ogg');
 		
 		// Ambient audio
 		this.scene.load.audio('ambience_hh', 'assets/sounds/SFX/ambience_hh.ogg');
@@ -158,7 +158,14 @@ export class AudioManager {
 			} catch (e) {
 				console.warn('[AudioManager] Failed to create fire_hh SFX instance:', e);
 			}
-			// Blaze SFX removed; use fire_hh directly when needed
+			// Blaze SFX for Fire_Transition
+			try {
+				const blazeSfx = this.scene.sound.add('blaze_hh', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set('blaze_hh' as any, blazeSfx);
+				console.log('[AudioManager] Blaze SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create blaze_hh SFX instance:', e);
+			}
 			console.log('[AudioManager] Spin sound effect instance created');
 
 			// Menu click SFX
@@ -266,7 +273,7 @@ export class AudioManager {
 			}
 
 			// Create win dialog SFX instances
-			const bigWinSfx = this.scene.sound.add('bigw_ka', { volume: this.sfxVolume, loop: false });
+			const bigWinSfx = this.scene.sound.add('bigw_hh', { volume: this.sfxVolume, loop: false });
 			this.sfxInstances.set(SoundEffectType.WIN_BIG, bigWinSfx);
 			const megaWinSfx = this.scene.sound.add('megaw_ka', { volume: this.sfxVolume, loop: false });
 			this.sfxInstances.set(SoundEffectType.WIN_MEGA, megaWinSfx);
@@ -287,7 +294,7 @@ export class AudioManager {
 
 			// Create Big Win background music instance
 			try {
-			const bigWinMusic = this.scene.sound.add('bigw_ka', {
+				const bigWinMusic = this.scene.sound.add('bigw_hh', {
 					volume: this.musicVolume,
 					loop: true
 				});

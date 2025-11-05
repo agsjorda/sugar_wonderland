@@ -5,7 +5,15 @@ export const SPINNER_POS_Y_MUL = 0.82;
 export const SPINNER_WHEEL_OFFSET_X = 0;
 export const SPINNER_WHEEL_OFFSET_Y = -90;
 
-// Scatter Anticipation removed
+// Scatter Anticipation (Sparkler_Reel) default placement and scale
+export const SCATTER_ANTICIPATION_POS_X_MUL = 0.78;
+export const SCATTER_ANTICIPATION_POS_Y_MUL = 0.49;
+export const SCATTER_ANTICIPATION_DEFAULT_SCALE = 0.85;
+
+// Secondary Scatter Anticipation defaults (independent modifiers)
+export const SCATTER_ANTICIPATION2_POS_X_MUL = 0.965;
+export const SCATTER_ANTICIPATION2_POS_Y_MUL = 0.49;
+export const SCATTER_ANTICIPATION2_DEFAULT_SCALE = 0.85;
 
 export function getSpinnerPosition(scene: Scene) {
   return {
