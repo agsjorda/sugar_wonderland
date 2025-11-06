@@ -71,7 +71,7 @@ export class ScatterWinOverlay {
     private cardPerCardIntervalMs: number = 300;    // delay between each card
     private cardThrowDurationMs: number = 700;      // single card fly-in duration
     // Card layout defaults (ratios and angles) – tuned to reference image
-    private cardTargetYRatio: number = 0.59;
+    private cardTargetYRatio: number = 0.52;
     private cardSpacingRatio: number = 0.28;
     private cardAngleLeft: number = -8;
     private cardAngleRight: number = 8;
@@ -124,7 +124,7 @@ export class ScatterWinOverlay {
     // Free spin digits display options
     private fsDigitsScaleFactor: number = 1.1; // multiplier for manual descaling/rescaling
     private fsDigitsOffsetX: number = -16;       // extra offset from default base
-    private fsDigitsOffsetY: number = 10;       // extra offset from default base
+    private fsDigitsOffsetY: number = -5;       // extra offset from default base
     private fsDigitsSpacing: number = -30;       // extra spacing in px between digits (after scaling)
     private fsDigitsAlign: 'left' | 'center' | 'right' = 'center';
     private fsDigitsRelativeToCard: boolean = true; // fit digits to a fraction of card width
@@ -572,7 +572,7 @@ export class ScatterWinOverlay {
 
     /** Set the manual scale for the PickACard text/image. */
     public setPickScale(scale: number = 1.0): void {
-        this.pickScale = Math.max(0.05, scale);
+        this.pickScale = Math.max(0.09, scale);
         if (this.pickACard) {
             try { this.pickACard.setScale(this.pickScale); } catch {}
         }
@@ -856,6 +856,15 @@ export class ScatterWinOverlay {
                             scaleX: 0.0001,
                             duration: half,
                             ease: 'Cubic.easeIn',
+                            onStart: () => {
+                                // Play card flip SFX at the beginning of the flip-in
+                                try {
+                                    const audio = (window as any).audioManager;
+                                    if (audio && typeof audio.playSoundEffect === 'function') {
+                                        audio.playSoundEffect('cardflip_hh' as any);
+                                    }
+                                } catch {}
+                            },
                             onComplete: () => {
                                 try {
                                     (chosen as Phaser.GameObjects.Image).setTexture('free_spin_card_front');
@@ -1367,6 +1376,17 @@ export class ScatterWinOverlay {
     private showCongratsBreathing(chosen: any): void {
         if (!this.scene) return;
         try {
+            // Stop bonus visual effects (fireworks and embers) and related SFX when congrats appears
+            try { this.scene?.events.emit('stopBonusEffects'); } catch {}
+            try {
+                const audio = (window as any).audioManager;
+                if (audio && typeof audio.stopByKey === 'function') {
+                    audio.stopByKey('fireworks_hh');
+                } else {
+                    (this.scene as any)?.sound?.sounds?.forEach?.((s: any) => { if (s?.key === 'fireworks_hh' && s.isPlaying) try { s.stop(); } catch {} });
+                }
+            } catch {}
+
             const w = this.scene.cameras.main.width;
             const h = this.scene.cameras.main.height;
             // Position relative to the chosen card's final position and size
@@ -1738,6 +1758,16 @@ export class ScatterWinOverlay {
       this.transitionContainer?.setAlpha(1);
       try { this.scene.children.bringToTop(this.transitionContainer!); } catch {}
 
+      // Play blaze SFX during fire transition
+      try {
+        const audio = (window as any).audioManager;
+        if (audio && typeof audio.playOneShot === 'function') {
+          audio.playOneShot('blaze_hh');
+        } else {
+          (this.scene as any)?.sound?.play?.('blaze_hh');
+        }
+      } catch {}
+
       // Aggressively stop any BGM to avoid overlaps before switching
       try {
         const audio = (window as any).audioManager;
@@ -1764,6 +1794,13 @@ export class ScatterWinOverlay {
       const enterIfNeeded = () => {
         if (bonusEntered) return;
         bonusEntered = true;
+        // Fade out blaze SFX when entering bonus mid-transition
+        try {
+          const audio = (window as any).audioManager;
+          if (audio && typeof audio.fadeOutSfx === 'function') {
+            audio.fadeOutSfx('blaze_hh' as any, 200);
+          }
+        } catch {}
         this.enterBonusAndStartAutoplay();
       };
       const finish = () => {
@@ -1775,6 +1812,13 @@ export class ScatterWinOverlay {
           duration: 200,
           ease: 'Cubic.easeIn',
           onComplete: () => {
+            // Ensure blaze SFX is faded out at end of transition
+            try {
+              const audio = (window as any).audioManager;
+              if (audio && typeof audio.fadeOutSfx === 'function') {
+                audio.fadeOutSfx('blaze_hh' as any, 200);
+              }
+            } catch {}
             try {
               this.transitionContainer?.setVisible(false);
               this.transitionContainer?.setAlpha(1);

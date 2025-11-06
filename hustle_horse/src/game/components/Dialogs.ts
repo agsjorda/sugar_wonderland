@@ -11,7 +11,7 @@ import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { resolveAssetUrl } from '../../utils/AssetLoader';
 
 export interface DialogConfig {
-	type: 'confetti_KA' | 'Congrats_KA' | 'Explosion_AK' | 'FreeSpinDialog_KA' | 'largeW_KA' | 'LargeW_KA' | 'MediumW_KA' | 'SmallW_KA' | 'SuperW_KA';
+	type: 'Congrats';
 	position?: { x: number; y: number };
 	scale?: number;
 	duration?: number;
@@ -76,9 +76,9 @@ export class Dialogs {
 	private congratsBgOffsetY: number = 0;
 	// Congrats background fire spine behind the PNG bg
 	private congratsFireSpine: any | null = null;
-	private congratsFireScale: number = 0.7;
-	private congratsFireOffsetX: number = 0;
-	private congratsFireOffsetY: number = -80;
+	private congratsFireScale: number = 0.85; // tuned for fireanimation01_HTBH
+	private congratsFireOffsetX: number = 0;  // tuned for fireanimation01_HTBH
+	private congratsFireOffsetY: number = -120; // tuned for fireanimation01_HTBH
 	private congratsFireTimeScale: number = 1.0;
 	private congratsFireAnimName: string = 'animation';
 	// Congrats title image (PNG) with breathing animation
@@ -138,44 +138,12 @@ export class Dialogs {
 	private congratsCharScaleContainer: Phaser.GameObjects.Container | null = null; // scale/rotation
 
 	// Dialog configuration
-	private dialogScales: Record<string, number> = {
-		'confetti_KA': 0.8,
-		'Explosion_AK': 0.8,
-		'FreeSpinDialog_KA': 0.7,
-		'largeW_KA': 0.7,
-		'LargeW_KA': 0.7,
-		'MediumW_KA': 0.7,
-		'SmallW_KA': 0.7,
-		'SuperW_KA': 0.7,
-		'Paint_KA': 0.41
-	};
+private dialogScales: Record<string, number> = {};
 
 	// Dialog positions (relative: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom)
-	private dialogPositions: Record<string, { x: number; y: number }> = {
-		'confetti_KA': { x: 0.5, y: 0.5 },
-		'Explosion_AK': { x: 0.5, y: 0.5 },
-		'FreeSpinDialog_KA': { x: 0.5, y: 0.5 },
-		'largeW_KA': { x: 0.5, y: 0.5 },
-		'LargeW_KA': { x: 0.5, y: 0.5 },
-		'MediumW_KA': { x: 0.5, y: 0.5 },
-		'SmallW_KA': { x: 0.5, y: 0.5 },
-		'SuperW_KA': { x: 0.5, y: 0.5 },
-		'Paint_KA': { x: 0.52, y: 0.72 }
-	};
+private dialogPositions: Record<string, { x: number; y: number }> = {};
 
-	private dialogLoops: Record<string, boolean> = {
-		// Effects
-		'confetti_KA': true,
-		'Explosion_AK': true,
-		'Paint_KA': false,
-		// Dialog texts
-		'FreeSpinDialog_KA': true,
-		'largeW_KA': true,
-		'LargeW_KA': true,
-		'MediumW_KA': true,
-		'SmallW_KA': true,
-		'SuperW_KA': true
-	};
+private dialogLoops: Record<string, boolean> = {};
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -437,8 +405,8 @@ export class Dialogs {
 		// Track current dialog type for bonus mode detection
 		this.currentDialogType = config.type;
 
-		// Safety: ensure Congrats-only fire is gone when not in Congrats
-		if (this.currentDialogType !== 'Congrats_KA' && this.congratsFireSpine) {
+	// Safety: ensure Congrats-only fire is gone when not in Congrats
+		if (this.currentDialogType !== 'Congrats' && this.congratsFireSpine) {
 			try { this.congratsFireSpine.destroy(); } catch {}
 			this.congratsFireSpine = null;
 		}
@@ -538,13 +506,13 @@ export class Dialogs {
 		// Create effects based on dialog type
 		this.createEffects(scene, config.type);
 		// Add Congrats fire AFTER effects are created (effects container is cleared inside createEffects)
-		if (config.type === 'Congrats_KA') {
+		if (config.type === 'Congrats') {
 			try {
 				if (this.congratsFireSpine) { try { this.congratsFireSpine.destroy(); } catch {} this.congratsFireSpine = null; }
 				if (ensureSpineFactory(scene, '[Dialogs] congrats fire spine (post-effects)')) {
 					const centerX = scene.scale.width * 0.5;
 					const centerY = scene.scale.height * 0.5;
-					const fire = (scene.add as any).spine(centerX + this.congratsFireOffsetX, centerY + this.congratsFireOffsetY, '3rd_Fire', '3rd_Fire-atlas');
+					const fire = (scene.add as any).spine(centerX + this.congratsFireOffsetX, centerY + this.congratsFireOffsetY, 'fireanimation01_HTBH', 'fireanimation01_HTBH-atlas');
 					try { fire.setOrigin(0.5, 0.5); } catch {}
 					try { fire.setScale(Math.max(0.05, this.congratsFireScale)); } catch {}
 					try {
@@ -576,7 +544,7 @@ export class Dialogs {
 		} catch {}
 		
 		// If Congrats, add the PNG title with breathing tween (after main content is created)
-		if (config.type === 'Congrats_KA') {
+		if (config.type === 'Congrats') {
 			try {
 				// Clean any prior title image instance
 				if (this.congratsWinTitleImage) { try { this.congratsWinTitleImage.destroy(); } catch {} this.congratsWinTitleImage = null; }
@@ -680,7 +648,7 @@ export class Dialogs {
 		const scale = config.scale || this.getDialogScale(config.type);
 		
 		// If Congrats dialog, add background fire spine, background image, and character
-		if (config.type === 'Congrats_KA') {
+		if (config.type === 'Congrats') {
 			try {
 				const centerX = scene.scale.width * 0.5;
 				const centerY = scene.scale.height * 0.5;
@@ -724,8 +692,8 @@ export class Dialogs {
 			}
 		}
 
-		// Create Spine animation for the dialog, except for Congrats_KA (now PNG-only)
-		if (config.type !== 'Congrats_KA') {
+		// Create Spine animation for the dialog, except for Congrats (now PNG-only)
+		if (config.type !== 'Congrats') {
 			try {
 				console.log(`[Dialogs] Creating Spine animation for dialog: ${config.type}`);
 				console.log(`[Dialogs] Using atlas: ${config.type}-atlas`);
@@ -762,13 +730,13 @@ export class Dialogs {
 			
 			console.log(`[Dialogs] Created dialog content: ${config.type}`);
 		} else {
-			// For Congrats_KA, no Spine dialog; handled by PNG + effects
+			// For Congrats, no Spine dialog; handled by PNG + effects
 			this.currentDialog = null;
-			console.log('[Dialogs] Skipping Congrats_KA Spine creation (PNG-based congrats title in use)');
+			console.log('[Dialogs] Skipping Congrats Spine creation (PNG-based congrats title in use)');
 		}
 
 		// Expose console helpers when showing Congrats dialog
-		if (config.type === 'Congrats_KA') {
+		if (config.type === 'Congrats') {
 			try {
 				const self = this;
 				(window as any).setCongratsBg = function(opts: { scale?: number; offsetX?: number; offsetY?: number }) {
@@ -857,139 +825,24 @@ export class Dialogs {
 	private createEffects(scene: Scene, dialogType: string): void {
 		// Clear existing effects
 		this.effectsContainer.removeAll();
-		
-		// Always create all three effects for all dialogs
-		this.createConfettiEffect(scene);
-		this.createExplosionEffect(scene);
-		this.createPaintEffect(scene);
+		// Effects removed from project (confetti/explosion/paint)
+		try { console.log('[Dialogs] Skipping effects (confetti/explosion/paint removed)'); } catch {}
 	}
 
 	/**
 	 * Create confetti effect
 	 */
-	private createConfettiEffect(scene: Scene): void {
-		try {
-			// Get position and scale from dialog configuration
-			const position = this.getDialogPosition('confetti_KA', scene);
-			const scale = this.getDialogScale('confetti_KA');
-			
-			const confetti = scene.add.spine(
-				position.x,
-				position.y,
-				'confetti_KA',
-				'confetti_KA-atlas'
-			);
-			confetti.setOrigin(0.5, 0.5);
-			confetti.setScale(scale);
-			
-					// Play intro animation first, then loop idle based on configuration (fallback to idle if intro missing)
-		const shouldLoop = this.getDialogLoop('confetti_KA');
-		try {
-			confetti.animationState.setAnimation(0, 'confetti_KA_win', false);
-			confetti.animationState.addAnimation(0, 'confetti_KA_idle', shouldLoop, 0);
-		} catch (error) {
-			// Fallback to idle animation if intro is missing
-			confetti.animationState.setAnimation(0, 'confetti_KA_idle', shouldLoop);
-		}
-			
-			confetti.setDepth(102);
-			this.effectsContainer.add(confetti);
-			console.log(`[Dialogs] Created confetti effect at (${position.x}, ${position.y}) with scale: ${scale}`);
-		} catch (error) {
-			console.error('[Dialogs] Error creating confetti effect:', error);
-		}
-	}
+// removed: confetti effect no longer supported
 
 	/**
 	 * Create explosion effect
 	 */
-	private createExplosionEffect(scene: Scene): void {
-		try {
-			// Get position and scale from dialog configuration
-			const position = this.getDialogPosition('Explosion_AK', scene);
-			const scale = this.getDialogScale('Explosion_AK');
-			
-			const explosion = scene.add.spine(
-				position.x,
-				position.y,
-				'Explosion_AK',
-				'Explosion_AK-atlas'
-			);
-			explosion.setOrigin(0.5, 0.5);
-			explosion.setScale(scale);
-			
-					// Play intro animation first, then loop idle based on configuration (fallback to idle if intro missing)
-		const shouldLoop = this.getDialogLoop('Explosion_AK');
-		try {
-			explosion.animationState.setAnimation(0, 'Explosion_AK_win', false);
-			explosion.animationState.addAnimation(0, 'Explosion_AK_idle', shouldLoop, 0);
-		} catch (error) {
-			// Fallback to idle animation if intro is missing
-			explosion.animationState.setAnimation(0, 'Explosion_AK_idle', shouldLoop);
-		}
-			
-			explosion.setDepth(102);
-			this.effectsContainer.add(explosion);
-			console.log(`[Dialogs] Created explosion effect at (${position.x}, ${position.y}) with scale: ${scale}`);
-		} catch (error) {
-			console.error('[Dialogs] Error creating explosion effect:', error);
-		}
-	}
+// removed: explosion effect no longer supported
 
 	/**
 	 * Create paint effect
 	 */
-	private createPaintEffect(scene: Scene): void {
-		try {
-			// Get position and scale from dialog configuration
-			const position = this.getDialogPosition('Paint_KA', scene);
-			const scale = this.getDialogScale('Paint_KA');
-			
-			const paint = scene.add.spine(
-				position.x,
-				position.y,
-				'Paint_KA',
-				'Paint_KA-atlas'
-			);
-			paint.setOrigin(0.5, 0.5);
-			paint.setScale(scale);
-			
-					// Play intro animation first, then loop idle based on configuration (fallback to idle if intro missing)
-		const shouldLoop = this.getDialogLoop('Paint_KA');
-		try {
-			// Play intro animation first, then loop idle based on configuration
-			const introAnimation = paint.animationState.setAnimation(0, 'Paint_KA_win', false);
-			paint.animationState.addAnimation(0, 'Paint_KA_idle', shouldLoop, 0);
-			
-			console.log('[Dialogs] Paint intro animation started');
-			
-			// Simple approach: fade in number display after paint intro animation
-			// Most paint intro animations are around 1-2 seconds
-			const introDuration = 1500; // 1.5 seconds
-			
-			scene.time.delayedCall(introDuration, () => {
-				console.log('[Dialogs] Paint intro animation complete, fading in number display');
-				this.fadeInNumberDisplay(scene);
-			});
-			
-		} catch (error) {
-			console.log('[Dialogs] Paint intro animation failed, falling back to idle:', error);
-			// Fallback to idle animation if intro is missing
-			paint.animationState.setAnimation(0, 'Paint_KA_idle', shouldLoop);
-			// If intro animation is missing, trigger number display fade-in after a short delay
-			scene.time.delayedCall(500, () => {
-				console.log('[Dialogs] Fallback: triggering number display fade-in after 0.5 seconds');
-				this.fadeInNumberDisplay(scene);
-			});
-		}
-			
-			paint.setDepth(102);
-			this.effectsContainer.add(paint);
-			console.log(`[Dialogs] Paint effect added to effectsContainer, container children count:`, this.effectsContainer.length);
-		} catch (error) {
-			console.error('[Dialogs] Error creating paint effect:', error);
-		}
-	}
+// removed: paint effect no longer supported
 
 	/**
 	 * Create the "Press anywhere to continue" text
@@ -1057,7 +910,7 @@ export class Dialogs {
 		}
 		
 		// Create number display configuration
-		const isCongrats = (this.currentDialogType === 'Congrats_KA');
+		const isCongrats = (this.currentDialogType === 'Congrats');
 		const numberConfig: NumberDisplayConfig = {
 			x: scene.scale.width / 2,
 			y: scene.scale.height / 2 + 200,
@@ -1078,7 +931,7 @@ export class Dialogs {
 		// Display free spins if provided, otherwise display win amount
 		const displayValue = freeSpins !== undefined ? freeSpins : winAmount;
 		// For non-animated cases, we set the final value immediately. For Congrats, we'll animate below
-		if (this.currentDialogType !== 'Congrats_KA') {
+		if (this.currentDialogType !== 'Congrats') {
 			numberDisplay.displayValue(displayValue);
 		}
 		// Keep a reference for live spacing updates
@@ -1103,7 +956,7 @@ export class Dialogs {
 		console.log('[Dialogs] Created number display');
 
 		// If Congrats overlay, wait for pre-Congrats mask to finish, then fade in and animate counting
-		if (this.currentDialogType === 'Congrats_KA') {
+		if (this.currentDialogType === 'Congrats') {
 			const startCounting = () => {
 				// Fade in the number display quickly
 				scene.tweens.add({ targets: this.numberDisplayContainer, alpha: 1, duration: 250, ease: 'Power2' });
@@ -1419,13 +1272,7 @@ export class Dialogs {
 			return;
 		}
 		
-		// Check if this is a free spin dialog - use iris transition
-		if (this.currentDialogType === 'FreeSpinDialog_KA') {
-			console.log('[Dialogs] Free spin dialog clicked - starting iris transition');
-			// Don't disable dialog elements yet for free spin dialogs - let iris transition handle it
-			this.startIrisTransition(scene);
-			return;
-		}
+	// Free spin dialog removed
 		
 		// Use normal transition for other dialogs
 		console.log('[Dialogs] Other dialog type - starting normal transition');
@@ -1437,12 +1284,10 @@ export class Dialogs {
 	/**
 	 * Check if the current dialog is a win dialog
 	 */
-	private isWinDialog(): boolean {
-		return this.currentDialogType === 'SmallW_KA' || 
-			   this.currentDialogType === 'MediumW_KA' || 
-			   this.currentDialogType === 'LargeW_KA' || 
-			   this.currentDialogType === 'SuperW_KA';
-	}
+    private isWinDialog(): boolean {
+        // Legacy win dialogs removed; overlays handle wins
+        return false;
+    }
 	
 	/**
 	 * Start iris transition for free spin dialog
@@ -1531,7 +1376,7 @@ export class Dialogs {
 		const dialogTypeBeforeCleanup = this.currentDialogType;
 
 		// If closing Congrats, use end fire transition back to base
-		if (dialogTypeBeforeCleanup === 'Congrats_KA') {
+		if (dialogTypeBeforeCleanup === 'Congrats') {
 			console.log('[Dialogs] Congrats dialog closed - using end fire transition back to base');
 			// Stop effects but keep Congrats visible until mask covers
 			this.stopAllEffectAnimations();
@@ -1575,13 +1420,10 @@ export class Dialogs {
 				// Hide dialog immediately while screen is black
 				this.cleanupDialog();
 
-				// Check if we need to trigger bonus mode while screen is black
-				if (dialogTypeBeforeCleanup === 'FreeSpinDialog_KA') {
-					console.log('[Dialogs] Triggering bonus mode during black screen');
-					this.triggerBonusMode(scene);
-				} else {
+				// Free spin dialog removed; handle only Congrats branch
+				if (false) { } else {
 					// If congrats closed while in bonus mode, revert to base visuals and reset symbols
-					if (dialogTypeBeforeCleanup === 'Congrats_KA') {
+					if (dialogTypeBeforeCleanup === 'Congrats') {
 						console.log('[Dialogs] Congrats dialog closed - reverting from bonus visuals to base');
 						// Switch off bonus mode visuals and music
 						scene.events.emit('setBonusMode', false);
@@ -1625,7 +1467,7 @@ export class Dialogs {
 							blackScreen.destroy();
 							
 							// Ensure UI is back to normal only when congrats dialog closes
-							if (dialogTypeBeforeCleanup === 'Congrats_KA') {
+						if (dialogTypeBeforeCleanup === 'Congrats') {
 								console.log('[Dialogs] Black screen faded out after congrats - restoring normal background and header');
 								scene.events.emit('hideBonusBackground');
 								scene.events.emit('hideBonusHeader');
@@ -2330,9 +2172,7 @@ private updateEmbers(scene: Scene, delta: number): void {
 	/**
 	 * Check if we should trigger bonus mode based on current dialog type
 	 */
-	private shouldTriggerBonusMode(): boolean {
-		return this.currentDialogType === 'FreeSpinDialog_KA';
-	}
+	private shouldTriggerBonusMode(): boolean { return false; }
 
 	/**
 	 * Trigger bonus mode by enabling bonus background and header
@@ -2814,31 +2654,65 @@ private updateEmbers(scene: Scene, delta: number): void {
 	}
 
 	// Convenience methods for specific dialog types
-showCongrats(scene: Scene, config?: Partial<DialogConfig>): void {
+	showCongrats(scene: Scene, config?: Partial<DialogConfig>): void {
 		// New flow: fade to black → build Congrats under cover → fade out with fire + embers
 		this.playEnterFireTransitionThen(() => {
-			this.showDialog(scene, { type: 'Congrats_KA', ...config });
+			this.showDialog(scene, { type: 'Congrats', ...config });
 		});
 	}
 
-	showFreeSpinDialog(scene: Scene, config?: Partial<DialogConfig>): void {
-		this.showDialog(scene, { type: 'FreeSpinDialog_KA', ...config });
-	}
+// Removed: FreeSpinDialog_KA is no longer used in the project
 
-	showLargeWin(scene: Scene, config?: Partial<DialogConfig>): void {
-		this.showDialog(scene, { type: 'LargeW_KA', ...config });
+showLargeWin(scene: Scene, config?: Partial<DialogConfig>): void {
+		// Redirect Large Win to Super Win overlay
+		try {
+			const amount = (config as any)?.winAmount ?? 0;
+			const overlay = (scene as any)?.superWinOverlay;
+			if (overlay && typeof overlay.show === 'function') {
+				overlay.show(amount);
+				return;
+			}
+		} catch {}
+		try { console.warn('[Dialogs] LargeW_KA replaced. SuperWinOverlay unavailable; skipping.'); } catch {}
 		}
 		
-	showMediumWin(scene: Scene, config?: Partial<DialogConfig>): void {
-		this.showDialog(scene, { type: 'MediumW_KA', ...config });
+showMediumWin(scene: Scene, config?: Partial<DialogConfig>): void {
+		// Redirect Medium Win to Mega Win overlay
+		try {
+			const amount = (config as any)?.winAmount ?? 0;
+			const overlay = (scene as any)?.megaWinOverlay;
+			if (overlay && typeof overlay.show === 'function') {
+				overlay.show(amount);
+				return;
+			}
+		} catch {}
+		try { console.warn('[Dialogs] MediumW_KA replaced. MegaWinOverlay unavailable; skipping.'); } catch {}
 		}
 
-	showSmallWin(scene: Scene, config?: Partial<DialogConfig>): void {
-		this.showDialog(scene, { type: 'SmallW_KA', ...config });
+showSmallWin(scene: Scene, config?: Partial<DialogConfig>): void {
+		// Redirect Small Win to Big Win overlay; legacy SmallW_KA replaced
+		try {
+			const amount = (config as any)?.winAmount ?? 0;
+			const overlay = (scene as any)?.bigWinOverlay;
+			if (overlay && typeof overlay.show === 'function') {
+				overlay.show(amount);
+				return;
+			}
+		} catch {}
+		try { console.warn('[Dialogs] SmallW_KA replaced. BigWinOverlay unavailable; skipping.'); } catch {}
 		}
 
-	showSuperWin(scene: Scene, config?: Partial<DialogConfig>): void {
-		this.showDialog(scene, { type: 'SuperW_KA', ...config });
+showSuperWin(scene: Scene, config?: Partial<DialogConfig>): void {
+		// Redirect Super Win to Epic Win overlay
+		try {
+			const amount = (config as any)?.winAmount ?? 0;
+			const overlay = (scene as any)?.epicWinOverlay;
+			if (overlay && typeof overlay.show === 'function') {
+				overlay.show(amount);
+				return;
+			}
+		} catch {}
+		try { console.warn('[Dialogs] SuperW_KA replaced. EpicWinOverlay unavailable; skipping.'); } catch {}
 	}
 }
 

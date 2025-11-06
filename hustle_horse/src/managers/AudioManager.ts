@@ -158,6 +158,14 @@ export class AudioManager {
 			} catch (e) {
 				console.warn('[AudioManager] Failed to create fire_hh SFX instance:', e);
 			}
+			// Fireworks SFX instance (optional; we can also play one-shot)
+			try {
+				const fireworksSfx = this.scene.sound.add('fireworks_hh', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set('fireworks_hh' as any, fireworksSfx);
+				console.log('[AudioManager] Fireworks SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create fireworks_hh SFX instance:', e);
+			}
 			// Blaze SFX for Fire_Transition
 			try {
 				const blazeSfx = this.scene.sound.add('blaze_hh', { volume: this.sfxVolume, loop: false });
@@ -194,6 +202,15 @@ export class AudioManager {
 				console.log('[AudioManager] Card pick SFX instance created');
 			} catch (e) {
 				console.warn('[AudioManager] Failed to create cardpick_hh SFX instance:', e);
+			}
+
+			// Card flip SFX for ScatterWinOverlay
+			try {
+				const cardFlip = this.scene.sound.add('cardflip_hh', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set('cardflip_hh' as any, cardFlip);
+				console.log('[AudioManager] Card flip SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create cardflip_hh SFX instance:', e);
 			}
 
 			const reelDropSfx = this.scene.sound.add('reeldrop_hh', {
@@ -904,6 +921,33 @@ export class AudioManager {
 			}
 		} else {
 			console.warn(`[AudioManager] Sound effect instance not found for type: ${sfxType}`);
+		}
+	}
+
+	/**
+	 * Play an arbitrary one-shot SFX by audio key with optional volume override.
+	 */
+	playOneShot(key: string, volume?: number): void {
+		if (this.isMuted) return;
+		try {
+			const vol = Math.max(0, Math.min(1, volume != null ? volume : this.sfxVolume));
+			(this.scene.sound as any).play?.(key, { volume: vol, loop: false });
+		} catch (e) {
+			console.warn('[AudioManager] playOneShot failed for key:', key, e);
+		}
+	}
+
+	/** Stop all currently playing sounds by audio key (SFX or music). */
+	stopByKey(key: string): void {
+		try {
+			const sounds: Phaser.Sound.BaseSound[] = (this.scene.sound as any).sounds || [];
+			for (const s of sounds) {
+				if ((s as any).key === key && s.isPlaying) {
+					s.stop();
+				}
+			}
+		} catch (e) {
+			console.warn('[AudioManager] stopByKey failed for key:', key, e);
 		}
 	}
 

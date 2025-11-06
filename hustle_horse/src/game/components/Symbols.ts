@@ -175,7 +175,14 @@ export class Symbols {
     try {
       const target: any = this.baseTopDragon || this.baseOverlayBorderUpper; // fallback to current upper
       if (!target) return;
-      this.scene.tweens.add({ targets: target, x: targetX, duration: Math.max(0, durationMs), ease });
+      this.scene.tweens.add({
+        targets: target,
+        x: targetX,
+        duration: Math.max(0, durationMs),
+        ease,
+        onStart: () => { try { this.scene.events.emit('baseTopDragonMoveStart'); } catch {} },
+        onComplete: () => { try { this.scene.events.emit('baseTopDragonMoveComplete'); } catch {} }
+      });
     } catch {}
   }
 
@@ -447,7 +454,7 @@ export class Symbols {
         try { upper = (this.scene.add as any).spine(centerX, topY + this.bonusDragonTopOffsetY, 'Dragon_Top_Bonus', 'Dragon_Top_Bonus-atlas'); } catch {}
         if (upper) {
           try { upper.setOrigin(0.5, 1.0); } catch {}
-          try { upper.setDepth(2); } catch {}
+          try { upper.setDepth(50); } catch {}
           // Play its single available animation (looping)
           try {
             const state = (upper as any).animationState;
@@ -476,12 +483,9 @@ export class Symbols {
           this.baseOverlayBorderUpper = upper;
           this.baseTopDragon = upper;
         } else {
-          // Fallback to PNG if spine not available
-          this.baseOverlayBorderUpper = this.scene.add.image(centerX, topY + this.borderTopOffsetY, 'Border_Upper').setOrigin(0.5, 1.0);
-          this.baseOverlayBorderUpper.setDepth(2);
-          const upperScaleX = totalWidth / this.baseOverlayBorderUpper.width;
-          this.baseOverlayBorderUpper.setScale(upperScaleX);
-          this.baseOverlayBorderUpper.setVisible(true);
+          // No fallback used in bonus; skip upper border if spine is unavailable
+          try { this.baseOverlayBorderUpper?.destroy?.(); } catch {}
+          this.baseOverlayBorderUpper = undefined as any;
         }
         // Lower spine
         let lower: any = null;
@@ -589,6 +593,8 @@ export class Symbols {
           // Add to the dedicated container so future movement/animation is simple
           try { this.baseBorderContainer?.add(upper); } catch {}
           this.baseOverlayBorderUpper = upper;
+          // Notify scene that the base top dragon is ready (movement/creation complete)
+          try { this.scene.events.emit('baseTopDragonMoveComplete'); } catch {}
         } else {
           // Fallback PNG (mapped to skeleton.png in portrait/high)
           this.baseOverlayBorderUpper = this.scene.add.image(
@@ -603,6 +609,8 @@ export class Symbols {
           // Add to container for consistency
           try { this.baseBorderContainer?.add(this.baseOverlayBorderUpper); } catch {}
           this.baseTopDragon = this.baseOverlayBorderUpper;
+          // Notify scene even when using PNG fallback
+          try { this.scene.events.emit('baseTopDragonMoveComplete'); } catch {}
         }
 
         // Try mirrored dragon_default at the bottom; fallback to PNG
@@ -2709,6 +2717,8 @@ export class Symbols {
                   if (!gameStateManager.isBonus && !this.hasEmittedScatterWinStart) {
                     this.hasEmittedScatterWinStart = true;
                     this.scene.events.emit('symbol0-win-start');
+                    // Also fade the light grey base overlay for base scene when scatter starts
+                    this.fadeBaseOverlayForScatterStart(250, 0);
                   }
                 } catch {}
                 // Re-center on next tick to compensate for bounds changes after animation starts
@@ -2829,6 +2839,23 @@ export class Symbols {
           });
         }
       }
+    } catch {}
+  }
+
+  /** Fade the base light-grey grid background when scatter win starts (base scene). */
+  private fadeBaseOverlayForScatterStart(durationMs: number = 250, toAlpha: number = 0): void {
+    try {
+      if (!this.baseOverlayRect) return;
+      this.scene.tweens.killTweensOf(this.baseOverlayRect);
+      // Ensure it's visible before fading
+      this.baseOverlayRect.setVisible(true);
+      const targetAlpha = Math.max(0, Math.min(1, toAlpha));
+      this.scene.tweens.add({
+        targets: this.baseOverlayRect,
+        alpha: targetAlpha,
+        duration: Math.max(0, durationMs),
+        ease: 'Cubic.easeOut'
+      });
     } catch {}
   }
 

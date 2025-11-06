@@ -149,6 +149,27 @@ export class WinLineDrawer {
 
     // Convert SpinData paylines to win patterns format
     this.currentWinPatterns = this.convertPaylinesToWinPatterns(spinData);
+    // Dynamically adjust timings based on number of lines and turbo
+    try {
+      const numLines = Math.max(1, this.currentWinPatterns.length);
+      const isTurbo = !!(((this.scene as any)?.gameData?.isTurbo) || gameStateManager.isTurbo);
+      // Total time budget per win cycle (ms)
+      const totalBudget = isTurbo ? 900 : 1800;
+      // Reserve a small end pause (part of budget)
+      const endPause = Math.min(200, Math.floor(totalBudget * 0.15));
+      // Per-line time from remaining budget
+      const perLine = Math.max(40, Math.floor((totalBudget - endPause) / numLines));
+      // Apply aggressively faster draw speed under turbo
+      const speed = isTurbo ? 2.0 : 1.5;
+
+      // Override all mins so large win counts don't balloon timing
+      this.minLineDisplayTime = perLine;
+      this.minCycleEndPause = endPause;
+      this.lineDisplayTime = perLine;
+      this.cycleEndPause = endPause;
+      this.animationSpeed = speed;
+      console.log(`[WinLineDrawer] Dynamic timing applied: lines=${numLines}, turbo=${isTurbo}, perLine=${perLine}ms, endPause=${endPause}ms, speed=${speed}x`);
+    } catch {}
     this.isLooping = false; // Not looping, just single pass
     this.wasInterruptedByManualSpin = false;
     

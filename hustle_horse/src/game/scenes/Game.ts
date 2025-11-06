@@ -42,8 +42,12 @@ import { ScatterAnticipation } from '../components/ScatterAnticipation';
 import { SCATTER_ANTICIPATION2_POS_X_MUL, SCATTER_ANTICIPATION2_POS_Y_MUL, SCATTER_ANTICIPATION2_DEFAULT_SCALE } from '../../config/UIPositionConfig';
 import { ScatterWinOverlay } from '../components/ScatterWinOverlay';
 import { BigWinOverlay } from '../components/BigWinOverlay';
+import { MegaWinOverlay } from '../components/MegaWinOverlay';
+import { EpicWinOverlay } from '../components/EpicWinOverlay';
+import { SuperWinOverlay } from '../components/SuperWinOverlay';
 import { ScatterAnimationManager } from '../../managers/ScatterAnimationManager';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
+import { TurboConfig } from '../../config/TurboConfig';
 
 // Extend the Phaser Scene type to include the spine plugin
 export class Game extends Scene {
@@ -74,6 +78,14 @@ export class Game extends Scene {
     private scatterWinOverlay!: ScatterWinOverlay;
     private scatterAnticipation2!: ScatterAnticipation;
     private bigWinOverlay!: BigWinOverlay;
+    private megaWinOverlay!: MegaWinOverlay;
+    private epicWinOverlay!: EpicWinOverlay;
+    private superWinOverlay!: SuperWinOverlay;
+	// Big_Dragon runtime adjustment controls
+	private dragon: any;
+	public dragonOffsetX: number = 135;
+	public dragonOffsetY: number = -460;
+	public dragonScaleMultiplier: number = 0.5;
 	
 	// Note: Payout data now calculated directly from paylines in WIN_STOP handler
 	// Track whether this spin has winlines to animate
@@ -93,10 +105,13 @@ export class Game extends Scene {
 		this.gameData = new GameData();
 		this.symbols = new Symbols();
 		this.menu = new Menu();
-		this.scatterAnticipation = new ScatterAnticipation();
+        this.scatterAnticipation = new ScatterAnticipation();
         this.scatterWinOverlay = new ScatterWinOverlay();
         this.scatterAnticipation2 = new ScatterAnticipation();
         this.bigWinOverlay = new BigWinOverlay();
+        this.megaWinOverlay = new MegaWinOverlay();
+        this.epicWinOverlay = new EpicWinOverlay();
+        this.superWinOverlay = new SuperWinOverlay();
 	}
 
 	init (data: any)
@@ -185,6 +200,74 @@ export class Game extends Scene {
 		this.header = new Header(this.networkManager, this.screenModeManager);
 		this.header.create(this);
 
+		// Spawn Big_Dragon only after dragon_default moves in base scene, with 0.5s delay
+		const spawnDragonHead = () => {
+			try {
+				const width = this.scale.width;
+				const height = this.scale.height;
+				// Target position (inside screen) with offset modifiers
+				const targetX = (width * 0.18) + this.dragonOffsetX;
+				const targetY = (height * 0.70) + this.dragonOffsetY;
+				// Spawn off-screen (upper side) then slide down
+				const dragon: any = (this.add as any).spine(targetX, -50, 'Big_Dragon', 'Big_Dragon-atlas');
+				if (dragon?.setOrigin) dragon.setOrigin(0.5, 0.5);
+				const baseScale = this.networkManager.getAssetScale?.() ?? 1;
+				dragon.setScale?.(baseScale * 0.35 * this.dragonScaleMultiplier);
+				const animations = dragon?.skeleton?.data?.animations;
+				const firstAnim = Array.isArray(animations) && animations.length > 0 ? animations[0].name : undefined;
+				if (firstAnim && dragon?.animationState?.setAnimation) {
+					dragon.animationState.setAnimation(0, firstAnim, false);
+				}
+				// Layer above base scene UI but below scatter overlay (10000+) 
+				dragon.setDepth?.(9000);
+				// Compute a safe off-screen Y above the viewport using bounds if available
+				try {
+					const b = dragon.getBounds?.();
+					const h = b && (b.size?.y || b.height) ? (b.size?.y || b.height) : (dragon.displayHeight || 0);
+					const offY = h > 0 ? -(h + 20) : -(this.scale.height * 0.15 + 20);
+					dragon.setPosition(targetX, offY);
+				} catch {}
+				// Slide into targetY to avoid instant pop-in, turbo-aware duration
+				try {
+					const isTurbo = !!this.gameStateManager?.isTurbo;
+					const baseDur = 700;
+					const dur = Math.max(100, Math.floor(baseDur * (isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1)));
+					this.tweens.add({ targets: dragon, y: targetY, duration: dur, ease: 'Sine.easeOut' });
+				} catch {}
+				this.dragon = dragon;
+				(window as any).dragon = dragon;
+				(window as any).setDragonAdjust = (opts: { dx?: number; dy?: number; scale?: number }) => {
+					try {
+						if (opts && typeof opts.dx === 'number') this.dragonOffsetX = opts.dx;
+						if (opts && typeof opts.dy === 'number') this.dragonOffsetY = opts.dy;
+						if (opts && typeof opts.scale === 'number') this.dragonScaleMultiplier = opts.scale;
+						if (this.dragon) {
+							const bw = this.scale.width;
+							const bh = this.scale.height;
+							this.dragon.setPosition((bw * 0.18) + this.dragonOffsetX, (bh * 0.70) + this.dragonOffsetY);
+							const bs = this.networkManager.getAssetScale?.() ?? 1;
+							this.dragon.setScale(bs * 0.35 * this.dragonScaleMultiplier);
+						}
+						return { x: this.dragon?.x, y: this.dragon?.y, scale: this.dragon?.scaleX };
+					} catch (err) {
+						console.warn('[Game] setDragonAdjust error:', err);
+					}
+				};
+				console.log('[Game] Big_Dragon spine added to base scene');
+			} catch (e) {
+				console.warn('[Game] Failed to create Big_Dragon spine:', e);
+			}
+		};
+		// Listen once and spawn after delay when base top dragon starts moving (scatter win)
+		this.events.once('baseTopDragonMoveStart', () => {
+			const isTurbo = !!this.gameStateManager?.isTurbo;
+			const baseDelay = 500;
+			const delay = Math.max(30, Math.floor(baseDelay * (isTurbo ? TurboConfig.TURBO_DELAY_MULTIPLIER : 1)));
+			this.time.delayedCall(delay, spawnDragonHead);
+		});
+		// Optional manual trigger for debugging
+		(window as any).spawnDragonHead = () => spawnDragonHead();
+
 		// Create bonus background using the managers (initially hidden)
 		console.log('[Game] Creating bonus background...');
 		this.bonusBackground = new BonusBackground(this.networkManager, this.screenModeManager);
@@ -252,6 +335,30 @@ export class Game extends Scene {
             (window as any).bigWinOverlay = this.bigWinOverlay;
         } catch (e) {
             console.warn('[Game] Failed to initialize BigWinOverlay:', e);
+        }
+
+        // Initialize Mega Win overlay (replacement for legacy MediumW_KA)
+        try {
+            this.megaWinOverlay.initialize(this, this.networkManager, this.screenModeManager);
+            (window as any).megaWinOverlay = this.megaWinOverlay;
+        } catch (e) {
+            console.warn('[Game] Failed to initialize MegaWinOverlay:', e);
+        }
+
+        // Initialize Epic Win overlay (replacement for legacy SuperW_KA)
+        try {
+            this.epicWinOverlay.initialize(this, this.networkManager, this.screenModeManager);
+            (window as any).epicWinOverlay = this.epicWinOverlay;
+        } catch (e) {
+            console.warn('[Game] Failed to initialize EpicWinOverlay:', e);
+        }
+
+        // Initialize Super Win overlay (replacement for legacy LargeW_KA)
+        try {
+            this.superWinOverlay.initialize(this, this.networkManager, this.screenModeManager);
+            (window as any).superWinOverlay = this.superWinOverlay;
+        } catch (e) {
+            console.warn('[Game] Failed to initialize SuperWinOverlay:', e);
         }
 		
 		// Initialize scatter animation manager with both containers, spinner, dialogs, and overlay component
@@ -510,6 +617,16 @@ export class Game extends Scene {
 			console.log('[Game] Dialog animations complete event received');
 			// Re-allow win dialogs after transitions complete
 			this.suppressWinDialogsUntilNextSpin = false;
+			// Remove dragon head after scatter overlay completes
+			try {
+				if (this.dragon) {
+					try { this.tweens.killTweensOf(this.dragon); } catch {}
+					try { this.dragon.destroy(); } catch {}
+					this.dragon = undefined as any;
+					try { (window as any).dragon = undefined; } catch {}
+					console.log('[Game] Dragon head removed after overlay completion');
+				}
+			} catch {}
 			
 			// Clear the win dialog state - autoplay can resume
 			gameStateManager.isShowingWinDialog = false;
@@ -523,6 +640,19 @@ export class Game extends Scene {
 			
 			// Process any remaining wins in the queue
 			this.processWinQueue();
+		});
+
+		// Also ensure dragon head is removed when scatter bonus is activated
+		this.events.on('scatterBonusActivated', () => {
+			try {
+				if (this.dragon) {
+					try { this.tweens.killTweensOf(this.dragon); } catch {}
+					try { this.dragon.destroy(); } catch {}
+					this.dragon = undefined as any;
+					try { (window as any).dragon = undefined; } catch {}
+					console.log('[Game] Dragon head removed on scatterBonusActivated');
+				}
+			} catch {}
 		});
 
 		// Listen for any spin to start (manual or autoplay)
@@ -700,10 +830,10 @@ export class Game extends Scene {
 		
 		// Determine which win dialog to show based on multiplier thresholds
 		if (multiplier >= 60) {
-			console.log(`[Game] Large Win! Showing LargeW_KA dialog for ${multiplier.toFixed(2)}x multiplier`);
+			console.log(`[Game] Large Win! Showing SuperWinOverlay for ${multiplier.toFixed(2)}x multiplier`);
 			this.dialogs.showLargeWin(this, { winAmount: payout });
 		} else if (multiplier >= 45) {
-			console.log(`[Game] Super Win! Showing SuperW_KA dialog for ${multiplier.toFixed(2)}x multiplier`);
+			console.log(`[Game] Super Win! Showing EpicWinOverlay for ${multiplier.toFixed(2)}x multiplier`);
 			this.dialogs.showSuperWin(this, { winAmount: payout });
         } else if (multiplier >= 30) {
             console.log(`[Game] Medium/Big Win! Showing BigWinOverlay for ${multiplier.toFixed(2)}x multiplier`);
@@ -729,7 +859,7 @@ export class Game extends Scene {
                 this.dialogs.showMediumWin(this, { winAmount: payout });
             }
 		} else if (multiplier >= 20) {
-			console.log(`[Game] Small Win! Showing SmallW_KA dialog for ${multiplier.toFixed(2)}x multiplier`);
+			console.log(`[Game] Small Win! Showing BigWinOverlay for ${multiplier.toFixed(2)}x multiplier`);
 			this.dialogs.showSmallWin(this, { winAmount: payout });
 		}
 		
@@ -1234,10 +1364,10 @@ export class Game extends Scene {
 
 		(window as any).showFreeSpinDialog = (freeSpins: number = 10) => {
 			try {
-				console.log(`[Game] TEST: Showing Free Spin dialog with ${freeSpins} spins`);
-				this.dialogs.showFreeSpinDialog(this, { freeSpins });
+				console.log(`[Game] TEST: Skipping legacy Free Spin dialog; freeSpins=${freeSpins}`);
+				this.events.emit('scatterBonusActivated', { scatterIndex: 3, actualFreeSpins: freeSpins });
 			} catch (e) {
-				console.error('[Game] TEST: Failed to show Free Spin dialog:', e);
+				console.error('[Game] TEST: Failed to emit scatterBonusActivated:', e);
 			}
 		};
 
@@ -1319,10 +1449,10 @@ export class Game extends Scene {
 		console.log('- getCoinCount() - Check active coin count');
 		console.log('- showLargeWin(amt) - Show Large Win dialog with optional amount');
 		console.log('- showSuperWin(amt) - Show Super Win dialog with optional amount');
-		console.log('- showBigWin(amt) - Alias to Medium Win dialog with optional amount');
+		console.log('- showBigWin(amt) - Shows Big Win overlay with optional amount');
 		console.log('- showWinByMultiplier(mult, bet) - Show win dialog via multiplier thresholds');
 		console.log('- showCongrats() - Show Congrats dialog');
-		console.log('- showFreeSpinDialog(spins) - Show Free Spin dialog');
+		console.log('- (removed) showFreeSpinDialog(spins)');
         
 		console.log('- showScatterAnticipation() / hideScatterAnticipation() - Toggle scatter anticipation');
 		console.log('- showBonusLayers() / hideBonusLayers() - Toggle bonus background and header');

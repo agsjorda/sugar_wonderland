@@ -338,47 +338,24 @@ export class AssetConfig {
 				'congratulations-you-won': `${prefix}/dialogs/congratulations-you-won.png`
 			},
 			spine: {
-				// Fire background element for Congrats overlay
-				'3rd_Fire': {
-					atlas: `${prefix}/fire_animations/3rd_Fire.atlas`,
-					json: `${prefix}/fire_animations/3rd_Fire.json`
+				// Fire background element for Congrats overlay (replaces 3rd_Fire)
+				'fireanimation01_HTBH': {
+					atlas: `${prefix}/fire_animations/fireanimation01_HTBH.atlas`,
+					json: `${prefix}/fire_animations/fireanimation01_HTBH.json`
 				},
-				'confetti_KA': {
-					atlas: `${prefix}/dialogs/confetti_KA.atlas`,
-					json: `${prefix}/dialogs/confetti_KA.json`
-				},
-				'Paint_KA': {
-					atlas: `${prefix}/dialogs/Paint_KA.atlas`,
-					json: `${prefix}/dialogs/Paint_KA.json`
-				},
-				'Explosion_AK': {
-					atlas: `${prefix}/dialogs/Explosion_AK.atlas`,
-					json: `${prefix}/dialogs/Explosion_AK.json`
-				},
-				'SmallW_KA': {
-					atlas: `${prefix}/dialogs/SmallW_KA.atlas`,
-					json: `${prefix}/dialogs/SmallW_KA.json`
-				},
-				'MediumW_KA': {
-					atlas: `${prefix}/dialogs/MediumW_KA.atlas`,
-					json: `${prefix}/dialogs/MediumW_KA.json`
-				},
-				'LargeW_KA': {
-					atlas: `${prefix}/dialogs/largeW_KA.atlas`,
-					json: `${prefix}/dialogs/largeW_KA.json`
-				},
-				'SuperW_KA': {
-					atlas: `${prefix}/dialogs/SuperW_KA.atlas`,
-					json: `${prefix}/dialogs/SuperW_KA.json`
-				},
-				'FreeSpinDialog_KA': {
-					atlas: `${prefix}/dialogs/FreeSpinDialog_KA.atlas`,
-					json: `${prefix}/dialogs/FreeSpinDialog_KA.json`
-				},
+				// Removed unused dialog effect spines (confetti_KA, Paint_KA, Explosion_AK)
+				// Legacy Small/Medium/Large/Super win dialogs removed in favor of overlay components
+				// Removed FreeSpinDialog_KA (not used)
 				// Character spine used on top of the congrats background
 				'HustleForSpine': {
 					atlas: `assets/characters/HustleForSpine.atlas`,
 					json: `assets/characters/HustleForSpine.json`
+				}
+				,
+				// Big Dragon character from characters folder
+				'Big_Dragon': {
+					atlas: `assets/characters/Big_Dragon.atlas`,
+					json: `assets/characters/Big_Dragon.json`
 				}
 			}
 		};
@@ -505,6 +482,8 @@ export class AssetConfig {
 				// Fire SFX
 				'fire_hh': 'assets/sounds/SFX/fire_hh.ogg',
 				'blaze_hh': 'assets/sounds/SFX/blaze_hh.ogg',
+				'fireworks_hh': 'assets/sounds/SFX/fireworks_hh.ogg',
+				'cardflip_hh': 'assets/sounds/SFX/cardflip_hh.ogg',
 				// Hit win SFX
 				'hitwin_hh': 'assets/sounds/SFX/hitwin_hh.ogg',
 				// Wild multi SFX

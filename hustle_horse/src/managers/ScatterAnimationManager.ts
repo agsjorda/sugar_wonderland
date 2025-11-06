@@ -441,7 +441,7 @@ export class ScatterAnimationManager {
       console.error(`[ScatterAnimationManager] Could not get freeSpins from current spinData - dialog will show 0`);
     }
 
-    console.log(`[ScatterAnimationManager] Showing free spins dialog for ${freeSpins} free spins`);
+    console.log(`[ScatterAnimationManager] Free spins awarded: ${freeSpins}. Skipping legacy FreeSpinDialog_KA.`);
     console.log(`[ScatterAnimationManager] Backend data state: freeSpins=${data.freeSpins}, scatterIndex=${data.scatterIndex}`);
 
     // Update game state to reflect bonus mode
@@ -449,39 +449,19 @@ export class ScatterAnimationManager {
     gameStateManager.isBonus = true;
     console.log('[ScatterAnimationManager] isBonus is now:', gameStateManager.isBonus);
 
-    // Show the FreeSpinDialog_KA with all effects - this will trigger bonus mode when clicked
-    try {
-      console.log('[ScatterAnimationManager] Calling dialogsComponent.showDialog with type: FreeSpinDialog_KA, freeSpins:', freeSpins);
-      this.dialogsComponent.showDialog(this.scene, {
-        type: 'FreeSpinDialog_KA',
-        freeSpins: freeSpins
-      });
+    // Do not force-dismiss overlays; bonus will continue after overlays end
 
-      console.log('[ScatterAnimationManager] Free spins dialog displayed successfully');
+    // Directly emit events and proceed to bonus without showing an intermediate dialog
+    gameEventManager.emit(GameEventType.IS_BONUS, {
+      scatterCount: data.scatterIndex,
+      bonusType: 'freeSpins'
+    });
 
-      // Emit IS_BONUS event through the EventManager
-      gameEventManager.emit(GameEventType.IS_BONUS, {
-        scatterCount: data.scatterIndex,
-        bonusType: 'freeSpins'
-      });
-
-      // Emit scatter bonus activated event with scatter index and actual free spins for UI updates
-      if (this.scene) {
-        const eventData = {
-          scatterIndex: data.scatterIndex,
-          actualFreeSpins: freeSpins
-        };
-        console.log(`[ScatterAnimationManager] Emitting scatterBonusActivated event with data:`, eventData);
-
-        this.scene.events.emit('scatterBonusActivated', eventData);
-        console.log(`[ScatterAnimationManager] Emitted scatterBonusActivated event with index ${data.scatterIndex} and ${freeSpins} free spins`);
-      }
-
-      // Set up listener for when dialog animations complete
-      this.setupDialogCompletionListener();
-
-    } catch (error) {
-      console.error('[ScatterAnimationManager] Error showing dialog effects:', error);
+    if (this.scene) {
+      const eventData = { scatterIndex: data.scatterIndex, actualFreeSpins: freeSpins };
+      console.log(`[ScatterAnimationManager] Emitting scatterBonusActivated event with data:`, eventData);
+      this.scene.events.emit('scatterBonusActivated', eventData);
+      console.log(`[ScatterAnimationManager] Emitted scatterBonusActivated event with index ${data.scatterIndex} and ${freeSpins} free spins`);
     }
   }
 
