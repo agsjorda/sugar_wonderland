@@ -475,6 +475,8 @@ export class EpicWinOverlay {
                 if (this.dismissResolver) { const r = this.dismissResolver; this.dismissResolver = undefined; r(); }
                 // Notify dialog completion for bonus/auto flows
                 try { (this.scene as any).events?.emit('dialogAnimationsComplete'); } catch {}
+                // Emit win dialog closed event for bonus/autoplay flows
+                try { gameEventManager.emit(GameEventType.WIN_DIALOG_CLOSED); } catch {}
                 if (onComplete) onComplete();
             }
         });
@@ -483,6 +485,10 @@ export class EpicWinOverlay {
     public waitUntilDismissed(): Promise<void> {
         if (!this.isShowing) return Promise.resolve();
         return new Promise<void>((resolve) => { this.dismissResolver = resolve; });
+    }
+
+    public getIsShowing(): boolean {
+        return this.isShowing;
     }
 
     // Fire transition helpers (copied from Big/Mega overlays)

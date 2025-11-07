@@ -103,8 +103,8 @@ export class ScatterAnimationManager {
   }
 
   public async playScatterAnimation(data: Data): Promise<void> {
-    if (this.isAnimating || !this.scene || !this.symbolsContainer || !this.spinnerContainer) {
-      console.warn('[ScatterAnimationManager] Cannot play animation - not ready or already animating');
+    if (this.isAnimating || !this.scene || !this.symbolsContainer) {
+      console.warn('[ScatterAnimationManager] Cannot play animation - scene or symbols container not ready');
       return;
     }
 

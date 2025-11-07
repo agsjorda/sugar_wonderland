@@ -1,4 +1,4 @@
-import { Scene } from "phaser";
+import { Scene, Geom } from "phaser";
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { EventBus } from "../EventBus";
@@ -50,6 +50,22 @@ export class SlotController {
 	// References for bet UI interactivity control
 	private betLabelRef: Phaser.GameObjects.Text | null = null;
 	private betCentralZone: Phaser.GameObjects.Zone | null = null;
+	// Adjustable UI hitbox modifiers (tweak these to trim or clamp clickable widths)
+	private uiHitboxModifiers: {
+		marginPx: number; // gap between feature button and bet zone when auto-resizing
+		betCenterWidthPx?: number; // optional hard cap for bet zone width
+		betCenterTrimLeftPx?: number; // extra trim on left side of bet zone
+		betCenterTrimRightPx?: number; // extra trim on right side of bet zone
+		featureTrimLeftPx?: number; // optional trim for feature button (left side)
+		featureTrimRightPx?: number; // optional trim for feature button (right side)
+	} = {
+		marginPx: 8,
+		betCenterWidthPx: undefined,
+		betCenterTrimLeftPx: 0,
+		betCenterTrimRightPx: 0,
+		featureTrimLeftPx: 0,
+		featureTrimRightPx: 0
+	};
     private freeSpinLabel: Phaser.GameObjects.Text;
     private freeSpinNumber: Phaser.GameObjects.Text;
     private freeSpinSubLabel: Phaser.GameObjects.Text;
@@ -111,6 +127,8 @@ export class SlotController {
 	
 	// Store the base bet amount (without amplify bet increase) for API calls
 	private baseBetAmount: number = 0;
+	// Store an independent Buy Feature bet amount (decoupled from main BET)
+	private buyFeatureBetAmount: number = 0.2;
 
 	// Predefined bet steps (must match BetOptions)
 	private readonly betOptions: number[] = [
@@ -543,8 +561,9 @@ export class SlotController {
 		const featureButton = this.buttons.get('feature');
 		
 		if (featureButton) {
+			const gameData = this.getGameData();
 			// Guard: do not re-enable during bonus or before explicit allow
-			if (gameStateManager.isBonus || !this.canEnableFeatureButton) {
+			if (gameStateManager.isBonus || !this.canEnableFeatureButton || (gameData && gameData.isEnhancedBet)) {
 				console.log('[SlotController] Skipping feature enable (bonus active or not allowed yet)');
 				return;
 			}
@@ -900,8 +919,13 @@ export class SlotController {
 		this.primaryControllers.add(this.autoplayStopIcon);
 
 		spinButton.setInteractive();
+		// Press animation
+		this.attachPushEffect(spinButton);
 		spinButton.on('pointerdown', async () => {
 			console.log('[SlotController] Spin button clicked');
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			// Trigger symbols flash overlay immediately on spin click
 			try { this.scene?.events.emit('flashAllSymbolsNow'); } catch {}
 			// Block spin during scatter anticipation/transition to overlay
@@ -957,8 +981,13 @@ export class SlotController {
 			turboButton.y + TURBO_OFFSET_Y
 		);
 		turboButton.setInteractive();
+		// Press animation
+		this.attachPushEffect(turboButton);
 		turboButton.on('pointerdown', () => {
 			console.log('[SlotController] Turbo button clicked');
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			this.handleTurboButtonClick();
 		});
 		this.buttons.set('turbo', turboButton);
@@ -989,8 +1018,13 @@ export class SlotController {
 			amplifyButton.y + AMPLIFY_OFFSET_Y
 		);
 		amplifyButton.setInteractive();
+		// Press animation
+		this.attachPushEffect(amplifyButton);
 		amplifyButton.on('pointerdown', () => {
 			console.log('[SlotController] Amplify button clicked');
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			this.handleAmplifyButtonClick();
 		});
 		this.buttons.set('amplify', amplifyButton);
@@ -1024,8 +1058,13 @@ export class SlotController {
 			autoplayButton.y + AUTOPLAY_OFFSET_Y
 		);
 		autoplayButton.setInteractive();
+		// Press animation
+		this.attachPushEffect(autoplayButton);
 		autoplayButton.on('pointerdown', () => {
 			console.log('[SlotController] Autoplay button clicked');
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			this.handleAutoplayButtonClick();
 		});
 		this.buttons.set('autoplay', autoplayButton);
@@ -1053,8 +1092,13 @@ export class SlotController {
 		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(10);
 		// Position relative to container; container-level offset moves everything
 		menuButton.setInteractive();
+		// Press animation
+		this.attachPushEffect(menuButton);
 		menuButton.on('pointerdown', () => {
 			console.log('[SlotController] Menu button clicked');
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			EventBus.emit('menu');
 		});
 		this.buttons.set('menu', menuButton);
@@ -1272,8 +1316,13 @@ export class SlotController {
 
 		// Make BET label clickable to open bet selection UI
 		betLabel.setInteractive();
+		// Press animation
+		this.attachPushEffect(betLabel, { downScale: 0.97 });
 		betLabel.on('pointerdown', () => {
 			console.log('[SlotController] BET label clicked - showing bet options');
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			EventBus.emit('show-bet-options');
 		});
 
@@ -1317,8 +1366,13 @@ export class SlotController {
 			decreaseBetButton.y + BET_MINUS_OFFSET_Y
 		);
 		decreaseBetButton.setInteractive();
+		// Press animation
+		this.attachPushEffect(decreaseBetButton);
 		decreaseBetButton.on('pointerdown', () => {
 			console.log('[SlotController] Decrease bet button clicked');
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			this.changeBetBy(-1);
 		});
 		this.buttons.set('decrease_bet', decreaseBetButton);
@@ -1335,8 +1389,13 @@ export class SlotController {
 			increaseBetButton.y + BET_PLUS_OFFSET_Y
 		);
 		increaseBetButton.setInteractive();
+		// Press animation
+		this.attachPushEffect(increaseBetButton);
 		increaseBetButton.on('pointerdown', () => {
 			console.log('[SlotController] Increase bet button clicked');
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			this.changeBetBy(1);
 		});
 		this.buttons.set('increase_bet', increaseBetButton);
@@ -1344,8 +1403,13 @@ export class SlotController {
 
 		// Make bet value clickable to open bet selection UI
 		this.betAmountText.setInteractive();
+		// Press animation
+		this.attachPushEffect(this.betAmountText, { downScale: 0.97 });
 		this.betAmountText.on('pointerdown', () => {
 			console.log('[SlotController] Bet value clicked - showing bet options');
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			EventBus.emit('show-bet-options');
 		});
 
@@ -1357,13 +1421,27 @@ export class SlotController {
 			centralZoneWidth,
 			containerHeight
 		).setOrigin(0.5, 0.5).setDepth(12);
-		centralZone.setInteractive();
+        // Limit bet central zone to strictly inside container to prevent overlap
+        try {
+            centralZone.setInteractive(
+                new Geom.Rectangle(-centralZoneWidth * 0.5, -containerHeight * 0.5, centralZoneWidth, containerHeight),
+                Geom.Rectangle.Contains
+            );
+        } catch {
+            centralZone.setInteractive();
+        }
 		centralZone.on('pointerdown', () => {
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			console.log('[SlotController] Bet central area clicked - showing bet options');
 			EventBus.emit('show-bet-options');
 		});
 		this.controllerContainer.add(centralZone);
 		this.betCentralZone = centralZone;
+
+		// Initialize min/max button visual state
+		this.updateBetButtonStates();
 	}
 
 	/**
@@ -1491,13 +1569,26 @@ export class SlotController {
 			'feature'
 		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(10);
 		featureButton.setPosition(featureButton.x + FEATURE_OFFSET_X, featureButton.y + FEATURE_OFFSET_Y);
-		featureButton.setInteractive();
+        // Tighten interactive hit area to avoid overlaps with neighboring zones
+        try { featureButton.setInteractive({ useHandCursor: true }); } catch { featureButton.setInteractive(); }
 		featureButton.on('pointerdown', () => {
 			console.log('[SlotController] Feature button clicked');
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			this.showBuyFeatureDrawer();
 		});
 		this.buttons.set('feature', featureButton);
 		this.controllerContainer.add(featureButton);
+
+		// Apply any configured feature button hitbox trims
+		this.applyFeatureButtonHitbox(featureButton);
+
+		// Press animation
+		this.attachPushEffect(featureButton);
+
+        // Ensure bet clickable zone doesn't overlap the feature button horizontally
+        this.adjustBetZoneToAvoidFeatureOverlap(featureButton);
 
 		// "BUY FEATURE" label (1st line)
 		const featureLabel1 = scene.add.text(
@@ -1540,6 +1631,111 @@ export class SlotController {
 
 		// Initialize amount from current bet
 		this.updateFeatureAmountFromCurrentBet();
+	}
+
+	/**
+	 * Reduce BET central zone width if it would overlap the Buy Feature button horizontally
+	 */
+	private adjustBetZoneToAvoidFeatureOverlap(featureButton: Phaser.GameObjects.Image): void {
+		try {
+			if (!this.betCentralZone || !featureButton) return;
+			// Current zone hit area
+			const zone = this.betCentralZone;
+			const hit: any = (zone.input && (zone.input as any).hitArea) || null;
+			const currentWidth: number = hit?.width || zone.width || 0;
+			const currentHeight: number = hit?.height || zone.height || 55;
+			if (!currentWidth || currentWidth <= 0) return;
+
+			// Compute right edge of feature and left edge of zone
+			const fb = featureButton.getBounds();
+			const featureRight = fb.right;
+			const margin = this.uiHitboxModifiers.marginPx ?? 8;
+			// Desired left edge of zone must be to the right of featureRight + margin
+			const zoneCenterX = zone.x;
+			const maxHalfWidth = Math.max(10, zoneCenterX - (featureRight + margin));
+			let desiredWidth = Math.min(currentWidth, Math.max(20, maxHalfWidth * 2));
+			// Apply optional hard cap for bet zone width
+			if (this.uiHitboxModifiers.betCenterWidthPx && this.uiHitboxModifiers.betCenterWidthPx > 0) {
+				desiredWidth = Math.min(desiredWidth, this.uiHitboxModifiers.betCenterWidthPx);
+			}
+			// Apply extra trims to left/right if provided
+			const trimLeft = this.uiHitboxModifiers.betCenterTrimLeftPx ?? 0;
+			const trimRight = this.uiHitboxModifiers.betCenterTrimRightPx ?? 0;
+			const finalWidth = Math.max(10, desiredWidth - (trimLeft + trimRight));
+			const offsetX = (trimRight - trimLeft) * 0.5;
+			if (finalWidth < currentWidth) {
+				zone.setInteractive(
+					new Geom.Rectangle(-finalWidth * 0.5 + offsetX, -currentHeight * 0.5, finalWidth, currentHeight),
+					Geom.Rectangle.Contains
+				);
+			}
+		} catch {}
+	}
+
+	// Apply optional trims to the feature button hitbox (no-op when trims are zero)
+	private applyFeatureButtonHitbox(featureButton: Phaser.GameObjects.Image): void {
+		try {
+			const trimLeft = this.uiHitboxModifiers.featureTrimLeftPx ?? 0;
+			const trimRight = this.uiHitboxModifiers.featureTrimRightPx ?? 0;
+			if (!trimLeft && !trimRight) return; // nothing to change
+			const fullW = featureButton.displayWidth;
+			const fullH = featureButton.displayHeight || 55;
+			const w = Math.max(10, fullW - (trimLeft + trimRight));
+			const offsetX = (trimRight - trimLeft) * 0.5;
+			featureButton.setInteractive(
+				new Geom.Rectangle(-w * 0.5 + offsetX, -fullH * 0.5, w, fullH),
+				Geom.Rectangle.Contains
+			);
+		} catch {}
+	}
+
+	// Public API to change UI hitbox behavior at runtime
+	public setUiHitboxModifiers(mods: Partial<typeof this.uiHitboxModifiers>): void {
+		this.uiHitboxModifiers = { ...this.uiHitboxModifiers, ...mods };
+		const featureButton = this.buttons.get('feature');
+		if (featureButton) {
+			this.applyFeatureButtonHitbox(featureButton);
+			this.adjustBetZoneToAvoidFeatureOverlap(featureButton);
+		}
+	}
+
+	// Small press/release scale animation for clickable UI
+	private attachPushEffect(go: any, options?: { downScale?: number; downMs?: number; upMs?: number }): void {
+		try {
+			if (!go || !go.scene || typeof go.setScale !== 'function') return;
+			const scene: Scene = go.scene;
+			const originalScaleX: number = typeof go.scaleX === 'number' ? go.scaleX : 1;
+			const originalScaleY: number = typeof go.scaleY === 'number' ? go.scaleY : 1;
+			const downScale = options?.downScale ?? 0.94;
+			const downMs = options?.downMs ?? 60;
+			const upMs = options?.upMs ?? 80;
+
+			const press = () => {
+				try { scene.tweens.killTweensOf(go); } catch {}
+				scene.tweens.add({
+					targets: go,
+					scaleX: originalScaleX * downScale,
+					scaleY: originalScaleY * downScale,
+					duration: downMs,
+					ease: 'Quad.easeOut'
+				});
+			};
+
+			const release = () => {
+				try { scene.tweens.killTweensOf(go); } catch {}
+				scene.tweens.add({
+					targets: go,
+					scaleX: originalScaleX,
+					scaleY: originalScaleY,
+					duration: upMs,
+					ease: 'Quad.easeOut'
+				});
+			};
+
+			go.on('pointerdown', press);
+			go.on('pointerup', release);
+			go.on('pointerout', release);
+		} catch {}
 	}
 
 	private createLandscapeController(scene: Scene, assetScale: number): void {
@@ -1589,8 +1785,13 @@ export class SlotController {
 		}
 
 		spinButton.setInteractive();
+		// Press animation
+		this.attachPushEffect(spinButton);
 		spinButton.on('pointerdown', async () => {
 			console.log('[SlotController] Spin button clicked');
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			// Trigger symbols flash overlay immediately on spin click
 			try { this.scene?.events.emit('flashAllSymbolsNow'); } catch {}
 			// Block spin during scatter anticipation/transition to overlay
@@ -1635,8 +1836,13 @@ export class SlotController {
 			turboButton.y + TURBO_OFFSET_Y
 		);
 		turboButton.setInteractive();
+		// Press animation
+		this.attachPushEffect(turboButton);
 		turboButton.on('pointerdown', () => {
 			console.log('[SlotController] Turbo button clicked');
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			this.handleTurboButtonClick();
 		});
 		this.buttons.set('turbo', turboButton);
@@ -1669,8 +1875,13 @@ export class SlotController {
 			autoplayButton.y + AUTOPLAY_OFFSET_Y
 		);
 		autoplayButton.setInteractive();
+		// Press animation
+		this.attachPushEffect(autoplayButton);
 		autoplayButton.on('pointerdown', () => {
 			console.log('[SlotController] Autoplay button clicked');
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			this.handleAutoplayButtonClick();
 		});
 		this.buttons.set('autoplay', autoplayButton);
@@ -1699,8 +1910,13 @@ export class SlotController {
 		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(10);
 		// Position relative to container; container-level offset moves everything
 		menuButton.setInteractive();
+		// Press animation
+		this.attachPushEffect(menuButton);
 		menuButton.on('pointerdown', () => {
 			console.log('[SlotController] Menu button clicked');
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			EventBus.emit('menu');
 		});
 		this.buttons.set('menu', menuButton);
@@ -1782,6 +1998,9 @@ export class SlotController {
 				this.betDollarText.setPosition(betX - (this.betAmountText.width / 2) - 5, betY);
 			}
 		}
+
+		// Update plus/minus visual/interactivity based on boundaries
+		this.updateBetButtonStates();
 		
 		// Keep the Buy Feature amount synced with current base bet
 		this.updateFeatureAmountFromCurrentBet();
@@ -1792,6 +2011,49 @@ export class SlotController {
 			// Reset amplify bet state when bet amount is changed externally
 			this.resetAmplifyBetOnBetChange();
 		}
+	}
+
+	/**
+	 * Enable/disable and grey out bet +/- buttons at min/max values
+	 */
+	private updateBetButtonStates(): void {
+		try {
+			const minusBtn = this.buttons.get('decrease_bet');
+			const plusBtn = this.buttons.get('increase_bet');
+			if (!minusBtn || !plusBtn) return;
+
+			// Determine current bet and nearest index
+			let currentBet = this.baseBetAmount || 0.2;
+			if (this.betAmountText) {
+				const parsed = parseFloat(this.betAmountText.text);
+				if (!isNaN(parsed)) currentBet = parsed;
+			}
+			const idx = this.findClosestBetIndex(currentBet);
+			const minIdx = 0;
+			const maxIdx = Math.max(0, this.betOptions.length - 1);
+			const atMin = idx <= minIdx || Math.abs(currentBet - this.betOptions[minIdx]) < 0.0001;
+			const atMax = idx >= maxIdx || Math.abs(currentBet - this.betOptions[maxIdx]) < 0.0001;
+
+			this.applyButtonEnabled(minusBtn, !atMin);
+			this.applyButtonEnabled(plusBtn, !atMax);
+		} catch {}
+	}
+
+	private applyButtonEnabled(btn: Phaser.GameObjects.Image, enabled: boolean): void {
+		try {
+			if (enabled) {
+				btn.clearTint();
+				btn.setAlpha(1);
+				// Only re-enable if not already interactive and the controller is visible
+				if (!btn.input?.enabled) {
+					btn.setInteractive();
+				}
+			} else {
+				btn.setTint(0x777777);
+				btn.setAlpha(0.6);
+				btn.disableInteractive();
+			}
+		} catch {}
 	}
 
 	/**
@@ -1843,14 +2105,8 @@ export class SlotController {
 		if (!this.featureAmountText || !this.featureDollarText) {
 			return;
 		}
-		// Prefer displayed bet (reflects amplify), fallback to base bet
-		let displayedBet = 0;
-		if (this.betAmountText) {
-			displayedBet = parseFloat(this.betAmountText.text) || 0;
-		}
-		if (displayedBet === 0) {
-			displayedBet = this.getBaseBetAmount() || 0;
-		}
+    // Always use the independent Buy Feature bet (decoupled from main BET)
+    const displayedBet = this.getBuyFeatureBetAmount() || 0;
 		const price = displayedBet * 100;
 		// Format with thousands separators and 2 decimals
 		this.featureAmountText.setText(price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
@@ -1870,6 +2126,18 @@ export class SlotController {
 	getBaseBetAmount(): number {
 		return this.baseBetAmount;
 	}
+
+/** Get the independent Buy Feature bet amount */
+getBuyFeatureBetAmount(): number {
+    return this.buyFeatureBetAmount;
+}
+
+/** Set the independent Buy Feature bet amount and refresh HUD price */
+setBuyFeatureBetAmount(amount: number): void {
+    const clamped = Math.max(0, amount);
+    this.buyFeatureBetAmount = clamped;
+    this.updateFeatureAmountFromCurrentBet();
+}
 
 	updateBalanceAmount(balanceAmount: number): void {
 		if (this.balanceAmountText) {
@@ -2383,6 +2651,8 @@ export class SlotController {
 			this.hideEnhanceBetIdleLoop();
 			// Restore original bet amount (remove 25% increase)
 			this.restoreOriginalBetAmount();
+			// Re-enable feature button when amplify is turned OFF
+			this.enableFeatureButton();
 		} else {
 			// Amplify bet is not active, turn it on
 			console.log('[SlotController] Turning amplify bet ON via button click');
@@ -2392,6 +2662,8 @@ export class SlotController {
 			this.triggerAmplifyBetAnimation();
 			// Apply 25% bet increase
 			this.applyAmplifyBetIncrease();
+			// Disable feature button when amplify is turned ON
+			this.disableFeatureButton();
 		}
 		
 		// Control the amplify bet button pulsing based on state
@@ -2717,6 +2989,13 @@ export class SlotController {
 		
 		// Control the animation based on initial state
 		this.controlAmplifyBetAnimation();
+		
+		// Apply initial feature button availability based on amplify state
+		if (gameData.isEnhancedBet) {
+			this.disableFeatureButton();
+		} else {
+			this.enableFeatureButton();
+		}
 		
 		console.log(`[SlotController] Amplify button initialized with state: ${gameData.isEnhancedBet ? 'ON' : 'OFF'}`);
 	}
@@ -3642,9 +3921,7 @@ public updateAutoplayButtonState(): void {
 			const buyFeatureBet = this.buyFeature.getCurrentBetAmount();
 			const calculatedPrice = buyFeatureBet * 100; // Same multiplier as BuyFeature uses
 			
-			// Update SlotController bet to match the selected Buy Feature bet
-			// This updates both the displayed bet and the internal baseBetAmount
-			this.updateBetAmount(buyFeatureBet);
+			// Do NOT sync main BET with Buy Feature selection to keep them independent
 			
 			console.log(`[SlotController] Buy feature bet: $${buyFeatureBet.toFixed(2)}, calculated price: $${calculatedPrice.toFixed(2)}`);
 			
@@ -3830,19 +4107,25 @@ public updateAutoplayButtonState(): void {
 			this.pendingFreeSpinsData = data;
 		});
 
-		// Listen for dialog animations completion to show free spin display
+		// Listen for dialog animations completion to show free spin display (only if not already visible)
 		this.scene.events.on('dialogAnimationsComplete', () => {
 			console.log('[SlotController] Dialog animations completed - checking if free spin display should be shown');
 			console.log('[SlotController] Current pendingFreeSpinsData:', this.pendingFreeSpinsData);
-			
-			if (this.pendingFreeSpinsData) {
-				console.log(`[SlotController] Showing free spin display with ${this.pendingFreeSpinsData.actualFreeSpins} spins after dialog closed`);
-				this.showFreeSpinDisplayWithActualValue(this.pendingFreeSpinsData.actualFreeSpins);
-				// Clear the pending data
-				this.pendingFreeSpinsData = null;
-			} else {
+			// If there is no pending data, do nothing
+			if (!this.pendingFreeSpinsData) {
 				console.log('[SlotController] No pending free spins data - free spin display not shown');
+				return;
 			}
+			// If display is already visible (e.g., shown by ScatterWinOverlay), avoid re-showing and clear pending
+			const alreadyVisible = !!(this.freeSpinLabel?.visible || this.freeSpinNumber?.visible || this.freeSpinDigitsContainer?.visible);
+			if (alreadyVisible) {
+				console.log('[SlotController] Free spin display already visible - clearing pending data and skipping re-show');
+				this.pendingFreeSpinsData = null;
+				return;
+			}
+			console.log(`[SlotController] Showing free spin display with ${this.pendingFreeSpinsData.actualFreeSpins} spins after dialog closed`);
+			this.showFreeSpinDisplayWithActualValue(this.pendingFreeSpinsData.actualFreeSpins);
+			this.pendingFreeSpinsData = null;
 		});
 
 		// When scatter sequence fully completes, clear scatter flag and re-enable controls if not in bonus

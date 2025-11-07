@@ -45,8 +45,8 @@ export class BuyFeature {
 	private featureLogo?: Phaser.GameObjects.Image;
 	private featureLogoBackground?: Phaser.GameObjects.Image;
 	private featureLogoSpine?: any;
-	private featureLogoScale: number = 0.08; // Manual scale for scatter logo (spine or image)
-	private featureLogoBackgroundScale: number = 0.55; // Manual scale for background PNG logo
+	private featureLogoScale: number = 0.15; // Manual scale for scatter logo (spine or image)
+	private featureLogoBackgroundScale: number = 0.89; // Manual scale for background PNG logo
 	private backgroundImage: Phaser.GameObjects.Image;
 	private onCloseCallback?: () => void;
 	private onConfirmCallback?: () => void;
@@ -90,7 +90,8 @@ export class BuyFeature {
 	 */
 	private initializeBetIndex(): void {
 		if (this.slotController) {
-			const currentBaseBet = this.slotController.getBaseBetAmount();
+			// Initialize from SlotController's independent Buy Feature bet (not main BET)
+			const currentBaseBet = (this.slotController as any).getBuyFeatureBetAmount ? (this.slotController as any).getBuyFeatureBetAmount() : this.slotController.getBaseBetAmount();
 			
 			// Find the closest bet option
 			let closestIndex = 0;
@@ -107,6 +108,8 @@ export class BuyFeature {
 			this.currentBetIndex = closestIndex;
 			this.currentBet = this.betOptions[closestIndex];
 			console.log(`[BuyFeature] Initialized bet index ${closestIndex} with bet $${this.currentBet.toFixed(2)}`);
+			// Sync HUD Buy Feature price to this initial value
+			try { (this.slotController as any).setBuyFeatureBetAmount?.(this.currentBet); } catch {}
 		}
 	}
 
@@ -371,7 +374,12 @@ export class BuyFeature {
 		this.container.add(this.confirmButton);
 		
 		buttonImage.setInteractive();
-		buttonImage.on('pointerdown', () => this.confirmPurchase());
+		buttonImage.on('pointerdown', () => {
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
+			this.confirmPurchase();
+		});
 	}
 
 	private createCloseButton(scene: Scene): void {
@@ -386,7 +394,12 @@ export class BuyFeature {
 		});
 		this.closeButton.setOrigin(0.5);
 		this.closeButton.setInteractive();
-		this.closeButton.on('pointerdown', () => this.close());
+		this.closeButton.on('pointerdown', () => {
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
+			this.close();
+		});
 		this.container.add(this.closeButton);
 	}
 
@@ -494,6 +507,9 @@ export class BuyFeature {
 		
 		// Handle pointer down for continuous press
 		this.minusButton.on('pointerdown', () => {
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			this.selectPreviousBet();
 			this.startContinuousDecrement(scene);
 		});
@@ -530,6 +546,9 @@ export class BuyFeature {
 		
 		// Handle pointer down for continuous press
 		this.plusButton.on('pointerdown', () => {
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			this.selectNextBet();
 			this.startContinuousIncrement(scene);
 		});
@@ -553,6 +572,10 @@ export class BuyFeature {
 			this.currentBet = this.betOptions[this.currentBetIndex];
 			this.updateBetDisplay();
 			this.updatePriceDisplay();
+			// Update HUD Buy Feature price indicator
+			if (this.slotController && (this.slotController as any).setBuyFeatureBetAmount) {
+				(this.slotController as any).setBuyFeatureBetAmount(this.currentBet);
+			}
 			console.log(`[BuyFeature] Previous bet selected: $${this.currentBet.toFixed(2)}`);
 		}
 	}
@@ -563,6 +586,10 @@ export class BuyFeature {
 			this.currentBet = this.betOptions[this.currentBetIndex];
 			this.updateBetDisplay();
 			this.updatePriceDisplay();
+			// Update HUD Buy Feature price indicator
+			if (this.slotController && (this.slotController as any).setBuyFeatureBetAmount) {
+				(this.slotController as any).setBuyFeatureBetAmount(this.currentBet);
+			}
 			console.log(`[BuyFeature] Next bet selected: $${this.currentBet.toFixed(2)}`);
 		}
 	}

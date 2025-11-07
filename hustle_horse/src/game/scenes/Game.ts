@@ -25,7 +25,6 @@ import { Symbols } from '../components/Symbols';
 import { GameData } from '../components/GameData';
 import { BonusBackground } from '../components/BonusBackground';
 import { BonusHeader } from '../components/BonusHeader';
-import { Spinner } from '../components/Spinner';
 import { Dialogs } from '../components/Dialogs';
 import { BetOptions } from '../components/BetOptions';
 import { AutoplayOptions } from '../components/AutoplayOptions';
@@ -38,6 +37,7 @@ import { SpinData } from '../../backend/SpinData';
 import { AudioManager, MusicType, SoundEffectType } from '../../managers/AudioManager';
 import { Menu } from '../components/Menu';
 import { FullScreenManager } from '../../managers/FullScreenManager';
+import { ClockDisplay } from '../components/ClockDisplay';
 import { ScatterAnticipation } from '../components/ScatterAnticipation';
 import { SCATTER_ANTICIPATION2_POS_X_MUL, SCATTER_ANTICIPATION2_POS_Y_MUL, SCATTER_ANTICIPATION2_DEFAULT_SCALE } from '../../config/UIPositionConfig';
 import { ScatterWinOverlay } from '../components/ScatterWinOverlay';
@@ -65,7 +65,6 @@ export class Game extends Scene {
 
 	private bonusBackground!: BonusBackground;
 	private bonusHeader!: BonusHeader;
-	private spinner!: Spinner;
 	private dialogs!: Dialogs;
 	private betOptions!: BetOptions;
 	private autoplayOptions!: AutoplayOptions;
@@ -81,6 +80,7 @@ export class Game extends Scene {
     private megaWinOverlay!: MegaWinOverlay;
     private epicWinOverlay!: EpicWinOverlay;
     private superWinOverlay!: SuperWinOverlay;
+	private clockDisplay!: ClockDisplay;
 	// Big_Dragon runtime adjustment controls
 	private dragon: any;
 	public dragonOffsetX: number = 135;
@@ -192,13 +192,32 @@ export class Game extends Scene {
 		this.background = new Background(this.networkManager, this.screenModeManager);
 		this.background.create(this);
 		
-		// Create spinner using the managers
-		this.spinner = new Spinner(this.networkManager, this.screenModeManager);
-		this.spinner.create(this);
+        // Spinner removed: overlay handles free-spin flow
 
 		// Create header using the managers
 		this.header = new Header(this.networkManager, this.screenModeManager);
 		this.header.create(this);
+
+		// Create persistent clock display (stays on screen forever)
+		// Mirror the preloader positioning with fixed offsets and scaling
+		const clockY = this.scale.height * 0.009; // Slightly below top edge
+		this.clockDisplay = new ClockDisplay(this, {
+			offsetX: -120,
+			offsetY: clockY,
+			fontSize: 16,
+			color: '#FFFFFF',
+			alpha: 0.5,
+			depth: 30000, // Very high depth to stay above all overlays and transitions
+			scale: 0.7,
+			suffixText: ' | Hustle The Blazing Horse',
+			additionalText: 'DiJoker',
+			additionalTextOffsetX: 185,
+			additionalTextOffsetY: 0,
+			additionalTextScale: 0.7,
+			additionalTextColor: '#FFFFFF',
+			additionalTextFontSize: 16
+		});
+		this.clockDisplay.create();
 
 		// Spawn Big_Dragon only after dragon_default moves in base scene, with 0.5s delay
 		const spawnDragonHead = () => {
@@ -228,12 +247,35 @@ export class Game extends Scene {
 					dragon.setPosition(targetX, offY);
 				} catch {}
 				// Slide into targetY to avoid instant pop-in, turbo-aware duration
-				try {
-					const isTurbo = !!this.gameStateManager?.isTurbo;
-					const baseDur = 700;
-					const dur = Math.max(100, Math.floor(baseDur * (isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1)));
-					this.tweens.add({ targets: dragon, y: targetY, duration: dur, ease: 'Sine.easeOut' });
-				} catch {}
+                try {
+                    const isTurbo = !!this.gameStateManager?.isTurbo;
+                    const baseDur = 700;
+                    const dur = Math.max(100, Math.floor(baseDur * (isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1)));
+                    this.tweens.add({
+                        targets: dragon,
+                        y: targetY,
+                        duration: dur,
+                        ease: 'Sine.easeOut',
+                        onComplete: () => {
+                            // Purely visual: spawn a falling coin burst from top when Big_Dragon settles
+                            try {
+                                const ga: any = this as any;
+                                const spawner = ga?.coinAnimation?.spawnSingleCoin;
+                                if (typeof spawner === 'function') {
+                                    const burstX = targetX; // align above dragon head horizontally
+                                    const topY = Math.max(0, this.scale.height * 0.05);
+                                    const count = 10;
+                                    for (let i = 0; i < count; i++) {
+                                        const spreadX = (Math.random() - 0.5) * (this.scale.width * 0.20); // ±10% screen width
+                                        const vx = (Math.random() - 0.5) * 220; // slightly reduced horizontal drift
+                                        const vy = 360 + Math.random() * 460;   // downward velocity
+                                        ga.coinAnimation.spawnSingleCoin(burstX + spreadX, topY, vx, vy);
+                                    }
+                                }
+                            } catch {}
+                        }
+                    });
+                } catch {}
 				this.dragon = dragon;
 				(window as any).dragon = dragon;
 				(window as any).setDragonAdjust = (opts: { dx?: number; dy?: number; scale?: number }) => {
@@ -258,12 +300,15 @@ export class Game extends Scene {
 				console.warn('[Game] Failed to create Big_Dragon spine:', e);
 			}
 		};
-		// Listen once and spawn after delay when base top dragon starts moving (scatter win)
-		this.events.once('baseTopDragonMoveStart', () => {
-			const isTurbo = !!this.gameStateManager?.isTurbo;
-			const baseDelay = 500;
-			const delay = Math.max(30, Math.floor(baseDelay * (isTurbo ? TurboConfig.TURBO_DELAY_MULTIPLIER : 1)));
-			this.time.delayedCall(delay, spawnDragonHead);
+		// Spawn whenever base top dragon starts moving (scatter win), guard against duplicates
+		this.events.on('baseTopDragonMoveStart', () => {
+			try {
+				if (this.dragon) return; // already present, skip
+				const isTurbo = !!this.gameStateManager?.isTurbo;
+				const baseDelay = 500;
+				const delay = Math.max(30, Math.floor(baseDelay * (isTurbo ? TurboConfig.TURBO_DELAY_MULTIPLIER : 1)));
+				this.time.delayedCall(delay, () => { try { if (!this.dragon) spawnDragonHead(); } catch {} });
+			} catch {}
 		});
 		// Optional manual trigger for debugging
 		(window as any).spawnDragonHead = () => spawnDragonHead();
@@ -364,16 +409,14 @@ export class Game extends Scene {
 		// Initialize scatter animation manager with both containers, spinner, dialogs, and overlay component
 		// @ts-ignore - We know these properties exist at runtime
 		const symbolsContainer = this.symbols.container || this.symbols.symbolsContainer;
-		// @ts-ignore
-		const spinnerContainer = this.spinner.container || this.spinner.spinnerContainer;
 
-        ScatterAnimationManager.getInstance().initialize(
+		ScatterAnimationManager.getInstance().initialize(
 			this,
 			symbolsContainer,
-			spinnerContainer,
-			this.spinner,
+			null as any,
+			null as any,
 			this.dialogs,
-            undefined,
+			undefined,
 			this.scatterWinOverlay
 		);
 		
@@ -412,11 +455,7 @@ export class Game extends Scene {
 		// Initialize balance on game start
 		this.initializeGameBalance();
 		
-		// Add spacebar key listener for coin spawning
-		this.input.keyboard?.on('keydown-SPACE', () => {
-			console.log('[Game] Spacebar pressed - spawning coins');
-			this.spawnCoins(3); // Spawn 3 coins when spacebar is pressed
-		});
+		// Spacebar coin spawn removed
 		
 		// Emit START event AFTER SlotController is created
 		console.log(`[Game] Emitting START event to initialize game...`);
@@ -797,6 +836,19 @@ export class Game extends Scene {
 			console.log('[Game] Suppressing win dialog (transitioning from bonus to base)');
 			return;
 		}
+
+		// Prevent win dialogs if congrats is showing
+		if (this.dialogs.isCongratsShowing()) {
+			console.log('[Game] Congrats dialog is showing - preventing win dialog from showing/queueing');
+			return;
+		}
+
+		// Prevent win dialogs if bonus is finished (congrats should show instead)
+		if (gameStateManager.isBonus && gameStateManager.isBonusFinished) {
+			console.log('[Game] Bonus finished - preventing win dialog (congrats should show instead)');
+			return;
+		}
+
 		console.log(`[Game] checkAndShowWinDialog called with payout: $${payout}, bet: $${bet}`);
 		console.log(`[Game] Current win queue length: ${this.winQueue.length}`);
 		console.log(`[Game] Current isShowingWinDialog state: ${gameStateManager.isShowingWinDialog}`);
@@ -811,9 +863,13 @@ export class Game extends Scene {
 		// Check if a dialog is already showing - prevent multiple dialogs
 		if (this.dialogs.isDialogShowing()) {
 			console.log('[Game] Dialog already showing, skipping win dialog for this payout');
-			// Add to queue if dialog is already showing
-			this.winQueue.push({ payout: payout, bet: bet });
-			console.log(`[Game] Added to win queue. Queue length: ${this.winQueue.length}`);
+			// Only add to queue if it's not congrats (congrats should block all win dialogs)
+			if (!this.dialogs.isCongratsShowing()) {
+				this.winQueue.push({ payout: payout, bet: bet });
+				console.log(`[Game] Added to win queue. Queue length: ${this.winQueue.length}`);
+			} else {
+				console.log('[Game] Congrats showing - not adding to win queue');
+			}
 			return;
 		}
 		
@@ -831,24 +887,145 @@ export class Game extends Scene {
 		// Determine which win dialog to show based on multiplier thresholds
 		if (multiplier >= 60) {
 			console.log(`[Game] Large Win! Showing SuperWinOverlay for ${multiplier.toFixed(2)}x multiplier`);
-			this.dialogs.showLargeWin(this, { winAmount: payout });
+			try {
+				if (this.superWinOverlay) {
+					// Don't show if congrats is already showing or bonus is finished
+					if (this.dialogs.isCongratsShowing() || (gameStateManager.isBonus && gameStateManager.isBonusFinished)) {
+						console.log('[Game] Skipping SuperWinOverlay - congrats showing or bonus finished');
+						return;
+					}
+					// Mark dialog state and show overlay
+					gameStateManager.isShowingWinDialog = true;
+					this.superWinOverlay.show(payout);
+					// When user dismisses overlay, clear state and process any queued wins
+					this.superWinOverlay.waitUntilDismissed().then(() => {
+						try { gameStateManager.isShowingWinDialog = false; } catch {}
+						// Check if bonus finished and trigger congrats if needed
+						if (gameStateManager.isBonus && gameStateManager.isBonusFinished) {
+							console.log('[Game] Bonus finished after SuperWinOverlay dismissed - triggering congrats');
+							// Ensure bonus mode is ended (in case transition was blocked by overlay)
+							if (gameStateManager.isBonus) {
+								console.log('[Game] Ensuring bonus mode is ended after win overlay dismissal');
+								this.events.emit('setBonusMode', false);
+							}
+							const symbolsComponent = (this as any).symbols;
+							if (symbolsComponent && typeof symbolsComponent.showCongratsDialogAfterDelay === 'function') {
+								symbolsComponent.showCongratsDialogAfterDelay();
+								gameStateManager.isBonusFinished = false;
+							}
+							// Don't process win queue if congrats will show
+							return;
+						}
+						// Only process win queue if congrats is not showing
+						if (!this.dialogs.isCongratsShowing()) {
+							try { this.processWinQueue(); } catch {}
+						}
+					}).catch(() => {
+						try { gameStateManager.isShowingWinDialog = false; } catch {}
+						// Only process win queue if congrats is not showing
+						if (!this.dialogs.isCongratsShowing()) {
+							try { this.processWinQueue(); } catch {}
+						}
+					});
+				} else {
+					// Fallback to dialogs method
+					this.dialogs.showLargeWin(this, { winAmount: payout });
+				}
+			} catch (e) {
+				console.warn('[Game] Failed to show SuperWinOverlay, falling back to showLargeWin:', e);
+				this.dialogs.showLargeWin(this, { winAmount: payout });
+			}
 		} else if (multiplier >= 45) {
 			console.log(`[Game] Super Win! Showing EpicWinOverlay for ${multiplier.toFixed(2)}x multiplier`);
-			this.dialogs.showSuperWin(this, { winAmount: payout });
+			try {
+				if (this.epicWinOverlay) {
+					// Don't show if congrats is already showing or bonus is finished
+					if (this.dialogs.isCongratsShowing() || (gameStateManager.isBonus && gameStateManager.isBonusFinished)) {
+						console.log('[Game] Skipping EpicWinOverlay - congrats showing or bonus finished');
+						return;
+					}
+					// Mark dialog state and show overlay
+					gameStateManager.isShowingWinDialog = true;
+					this.epicWinOverlay.show(payout);
+					// When user dismisses overlay, clear state and process any queued wins
+					this.epicWinOverlay.waitUntilDismissed().then(() => {
+						try { gameStateManager.isShowingWinDialog = false; } catch {}
+						// Check if bonus finished and trigger congrats if needed
+						if (gameStateManager.isBonus && gameStateManager.isBonusFinished) {
+							console.log('[Game] Bonus finished after EpicWinOverlay dismissed - triggering congrats');
+							// Ensure bonus mode is ended (in case transition was blocked by overlay)
+							if (gameStateManager.isBonus) {
+								console.log('[Game] Ensuring bonus mode is ended after win overlay dismissal');
+								this.events.emit('setBonusMode', false);
+							}
+							const symbolsComponent = (this as any).symbols;
+							if (symbolsComponent && typeof symbolsComponent.showCongratsDialogAfterDelay === 'function') {
+								symbolsComponent.showCongratsDialogAfterDelay();
+								gameStateManager.isBonusFinished = false;
+							}
+							// Don't process win queue if congrats will show
+							return;
+						}
+						// Only process win queue if congrats is not showing
+						if (!this.dialogs.isCongratsShowing()) {
+							try { this.processWinQueue(); } catch {}
+						}
+					}).catch(() => {
+						try { gameStateManager.isShowingWinDialog = false; } catch {}
+						// Only process win queue if congrats is not showing
+						if (!this.dialogs.isCongratsShowing()) {
+							try { this.processWinQueue(); } catch {}
+						}
+					});
+				} else {
+					// Fallback to dialogs method
+					this.dialogs.showSuperWin(this, { winAmount: payout });
+				}
+			} catch (e) {
+				console.warn('[Game] Failed to show EpicWinOverlay, falling back to showSuperWin:', e);
+				this.dialogs.showSuperWin(this, { winAmount: payout });
+			}
         } else if (multiplier >= 30) {
             console.log(`[Game] Medium/Big Win! Showing BigWinOverlay for ${multiplier.toFixed(2)}x multiplier`);
             try {
                 if (this.bigWinOverlay) {
+                    // Don't show if congrats is already showing or bonus is finished
+                    if (this.dialogs.isCongratsShowing() || (gameStateManager.isBonus && gameStateManager.isBonusFinished)) {
+                        console.log('[Game] Skipping BigWinOverlay - congrats showing or bonus finished');
+                        return;
+                    }
                     // Mark dialog state and show overlay
                     gameStateManager.isShowingWinDialog = true;
                     this.bigWinOverlay.show(payout);
                     // When user dismisses overlay, clear state and process any queued wins
                     this.bigWinOverlay.waitUntilDismissed().then(() => {
                         try { gameStateManager.isShowingWinDialog = false; } catch {}
-                        try { this.processWinQueue(); } catch {}
+                        // Check if bonus finished and trigger congrats if needed
+                        if (gameStateManager.isBonus && gameStateManager.isBonusFinished) {
+                            console.log('[Game] Bonus finished after BigWinOverlay dismissed - triggering congrats');
+                            // Ensure bonus mode is ended (in case transition was blocked by overlay)
+                            if (gameStateManager.isBonus) {
+                                console.log('[Game] Ensuring bonus mode is ended after win overlay dismissal');
+                                this.events.emit('setBonusMode', false);
+                            }
+                            const symbolsComponent = (this as any).symbols;
+                            if (symbolsComponent && typeof symbolsComponent.showCongratsDialogAfterDelay === 'function') {
+                                symbolsComponent.showCongratsDialogAfterDelay();
+                                gameStateManager.isBonusFinished = false;
+                            }
+                            // Don't process win queue if congrats will show
+                            return;
+                        }
+                        // Only process win queue if congrats is not showing
+                        if (!this.dialogs.isCongratsShowing()) {
+                            try { this.processWinQueue(); } catch {}
+                        }
                     }).catch(() => {
                         try { gameStateManager.isShowingWinDialog = false; } catch {}
-                        try { this.processWinQueue(); } catch {}
+                        // Only process win queue if congrats is not showing
+                        if (!this.dialogs.isCongratsShowing()) {
+                            try { this.processWinQueue(); } catch {}
+                        }
                     });
                 } else {
                     // Fallback to previous dialog behavior
@@ -860,7 +1037,54 @@ export class Game extends Scene {
             }
 		} else if (multiplier >= 20) {
 			console.log(`[Game] Small Win! Showing BigWinOverlay for ${multiplier.toFixed(2)}x multiplier`);
-			this.dialogs.showSmallWin(this, { winAmount: payout });
+			try {
+				if (this.bigWinOverlay) {
+					// Don't show if congrats is already showing or bonus is finished
+					if (this.dialogs.isCongratsShowing() || (gameStateManager.isBonus && gameStateManager.isBonusFinished)) {
+						console.log('[Game] Skipping BigWinOverlay (small win) - congrats showing or bonus finished');
+						return;
+					}
+					// Mark dialog state and show overlay
+					gameStateManager.isShowingWinDialog = true;
+					this.bigWinOverlay.show(payout);
+					// When user dismisses overlay, clear state and process any queued wins
+					this.bigWinOverlay.waitUntilDismissed().then(() => {
+						try { gameStateManager.isShowingWinDialog = false; } catch {}
+						// Check if bonus finished and trigger congrats if needed
+						if (gameStateManager.isBonus && gameStateManager.isBonusFinished) {
+							console.log('[Game] Bonus finished after BigWinOverlay (small win) dismissed - triggering congrats');
+							// Ensure bonus mode is ended (in case transition was blocked by overlay)
+							if (gameStateManager.isBonus) {
+								console.log('[Game] Ensuring bonus mode is ended after win overlay dismissal');
+								this.events.emit('setBonusMode', false);
+							}
+							const symbolsComponent = (this as any).symbols;
+							if (symbolsComponent && typeof symbolsComponent.showCongratsDialogAfterDelay === 'function') {
+								symbolsComponent.showCongratsDialogAfterDelay();
+								gameStateManager.isBonusFinished = false;
+							}
+							// Don't process win queue if congrats will show
+							return;
+						}
+						// Only process win queue if congrats is not showing
+						if (!this.dialogs.isCongratsShowing()) {
+							try { this.processWinQueue(); } catch {}
+						}
+					}).catch(() => {
+						try { gameStateManager.isShowingWinDialog = false; } catch {}
+						// Only process win queue if congrats is not showing
+						if (!this.dialogs.isCongratsShowing()) {
+							try { this.processWinQueue(); } catch {}
+						}
+					});
+				} else {
+					// Fallback to dialogs method
+					this.dialogs.showSmallWin(this, { winAmount: payout });
+				}
+			} catch (e) {
+				console.warn('[Game] Failed to show BigWinOverlay for small win, falling back to showSmallWin:', e);
+				this.dialogs.showSmallWin(this, { winAmount: payout });
+			}
 		}
 		
 		console.log(`[Game] Win dialog should now be visible. isShowingWinDialog: ${gameStateManager.isShowingWinDialog}`);
@@ -874,6 +1098,19 @@ export class Game extends Scene {
 			console.log('[Game] Suppressing processing of win queue (transitioning from bonus to base)');
 			return;
 		}
+
+		// Prevent processing win queue if congrats is showing
+		if (this.dialogs.isCongratsShowing()) {
+			console.log('[Game] Congrats dialog is showing - suppressing win queue processing');
+			return;
+		}
+
+		// Prevent processing win queue if bonus is finished (congrats should show instead)
+		if (gameStateManager.isBonus && gameStateManager.isBonusFinished) {
+			console.log('[Game] Bonus finished - suppressing win queue processing (congrats should show instead)');
+			return;
+		}
+
 		console.log(`[Game] processWinQueue called. Queue length: ${this.winQueue.length}`);
 		console.log(`[Game] Current isShowingWinDialog state: ${gameStateManager.isShowingWinDialog}`);
 		console.log(`[Game] Current dialog showing state: ${this.dialogs.isDialogShowing()}`);
@@ -984,11 +1221,21 @@ export class Game extends Scene {
 		const intervalMs = durationMs / totalCoins;
 		console.log(`[Game] Spawning ${totalCoins} coins over ${durationMs}ms (${intervalMs.toFixed(1)}ms per coin) at position (${centerX}, ${centerY})`);
 
-		for (let i = 0; i < totalCoins; i++) {
-			this.time.delayedCall(i * intervalMs, () => {
-				this.coinAnimation.spawnSingleCoin(centerX, centerY);
-			});
-		}
+    for (let i = 0; i < totalCoins; i++) {
+        this.time.delayedCall(i * intervalMs, () => {
+            // In bonus: spawn from the sky with downward velocity and wide horizontal spread
+            if (this.gameStateManager?.isBonus) {
+                const skyY = Math.max(0, this.scale.height * 0.05);
+                const skyX = this.scale.width * (0.15 + Math.random() * 0.70); // between 15% and 85% width
+                const vx = (Math.random() - 0.5) * 200; // gentle horizontal drift
+                const vy = 350 + Math.random() * 500;   // fall down
+                this.coinAnimation.spawnSingleCoin(skyX, skyY, vx, vy);
+            } else {
+                // Base: keep existing behavior
+                this.coinAnimation.spawnSingleCoin(centerX, centerY);
+            }
+        });
+    }
 	}
 
 	/**
@@ -1095,6 +1342,7 @@ export class Game extends Scene {
 					this.audioManager.setExclusiveBackground(MusicType.MAIN);
 					console.log('[Game] Switched to main background music (exclusive)');
 				}
+				// Do not auto-spawn on base return; spawn will occur only on scatter via baseTopDragonMoveStart
 			}
 			
 			// TODO: Update backend data isBonus flag if needed
@@ -1442,7 +1690,7 @@ export class Game extends Scene {
 			}
 		};
 
-		console.log('[Game] Coin system ready! Press SPACEBAR to spawn coins or use console commands:');
+		console.log('[Game] Coin system ready! Use console commands:');
 		console.log('- spawnCoins(5) - Spawn 5 coins');
 		console.log('- spawnSingleCoin(400, 300) - Spawn one coin at position');
 		console.log('- clearCoins() - Remove all coins');
@@ -1525,6 +1773,13 @@ export class Game extends Scene {
 	}
 
 	shutdown() {
+		// Clean up clock display
+		try {
+			if (this.clockDisplay) {
+				this.clockDisplay.destroy();
+			}
+		} catch {}
+
 		this.events.once('shutdown', () => {
 			// Clean up any game-specific resources if needed
 		});

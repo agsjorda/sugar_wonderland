@@ -79,7 +79,7 @@ export class Symbols {
   private baseBorderSkeletonAbsoluteScale: number = 1.0;
   private baseBorderSkeletonHalfOffscreen: boolean = false;
   private baseBorderSkeletonOffscreenSide: 'left' | 'right' = 'left';
-  private baseBorderSkeletonTimeScale: number = 1.5;
+  private baseBorderSkeletonTimeScale: number = 1.6;
   private baseBorderSkeletonFrameStep: number = 1;
   private baseBorderSkeletonFrameCounter: number = 0;
 
@@ -92,6 +92,13 @@ export class Symbols {
   private baseBorderBottomTimeScale: number = 1.5;
   private baseBorderBottomFrameStep: number = 1;
   private baseBorderBottomFrameCounter: number = 0;
+
+  // Start time (in seconds) to loop dragon_default from, skipping 0..start
+  private dragonLoopStartSeconds: number = 1.8;
+  // Speed modifier for Dragon_Top_Bonus (applied in bonus mode)
+  private dragonTopBonusSpeedModifier: number = 1.5;
+  // Speed modifier for bottom dragon_bonus (applied in bonus mode)
+  private dragonBottomBonusSpeedModifier: number = 1.0;
 
   // Extra bonus-only offset for bottom dragon (applied on top of base bottom offsets)
   private bonusBottomExtraOffsetY: number = -15;
@@ -466,6 +473,11 @@ export class Symbols {
                 const first = anims[0]?.name; if (first) state.setAnimation(0, first, true);
               } catch {}
             }
+            // Apply Dragon_Top_Bonus speed modifier
+            try {
+              const ts = Math.max(0.0001, this.dragonTopBonusSpeedModifier);
+              state.timeScale = ts;
+            } catch {}
           } catch {}
           // Fit width using bounds
           try {
@@ -504,6 +516,11 @@ export class Symbols {
                 const first = anims[0]?.name; if (first) state.setAnimation(0, first, true);
               } catch {}
             }
+            // Apply bottom dragon_bonus speed modifier
+            try {
+              const ts = Math.max(0.0001, this.dragonBottomBonusSpeedModifier);
+              state.timeScale = ts;
+            } catch {}
           } catch {}
           try {
             const b = lower.getBounds?.();
@@ -637,6 +654,22 @@ export class Symbols {
               const ts = Math.max(0.0001, this.baseBorderBottomTimeScale);
               const step = Math.max(1, Math.floor(this.baseBorderBottomFrameStep || 1));
               state.timeScale = (step > 1) ? 0 : ts;
+            } catch {}
+            // BOTTOM dragon: loop only from desired start to end (skip 0..start entirely)
+            try {
+              const entry = (state as any)?.tracks?.[0] || null;
+              if (entry && this.dragonLoopStartSeconds > 0) {
+                const dur = entry?.animation?.duration ?? 0;
+                if (dur > 0) {
+                  const epsilon = 1 / 60;
+                  const start = Math.min(Math.max(0, this.dragonLoopStartSeconds), Math.max(0, dur - epsilon));
+                  if (start > 0 && start < dur) {
+                    try { entry.animationStart = start; } catch {}
+                    try { entry.animationEnd = dur; } catch {}
+                    try { entry.trackTime = 0; } catch {}
+                  }
+                }
+              }
             } catch {}
           } catch {}
           // Fit/scale to width and mirror horizontally
@@ -1237,6 +1270,11 @@ export class Symbols {
                     const first = anims[0]?.name; if (first) state.setAnimation(0, first, true);
                   } catch {}
                 }
+                // Apply bonus dragon speed modifier (toggle section)
+                try {
+                  const ts = Math.max(0.0001, this.dragonTopBonusSpeedModifier);
+                  state.timeScale = ts;
+                } catch {}
               } catch {}
               try {
                 const b = upper.getBounds?.();
@@ -1278,6 +1316,11 @@ export class Symbols {
                     const first = anims[0]?.name; if (first) state.setAnimation(0, first, true);
                   } catch {}
                 }
+                // Apply bottom bonus dragon speed modifier (toggle section)
+                try {
+                  const ts = Math.max(0.0001, this.dragonBottomBonusSpeedModifier);
+                  state.timeScale = ts;
+                } catch {}
               } catch {}
               try {
                 const b = lower.getBounds?.();
@@ -1385,6 +1428,22 @@ export class Symbols {
                   const ts = Math.max(0.0001, this.baseBorderBottomTimeScale);
                   const step = Math.max(1, Math.floor(this.baseBorderBottomFrameStep || 1));
                   state.timeScale = (step > 1) ? 0 : ts;
+                } catch {}
+                // BOTTOM dragon: loop only from desired start to end (skip 0..start entirely)
+                try {
+                  const entry = (state as any)?.tracks?.[0] || null;
+                  if (entry && this.dragonLoopStartSeconds > 0) {
+                    const dur = entry?.animation?.duration ?? 0;
+                    if (dur > 0) {
+                      const epsilon = 1 / 60;
+                      const start = Math.min(Math.max(0, this.dragonLoopStartSeconds), Math.max(0, dur - epsilon));
+                      if (start > 0 && start < dur) {
+                        try { entry.animationStart = start; } catch {}
+                        try { entry.animationEnd = dur; } catch {}
+                        try { entry.trackTime = 0; } catch {}
+                      }
+                    }
+                  }
                 } catch {}
               } catch {}
               try {
@@ -3262,14 +3321,42 @@ export class Symbols {
   private showCongratsDialogAfterDelay(): void {
     console.log('[Symbols] Showing congrats dialog after delay');
     
-    // Close any open win dialogs first (safety check)
     const gameScene = this.scene as any;
+    
+    // Close any open win dialogs first (safety check)
     if (gameScene.dialogs && typeof gameScene.dialogs.hideDialog === 'function') {
       if (gameScene.dialogs.isDialogShowing()) {
         console.log('[Symbols] Closing any remaining win dialogs before showing congrats');
         gameScene.dialogs.hideDialog();
       }
     }
+
+    // Hide any win overlays that might be showing
+    try {
+      if (gameScene.bigWinOverlay && typeof gameScene.bigWinOverlay.hide === 'function' && typeof gameScene.bigWinOverlay.getIsShowing === 'function' && gameScene.bigWinOverlay.getIsShowing()) {
+        console.log('[Symbols] Hiding BigWinOverlay before showing congrats');
+        gameScene.bigWinOverlay.hide(150);
+      }
+      if (gameScene.superWinOverlay && typeof gameScene.superWinOverlay.hide === 'function' && typeof gameScene.superWinOverlay.getIsShowing === 'function' && gameScene.superWinOverlay.getIsShowing()) {
+        console.log('[Symbols] Hiding SuperWinOverlay before showing congrats');
+        gameScene.superWinOverlay.hide(150);
+      }
+      if (gameScene.epicWinOverlay && typeof gameScene.epicWinOverlay.hide === 'function' && typeof gameScene.epicWinOverlay.getIsShowing === 'function' && gameScene.epicWinOverlay.getIsShowing()) {
+        console.log('[Symbols] Hiding EpicWinOverlay before showing congrats');
+        gameScene.epicWinOverlay.hide(150);
+      }
+    } catch (e) {
+      console.warn('[Symbols] Error hiding win overlays:', e);
+    }
+    
+    // Clear win queue to prevent queued win dialogs from showing after congrats
+    if (gameScene.clearWinQueue && typeof gameScene.clearWinQueue === 'function') {
+      console.log('[Symbols] Clearing win queue before showing congrats');
+      gameScene.clearWinQueue();
+    }
+
+    // Reset win dialog state
+    gameStateManager.isShowingWinDialog = false;
     
     // Calculate total win from freespinItems
     let totalWin = 0;
@@ -3298,6 +3385,9 @@ export class Symbols {
   private stopFreeSpinAutoplay(): void {
     console.log('[Symbols] ===== STOPPING FREE SPIN AUTOPLAY =====');
     
+    // Check if we're stopping because free spins are complete (before resetting state)
+    const spinsWereComplete = this.freeSpinAutoplaySpinsRemaining <= 0;
+    
     // Clear timer
     if (this.freeSpinAutoplayTimer) {
       this.freeSpinAutoplayTimer.destroy();
@@ -3323,6 +3413,16 @@ export class Symbols {
     // Restore winline animation timing to normal mode (same as normal autoplay)
     console.log('[Symbols] Restoring winline animation timing to normal mode');
     this.setTurboMode(false);
+    
+    // If we're in bonus mode and all free spins are complete, ensure bonus mode is properly ended
+    // This is a safety check - SlotController should have already handled this, but ensure it happens
+    // even if a win overlay was blocking the transition
+    if (gameStateManager.isBonus && spinsWereComplete) {
+      console.log('[Symbols] All free spins complete - marking bonus as finished');
+      gameStateManager.isBonusFinished = true;
+      // Note: We don't emit setBonusMode(false) here because it should be handled by SlotController
+      // or by the win overlay dismissal handler. This ensures we don't have duplicate transitions.
+    }
     
     // Emit AUTO_STOP event to notify other systems
     gameEventManager.emit(GameEventType.AUTO_STOP);
@@ -4357,5 +4457,4 @@ function resetSymbolsVisibility(self: Symbols): void {
     self.container.setAlpha(1);
   }
 }
-
 

@@ -199,11 +199,6 @@ export class GameAPI {
         }
     }
     public async getBalance(): Promise<any> {
-        return {
-            data:{
-                balance:10000
-                }
-            }
         try{
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 8000);

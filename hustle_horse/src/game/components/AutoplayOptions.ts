@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
+import { SoundEffectType } from '../../managers/AudioManager';
 
 export interface AutoplayOptionsConfig {
 	position?: { x: number; y: number };
@@ -116,6 +117,9 @@ export class AutoplayOptions {
 		this.closeButton.setOrigin(0.5, 0.5);
 		this.closeButton.setInteractive();
 		this.closeButton.on('pointerdown', () => {
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			// Create slide-down animation
 			if (this.container.scene) {
 				this.container.scene.tweens.add({
@@ -238,6 +242,9 @@ export class AutoplayOptions {
 		// Make interactive
 		container.setInteractive(new Phaser.Geom.Rectangle(0, 0, width, height), Phaser.Geom.Rectangle.Contains);
 		container.on('pointerdown', () => {
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			this.selectButton(index, value);
 		});
 		
@@ -280,6 +287,9 @@ export class AutoplayOptions {
 		this.minusButton.setOrigin(0.5, 0.5);
 		this.minusButton.setInteractive();
 		this.minusButton.on('pointerdown', () => {
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			this.selectPreviousBet();
 		});
 		this.container.add(this.minusButton);
@@ -302,6 +312,9 @@ export class AutoplayOptions {
 		this.plusButton.setOrigin(0.5, 0.5);
 		this.plusButton.setInteractive();
 		this.plusButton.on('pointerdown', () => {
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			this.selectNextBet();
 		});
 		this.container.add(this.plusButton);
@@ -333,6 +346,9 @@ export class AutoplayOptions {
 		
 		buttonImage.setInteractive();
 		buttonImage.on('pointerdown', () => {
+			if ((window as any).audioManager) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+			}
 			if (this.container.scene) {
 				this.container.scene.tweens.add({
 					targets: this.container,

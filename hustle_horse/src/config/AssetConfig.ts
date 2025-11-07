@@ -122,7 +122,8 @@ export class AssetConfig {
 				'loading_background': `${prefix}/loading/BG-loading.png`,
 				'button_bg': `${prefix}/loading/button_bg.png`,
 				'button_spin': `${prefix}/loading/button_spin.png`,
-				'hustle_horse_logo': `${prefix}/loading/hustle-horse-logo.png`
+				'hustle_horse_logo': `${prefix}/loading/hustle-horse-logo.png`,
+				'loading_frame': `${prefix}/loading/loading-frame.png`
 			},
 			spine: {
 				// Studio loading spine (DI JOKER) – only available in portrait/high
@@ -233,8 +234,10 @@ export class AssetConfig {
 			fonts: {
 				'poppins-thin': 'assets/fonts/poppins/Poppins-Thin.ttf',
 				'poppins-bold': 'assets/fonts/poppins/Poppins-Bold.ttf',
-				'poppins-regular': 'assets/fonts/poppins/Poppins-Regular.ttf'
-				
+				'poppins-regular': 'assets/fonts/poppins/Poppins-Regular.ttf',
+				// Inter font - add font files to assets/fonts/inter/ directory if not using web font
+				'inter-regular': 'assets/fonts/inter/Inter-Regular.ttf',
+				'inter-bold': 'assets/fonts/inter/Inter-Bold.ttf'
 			}
 		};
 	}
@@ -304,17 +307,14 @@ export class AssetConfig {
 			// Payline visuals
 			'paylineMobileWin': `${prefix}/help_screen/paylineMobileWin.png`,
 			'paylineMobileNoWin': `${prefix}/help_screen/paylineMobileNoWin.png`,
-			// Scatter / Tumble / Multiplier visuals
-			'scatterGame': `${prefix}/help_screen/scatterGame.png`,
-			'scatterIcon': `${prefix}/help_screen/scatterIcon.png`,
-			'scatterWin': `${prefix}/help_screen/scatterWin.png`,
-			'ScatterLabel': `${prefix}/help_screen/ScatterSymbol.png`,
-			'wheelSpin_helper': `${prefix}/help_screen/wheelSpin_helper.png`,
-			'freeSpin_round': `${prefix}/help_screen/freeSpin_round.png`,
-			'tumbleIcon': `${prefix}/help_screen/tumbleIcon.png`,
-			'tumbleWin': `${prefix}/help_screen/tumbleWin.png`,
-			'multiplierGame': `${prefix}/help_screen/multiplierGame.png`,
-			'multiplierIcon': `${prefix}/help_screen/multiplierIcon.png`
+            // Scatter / Tumble / Multiplier visuals (icons removed to avoid loading unused assets)
+            'scatterGame': `${prefix}/help_screen/scatterGame.png`,
+            'scatterWin': `${prefix}/help_screen/scatterWin.png`,
+            'ScatterLabel': `${prefix}/help_screen/ScatterSymbol.png`,
+            'wheelSpin_helper': `${prefix}/help_screen/wheelSpin_helper.png`,
+            'freeSpin_round': `${prefix}/help_screen/freeSpin_round.png`,
+            'tumbleWin': `${prefix}/help_screen/tumbleWin.png`,
+            'multiplierGame': `${prefix}/help_screen/multiplierGame.png`
 		};
 
 		// Map winlines1..20 -> public/assets/winlines/winline1..20.png
@@ -468,6 +468,7 @@ export class AssetConfig {
 			audio: {
 				// Menu/UI clicks
 				'click_sw': 'assets/sounds/click_sw.ogg',
+				'button_fx': 'assets/sounds/SFX/button_fx.ogg',
 				'mainbg_hh': 'assets/sounds/BG/mainbg_hh.ogg',
 				'bonusbg_hh': 'assets/sounds/BG/bonusbg_hh.ogg',
 				'freespinbg_ka': 'assets/sounds/Wins/freespin_ka.ogg',

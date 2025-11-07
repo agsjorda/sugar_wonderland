@@ -4,6 +4,7 @@ import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { AssetConfig } from '../../config/AssetConfig';
 import { AssetLoader } from '../../utils/AssetLoader';
+import { ClockDisplay } from '../components/ClockDisplay';
 
 export class Boot extends Scene
 {
@@ -11,6 +12,7 @@ export class Boot extends Scene
 	private screenModeManager: ScreenModeManager;
 	private assetConfig: AssetConfig;
 	private assetLoader: AssetLoader;
+	private clockDisplay?: ClockDisplay;
 
 	constructor ()
 	{
@@ -47,6 +49,25 @@ export class Boot extends Scene
 
 	create ()
 	{
+		// Create persistent clock display (stays on screen forever)
+		const clockY = this.scale.height * 0.05; // 5% from top
+		this.clockDisplay = new ClockDisplay(this, {
+			offsetX: 0,
+			offsetY: clockY,
+			fontSize: 16,
+			color: '#FFFFFF',
+			alpha: 0.80,
+			depth: 30000, // Very high depth to stay above all overlays and transitions
+			suffixText: ' | Hustle The Blazing Horse',
+			additionalText: 'DiJoker',
+			additionalTextOffsetX: 0,
+			additionalTextOffsetY: 0,
+			additionalTextScale: 1.0,
+			additionalTextColor: '#FFFFFF',
+			additionalTextFontSize: 16
+		});
+		this.clockDisplay.create();
+
 		// Emit the screen mode manager so UI components can access it
 		EventBus.emit('screen-mode-manager-ready', this.screenModeManager);
 		

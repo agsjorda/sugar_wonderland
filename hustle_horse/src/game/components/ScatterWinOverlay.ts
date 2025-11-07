@@ -33,8 +33,10 @@ export class ScatterWinOverlay {
     private overlayTextOffsetY: number = -155; // px offset from card center
     private overlayTextScaleFactor: number = 1; // relative to card scale
     private overlayTextRef: Phaser.GameObjects.Image | null = null;
-    private congratsRef: Phaser.GameObjects.Image | null = null;
-    private pressAnyText: Phaser.GameObjects.Text | null = null;
+  private congratsRef: Phaser.GameObjects.Image | null = null;
+  private congratsFireSpine: any | null = null;
+  private congratsFireContainer: Phaser.GameObjects.Container | null = null;
+  private pressAnyText: Phaser.GameObjects.Text | null = null;
   // Final transition overlay elements
   private transitionContainer: Phaser.GameObjects.Container | null = null;
   private transitionBg: Phaser.GameObjects.Rectangle | null = null;
@@ -54,12 +56,16 @@ export class ScatterWinOverlay {
     // Congrats popup options
     private congratsBaseScale: number = 0.66;
     private congratsOffsetX: number = 0;
-    private congratsOffsetY: number = 0;
+    private congratsOffsetY: number = 15;
     private congratsYOffsetRatio: number = 0.8; // portion of card height above card center
     private congratsPulseAmplitude: number = 0.1; // ±3%
     private congratsPulseDurationMs: number = 200;
     private congratsPopDurationMs: number = 350;
     private congratsShowDelayMs: number = 400;
+    // Congrats fire animation modifiers
+    private congratsFireOffsetX: number = 0;
+    private congratsFireOffsetY: number = -47;
+    private congratsFireScaleModifier: number = 0.8;
     private lastFreeSpinsCount: number | null = null;
     // Press-anywhere hint options
     private pressAnyShowDelayMs: number = 300; // after congrats appears
@@ -588,9 +594,19 @@ export class ScatterWinOverlay {
             if (onComplete) onComplete();
             return;
         }
-        
+
         // Stop idle animation when hiding
         this.isIdleAnimating = false;
+
+        // Clean up congrats fire immediately when hiding starts
+        if (this.congratsFireSpine) {
+            try { this.congratsFireSpine.destroy(); } catch {}
+            this.congratsFireSpine = null;
+        }
+        if (this.congratsFireContainer) {
+            try { this.congratsFireContainer.destroy(true); } catch {}
+            this.congratsFireContainer = null;
+        }
         // Fade entire overlay container simultaneously
         if (this.container) {
             this.scene.tweens.add({
@@ -1287,6 +1303,9 @@ export class ScatterWinOverlay {
         pulseDurationMs?: number;
         popDurationMs?: number;
         showDelayMs?: number;
+        fireOffsetX?: number; // congrats fire X offset
+        fireOffsetY?: number; // congrats fire Y offset
+        fireScaleModifier?: number; // congrats fire scale multiplier
     }): void {
         if (options.baseScale !== undefined) this.congratsBaseScale = Math.max(0.05, options.baseScale);
         if (options.offsetX !== undefined) this.congratsOffsetX = options.offsetX;
@@ -1296,6 +1315,9 @@ export class ScatterWinOverlay {
         if (options.pulseDurationMs !== undefined) this.congratsPulseDurationMs = Math.max(50, options.pulseDurationMs);
         if (options.popDurationMs !== undefined) this.congratsPopDurationMs = Math.max(50, options.popDurationMs);
         if (options.showDelayMs !== undefined) this.congratsShowDelayMs = Math.max(0, options.showDelayMs);
+        if (options.fireOffsetX !== undefined) this.congratsFireOffsetX = options.fireOffsetX;
+        if (options.fireOffsetY !== undefined) this.congratsFireOffsetY = options.fireOffsetY;
+        if (options.fireScaleModifier !== undefined) this.congratsFireScaleModifier = Math.max(0.01, options.fireScaleModifier);
     }
 
     private clearAnimations(): void {
@@ -1359,6 +1381,14 @@ export class ScatterWinOverlay {
                 try { this.congratsRef.destroy(); } catch {}
                 this.congratsRef = null;
             }
+            if (this.congratsFireSpine) {
+                try { this.congratsFireSpine.destroy(); } catch {}
+                this.congratsFireSpine = null;
+            }
+            if (this.congratsFireContainer) {
+                try { this.congratsFireContainer.destroy(true); } catch {}
+                this.congratsFireContainer = null;
+            }
             if (this.pressAnyText) {
                 try { this.pressAnyText.destroy(); } catch {}
                 this.pressAnyText = null;
@@ -1387,11 +1417,65 @@ export class ScatterWinOverlay {
                 }
             } catch {}
 
+            // Clean up any existing congrats fire from previous runs
+            if (this.congratsFireSpine) {
+                try { this.congratsFireSpine.destroy(); } catch {}
+                this.congratsFireSpine = null;
+            }
+            if (this.congratsFireContainer) {
+                try { this.congratsFireContainer.destroy(true); } catch {}
+                this.congratsFireContainer = null;
+            }
+
             const w = this.scene.cameras.main.width;
             const h = this.scene.cameras.main.height;
             // Position relative to the chosen card's final position and size
             const baseX = (chosen?.x ?? w * 0.5) + this.congratsOffsetX;
             const baseY = (chosen?.y ?? h * this.flippedCardTargetYRatio) - ((chosen?.displayHeight || 200) * this.congratsYOffsetRatio) + this.congratsOffsetY;
+
+            // Create container for congrats fire animation (placed behind congrats PNG)
+            if (!this.congratsFireContainer) {
+                this.congratsFireContainer = this.scene.add.container(0, 0);
+                try { this.congratsFireContainer.setDepth?.(10004); } catch {} // Behind congrats (10005)
+                try { this.container?.add(this.congratsFireContainer); } catch {}
+            }
+
+            // Load and create fire animation behind congrats
+            this.scene.time.delayedCall(0, async () => {
+                if (!this.scene) return;
+                const loaded = await this.loadFireSpineIfNeeded();
+                if (loaded && ensureSpineFactory(this.scene, '[ScatterWinOverlay] create congrats fire')) {
+                    try {
+                        const fireX = baseX + this.congratsFireOffsetX;
+                        const fireY = baseY + this.congratsFireOffsetY;
+                        const spineObj = (this.scene.add as any).spine(
+                            fireX,
+                            fireY,
+                            'overlay_fire',
+                            'overlay_fire_atlas'
+                        );
+                        this.congratsFireSpine = spineObj;
+                        try { spineObj.setOrigin(0.5, 0.5); } catch {}
+                        // Scale using congrats fire scale modifier
+                        try { spineObj.setScale(this.congratsBaseScale * this.congratsFireScaleModifier); } catch {}
+                        try { spineObj.setAlpha(0); } catch {} // Start hidden
+                        // Start animating
+                        try { (spineObj as any).animationState?.setAnimation(0, 'animation', true); } catch {}
+                        this.congratsFireContainer?.add(spineObj);
+
+                        // Fade in the fire with the congrats
+                        this.scene.tweens.add({
+                            targets: spineObj,
+                            alpha: 0.8, // Slightly transparent
+                            duration: this.congratsPopDurationMs,
+                            ease: 'Back.easeOut'
+                        });
+                    } catch (e) {
+                        console.warn('[ScatterWinOverlay] Could not create congrats fire spine:', e);
+                    }
+                }
+            });
+
             const img = this.scene.add.image(baseX, baseY, 'congrats');
             img.setOrigin(0.5, 0.5);
             img.setAlpha(0);

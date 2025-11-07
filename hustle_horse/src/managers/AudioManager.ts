@@ -14,6 +14,7 @@ export enum SoundEffectType {
 	TURBO_DROP = 'turbodrop',
 	WHEEL_SPIN = 'wheelspin',
 	MENU_CLICK = 'menu_click',
+	BUTTON_FX = 'button_fx',
 	HIT_WIN = 'hitwin',
 	WILD_MULTI = 'wildmulti',
 	SCATTER = 'scatter',
@@ -96,6 +97,7 @@ export class AudioManager {
 		// Sound effects
 		this.scene.load.audio('spin_hh', 'assets/sounds/SFX/spin_hh.ogg');
 		this.scene.load.audio('click_sw', 'assets/sounds/click_sw.ogg');
+		this.scene.load.audio('button_fx', 'assets/sounds/SFX/button_fx.ogg');
 		this.scene.load.audio('reeldrop_hh', 'assets/sounds/SFX/reeldrop_hh.ogg');
 		this.scene.load.audio('turbodrop_hh', 'assets/sounds/SFX/turbodrop_hh.ogg');
 		this.scene.load.audio('coin_drop_ka', 'assets/sounds/SFX/coin_drop_ka.ogg');
@@ -183,6 +185,15 @@ export class AudioManager {
 				console.log('[AudioManager] Menu click SFX instance created');
 			} catch (e) {
 				console.warn('[AudioManager] Failed to create click_sw SFX instance:', e);
+			}
+
+			// Button FX SFX
+			try {
+				const buttonFxSfx = this.scene.sound.add('button_fx', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.BUTTON_FX, buttonFxSfx);
+				console.log('[AudioManager] Button FX SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create button_fx SFX instance:', e);
 			}
 
 			// Card deal SFX for ScatterWinOverlay

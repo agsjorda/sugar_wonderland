@@ -1,5 +1,5 @@
 import { Scene } from 'phaser';
-import { MusicType } from '../../managers/AudioManager';
+import { MusicType, SoundEffectType } from '../../managers/AudioManager';
 import { ensureSpineLoader, ensureSpineFactory } from '../../utils/SpineGuard';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
@@ -40,13 +40,15 @@ export class Dialogs {
 	
 	// Continue text
 	private continueText: Phaser.GameObjects.Text | null = null;
+	private continueTextOffsetX: number = 0;
+	private continueTextOffsetY: number = 330;
 	
 	// Number display container
 	private numberDisplayContainer: Phaser.GameObjects.Container | null = null;
 	private numberDisplayRef: NumberDisplay | null = null;
 	// Number display position offsets (modifiers)
 	private numberDisplayOffsetX: number = 0;
-	private numberDisplayOffsetY: number = -90;
+	private numberDisplayOffsetY: number = 25;
 	
 
 	
@@ -76,16 +78,16 @@ export class Dialogs {
 	private congratsBgOffsetY: number = 0;
 	// Congrats background fire spine behind the PNG bg
 	private congratsFireSpine: any | null = null;
-	private congratsFireScale: number = 0.85; // tuned for fireanimation01_HTBH
+	private congratsFireScale: number = 0.70; // tuned for fireanimation01_HTBH
 	private congratsFireOffsetX: number = 0;  // tuned for fireanimation01_HTBH
-	private congratsFireOffsetY: number = -120; // tuned for fireanimation01_HTBH
-	private congratsFireTimeScale: number = 1.0;
+	private congratsFireOffsetY: number = -35; // tuned for fireanimation01_HTBH
+	private congratsFireTimeScale: number = 1;
 	private congratsFireAnimName: string = 'animation';
 	// Congrats title image (PNG) with breathing animation
 	private congratsWinTitleImage: Phaser.GameObjects.Image | null = null;
 	private congratsWinTitleScale: number = 1.0;
 	private congratsWinTitleOffsetX: number = 0;
-	private congratsWinTitleOffsetY: number = -25;
+	private congratsWinTitleOffsetY: number = 15;
 	private congratsWinTitleBreathDurationMs: number = 120;
 	private congratsWinTitleTween: Phaser.Tweens.Tween | null = null;
 
@@ -126,11 +128,11 @@ export class Dialogs {
 	private emberUpdateHandler: ((time: number, delta: number) => void) | null = null;
 
     private congratsCharSpine: SpineGameObject | null = null;
-    private congratsCharScale: number = 0.7;
+    private congratsCharScale: number = 0.75;
     private congratsCharX: number | null = null;
     private congratsCharY: number | null = null;
     private congratsCharOffsetX: number = 120;
-    private congratsCharOffsetY: number = -20;
+    private congratsCharOffsetY: number = 40;
     private congratsCharTimeScale: number = 1.0;
 	// Nested containers for precise transforms
 	private congratsCharRoot: Phaser.GameObjects.Container | null = null; // base position
@@ -222,12 +224,12 @@ private dialogLoops: Record<string, boolean> = {};
 				this.endTransitionContainer?.setAlpha(1);
 				try { scene.children.bringToTop(this.endTransitionContainer!); } catch {}
 				// Fast fade-in for black mask behind fire transition
-				try {
-					if (this.endTransitionBg) {
-						this.endTransitionBg.setAlpha(0);
-						scene.tweens.add({ targets: this.endTransitionBg, alpha: 0.7, duration: 80, ease: 'Cubic.easeOut' });
-					}
-				} catch {}
+					try {
+						if (this.endTransitionBg) {
+							// Delay black mask fade until after the fire transition completes
+							this.endTransitionBg.setAlpha(0);
+						}
+					} catch {}
 				// Cover-fit scaling with slight overscan to avoid any gaps
 				try {
 					const w = scene.cameras.main.width;
@@ -251,7 +253,15 @@ private dialogLoops: Record<string, boolean> = {};
 						audio.stopAllMusic();
 					}
 				} catch {}
-				// Blaze SFX removed with fire transitions
+				// Play blaze SFX consistently with Fire_Transition
+				try {
+					const audio = (window as any).audioManager;
+					if (audio && typeof audio.playSoundEffect === 'function') {
+						audio.playSoundEffect('blaze_hh' as any);
+					} else {
+						try { (scene as any).sound?.play?.('blaze_hh'); } catch {}
+					}
+				} catch {}
 				// timeScale
 				try { (this.endTransitionSpine as any).animationState.timeScale = Math.max(0.05, this.endFireTransitionTimeScale); } catch {}
 				// Keep opaque mask behind spine to ensure no gaps
@@ -262,6 +272,13 @@ private dialogLoops: Record<string, boolean> = {};
 					if (congratsShown) return; congratsShown = true; next();
 				};
 				const fadeOutMaskAndEmit = () => {
+					// Fade out blaze SFX as transition ends
+					try {
+						const audio = (window as any).audioManager;
+						if (audio && typeof audio.fadeOutSfx === 'function') {
+							audio.fadeOutSfx('blaze_hh' as any, 200);
+						}
+					} catch {}
 					scene.tweens.add({
 						targets: this.endTransitionContainer,
 						alpha: 0,
@@ -282,8 +299,22 @@ private dialogLoops: Record<string, boolean> = {};
 					});
 				};
 
-				const finish = () => {
+					const finish = () => {
 					if (finished) return; finished = true;
+						// Now bring in the black overlay for congrats after fire completes
+						try {
+							if (this.endBlackOverlay && scene?.tweens) {
+								try { scene.tweens.killTweensOf(this.endBlackOverlay); } catch {}
+								this.endBlackOverlay.setVisible(true);
+								this.endBlackOverlay.setAlpha(0);
+								scene.tweens.add({
+									targets: this.endBlackOverlay,
+									alpha: 0.7,
+									duration: Math.max(20, this.endBlackOverlayFadeInMs),
+									ease: 'Cubic.easeOut'
+								});
+							}
+						} catch {}
 					const hold = Math.max(0, this.startFireBlackHoldMs || 0);
 					if (hold > 0) {
 						scene.time.delayedCall(hold, fadeOutMaskAndEmit);
@@ -858,8 +889,8 @@ private dialogLoops: Record<string, boolean> = {};
 		
 		// Create the text with your original styling
 		this.continueText = scene.add.text(
-			scene.scale.width / 2,
-			scene.scale.height / 2 + 300,
+			scene.scale.width / 2 + this.continueTextOffsetX,
+			scene.scale.height / 2 + this.continueTextOffsetY,
 			'Press anywhere to continue',
 			{
 				fontFamily: 'Poppins-Bold',
@@ -1194,6 +1225,9 @@ private dialogLoops: Record<string, boolean> = {};
 			scene.time.delayedCall(1500, () => {
 				if (this.clickArea) {
 					this.clickArea.on('pointerdown', () => {
+						if ((window as any).audioManager) {
+							(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+						}
 						this.handleDialogClick(scene);
 					});
 					console.log('[Dialogs] Click handler enabled for win dialog');
@@ -1206,6 +1240,9 @@ private dialogLoops: Record<string, boolean> = {};
 				if (this.clickArea) {
 					this.clickArea.on('pointerdown', () => {
 						console.log('[Dialogs] Free spin dialog clicked!');
+						if ((window as any).audioManager) {
+							(window as any).audioManager.playSoundEffect('button_fx' as any);
+						}
 						this.handleDialogClick(scene);
 					});
 					console.log('[Dialogs] Click handler enabled for free spin dialog');
@@ -1608,7 +1645,7 @@ private dialogLoops: Record<string, boolean> = {};
 						if (this.endBlackOverlay) this.endTransitionContainer?.sendToBack(this.endBlackOverlay);
 						if (this.endTransitionSpine) this.endTransitionContainer?.bringToTop(this.endTransitionSpine);
 					} catch {}
-						if (this.endBlackOverlay) { showOverlay(); }
+					// Defer showing the endBlackOverlay until after the fire transition
 				// Cover-fit scaling with slight overscan to avoid any gaps
 				try {
 					const w = scene.cameras.main.width;
@@ -1625,7 +1662,15 @@ private dialogLoops: Record<string, boolean> = {};
 						(this.endTransitionSpine as any).setScale(scaleToCover);
 					}
 				} catch {}
-						// Blaze SFX removed with fire transitions
+						// Play blaze SFX consistently with Fire_Transition
+						try {
+							const audio = (window as any).audioManager;
+							if (audio && typeof audio.playSoundEffect === 'function') {
+								audio.playSoundEffect('blaze_hh' as any);
+							} else {
+								try { (scene as any).sound?.play?.('blaze_hh'); } catch {}
+							}
+						} catch {}
 						try { (this.endTransitionSpine as any).animationState.timeScale = Math.max(0.05, this.endFireTransitionTimeScale); } catch {}
 					// Keep opaque mask behind spine to ensure no gaps
 
@@ -1667,7 +1712,14 @@ private dialogLoops: Record<string, boolean> = {};
 										if (this.endTransitionBg) { this.endTransitionBg.setAlpha(0); }
 									} catch {}
 									const tail = Math.max(0, this.endBlackOverlayTailMs || 0);
-									if (tail > 0) {
+							// Fade out blaze SFX as transition ends
+							try {
+								const audio = (window as any).audioManager;
+								if (audio && typeof audio.fadeOutSfx === 'function') {
+									audio.fadeOutSfx('blaze_hh' as any, 200);
+								}
+							} catch {}
+							if (tail > 0) {
 										scene.time.delayedCall(tail, () => fadeOutOverlay(complete));
 									} else {
 										fadeOutOverlay(complete);
@@ -1932,10 +1984,26 @@ private updateEmbers(scene: Scene, delta: number): void {
 					if (!bw || !bh) { bw = (this.endTransitionSpine as any).displayWidth || 0; bh = (this.endTransitionSpine as any).displayHeight || 0; }
 					if (bw > 0 && bh > 0) { (this.endTransitionSpine as any).setScale(Math.max(w / bw, h / bh) * 2.0); }
 				} catch {}
-				try { (this.endTransitionSpine as any).animationState.timeScale = Math.max(0.05, this.endFireTransitionTimeScale); } catch {}
+                try { (this.endTransitionSpine as any).animationState.timeScale = Math.max(0.05, this.endFireTransitionTimeScale); } catch {}
+                // Play blaze SFX consistently with Fire_Transition (no-mask variant)
+                try {
+                    const audio = (window as any).audioManager;
+                    if (audio && typeof audio.playSoundEffect === 'function') {
+                        audio.playSoundEffect('blaze_hh' as any);
+                    } else {
+                        try { (scene as any).sound?.play?.('blaze_hh'); } catch {}
+                    }
+                } catch {}
 				let finished = false;
 				const finish = () => {
 					if (finished) return; finished = true;
+                    // Fade out blaze SFX as transition ends (no-mask variant)
+                    try {
+                        const audio = (window as any).audioManager;
+                        if (audio && typeof audio.fadeOutSfx === 'function') {
+                            audio.fadeOutSfx('blaze_hh' as any, 200);
+                        }
+                    } catch {}
 					// Remove fire and clean up immediately (embers removed)
 					try { if (this.endTransitionSpine) { this.endTransitionSpine.destroy(); this.endTransitionSpine = null; } } catch {}
 					try { this.endTransitionContainer?.setVisible(false); this.endTransitionContainer?.setAlpha(1); } catch {}
@@ -2387,6 +2455,13 @@ private updateEmbers(scene: Scene, delta: number): void {
 	}
 
 	/**
+	 * Check if congrats dialog is currently showing
+	 */
+	isCongratsShowing(): boolean {
+		return this.isDialogActive && this.currentDialogType === 'Congrats';
+	}
+
+	/**
 	 * Get the current dialog type
 	 */
 	getCurrentDialogType(): string | null {
@@ -2430,6 +2505,11 @@ private updateEmbers(scene: Scene, delta: number): void {
 			if (this.congratsCharRoot) { this.congratsCharRoot.x = baseX; this.congratsCharRoot.y = baseY; }
 			if (this.congratsCharOffsetContainer) { this.congratsCharOffsetContainer.x = (this.congratsCharOffsetX || 0); this.congratsCharOffsetContainer.y = (this.congratsCharOffsetY || 0); }
 			if (this.congratsCharScaleContainer) { this.congratsCharScaleContainer.setScale(Math.max(0.05, this.congratsCharScale)); }
+		}
+		// Reposition continue text on resize
+		if (this.continueText) {
+			this.continueText.x = scene.scale.width / 2 + this.continueTextOffsetX;
+			this.continueText.y = scene.scale.height / 2 + this.continueTextOffsetY;
 		}
 	}
 
@@ -2577,7 +2657,7 @@ private updateEmbers(scene: Scene, delta: number): void {
     }
 
     /** Convenience: set only offset for congrats character. */
-    public setCongratsCharacterOffset(opts: { offsetX?: number; offsetY?: number }): void {
+	public setCongratsCharacterOffset(opts: { offsetX?: number; offsetY?: number }): void {
         if (opts.offsetX !== undefined) this.congratsCharOffsetX = opts.offsetX;
         if (opts.offsetY !== undefined) this.congratsCharOffsetY = opts.offsetY;
         if (this.currentScene && this.congratsCharSpine) {
@@ -2585,6 +2665,16 @@ private updateEmbers(scene: Scene, delta: number): void {
             const baseY = (typeof this.congratsCharY === 'number' && isFinite(this.congratsCharY)) ? this.congratsCharY : this.currentScene.scale.height * 0.5;
             if (this.congratsCharRoot) { this.congratsCharRoot.x = baseX; this.congratsCharRoot.y = baseY; }
             if (this.congratsCharOffsetContainer) { this.congratsCharOffsetContainer.x = (this.congratsCharOffsetX || 0); this.congratsCharOffsetContainer.y = (this.congratsCharOffsetY || 0); }
+        }
+    }
+
+    /** Set offset position for continue text. */
+    public setContinueTextOffset(offsetX: number = 0, offsetY: number = 300): void {
+        this.continueTextOffsetX = offsetX;
+        this.continueTextOffsetY = offsetY;
+        if (this.currentScene && this.continueText) {
+            this.continueText.x = this.currentScene.scale.width / 2 + this.continueTextOffsetX;
+            this.continueText.y = this.currentScene.scale.height / 2 + this.continueTextOffsetY;
         }
     }
 		

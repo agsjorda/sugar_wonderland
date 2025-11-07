@@ -9,6 +9,7 @@ import { GameData } from '../components/GameData';
 import { FullScreenManager } from '../../managers/FullScreenManager';
 import { ensureSpineLoader } from '../../utils/SpineGuard';
 import { StudioLoadingScreen } from '../components/StudioLoadingScreen';
+import { ClockDisplay } from '../components/ClockDisplay';
 
 export class Preloader extends Scene
 {
@@ -33,6 +34,7 @@ export class Preloader extends Scene
 	private buttonBg?: Phaser.GameObjects.Image;
 	private pressToPlayText?: Phaser.GameObjects.Text;
 	private fullscreenBtn?: Phaser.GameObjects.Image;
+	private clockDisplay?: ClockDisplay;
 
 	constructor ()
 	{
@@ -89,9 +91,45 @@ export class Preloader extends Scene
 		console.log(`[Preloader] BG-default size: ${bgDefault.width}x${bgDefault.height} scale=${defScale}`);
 		console.log(`[Preloader] BG-loading size: ${bgLoading.width}x${bgLoading.height} scale=${loadScale}`);
 
+		// Create persistent clock display (stays on screen forever)
+		const clockY = this.scale.height * 0.009; // 2% from top
+		this.clockDisplay = new ClockDisplay(this, {
+			offsetX: -120,
+			offsetY: clockY,
+			fontSize: 16,
+			color: '#FFFFFF',
+			alpha: 0.5,
+			depth: 30000, // Very high depth to stay above all overlays and transitions
+			scale: 0.7,
+			suffixText: ' | Hustle The Blazing Horse',
+			additionalText: 'DiJoker',
+			additionalTextOffsetX: 185,
+			additionalTextOffsetY: 0,
+			additionalTextScale: 0.7,
+			additionalTextColor: '#FFFFFF',
+			additionalTextFontSize: 16
+		});
+		this.clockDisplay.create();
+
 		if (screenConfig.isPortrait) {
-		// Display studio loading screen
-		const studio = new StudioLoadingScreen(this);
+		// Display studio loading screen with loading frame and text options
+		// You can adjust these values: offsetX, offsetY, scaleModifier, text position, scale, and color
+		const studio = new StudioLoadingScreen(this, {
+			loadingFrameOffsetX: 0,
+			loadingFrameOffsetY: 220,
+			loadingFrameScaleModifier: 0.04,
+			text: 'PLAY LOUD. WIN WILD. DIJOKER STYLE',
+			textOffsetX: -5,
+			textOffsetY: 250,
+			textScale: 1,
+			textColor: '#FFFFFF',
+			text2: 'www.dijoker.com',
+			text2OffsetX: 0,
+			text2OffsetY: 280,
+			text2Scale: 1,
+			text2Color: '#FFFFFF'
+			
+		});
 		studio.show();
 		// Schedule fade-out after minimum 3s, then reveal preloader UI if needed
 		studio.fadeOutAndDestroy(3000, 500);
@@ -236,7 +274,6 @@ export class Preloader extends Scene
 		this.assetLoader.loadSymbolAssets(this);
 		this.assetLoader.loadButtonAssets(this);
 		this.assetLoader.loadFontAssets(this);
-		this.assetLoader.loadSpinnerAssets(this);
 		this.assetLoader.loadDialogAssets(this);
 		// Load free-spin card spine for scatter card overlay
 		this.assetLoader.loadAssetGroup(this, this.assetConfig.getFreeSpinCardAssets());
