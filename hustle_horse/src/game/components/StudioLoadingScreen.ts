@@ -43,6 +43,7 @@ export class StudioLoadingScreen {
     private progressBarPadding: number = 3;
     private onProgressHandler?: (progress: number) => void;
     private options: StudioLoadingScreenOptions;
+    private dotGrid?: Phaser.GameObjects.Graphics;
 
     constructor(scene: Scene, options?: StudioLoadingScreenOptions) {
         this.scene = scene;
@@ -56,28 +57,33 @@ export class StudioLoadingScreen {
             textOffsetX: 0,
             textOffsetY: 0,
             textScale: 1.0,
-            textColor: '#FFFFFF'
+            textColor: '#FFFFFF',
         };
     }
 
     public show(): void {
         try {
             this.shownAtMs = this.scene.time.now;
-            // Black fullscreen background
+            // Solid background color #10161D
+            const bgColor = 0x10161D;
             const bg = this.scene.add.rectangle(
                 this.scene.scale.width * 0.5,
                 this.scene.scale.height * 0.5,
                 this.scene.scale.width,
                 this.scene.scale.height,
-                0x000000
+                bgColor
             ).setOrigin(0.5, 0.5);
             this.container.add(bg);
             this.bg = bg;
 
+            // Create dot grid background overlay
+            this.createDotGrid();
+
             // Add loading frame if texture exists
             if (this.scene.textures.exists("loading_frame")) {
                 const centerX = this.scene.scale.width * 0.5 + (this.options.loadingFrameOffsetX || 0);
-                const centerY = this.scene.scale.height * 0.5 + (this.options.loadingFrameOffsetY || 0);
+                const baseY = 315;
+                const centerY = this.scene.scale.height * 0.5 + baseY;
                 
                 const loadingFrame = this.scene.add.image(
                     centerX,
@@ -102,7 +108,8 @@ export class StudioLoadingScreen {
             // Add text if provided
             if (this.options.text) {
                 const textX = this.scene.scale.width * 0.5 + (this.options.textOffsetX || 0);
-                const textY = this.scene.scale.height * 0.5 + (this.options.textOffsetY || 0);
+                const textBaseY = 345;
+                const textY = this.scene.scale.height * 0.5 + textBaseY;
                 
                 // Base font size - 14px as specified, scaled by textScale modifier
                 const baseFontSize = 14;
@@ -165,7 +172,8 @@ export class StudioLoadingScreen {
             // Add second text if provided
             if (this.options.text2) {
                 const text2X = this.scene.scale.width * 0.5 + (this.options.text2OffsetX || 0);
-                const text2Y = this.scene.scale.height * 0.5 + (this.options.text2OffsetY || 0);
+                const text2BaseY = this.options.text2OffsetY || 0;
+                const text2Y = this.scene.scale.height * 0.5 + text2BaseY;
                 
                 // Base font size - 14px as specified, scaled by text2Scale modifier
                 const baseFontSize = 14;
@@ -178,7 +186,7 @@ export class StudioLoadingScreen {
                 
                 // Create text with specified styles matching CSS properties:
                 // color: rgba(255, 255, 255, 0.50)
-                // font-family: Arial (default)
+                // font-family: poppins-regular
                 // font-size: 14px
                 // font-style: normal
                 // font-weight: 500
@@ -188,7 +196,7 @@ export class StudioLoadingScreen {
                     text2Y,
                     this.options.text2.toUpperCase(), // text-transform: uppercase
                     {
-                        fontFamily: 'Arial',
+                        fontFamily: 'poppins-regular',
                         fontSize: `${fontSize}px`,
                         color: textColor,
                         fontStyle: 'normal',
@@ -209,8 +217,8 @@ export class StudioLoadingScreen {
                             originalUpdateText();
                             // Set canvas context font with weight 500
                             if (this.context) {
-                                // Format: "500 14px Arial" (weight size family)
-                                this.context.font = `500 ${fontSize}px Arial`;
+                                // Format: "500 14px poppins-regular" (weight size family)
+                                this.context.font = `500 ${fontSize}px poppins-regular`;
                             }
                         }.bind(textObj);
                         // Force update to apply the font weight
@@ -303,8 +311,8 @@ export class StudioLoadingScreen {
             // Spine animation (DI JOKER)
             const hasSpine = ensureSpineLoader(this.scene, '[StudioLoadingScreen] show');
             if (hasSpine) {
-                const cx = this.scene.scale.width * 0.5;
-                const cy = this.scene.scale.height * 0.45;
+                const cx = this.scene.scale.width * 0.35;
+                const cy = this.scene.scale.height * 0.48;
                 const spine = (this.scene.add as any).spine(cx, cy, 'di_joker', 'di_joker-atlas');
                 spine.setOrigin(0.5, 0.5);
 
@@ -312,11 +320,32 @@ export class StudioLoadingScreen {
                 const desiredHeight = this.scene.scale.height * 0.4;
                 const spineH = (spine as any).height || 800;
                 const scale = desiredHeight / spineH;
-                spine.setScale(0.08);
+                spine.setScale(0.09);
                 this.container.add(spine);
                 this.spine = spine;
 
                 try { (spine as any).animationState?.setAnimation(0, 'animation', true); } catch {}
+                
+                // Add DiJoker logo next to the spine
+                if (this.scene.textures.exists('dijoker_logo')) {
+                    const logo = this.scene.add.image(
+                        cx + this.scene.scale.width * 0.27, // Position to the right of the spine
+                        cy,
+                        'dijoker_logo'
+                    );
+                    
+                    // Scale the logo appropriately (adjust scale factor as needed)
+                    const logoScale = 1; // Adjust this value to make the logo larger or smaller
+                    logo.setScale(logoScale);
+                    
+                    // Center the logo vertically with the spine
+                    logo.setOrigin(0.5, 0.5);
+                    
+                    // Add to the same container as the spine for proper layering
+                    this.container.add(logo);
+                } else {
+                    console.warn('DiJoker logo texture not found');
+                }
             }
 
             // Progress bar (similar to Preloader) – positioned just below the spine
@@ -333,20 +362,33 @@ export class StudioLoadingScreen {
                 barY = cy + displayH * 0.5 + Math.max(20, 24 * assetScale);
             }
 
+            // Store progress bar properties for animation updates
+            this.progressBarX = barX;
+            this.progressBarY = barY;
+            this.progressBarWidth = barWidth;
+            this.progressBarHeight = barHeight;
+
+            // Create progress bar background
             this.progressBarBg = this.scene.add.graphics();
+            this.progressBarBg.setPosition(0, 0); // Position at container origin
+            this.progressBarBg.setScrollFactor(0);
+            // Draw background rectangle at screen coordinates (container is at 0,0 so coordinates are absolute)
             this.progressBarBg.fillStyle(0x000000, 0.5);
             this.progressBarBg.fillRoundedRect(barX - barWidth * 0.5, barY - barHeight * 0.5, barWidth, barHeight, barHeight * 0.5);
             this.container.add(this.progressBarBg);
 
+            // Create progress bar fill
             this.progressBarFill = this.scene.add.graphics();
+            this.progressBarFill.setPosition(0, 0); // Position at container origin
+            this.progressBarFill.setScrollFactor(0);
+            // Initial empty fill
+            const innerX = barX - barWidth * 0.5 + this.progressBarPadding;
+            const innerY = barY - barHeight * 0.5 + this.progressBarPadding;
+            const innerWidth = barWidth - this.progressBarPadding * 2;
+            const innerHeight = barHeight - this.progressBarPadding * 2;
             this.progressBarFill.fillStyle(0x66D449, 1);
-            this.progressBarFill.fillRoundedRect(barX - barWidth * 0.5 + this.progressBarPadding, barY - barHeight * 0.5 + this.progressBarPadding, 0, barHeight - this.progressBarPadding * 2, (barHeight - this.progressBarPadding * 2) * 0.5);
+            this.progressBarFill.fillRoundedRect(innerX, innerY, 0, innerHeight, innerHeight * 0.5);
             this.container.add(this.progressBarFill);
-
-            this.progressBarX = barX;
-            this.progressBarY = barY - 40;
-            this.progressBarWidth = barWidth;
-            this.progressBarHeight = barHeight;
 
             // Time-driven progress fill over 3 seconds (independent of loader progress)
             const counter = { p: 0 } as any;
@@ -357,19 +399,20 @@ export class StudioLoadingScreen {
                 ease: 'Linear',
                 onUpdate: () => {
                     if (this.progressBarFill && this.progressBarX !== undefined && this.progressBarY !== undefined && this.progressBarWidth !== undefined && this.progressBarHeight !== undefined) {
-                        const innerX = this.progressBarX - this.progressBarWidth * 0.5 + this.progressBarPadding;
-                        const innerY = this.progressBarY - this.progressBarHeight * 0.5 + this.progressBarPadding;
-                        const innerWidth = this.progressBarWidth - this.progressBarPadding * 2;
-                        const innerHeight = this.progressBarHeight - this.progressBarPadding * 2;
+                        // Use the stored bar coordinates
+                        const fillX = this.progressBarX - this.progressBarWidth * 0.5 + this.progressBarPadding;
+                        const fillY = this.progressBarY - this.progressBarHeight * 0.5 + this.progressBarPadding;
+                        const fillWidth = this.progressBarWidth - this.progressBarPadding * 2;
+                        const fillHeight = this.progressBarHeight - this.progressBarPadding * 2;
                         const progress = Math.max(0, Math.min(1, counter.p));
                         this.progressBarFill.clear();
                         this.progressBarFill.fillStyle(0x37DB6E, 1);
                         this.progressBarFill.fillRoundedRect(
-                            innerX,
-                            innerY,
-                            Math.max(0.0001, innerWidth * progress),
-                            innerHeight,
-                            innerHeight * 0.5
+                            fillX,
+                            fillY,
+                            Math.max(0.0001, fillWidth * progress),
+                            fillHeight,
+                            fillHeight * 0.5
                         );
                     }
                 }
@@ -427,6 +470,54 @@ export class StudioLoadingScreen {
 
     public hide(): void {
         this.container.destroy(true);
+    }
+
+    private createDotGrid(): void {
+        // Create graphics object for dot grid
+        const dotGridGraphics = this.scene.add.graphics();
+        
+        // Dot grid configuration
+        const dotSpacing = 20; // Spacing between dots in pixels
+        const dotRadius = 1; // Radius of each dot
+        const dotColor = 0xFFFFFF; // White color
+        const dotAlpha = 0.15; // 20% opacity
+        
+        // Calculate grid dimensions
+        const width = this.scene.scale.width;
+        const height = this.scene.scale.height;
+        
+        // Calculate number of dots needed (add padding to ensure full coverage)
+        const cols = Math.ceil(width / dotSpacing) + 1;
+        const rows = Math.ceil(height / dotSpacing) + 1;
+        
+        // Calculate starting offset to center the grid
+        const offsetX = (width - (cols - 1) * dotSpacing) * 0.5;
+        const offsetY = (height - (rows - 1) * dotSpacing) * 0.5;
+        
+        // Set fill style for dots
+        dotGridGraphics.fillStyle(dotColor, dotAlpha);
+        
+        // Draw dots in a grid pattern
+        // Since graphics are added to container at (0,0), we draw at screen coordinates
+        for (let row = 0; row < rows; row++) {
+            for (let col = 0; col < cols; col++) {
+                const x = offsetX + col * dotSpacing;
+                const y = offsetY + row * dotSpacing;
+                
+                // Draw circle (dot)
+                dotGridGraphics.fillCircle(x, y, dotRadius);
+            }
+        }
+        
+        // Position graphics at origin (0,0) relative to container
+        dotGridGraphics.setPosition(0, 0);
+        dotGridGraphics.setScrollFactor(0);
+        
+        // Add to container - will render behind loading frame (added after) but above background (added before)
+        this.container.add(dotGridGraphics);
+        this.dotGrid = dotGridGraphics;
+        
+        console.log(`[StudioLoadingScreen] Dot grid created: ${cols}x${rows} dots, spacing: ${dotSpacing}px, radius: ${dotRadius}px`);
     }
 }
 

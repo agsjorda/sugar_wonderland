@@ -227,6 +227,7 @@ export class Game extends Scene {
 				// Target position (inside screen) with offset modifiers
 				const targetX = (width * 0.18) + this.dragonOffsetX;
 				const targetY = (height * 0.70) + this.dragonOffsetY;
+				this.sound.play('roar_hh');
 				// Spawn off-screen (upper side) then slide down
 				const dragon: any = (this.add as any).spine(targetX, -50, 'Big_Dragon', 'Big_Dragon-atlas');
 				if (dragon?.setOrigin) dragon.setOrigin(0.5, 0.5);
@@ -270,6 +271,7 @@ export class Game extends Scene {
                                         const vx = (Math.random() - 0.5) * 220; // slightly reduced horizontal drift
                                         const vy = 360 + Math.random() * 460;   // downward velocity
                                         ga.coinAnimation.spawnSingleCoin(burstX + spreadX, topY, vx, vy);
+													
                                     }
                                 }
                             } catch {}
@@ -580,20 +582,9 @@ export class Game extends Scene {
 
 		// Listen for win start to spawn coins based on win amount
 		gameEventManager.on(GameEventType.WIN_START, (data: any) => {
-			console.log('[Game] WIN_START event received - spawning coins based on win amount');
-			
-			// Get current spin data to determine win amount
-			if (this.symbols && this.symbols.currentSpinData) {
-				const spinData = this.symbols.currentSpinData;
-				const totalWin = this.calculateTotalWinFromPaylines(spinData.slot.paylines);
-				const betAmount = parseFloat(spinData.bet);
-				
-				console.log(`[Game] WIN_START: Total win: $${totalWin}, bet: $${betAmount}`);
-				this.spawnCoinsForWin(totalWin, betAmount);
-			} else {
-				console.log('[Game] WIN_START: No current spin data available, spawning default 5 coins');
-				this.spawnCoins(5);
-			}
+			console.log('[Game] WIN_START event received - coin pop effect disabled (keeping dragon burst only)');
+			// Disable all win-based coin spawns in both base and bonus scenes
+			return;
 		});
 
 		// Listen for winline animations completion to show win dialogs

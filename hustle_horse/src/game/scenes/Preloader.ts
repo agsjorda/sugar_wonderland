@@ -19,22 +19,13 @@ export class Preloader extends Scene
 	private assetLoader: AssetLoader;
 	private gameAPI: GameAPI;
 
-	// Loading bar graphics
-	private progressBarBg?: Phaser.GameObjects.Graphics;
-	private progressBarFill?: Phaser.GameObjects.Graphics;
-	private progressText?: Phaser.GameObjects.Text;
-	private progressBarX?: number;
-	private progressBarY?: number;
-	private progressBarWidth?: number;
-	private progressBarHeight?: number;
-	private progressBarPadding: number = 3;
-
 	// UI elements we need after load
 	private buttonSpin?: Phaser.GameObjects.Image;
 	private buttonBg?: Phaser.GameObjects.Image;
 	private pressToPlayText?: Phaser.GameObjects.Text;
 	private fullscreenBtn?: Phaser.GameObjects.Image;
 	private clockDisplay?: ClockDisplay;
+	private preloaderVerticalOffsetModifier: number = 10; // Vertical offset for Preloader elements only
 
 	constructor ()
 	{
@@ -60,8 +51,8 @@ export class Preloader extends Scene
 		
 		console.log(`[Preloader] Applying asset scale: ${assetScale}x`);
 		
-		// Black background for studio loading
-		this.cameras.main.setBackgroundColor(0x000000);
+		// Background color for studio loading (#10161D)
+		this.cameras.main.setBackgroundColor(0x10161D);
 
 		// Always show layered backgrounds: default first, then loading overlay; both scaled to cover
 		const bgDefault = this.add.image(
@@ -111,21 +102,134 @@ export class Preloader extends Scene
 		});
 		this.clockDisplay.create();
 
+		// Add loading frame, text and website URL on top of BG-loading (appears instantly)
+		const loadingFrameY = 335 + this.preloaderVerticalOffsetModifier;
+		const loadingFrame = this.add.image(
+			this.scale.width * 0.5 + 0,  // Offset X: 0 to match studio loading screen
+			this.scale.height * 0.5 + loadingFrameY, // Y position with modifier
+			"loading_frame_2"
+		).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(0);
+
+		// Scale loading frame using the same scale modifier as studio loading screen (0.04)
+		const frameScale = (Math.max(this.scale.width / loadingFrame.width, this.scale.height / loadingFrame.height)) * 0.04;
+		loadingFrame.setScale(frameScale);
+
+		// Add "PLAY LOUD. WIN WILD. DIJOKER STYLE" text
+		const textY = 365 + this.preloaderVerticalOffsetModifier;
+		const text = this.add.text(
+			this.scale.width * 0.5 - 5, // Slight offset to match original
+			this.scale.height * 0.5 + textY, // Position with modifier
+			'PLAY LOUD. WIN WILD. DIJOKER STYLE',
+			{
+				fontFamily: 'Inter',
+				fontSize: '14px',
+				color: '#FFFFFF',
+				fontStyle: 'normal',
+				align: 'center',
+				
+			}
+		).setOrigin(0.5, 0.5)
+		.setScrollFactor(0)
+		.setAlpha(1);
+
+		// Set font weight to 500
+		try {
+			const textObj = text as any;
+			const originalUpdateText = textObj.updateText?.bind(textObj);
+			if (originalUpdateText) {
+				textObj.updateText = function(this: any) {
+					originalUpdateText();
+					if (this.context) {
+						this.context.font = `500 14px Inter`;
+					}
+				}.bind(textObj);
+				textObj.updateText();
+			}
+		} catch (e) {
+			console.warn('Could not set font weight for loading text');
+		}
+
+		// Add "www.dijoker.com" text
+		const websiteTextY = 395 + this.preloaderVerticalOffsetModifier;
+		const websiteText = this.add.text(
+			this.scale.width * 0.5,
+			this.scale.height * 0.5 + websiteTextY, // Position with modifier
+			'www.dijoker.com',
+			{
+				fontFamily: 'poppins-regular',
+				fontSize: '14px',
+				color: '#FFFFFF',
+				fontStyle: 'normal',
+				align: 'center'
+			}
+		).setOrigin(0.5, 0.5)
+		.setScrollFactor(0)
+		.setAlpha(1);
+
+		// Set font weight to 500 for website text
+		try {
+			const textObj = websiteText as any;
+			const originalUpdateText = textObj.updateText?.bind(textObj);
+			if (originalUpdateText) {
+				textObj.updateText = function(this: any) {
+					originalUpdateText();
+					if (this.context) {
+						this.context.font = `500 14px poppins-regular`;
+					}
+				}.bind(textObj);
+				textObj.updateText();
+
+			// Add "Win up to 21,000x" text with the same style as "Press anywhere to continue"
+			const winTextY = 140 + this.preloaderVerticalOffsetModifier;
+			const winText = this.add.text(
+				this.scale.width * 0.5,
+				this.scale.height * 0.5 + winTextY,
+				'Win up to 21,000x',
+				{
+					fontFamily: 'Poppins-SemiBold, Poppins-Regular, Arial, sans-serif',
+					fontSize: '35px',
+					color: '#FFFFFF',
+					align: 'center'
+				}
+			)
+			.setOrigin(0.5, 0.5)
+			.setScrollFactor(0)
+			.setAlpha(1);
+
+			// Add breathing animation to the win text
+			this.tweens.add({
+				targets: winText,
+				scale: { from: 0.90, to: 1.15 },
+				duration: 1200,
+				ease: 'Sine.easeInOut',
+				yoyo: true,
+				repeat: -1,  // Infinite repeat
+				hold: 0,
+				delay: 0
+			});
+
+			winText.setStroke('#379557', 4) // Add green outline
+			.setShadow(0, 2, '#000000', 4, true, true); // Add shadow for better visibility
+		}
+		} catch (e) {
+			console.warn('Could not set font weight for website text');
+		}
+
 		if (screenConfig.isPortrait) {
 		// Display studio loading screen with loading frame and text options
 		// You can adjust these values: offsetX, offsetY, scaleModifier, text position, scale, and color
 		const studio = new StudioLoadingScreen(this, {
 			loadingFrameOffsetX: 0,
-			loadingFrameOffsetY: 220,
+			loadingFrameOffsetY: 335,
 			loadingFrameScaleModifier: 0.04,
 			text: 'PLAY LOUD. WIN WILD. DIJOKER STYLE',
 			textOffsetX: -5,
-			textOffsetY: 250,
+			textOffsetY: 365,
 			textScale: 1,
 			textColor: '#FFFFFF',
 			text2: 'www.dijoker.com',
 			text2OffsetX: 0,
-			text2OffsetY: 280,
+			text2OffsetY: 370,
 			text2Scale: 1,
 			text2Color: '#FFFFFF'
 			
@@ -134,13 +238,12 @@ export class Preloader extends Scene
 		// Schedule fade-out after minimum 3s, then reveal preloader UI if needed
 		studio.fadeOutAndDestroy(3000, 500);
 
-		// Delay revealing Preloader's own progress UI until studio fade completes
+		// Delay any post-fade actions
 		this.events.once('studio-fade-complete', () => {
-			// Optionally, we could reveal or update UI elements here if they were hidden
-			// For now, no-op; Preloader already shows its own progress bar
+			// Any post-fade actions can go here
 		});
 
-			const buttonY = this.scale.height * 0.8;
+			const buttonY = this.scale.height * 0.77;
 			
 			// Scale buttons based on quality (low quality assets need 2x scaling)
 			this.buttonBg = this.add.image(
@@ -171,17 +274,16 @@ export class Preloader extends Scene
             
             console.log(`[Preloader] Added hustle_horse_logo at scale: ${assetScale}x`);
 
-            // Smooth lively pulse (scale up/down) using Sine for commercial-like feel
-            const baseLogoScaleX = hustle_horse_logo.scaleX;
-            const baseLogoScaleY = hustle_horse_logo.scaleY;
+            // Breathing animation for the logo (same as win text)
             this.tweens.add({
                 targets: hustle_horse_logo,
-                scaleX: baseLogoScaleX * 1.30,
-                scaleY: baseLogoScaleY * 1.30,
-                duration: 600,
+                scale: { from: 0.95, to: 1.15 },
+                duration: 1500,
                 ease: 'Sine.easeInOut',
                 yoyo: true,
-                repeat: -1
+                repeat: -1,  // Infinite repeat
+                hold: 0,
+                delay: 0
             });
 
 			this.tweens.add({
@@ -191,74 +293,14 @@ export class Preloader extends Scene
 				repeat: -1,
 			});
 
-			// Progress bar below the spinning button
-			const barWidth = this.scale.width * 0.5;
-			const barHeight = Math.max(18, 30 * assetScale);
-			const barX = this.scale.width * 0.5;
-			const barY = buttonY + (this.buttonBg.displayHeight * 0.5) + Math.max(20, 24 * assetScale) + 50;
+			}
 
-			this.progressBarBg = this.add.graphics();
-			this.progressBarBg.fillStyle(0x000000, 0.5);
-			this.progressBarBg.fillRoundedRect(barX - barWidth * 0.5, barY - barHeight * 0.5, barWidth, barHeight, barHeight * 0.5);
-
-			this.progressBarFill = this.add.graphics();
-			this.progressBarFill.fillStyle(0x66D449, 1);
-			this.progressBarFill.fillRoundedRect(barX - barWidth * 0.5 + this.progressBarPadding, barY - barHeight * 0.5 + this.progressBarPadding, 0, barHeight - this.progressBarPadding * 2, (barHeight - this.progressBarPadding * 2) * 0.5);
-
-			// Save geometry for updates
-			this.progressBarX = barX;
-			this.progressBarY = barY;
-			this.progressBarWidth = barWidth;
-			this.progressBarHeight = barHeight;
-
-			this.progressText = this.add.text(barX, barY, '0%', {
-				fontFamily: 'poppins-bold',
-				fontSize: `${Math.round(18 * assetScale)}px`,
-				color: '#FFFFFF',
-			})
-			.setOrigin(0.5, 0.5)
-			.setShadow(0, 3, '#000000', 6, true, true);
-
-			// "Press Play To Continue" text (initially hidden)
-			this.pressToPlayText = this.add.text(barX, barY - (barHeight * 1), 'Press Play To Continue', {
-				fontFamily: 'Poppins-Regular',
-				fontSize: `${Math.round(22 * assetScale)}px`,
-				color: '#FFFFFF',
-				align: 'center'
-			})
-			.setOrigin(0.5, 1)
-			.setAlpha(0)
-			.setShadow(0, 3, '#000000', 6, true, true);
-
-		}
-
-		// Set up progress event listener
+		// Keep emitting for React overlay listeners if any
 		this.load.on('progress', (progress: number) => {
-			// Update in-scene progress bar
-			if (this.progressBarFill && this.progressBarX !== undefined && this.progressBarY !== undefined && this.progressBarWidth !== undefined && this.progressBarHeight !== undefined) {
-				const innerX = this.progressBarX - this.progressBarWidth * 0.5 + this.progressBarPadding;
-				const innerY = this.progressBarY - this.progressBarHeight * 0.5 + this.progressBarPadding;
-				const innerWidth = this.progressBarWidth - this.progressBarPadding * 2;
-				const innerHeight = this.progressBarHeight - this.progressBarPadding * 2;
-				this.progressBarFill.clear();
-				this.progressBarFill.fillStyle(0x66D449, 1);
-				this.progressBarFill.fillRoundedRect(
-					innerX,
-					innerY,
-					Math.max(0.0001, innerWidth * progress),
-					innerHeight,
-					innerHeight * 0.5
-				);
-			}
-			if (this.progressText) {
-				this.progressText.setText(`${Math.round(progress * 100)}%`);
-			}
-
-			// Keep emitting for React overlay listeners if any
 			EventBus.emit('progress', progress);
 		});
 		
-		EventBus.emit('current-scene-ready', this);	
+		EventBus.emit('current-scene-ready', this);
 	}
 
 	preload ()

@@ -2,7 +2,10 @@ import { SpinData } from "./SpinData";
 import { GameData } from "../game/components/GameData";
 import { gameStateManager } from "../managers/GameStateManager";
 import { SoundEffectType } from "../managers/AudioManager";
+import { Scene } from "phaser";
 
+
+const TOKEN_DISABLER = false;
 /**
  * Function to parse URL query parameters
  * @param name - The name of the parameter to retrieve
@@ -199,27 +202,47 @@ export class GameAPI {
         }
     }
     public async getBalance(): Promise<any> {
-        try{
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                this.showTokenExpiredPopup();
+                throw new Error('No authentication token available');
+            }
+
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 8000);
             const response = await fetch(`${getApiBaseUrl()}/api/v1/slots/balance`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    'Authorization': `Bearer ${token}`
                 },
                 signal: controller.signal
             });
             clearTimeout(timeout);
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const error = new Error(`HTTP error! status: ${response.status}`);
+                
+                // Show token expired popup for 400 or 401 status
+                if (response.status === 400 || response.status === 401) {
+                    this.showTokenExpiredPopup();
+                    localStorage.removeItem('token');
+                }
+                
+                throw error;
             }
 
             const data = await response.json();
             return data;
         } catch (error) {
             console.error('Error in getBalance:', error);
+            
+            // Handle network errors or other issues
+            if (this.isTokenExpiredError(error)) {
+                this.showTokenExpiredPopup();
+            }
+            
             throw error;
         }
     }
@@ -228,9 +251,39 @@ export class GameAPI {
      * 2. Post a spin request to the server
      * This method sends a spin request and returns the server response
      */
+    private showTokenExpiredPopup(): void {
+        if(TOKEN_DISABLER)
+            return;
+        // Find the game scene
+        const gameScene = (window as any).game?.scene?.getScene('Game') as Phaser.Scene;
+        if (gameScene) {
+            // Import dynamically to avoid circular dependency
+            import('../game/components/TokenExpiredPopup').then(module => {
+                const TokenExpiredPopup = module.TokenExpiredPopup;
+                const popup = new TokenExpiredPopup(gameScene);
+                popup.show();
+            });
+        } else {
+            console.error('Game scene not found. Cannot show token expired popup.');
+        }
+    }
+
+    private isTokenExpiredError(error: any): boolean {
+        const errorMessage = error?.message?.toLowerCase() || '';
+        return (
+            errorMessage.includes('token') || 
+            errorMessage.includes('expired') || 
+            errorMessage.includes('unauthorized') ||
+            errorMessage.includes('401') ||
+            errorMessage.includes('400')
+        );
+    }
+
     public async doSpin(bet: number, isBuyFs: boolean, isEnhancedBet: boolean): Promise<SpinData> {
-        if (!localStorage.getItem('token')) {
-            throw new Error('No game token available. Please initialize the game first.');
+        const token = localStorage.getItem('token');
+        if (!token) {
+            this.showTokenExpiredPopup();
+            throw new Error('No game token available. Please refresh the page.');
         }
         
         try {
@@ -255,7 +308,16 @@ export class GameAPI {
 
             if (!response.ok) {
                 const errorText = await response.text();
-                throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+                const error = new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+                
+                // Check for token expiration
+                if (response.status === 401 || response.status === 400) {
+                    this.showTokenExpiredPopup();
+                    // Clear the invalid token
+                    localStorage.removeItem('token');
+                }
+                
+                throw error;
             }
 
             const responseData = await response.json();

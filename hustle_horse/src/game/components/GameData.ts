@@ -14,9 +14,26 @@ export class GameData {
 	public dropDuration: number = 0;
 	public dropReelsDelay: number = 0;
 	public dropReelsDuration: number = 0;
+	private soundVolume: number = 1.0; // Default volume
 
 	public constructor() {
 		setSpeed(this, 1.0);
+	}
+
+	/**
+	 * Get the current sound volume
+	 * @returns The current sound volume (0.0 to 1.0)
+	 */
+	public getSoundVolume(): number {
+		return this.soundVolume;
+	}
+
+	/**
+	 * Set the sound volume
+	 * @param volume The volume to set (0.0 to 1.0)
+	 */
+	public setSoundVolume(volume: number): void {
+		this.soundVolume = Math.max(0, Math.min(1, volume)); // Clamp between 0 and 1
 	}
 }
 

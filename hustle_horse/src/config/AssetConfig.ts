@@ -123,7 +123,9 @@ export class AssetConfig {
 				'button_bg': `${prefix}/loading/button_bg.png`,
 				'button_spin': `${prefix}/loading/button_spin.png`,
 				'hustle_horse_logo': `${prefix}/loading/hustle-horse-logo.png`,
-				'loading_frame': `${prefix}/loading/loading-frame.png`
+				'loading_frame': `${prefix}/loading/loading-frame.png`,
+				'loading_frame_2': `${prefix}/loading/loading-frame-2.png`,
+				'dijoker_logo': `${prefix}/loading/DiJoker-logo.png`
 			},
 			spine: {
 				// Studio loading spine (DI JOKER) – only available in portrait/high
@@ -474,6 +476,8 @@ export class AssetConfig {
 				'freespinbg_ka': 'assets/sounds/Wins/freespin_ka.ogg',
 				// Pick-a-card overlay background music
 				'bgpickacard_hh': 'assets/sounds/BG/bgpickacard_hh.ogg',
+				'rumble_hh': 'assets/sounds/SFX/rumble_hh.ogg',
+				'roar_hh': 'assets/sounds/SFX/roar_hh.ogg',
 				'ambience_hh': 'assets/sounds/SFX/ambience_hh.ogg',
 				'spin_hh': 'assets/sounds/SFX/spin_hh.ogg',
 				'reeldrop_hh': 'assets/sounds/SFX/reeldrop_hh.ogg',

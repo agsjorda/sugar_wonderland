@@ -173,6 +173,8 @@ export class ScatterAnticipation {
 					const shakeMs = Math.max(50, Math.floor(2500 * turboMul));
 					const cam = this.scene.cameras?.main;
 					cam?.shake(shakeMs, 0.004);
+					this.scene.sound.play('rumble_hh');
+
 				} catch {}
 				try {
 					const sceneAny = this.scene as any;
