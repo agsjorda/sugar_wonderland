@@ -4,7 +4,6 @@ import { ensureSpineLoader, ensureSpineFactory } from '../../utils/SpineGuard';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { NumberDisplay, NumberDisplayConfig } from './NumberDisplay';
-import { IrisTransition } from './IrisTransition';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
@@ -362,10 +361,7 @@ private dialogLoops: Record<string, boolean> = {};
 
 	create(scene: Scene): void {
 		// Store scene reference for later use
-		this.currentScene = scene;
-		
-		// Initialize iris transition for scatter animation
-		this.irisTransition = new IrisTransition(scene);
+		this.currentScene = scene
 		
 		// Create main dialog overlay container
 		this.dialogOverlay = scene.add.container(0, 0);

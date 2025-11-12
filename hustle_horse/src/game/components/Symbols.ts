@@ -166,6 +166,9 @@ export class Symbols {
   private flashOverlayFadeTo: number = 0.0;
   private flashOverlayDurationMs: number = 200;
   private flashOverlaySpeedMultiplier: number = 1.0; // >1 = faster, <1 = slower
+  
+  // Scatter anticipation overlay
+  private scatterOverlay: Phaser.GameObjects.Graphics | null = null;
 
   constructor() { 
     this.scatterAnimationManager = ScatterAnimationManager.getInstance();
@@ -407,6 +410,80 @@ export class Symbols {
    * Create a persistent light grey background behind the symbol grid (50% opacity)
    * This is independent of the winning overlay (black) and remains visible.
    */
+  /**
+   * Create and manage the scatter anticipation overlay
+   */
+  public createScatterOverlay(): void {
+    try {
+      if (this.scatterOverlay) {
+        this.scatterOverlay.destroy();
+      }
+      
+      const bounds = this.getSymbolGridBounds();
+      const padding = 100; // Extra padding around the grid
+      
+      this.scatterOverlay = this.scene.add.graphics();
+      this.scatterOverlay.fillStyle(0x000000, 0.8); // 80% opacity black
+      
+      this.scatterOverlay.fillRect(
+        bounds.x - padding,
+        bounds.y - padding,
+        bounds.width + padding * 2,
+        bounds.height + padding * 2
+      );
+      
+      this.scatterOverlay.setDepth(29000); // Just below scatter anticipation (30000)
+      this.scatterOverlay.setAlpha(0); // Start transparent
+      this.scene.add.existing(this.scatterOverlay);
+    } catch (error) {
+      console.error('[Symbols] Error creating scatter overlay:', error);
+    }
+  }
+
+  public showScatterOverlay(): void {
+    try {
+      if (!this.scatterOverlay) {
+        this.createScatterOverlay();
+      }
+      
+      if (this.scatterOverlay) {
+        this.scene.tweens.add({
+          targets: this.scatterOverlay,
+          alpha: 1,
+          duration: 500,
+          ease: 'Cubic.easeOut'
+        });
+      }
+    } catch (error) {
+      console.error('[Symbols] Error showing scatter overlay:', error);
+    }
+  }
+
+  public hideScatterOverlay(): void {
+    try {
+      if (!this.scatterOverlay) return;
+      
+      this.scene.tweens.add({
+        targets: this.scatterOverlay,
+        alpha: 0,
+        duration: 300,
+        ease: 'Cubic.easeIn',
+        onComplete: () => {
+          try {
+            if (this.scatterOverlay) {
+              this.scatterOverlay.destroy();
+              this.scatterOverlay = null;
+            }
+          } catch (error) {
+            console.error('[Symbols] Error in scatter overlay hide complete:', error);
+          }
+        }
+      });
+    } catch (error) {
+      console.error('[Symbols] Error hiding scatter overlay:', error);
+    }
+  }
+
   private createBaseOverlayRect(): void {
     try {
       if (this.baseOverlayRect) {
@@ -4200,6 +4277,30 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
                 try {
                   const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
                   if (isAnticipation && index === 2) {
+                    // Show black overlay for scatter anticipation
+                    if (self.overlayRect) {
+                      // Fade out the base overlay first
+                      if (self.baseOverlayRect) {
+                        self.scene.tweens.add({
+                          targets: self.baseOverlayRect,
+                          alpha: 0,
+                          duration: 300,
+                          ease: 'Cubic.easeOut'
+                        });
+                      }
+                      
+                      // Fade in the black overlay
+                      self.overlayRect.setAlpha(0);
+                      self.overlayRect.setVisible(true);
+                      self.scene.tweens.add({
+                        targets: self.overlayRect,
+                        alpha: 0.7, // Slightly more transparent than regular win overlay
+                        duration: 500,
+                        ease: 'Cubic.easeOut'
+                      });
+                    }
+                    
+                    // Show scatter anticipation animations
                     const sa = (self.scene as any)?.scatterAnticipation;
                     if (sa && typeof sa.show === 'function') {
                       sa.show();
@@ -4216,6 +4317,7 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
                 try {
                   const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
                   if (isAnticipation && index === (SLOT_ROWS - 1)) {
+                    // Hide scatter anticipation animations
                     const sa = (self.scene as any)?.scatterAnticipation;
                     if (sa && typeof sa.hide === 'function') {
                       sa.hide();
@@ -4224,6 +4326,35 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
                     if (sa2 && typeof sa2.hide === 'function') {
                       sa2.hide();
                     }
+                    
+                    // Transition back to base overlay
+                    if (self.overlayRect) {
+                      // Fade out the black overlay
+                      self.scene.tweens.add({
+                        targets: self.overlayRect,
+                        alpha: 0,
+                        duration: 300,
+                        ease: 'Cubic.easeIn',
+                        onComplete: () => {
+                          if (self.overlayRect) {
+                            self.overlayRect.setVisible(false);
+                          }
+                        }
+                      });
+                      
+                      // Fade in the base overlay
+                      if (self.baseOverlayRect) {
+                        self.baseOverlayRect.setAlpha(0);
+                        self.baseOverlayRect.setVisible(true);
+                        self.scene.tweens.add({
+                          targets: self.baseOverlayRect,
+                          alpha: 0.2, // Original base overlay alpha
+                          duration: 300,
+                          ease: 'Cubic.easeOut'
+                        });
+                      }
+                    }
+                    
                     console.log('[Symbols] Scatter anticipation hidden after last reel drop');
                     // Reset anticipation flag for safety
                     (self.scene as any).__isScatterAnticipationActive = false;

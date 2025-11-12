@@ -2062,14 +2062,19 @@ export class SlotController {
 	 */
 	private changeBetBy(stepDelta: number): void {
 		try {
+			// Set flag to indicate this is an internal bet change
+			this.isInternalBetChange = true;
+			
 			const currentBetText = this.getBetAmountText();
 			const currentBet = currentBetText ? parseFloat(currentBetText) : (this.baseBetAmount || 0.2);
 			if (isNaN(currentBet)) {
+				this.isInternalBetChange = false; // Reset flag on error
 				return;
 			}
 			const currentIndex = this.findClosestBetIndex(currentBet);
 			const newIndex = Phaser.Math.Clamp(currentIndex + stepDelta, 0, this.betOptions.length - 1);
 			if (newIndex === currentIndex) {
+				this.isInternalBetChange = false; // Reset flag if no change
 				return; // No change
 			}
 			const previousBet = this.betOptions[currentIndex];
@@ -2077,8 +2082,12 @@ export class SlotController {
 			this.updateBetAmount(newBet);
 			// Notify systems of bet change
 			gameEventManager.emit(GameEventType.BET_UPDATE, { newBet, previousBet });
+			
+			// Reset the flag after bet update is complete
+			this.isInternalBetChange = false;
 		} catch (e) {
 			console.warn('[SlotController] Failed to change bet:', e);
+			this.isInternalBetChange = false; // Ensure flag is reset on error
 		}
 	}
 

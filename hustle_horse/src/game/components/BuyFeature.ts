@@ -406,6 +406,13 @@ export class BuyFeature {
 
 	private confirmPurchase(): void {
 		console.log(`[BuyFeature] Confirming purchase`);
+		// Trigger symbol flash effect
+		try {
+			this.sceneRef?.events.emit('flashAllSymbolsNow');
+		} catch (err) {
+			console.warn('[BuyFeature] Failed to trigger flashAllSymbolsNow', err);
+		}
+		
 		// Play spin sound immediately when buy feature is confirmed
 		try {
 			const am: any = (window as any).audioManager;

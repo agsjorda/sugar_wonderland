@@ -5,218 +5,378 @@ import { TurboConfig } from '../../config/TurboConfig';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { SCATTER_ANTICIPATION_POS_X_MUL, SCATTER_ANTICIPATION_POS_Y_MUL, SCATTER_ANTICIPATION_DEFAULT_SCALE } from '../../config/UIPositionConfig';
 
+// Animation configuration
+const ANIMATION_CONFIG = {
+  OVERLAY: {
+    DURATION: 500,
+    EASE: 'Cubic.easeOut',
+    HIDE_EASE: 'Cubic.easeIn',
+    BASE_OVERLAY_OPACITY: 0.2,
+    OVERLAY_OPACITY: 0.7
+  },
+  SHAKE: {
+    DURATION: 2500,
+    INTENSITY: 0.004,
+    DRAGON_MOVE_DURATION: 1200,
+    DRAGON_MOVE_DELAY: 500
+  }
+} as const;
+
+interface ScatterAnticipationOptions {
+  x?: number;
+  y?: number;
+  scale?: number;
+}
+
 export class ScatterAnticipation {
-	private scene: Scene;
-	private container: Phaser.GameObjects.Container | null = null;
-	private spineObject: any | null = null;
-	private ownsContainer: boolean = false;
-	private retryCount: number = 0;
-	// Optional desired overrides applied on create or via setters
-	private desiredX?: number;
-	private desiredY?: number;
-	private desiredScale?: number;
+  private scene: Scene;
+  private container: Phaser.GameObjects.Container | null = null;
+  private spineObject: any | null = null;
+  private ownsContainer: boolean = false;
+  private retryCount: number = 0;
+  private desiredX?: number;
+  private desiredY?: number;
+  private desiredScale?: number;
+  private isVisible: boolean = false;
 
-	private playDefaultLoop(): void {
-		if (!this.spineObject) return;
-		try {
-			// Ensure track is clean and running
-			this.spineObject.animationState.clearTracks();
-			this.spineObject.animationState.timeScale = Math.max(0.0001, this.spineObject.animationState.timeScale || 1);
-			// Try required default name first
-			this.spineObject.animationState.setAnimation(0, 'default', true);
-			console.log('[ScatterAnticipation] Playing animation: default (loop)');
-			return;
-		} catch {}
-
-		// Fallback to first available animation if default missing
-		try {
-			const animations = this.spineObject?.skeleton?.data?.animations || [];
-			const first = animations[0]?.name;
-			if (first) {
-				this.spineObject.animationState.setAnimation(0, first, true);
-				console.log(`[ScatterAnticipation] 'default' not found. Playing first animation: ${first} (loop)`);
-			}
-		} catch {}
-	}
+  private playDefaultLoop(): void {
+    if (!this.spineObject) return;
+    
+    try {
+      const { animationState } = this.spineObject;
+      animationState.clearTracks();
+      animationState.timeScale = Math.max(0.0001, animationState.timeScale || 1);
+      
+      // Try default animation first, fallback to first available
+      const animations = animationState.data.skeletonData.animations;
+      const defaultAnim = animations.some(a => a.name === 'default') 
+        ? 'default' 
+        : animations[0]?.name;
+      
+      if (defaultAnim) {
+        animationState.setAnimation(0, defaultAnim, true);
+        console.log(`[ScatterAnticipation] Playing animation: ${defaultAnim} (loop)`);
+      }
+    } catch (error) {
+      console.error('[ScatterAnticipation] Error playing animation:', error);
+    }
+  }
 
 	constructor() {}
 
-	public create(scene: Scene, parentContainer?: Phaser.GameObjects.Container, options?: { x?: number; y?: number; scale?: number }): void {
-		this.scene = scene;
+  public create(
+    scene: Scene, 
+    parentContainer?: Phaser.GameObjects.Container, 
+    options: ScatterAnticipationOptions = {}
+  ): void {
+    this.scene = scene;
 
-		// Guard against missing spine factory
-		if (!ensureSpineFactory(scene, '[ScatterAnticipation] create')) {
-			console.warn('[ScatterAnticipation] Spine factory unavailable. Skipping creation.');
-			return;
-		}
+    if (!ensureSpineFactory(scene, '[ScatterAnticipation] create')) {
+      console.warn('[ScatterAnticipation] Spine factory unavailable. Skipping creation.');
+      return;
+    }
 
-		// Use provided parent container to guarantee layering relative to symbols
-		if (parentContainer) {
-			this.container = parentContainer;
-			this.ownsContainer = false;
-		} else {
-			// Fallback: create our own container; place above all other layers
-			this.container = scene.add.container(0, 0);
-			this.container.setDepth(30000);
-			this.ownsContainer = true;
-		}
+    this.initializeContainer(parentContainer);
+    this.updatePositionOptions(options);
+    
+    const centerX = this.desiredX ?? scene.scale.width * SCATTER_ANTICIPATION_POS_X_MUL;
+    const centerY = this.desiredY ?? scene.scale.height * SCATTER_ANTICIPATION_POS_Y_MUL;
 
+    this.tryCreateSpine(centerX, centerY);
+    this.setupEventListeners();
+  }
 
-		// Capture desired overrides if provided
-		this.desiredX = options?.x ?? this.desiredX;
-		this.desiredY = options?.y ?? this.desiredY;
-		this.desiredScale = options?.scale ?? this.desiredScale;
+  private initializeContainer(parentContainer?: Phaser.GameObjects.Container): void {
+    if (parentContainer) {
+      this.container = parentContainer;
+      this.ownsContainer = false;
+    } else {
+      this.container = this.scene.add.container(0, 0);
+      this.container.setDepth(30000);
+      this.ownsContainer = true;
+    }
+  }
 
-		const centerX = (this.desiredX !== undefined ? this.desiredX : scene.scale.width * SCATTER_ANTICIPATION_POS_X_MUL);
-		const centerY = (this.desiredY !== undefined ? this.desiredY : scene.scale.height * SCATTER_ANTICIPATION_POS_Y_MUL);
+  private updatePositionOptions(options: ScatterAnticipationOptions): void {
+    this.desiredX = options.x ?? this.desiredX;
+    this.desiredY = options.y ?? this.desiredY;
+    this.desiredScale = options.scale ?? this.desiredScale;
+  }
 
-		this.tryCreateSpine(centerX, centerY);
-		this.setupTurboListeners();
-		this.setupWinListeners();
-	}
+  private setupEventListeners(): void {
+    this.setupTurboListeners();
+    this.setupWinListeners();
+  }
 
-	private tryCreateSpine(centerX: number, centerY: number): void {
-		if (!this.container) return;
-		// Ensure spine data is in cache; if not, retry a few times
-		if (!(this.scene.cache.json as any).has('Sparkler_Reel')) {
-			if (this.retryCount < 5) {
-				this.retryCount++;
-				console.warn(`[ScatterAnticipation] Spine json 'Sparkler_Reel' not ready. Retrying (${this.retryCount}/5)...`);
-				this.scene.time.delayedCall(250, () => this.tryCreateSpine(centerX, centerY));
-				return;
-			} else {
-				console.error('[ScatterAnticipation] Spine assets still not ready after retries. Skipping creation.');
-				return;
-			}
-		}
+  private tryCreateSpine(centerX: number, centerY: number): void {
+    if (!this.container) return;
 
-		try {
-			this.spineObject = this.scene.add.spine(centerX, centerY, 'Sparkler_Reel', 'Sparkler_Reel-atlas');
-			this.spineObject.setOrigin(0.5, 0.5);
-			this.spineObject.setScale(this.desiredScale !== undefined ? this.desiredScale : SCATTER_ANTICIPATION_DEFAULT_SCALE);
-			this.spineObject.setDepth(0);
-			this.playDefaultLoop();
-			this.applyTurboToAnticipation();
-			this.container.add(this.spineObject);
-			// Do not change visibility here; Game controls start visibility
-			console.log('[ScatterAnticipation] Created spine animation at center');
-		} catch (error) {
-			console.error('[ScatterAnticipation] Failed to create spine animation', error);
-		}
-	}
+    if (!this.isSpineDataReady()) {
+      this.retrySpineCreation(centerX, centerY);
+      return;
+    }
 
-	public setPosition(x: number, y: number): void {
-		this.desiredX = x;
-		this.desiredY = y;
-		if (this.spineObject) {
-			this.spineObject.setPosition(x, y);
-		}
-	}
+    this.createSpineObject(centerX, centerY);
+  }
 
-	public setScale(scale: number): void {
-		this.desiredScale = scale;
-		if (this.spineObject) {
-			this.spineObject.setScale(scale);
-		}
-	}
+  private isSpineDataReady(): boolean {
+    const isReady = (this.scene.cache.json as any).has('Sparkler_Reel');
+    if (!isReady && this.retryCount < 5) {
+      this.retryCount++;
+      return false;
+    }
+    return isReady;
+  }
 
-	public show(): void {
-		if (this.container) {
-			if (this.ownsContainer) {
-				this.container.setVisible(true);
-			} else if (this.spineObject) {
-				this.spineObject.setVisible(true);
-			}
-			// Ensure animation is playing when shown and turbo applied
-			this.playDefaultLoop();
-			this.applyTurboToAnticipation();
-			// Play anticipation loop SFX
-			try {
-				const audio = (window as any)?.audioManager;
-				if (audio && typeof audio.playSoundEffect === 'function') {
-					audio.playSoundEffect('anticipation');
-				}
-			} catch {}
-		}
-	}
+  private retrySpineCreation(centerX: number, centerY: number): void {
+    console.warn(`[ScatterAnticipation] Spine json 'Sparkler_Reel' not ready. Retrying (${this.retryCount}/5)...`);
+    this.scene.time.delayedCall(250, () => this.tryCreateSpine(centerX, centerY));
+  }
 
-	private applyTurboToAnticipation(): void {
-		try {
-			if (this.spineObject && this.spineObject.animationState) {
-				// Increase timeScale when turbo is ON
-				const isTurbo = (window as any)?.gameStateManager?.isTurbo ?? false;
-				const speed = isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1.0;
-				this.spineObject.animationState.timeScale = Math.max(0.0001, speed);
-			}
-		} catch {}
-	}
+  private createSpineObject(centerX: number, centerY: number): void {
+    try {
+      this.spineObject = this.scene.add.spine(centerX, centerY, 'Sparkler_Reel', 'Sparkler_Reel-atlas');
+      this.spineObject.setOrigin(0.5, 0.5);
+      this.spineObject.setScale(this.desiredScale ?? SCATTER_ANTICIPATION_DEFAULT_SCALE);
+      this.spineObject.setDepth(0);
+      this.spineObject.setVisible(false); // Start hidden
+      this.container?.add(this.spineObject);
+      console.log('[ScatterAnticipation] Created spine animation at center (hidden)');
+    } catch (error) {
+      console.error('[ScatterAnticipation] Failed to create spine animation', error);
+    }
+  }
 
-	private setupTurboListeners(): void {
-		try {
-			gameEventManager.on(GameEventType.TURBO_ON, () => this.applyTurboToAnticipation());
-			gameEventManager.on(GameEventType.TURBO_OFF, () => this.applyTurboToAnticipation());
-		} catch {}
-	}
+  public setPosition(x: number, y: number): void {
+    this.desiredX = x;
+    this.desiredY = y;
+    this.spineObject?.setPosition(x, y);
+  }
 
-	// On win: shake camera, send bottom dragon to right edge, then top to left after 0.9s
-	private setupWinListeners(): void {
-		try {
-			const triggerSequence = () => {
-				// Only run this movement in BASE scene, not during bonus
-				try {
-					if (gameStateManager?.isBonus) { return; }
-					// Only when scatter is actually hit on the base spin
-					if (!gameStateManager?.isScatter) { return; }
-				} catch {}
-				try {
-					const turboMul = gameStateManager?.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1.0;
-					const shakeMs = Math.max(50, Math.floor(2500 * turboMul));
-					const cam = this.scene.cameras?.main;
-					cam?.shake(shakeMs, 0.004);
-					this.scene.sound.play('rumble_hh');
+  public setScale(scale: number): void {
+    this.desiredScale = scale;
+    this.spineObject?.setScale(scale);
+  }
 
-				} catch {}
-				try {
-					const sceneAny = this.scene as any;
-					const symbols = sceneAny?.symbols;
-					if (symbols && typeof symbols.animateBottomDragonToX === 'function' && typeof symbols.animateTopDragonToX === 'function') {
-						const turboMul = gameStateManager?.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1.0;
-						const moveDur = Math.max(100, Math.floor(1200 * turboMul));
-						const delayTop = Math.max(0, Math.floor(500 * turboMul));
-						const rightX = this.scene.scale.width + 900;
-						symbols.animateBottomDragonToX(rightX, moveDur, 'Sine.easeInOut');
-						this.scene.time.delayedCall(delayTop, () => {
-							const leftX = -900;
-							symbols.animateTopDragonToX(leftX, moveDur, 'Sine.easeInOut');
-						});
-					}
-				} catch {}
-			};
+  public show(): void {
+    if (!this.container) return;
+    
+    this.setVisibility(true);
+    this.startOverlayTransition(true);
+    this.playAnticipationSound();
+    this.applyTurboToAnticipation();
+    
+    // Ensure the animation is playing when shown
+    if (this.spineObject) {
+      this.playDefaultLoop();
+    }
+  }
 
-			// General win (kept, but base-only gate inside trigger)
-			gameEventManager.on(GameEventType.WIN_START, triggerSequence);
-			// Scene-level scatter activation (kept)
-			try { this.scene.events.on('scatterBonusActivated', triggerSequence); } catch {}
-			// Precise: when Symbol0_HTBH actually starts its winning animation
-			try { this.scene.events.on('symbol0-win-start', triggerSequence); } catch {}
-		} catch {}
-	}
+  private setVisibility(visible: boolean): void {
+    this.isVisible = visible;
+    if (this.spineObject) {
+      this.spineObject.setVisible(visible);
+    }
+    if (this.ownsContainer) {
+      this.container?.setVisible(visible);
+    }
+  }
 
-	public hide(): void {
-		if (!this.container) return;
-		if (this.ownsContainer) {
-			this.container.setVisible(false);
-		} else if (this.spineObject) {
-			this.spineObject.setVisible(false);
-		}
-		// Fade out anticipation SFX
-		try {
-			const audio = (window as any)?.audioManager;
-			if (audio && typeof audio.fadeOutSfx === 'function') {
-				audio.fadeOutSfx('anticipation', 300);
-			}
-		} catch {}
-	}
+  private startOverlayTransition(show: boolean): void {
+    try {
+      const symbols = (this.scene as any)?.symbols;
+      if (!symbols) return;
+
+      this.ensureOverlaysExist(symbols);
+      
+      if (show) {
+        this.showOverlays(symbols);
+      } else {
+        this.hideOverlays(symbols);
+      }
+    } catch (error) {
+      console.error(`[ScatterAnticipation] Error in ${show ? 'show' : 'hide'} overlay transition:`, error);
+    }
+  }
+
+  private ensureOverlaysExist(symbols: any): void {
+    if (!symbols.baseOverlayRect) symbols.createBaseOverlayRect();
+    if (!symbols.overlayRect) symbols.createOverlayRect();
+    
+    // Ensure overlays are visible before starting transitions
+    symbols.baseOverlayRect?.setVisible(true);
+    symbols.overlayRect?.setVisible(true);
+  }
+
+  private showOverlays(symbols: any): void {
+    const { baseOverlayRect, overlayRect } = symbols;
+    const { DURATION, EASE, OVERLAY_OPACITY } = ANIMATION_CONFIG.OVERLAY;
+
+    // Fade out base overlay
+    this.scene.tweens.add({
+      targets: baseOverlayRect,
+      alpha: 0,
+      duration: DURATION,
+      ease: EASE
+    });
+
+    // Fade in black overlay
+    overlayRect.fillStyle(0x000000, OVERLAY_OPACITY);
+    overlayRect.setAlpha(0);
+    this.scene.tweens.add({
+      targets: overlayRect,
+      alpha: 1,
+      duration: DURATION,
+      ease: EASE,
+      onStart: () => overlayRect.setVisible(true)
+    });
+  }
+
+  private playAnticipationSound(): void {
+    try {
+      const audio = (window as any)?.audioManager;
+      audio?.playSoundEffect?.('anticipation');
+    } catch (error) {
+      console.error('[ScatterAnticipation] Error playing anticipation sound:', error);
+    }
+  }
+
+  private applyTurboToAnticipation(): void {
+    try {
+      const animationState = this.spineObject?.animationState;
+      if (!animationState) return;
+      
+      const isTurbo = (window as any)?.gameStateManager?.isTurbo ?? false;
+      const speed = isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1.0;
+      animationState.timeScale = Math.max(0.0001, speed);
+    } catch (error) {
+      console.error('[ScatterAnticipation] Error applying turbo:', error);
+    }
+  }
+
+  private setupTurboListeners(): void {
+    try {
+      const handler = () => this.applyTurboToAnticipation();
+      gameEventManager.on(GameEventType.TURBO_ON, handler);
+      gameEventManager.on(GameEventType.TURBO_OFF, handler);
+    } catch (error) {
+      console.error('[ScatterAnticipation] Error setting up turbo listeners:', error);
+    }
+  }
+
+  private setupWinListeners(): void {
+    try {
+      const triggerSequence = this.createWinSequenceHandler();
+      
+      // Register for different win events
+      gameEventManager.on(GameEventType.WIN_START, triggerSequence);
+      this.scene.events.on('scatterBonusActivated', triggerSequence);
+      this.scene.events.on('symbol0-win-start', triggerSequence);
+    } catch (error) {
+      console.error('[ScatterAnticipation] Error setting up win listeners:', error);
+    }
+  }
+
+  private createWinSequenceHandler(): () => void {
+    return () => {
+      if (!this.shouldTriggerWinSequence()) return;
+      this.triggerCameraShake();
+      this.animateDragons();
+    };
+  }
+
+  private shouldTriggerWinSequence(): boolean {
+    try {
+      return !gameStateManager?.isBonus && gameStateManager?.isScatter === true;
+    } catch {
+      return false;
+    }
+  }
+
+  private triggerCameraShake(): void {
+    try {
+      const turboMul = gameStateManager?.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1.0;
+      const { DURATION, INTENSITY } = ANIMATION_CONFIG.SHAKE;
+      const shakeMs = Math.max(50, Math.floor(DURATION * turboMul));
+      
+      this.scene.cameras.main.shake(shakeMs, INTENSITY);
+      this.scene.sound.play('rumble_hh');
+    } catch (error) {
+      console.error('[ScatterAnticipation] Error triggering camera shake:', error);
+    }
+  }
+
+  private animateDragons(): void {
+    try {
+      const symbols = (this.scene as any)?.symbols;
+      if (!symbols?.animateBottomDragonToX || !symbols.animateTopDragonToX) return;
+
+      const turboMul = gameStateManager?.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1.0;
+      const {
+        DRAGON_MOVE_DURATION: baseDuration,
+        DRAGON_MOVE_DELAY: baseDelay
+      } = ANIMATION_CONFIG.SHAKE;
+      
+      const moveDur = Math.max(100, Math.floor(baseDuration * turboMul));
+      const delayTop = Math.max(0, Math.floor(baseDelay * turboMul));
+      
+      // Animate bottom dragon to right
+      const rightX = this.scene.scale.width + 900;
+      symbols.animateBottomDragonToX(rightX, moveDur, 'Sine.easeInOut');
+      
+      // Animate top dragon to left after delay
+      this.scene.time.delayedCall(delayTop, () => {
+        const leftX = -900;
+        symbols.animateTopDragonToX(leftX, moveDur, 'Sine.easeInOut');
+      });
+    } catch (error) {
+      console.error('[ScatterAnticipation] Error animating dragons:', error);
+    }
+  }
+
+  public hide(): void {
+    if (!this.container || !this.isVisible) return;
+    
+    this.isVisible = false;
+    this.startOverlayTransition(false);
+    this.setVisibility(false);
+    this.fadeOutAnticipationSound();
+  }
+
+  private hideOverlays(symbols: any): void {
+    const { baseOverlayRect, overlayRect } = symbols;
+    const { DURATION, EASE, HIDE_EASE, BASE_OVERLAY_OPACITY } = ANIMATION_CONFIG.OVERLAY;
+
+    // Fade out black overlay
+    this.scene.tweens.add({
+      targets: overlayRect,
+      alpha: 0,
+      duration: DURATION,
+      ease: HIDE_EASE,
+      onComplete: () => overlayRect.setVisible(false)
+    });
+
+    // Fade in base overlay
+    baseOverlayRect.fillStyle(0xE5E5E5, BASE_OVERLAY_OPACITY);
+    baseOverlayRect.setAlpha(0);
+    baseOverlayRect.setVisible(true);
+    
+    this.scene.tweens.add({
+      targets: baseOverlayRect,
+      alpha: 1,
+      duration: DURATION,
+      ease: EASE
+    });
+  }
+
+  private fadeOutAnticipationSound(): void {
+    try {
+      const audio = (window as any)?.audioManager;
+      audio?.fadeOutSfx?.('anticipation', 300);
+    } catch (error) {
+      console.error('[ScatterAnticipation] Error fading out anticipation sound:', error);
+    }
+  }
 
 	public destroy(): void {
 		if (this.spineObject) {

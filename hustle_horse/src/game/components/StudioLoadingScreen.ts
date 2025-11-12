@@ -122,7 +122,7 @@ export class StudioLoadingScreen {
                 
                 // Create text with specified styles matching CSS properties:
                 // color: rgba(255, 255, 255, 0.50)
-                // font-family: Inter
+                // font-family: poppins-regular
                 // font-size: 14px
                 // font-style: normal
                 // font-weight: 500
@@ -132,7 +132,7 @@ export class StudioLoadingScreen {
                     textY,
                     this.options.text.toUpperCase(), // text-transform: uppercase
                     {
-                        fontFamily: 'Inter',
+                        fontFamily: 'poppins-regular',
                         fontSize: `${fontSize}px`,
                         color: textColor,
                         fontStyle: 'normal',
@@ -153,8 +153,8 @@ export class StudioLoadingScreen {
                             originalUpdateText();
                             // Set canvas context font with weight 500
                             if (this.context) {
-                                // Format: "500 14px Inter" (weight size family)
-                                this.context.font = `500 ${fontSize}px Inter`;
+                                // Format: "500 14px poppins-regular" (weight size family)
+                                this.context.font = `500 ${fontSize}px poppins-regular`;
                             }
                         }.bind(textObj);
                         // Force update to apply the font weight

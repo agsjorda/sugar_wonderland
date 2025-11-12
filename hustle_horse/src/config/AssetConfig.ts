@@ -38,8 +38,6 @@ export class AssetConfig {
 			images: {
 				'BG-Normal': `${prefix}/background/BG-Normal.png`,
 				'reel-frame': `${prefix}/background/reel-frame.png`,
-				'Border_Upper': useDragonTail ? `${prefix}/background/skeleton.png` : `${prefix}/background/Border_Upper.png`,
-				'Border_Lower': `${prefix}/background/Border_Lower.png`,
 				// Mostly for landscape bg
 				// 'balloon-01': `${prefix}/background/balloon-01.png`,
 				// 'balloon-02': `${prefix}/background/balloon-02.png`,
@@ -385,6 +383,9 @@ export class AssetConfig {
 		const prefix = this.getAssetPrefix();
 		console.log('[AssetConfig] Loading Scatter Anticipation assets');
 		return {
+			images: {
+				'reel-background': `${prefix}/background/reel-background.png`
+			},
 			spine: {
 				'Sparkler_Reel': {
 					atlas: `${prefix}/scatterAnticipation/Sparkler_Reel.atlas`,

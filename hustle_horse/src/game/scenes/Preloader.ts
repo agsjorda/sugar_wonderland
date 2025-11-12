@@ -121,7 +121,7 @@ export class Preloader extends Scene
 			this.scale.height * 0.5 + textY, // Position with modifier
 			'PLAY LOUD. WIN WILD. DIJOKER STYLE',
 			{
-				fontFamily: 'Inter',
+				fontFamily: 'poppins-regular',
 				fontSize: '14px',
 				color: '#FFFFFF',
 				fontStyle: 'normal',
@@ -140,7 +140,7 @@ export class Preloader extends Scene
 				textObj.updateText = function(this: any) {
 					originalUpdateText();
 					if (this.context) {
-						this.context.font = `500 14px Inter`;
+						this.context.font = `500 14px poppins-regular`;
 					}
 				}.bind(textObj);
 				textObj.updateText();
@@ -472,17 +472,17 @@ export class Preloader extends Scene
 		const fontsObj: any = (document as any).fonts;
 		if (fontsObj && typeof fontsObj.ready?.then === 'function') {
 			fontsObj.ready.then(() => {
-				this.progressText?.setFontFamily('poppins-bold');
-				this.pressToPlayText?.setFontFamily('poppins-regular');
+				this.progressText?.setFontFamily('Inter');
+				this.pressToPlayText?.setFontFamily('Inter');
 			}).catch(() => {
 				// Fallback: set families anyway
-				this.progressText?.setFontFamily('poppins-bold');
-				this.pressToPlayText?.setFontFamily('poppins-regular');
+				this.progressText?.setFontFamily('Inter');
+				this.pressToPlayText?.setFontFamily('Inter');
 			});
 		} else {
 			// Browser without document.fonts support
-			this.progressText?.setFontFamily('poppins-bold');
-			this.pressToPlayText?.setFontFamily('poppins-regular');
+			this.progressText?.setFontFamily('Inter');
+			this.pressToPlayText?.setFontFamily('Inter');
 		}
     }
 }
