@@ -228,7 +228,7 @@ export class SlotController {
 		return {
 			fontSize: '10px',
 			color: '#ffffff',
-			fontFamily: 'poppins-regular'
+
 		};
 	}
 
@@ -435,7 +435,7 @@ export class SlotController {
 			{
 				fontSize: '24px',
 				color: '#ffffff',
-				fontFamily: 'poppins-regular',
+
 				stroke: '#379557',
 				strokeThickness: 4
 			}
@@ -1187,7 +1187,7 @@ export class SlotController {
 			{
 				fontSize: '9px',
 				color: '#ffffff', // Green color
-				fontFamily: 'poppins-regular'
+
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.amplifyDescriptionContainer.add(descriptionLabel1);
@@ -1200,7 +1200,7 @@ export class SlotController {
 			{
 				fontSize: '9px',
 				color: '#ffffff', // White color
-				fontFamily: 'poppins-regular'
+
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.amplifyDescriptionContainer.add(descriptionLabel2);
@@ -1239,7 +1239,7 @@ export class SlotController {
 			{
 				fontSize: '12px',
 				color: '#00ff00', // Green color
-				fontFamily: 'poppins-bold'
+
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(balanceLabel);
@@ -1252,7 +1252,7 @@ export class SlotController {
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color
-				fontFamily: 'poppins-bold'
+
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(this.balanceAmountText);
@@ -1265,7 +1265,7 @@ export class SlotController {
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color
-				fontFamily: 'poppins-regular'
+
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(this.balanceDollarText);
@@ -1308,7 +1308,7 @@ export class SlotController {
 			{
 				fontSize: '12px',
 				color: '#00ff00', // Green color
-				fontFamily: 'poppins-bold'
+
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(betLabel);
@@ -1334,7 +1334,7 @@ export class SlotController {
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color
-				fontFamily: 'poppins-bold'
+	
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(this.betAmountText);
@@ -1350,7 +1350,7 @@ export class SlotController {
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color
-				fontFamily: 'poppins-regular'
+
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(this.betDollarText);
@@ -1598,7 +1598,7 @@ export class SlotController {
 			{
 				fontSize: '12px',
 				color: '#ffffff',
-				fontFamily: 'poppins-regular'
+			
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(featureLabel1);
@@ -1611,7 +1611,7 @@ export class SlotController {
 			{
 				fontSize: '14px',
 				color: '#ffffff',
-				fontFamily: 'poppins-bold'
+			
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(this.featureAmountText);
@@ -1624,7 +1624,7 @@ export class SlotController {
 			{
 				fontSize: '14px',
 				color: '#ffffff',
-				fontFamily: 'poppins-regular'
+				
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(this.featureDollarText);
@@ -3473,7 +3473,7 @@ setBuyFeatureBetAmount(amount: number): void {
 			{
 				fontSize: '30px',
 				color: '#00ff00', // Bright vibrant green as shown in image
-				fontFamily: 'poppins-bold'
+			
 			}
 		).setOrigin(0.5, 0.5).setDepth(15);
 		this.controllerContainer.add(this.freeSpinLabel);
@@ -3486,7 +3486,7 @@ setBuyFeatureBetAmount(amount: number): void {
 			{
 				fontSize: '30px',
 				color: '#00ff00', // Bright vibrant green as shown in image
-				fontFamily: 'poppins-bold'
+		
 			}
 		).setOrigin(0.5, 0.5).setDepth(15);
 		this.controllerContainer.add(this.freeSpinSubLabel);
@@ -3496,7 +3496,7 @@ setBuyFeatureBetAmount(amount: number): void {
             freeSpinX + 110,
             freeSpinY + 5,
             '0',
-            { fontSize: '80px', color: '#ffffff', fontFamily: 'poppins-bold' }
+            { fontSize: '80px', color: '#ffffff'}
         ).setOrigin(0.5, 0.5).setDepth(15);
         this.freeSpinNumber.setVisible(false);
         this.controllerContainer.add(this.freeSpinNumber);
