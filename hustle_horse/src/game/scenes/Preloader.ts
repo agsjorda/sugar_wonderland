@@ -121,7 +121,7 @@ export class Preloader extends Scene
 			this.scale.height * 0.5 + textY, // Position with modifier
 			'PLAY LOUD. WIN WILD. DIJOKER STYLE',
 			{
-				fontFamily: 'poppins-regular',
+				fontFamily: 'Poppins-Regular',
 				fontSize: '14px',
 				color: '#FFFFFF',
 				fontStyle: 'normal',
@@ -140,7 +140,7 @@ export class Preloader extends Scene
 				textObj.updateText = function(this: any) {
 					originalUpdateText();
 					if (this.context) {
-						this.context.font = `500 14px poppins-regular`;
+						this.context.font = `500 14px Poppins-Regular`;
 					}
 				}.bind(textObj);
 				textObj.updateText();
@@ -156,7 +156,7 @@ export class Preloader extends Scene
 			this.scale.height * 0.5 + websiteTextY, // Position with modifier
 			'www.dijoker.com',
 			{
-				fontFamily: 'poppins-regular',
+				fontFamily: 'Poppins-Regular',
 				fontSize: '14px',
 				color: '#FFFFFF',
 				fontStyle: 'normal',
@@ -174,7 +174,7 @@ export class Preloader extends Scene
 				textObj.updateText = function(this: any) {
 					originalUpdateText();
 					if (this.context) {
-						this.context.font = `500 14px poppins-regular`;
+						this.context.font = `500 14px Poppins-Regular`;
 					}
 				}.bind(textObj);
 				textObj.updateText();

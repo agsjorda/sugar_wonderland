@@ -125,6 +125,8 @@ export class ScatterAnimationManager {
         try {
           const gameScene = this.scene as any;
           const currentSpinData = gameScene?.symbols?.currentSpinData;
+          // Smoothly fade out reel background while scatter win overlay is visible
+          try { gameScene?.symbols?.fadeOutReelBackground?.(400); } catch {}
           if (currentSpinData && typeof this.scatterWinOverlay.setFreeSpinsFromSpinData === 'function') {
             this.scatterWinOverlay.setFreeSpinsFromSpinData(currentSpinData);
           } else if (typeof this.scatterWinOverlay.setFreeSpinsCount === 'function') {
@@ -156,6 +158,11 @@ export class ScatterAnimationManager {
             // Step 6: Hide scatter win overlay after dialog is shown
             this.scatterWinOverlay.hide(300, () => {
               console.log('[ScatterAnimationManager] Scatter win overlay hidden');
+              // Smoothly fade reel background back in before entering bonus
+              try {
+                const symbols = (this.scene as any)?.symbols;
+                symbols?.fadeInReelBackground?.(400);
+              } catch {}
               resolve();
             });
           });
@@ -462,6 +469,12 @@ export class ScatterAnimationManager {
       console.log(`[ScatterAnimationManager] Emitting scatterBonusActivated event with data:`, eventData);
       this.scene.events.emit('scatterBonusActivated', eventData);
       console.log(`[ScatterAnimationManager] Emitted scatterBonusActivated event with index ${data.scatterIndex} and ${freeSpins} free spins`);
+      // Ensure reel background is visible and reset tint for bonus start
+      try {
+        const symbols = (this.scene as any)?.symbols;
+        symbols?.showReelBackground?.();
+        symbols?.tweenReelBackgroundToDefaultTint?.(300);
+      } catch {}
     }
   }
 

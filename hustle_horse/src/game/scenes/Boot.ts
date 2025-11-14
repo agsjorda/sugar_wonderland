@@ -43,6 +43,8 @@ export class Boot extends Scene
 		
 		// Load loading assets using AssetLoader
 		this.assetLoader.loadLoadingAssets(this);
+		// Preload font assets so web fonts are ready before Preloader creates text
+		this.assetLoader.loadFontAssets(this);
 		
 		console.log(`[Boot] Loading assets for Boot scene`);
 	}
@@ -71,9 +73,26 @@ export class Boot extends Scene
 		// Emit the screen mode manager so UI components can access it
 		EventBus.emit('screen-mode-manager-ready', this.screenModeManager);
 		
-		this.scene.start('Preloader', { 
-			networkManager: this.networkManager, 
-			screenModeManager: this.screenModeManager 
-		});
+		// Start Preloader only after web fonts are ready, so Poppins-Regular is applied correctly
+		const startPreloader = () => {
+			this.scene.start('Preloader', {
+				networkManager: this.networkManager,
+				screenModeManager: this.screenModeManager
+			});
+		};
+		
+		const fontsObj: any = (document as any).fonts;
+		if (fontsObj && typeof fontsObj.ready?.then === 'function') {
+			fontsObj.ready.then(() => {
+				console.log('[Boot] Web fonts ready, starting Preloader');
+				startPreloader();
+			}).catch((error: any) => {
+				console.warn('[Boot] Font loading error, starting Preloader anyway', error);
+				startPreloader();
+			});
+		} else {
+			console.log('[Boot] document.fonts API not available, starting Preloader immediately');
+			startPreloader();
+		}
 	}
 }

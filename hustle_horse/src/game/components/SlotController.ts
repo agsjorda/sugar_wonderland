@@ -82,7 +82,9 @@ export class SlotController {
     private freeSpinBaseY: number = 0;
     private freeSpinOffsetX: number = 0;
     private freeSpinOffsetY: number = 60;
-	private autoplaySpinsRemainingText: Phaser.GameObjects.Text;
+	private autoplaySpinsRemainingText!: Phaser.GameObjects.Text;
+	private isSpinLocked: boolean = false;
+	private isBuyFeatureLocked: boolean = false;
 	private pendingFreeSpinsData: { scatterIndex: number; actualFreeSpins: number } | null = null;
 	
 	// Store pending balance updates until reels stop spinning
@@ -228,7 +230,7 @@ export class SlotController {
 		return {
 			fontSize: '10px',
 			color: '#ffffff',
-
+			fontFamily: 'Poppins-Regular',
 		};
 	}
 
@@ -435,7 +437,7 @@ export class SlotController {
 			{
 				fontSize: '24px',
 				color: '#ffffff',
-
+				fontFamily: 'Poppins-Regular',
 				stroke: '#379557',
 				strokeThickness: 4
 			}
@@ -561,6 +563,11 @@ export class SlotController {
 		const featureButton = this.buttons.get('feature');
 		
 		if (featureButton) {
+			// Guard: never enable while reels are spinning or spin flow is locked
+			if (gameStateManager.isReelSpinning || this.isSpinLocked) {
+				console.log('[SlotController] Skipping feature enable (reels spinning or spin locked)');
+				return;
+			}
 			const gameData = this.getGameData();
 			// Guard: do not re-enable during bonus or before explicit allow
 			if (gameStateManager.isBonus || !this.canEnableFeatureButton || (gameData && gameData.isEnhancedBet)) {
@@ -922,7 +929,15 @@ export class SlotController {
 		// Press animation
 		this.attachPushEffect(spinButton);
 		spinButton.on('pointerdown', async () => {
+			if (this.isSpinLocked) {
+				console.log('[SlotController] Spin click ignored - spin is locked');
+				return;
+			}
 			console.log('[SlotController] Spin button clicked');
+			// Ensure symbols container is restored above reel background for the new spin
+			try { this.symbols?.restoreSymbolsAboveReelBg?.(); } catch {}
+			// Tint reel background for spin start (safe-guarded)
+			try { this.symbols?.tweenReelBackgroundToSpinTint(300); } catch {}
 			if ((window as any).audioManager) {
 				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
 			}
@@ -945,15 +960,20 @@ export class SlotController {
 				return;
 			}
 			
-			// Disable spin button, bet buttons, feature button and play animations
-			this.disableSpinButton();
-			this.disableBetButtons();
-			this.disableFeatureButton();
-			this.playSpinButtonAnimation();
-			this.rotateSpinButton();
-			
-			// Use the centralized spin handler
-			await this.handleSpin();
+			this.isSpinLocked = true;
+			try {
+				// Disable spin button, bet buttons, feature button and play animations
+				this.disableSpinButton();
+				this.disableBetButtons();
+				this.disableFeatureButton();
+				this.playSpinButtonAnimation();
+				this.rotateSpinButton();
+				
+				// Use the centralized spin handler
+				await this.handleSpin();
+			} finally {
+				this.isSpinLocked = false;
+			}
 		});
 		this.buttons.set('spin', spinButton);
 		this.primaryControllers.add(spinButton);
@@ -1187,7 +1207,7 @@ export class SlotController {
 			{
 				fontSize: '9px',
 				color: '#ffffff', // Green color
-
+				fontFamily: 'Poppins-Regular',
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.amplifyDescriptionContainer.add(descriptionLabel1);
@@ -1200,7 +1220,7 @@ export class SlotController {
 			{
 				fontSize: '9px',
 				color: '#ffffff', // White color
-
+				fontFamily: 'Poppins-Regular',
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.amplifyDescriptionContainer.add(descriptionLabel2);
@@ -1239,7 +1259,7 @@ export class SlotController {
 			{
 				fontSize: '12px',
 				color: '#00ff00', // Green color
-
+				fontFamily: 'Poppins-Bold',
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(balanceLabel);
@@ -1252,7 +1272,7 @@ export class SlotController {
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color
-
+				fontFamily: 'Poppins-Regular',
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(this.balanceAmountText);
@@ -1265,7 +1285,7 @@ export class SlotController {
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color
-
+				fontFamily: 'Poppins-Regular',
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(this.balanceDollarText);
@@ -1308,7 +1328,7 @@ export class SlotController {
 			{
 				fontSize: '12px',
 				color: '#00ff00', // Green color
-
+				fontFamily: 'Poppins-Bold',
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(betLabel);
@@ -1334,7 +1354,7 @@ export class SlotController {
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color
-	
+				fontFamily: 'Poppins-Regular',
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(this.betAmountText);
@@ -1350,7 +1370,7 @@ export class SlotController {
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color
-
+				fontFamily: 'Poppins-Regular',
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(this.betDollarText);
@@ -1572,6 +1592,10 @@ export class SlotController {
         // Tighten interactive hit area to avoid overlaps with neighboring zones
         try { featureButton.setInteractive({ useHandCursor: true }); } catch { featureButton.setInteractive(); }
 		featureButton.on('pointerdown', () => {
+			if (this.isBuyFeatureLocked) {
+				console.log('[SlotController] Feature button click ignored - buy feature is locked');
+				return;
+			}
 			console.log('[SlotController] Feature button clicked');
 			if ((window as any).audioManager) {
 				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
@@ -1598,7 +1622,7 @@ export class SlotController {
 			{
 				fontSize: '12px',
 				color: '#ffffff',
-			
+				fontFamily: 'Poppins-Bold',
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(featureLabel1);
@@ -1611,7 +1635,7 @@ export class SlotController {
 			{
 				fontSize: '14px',
 				color: '#ffffff',
-			
+				fontFamily: 'Poppins-Regular',
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(this.featureAmountText);
@@ -1624,7 +1648,7 @@ export class SlotController {
 			{
 				fontSize: '14px',
 				color: '#ffffff',
-				
+				fontFamily: 'Poppins-Regular',
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(this.featureDollarText);
@@ -3473,7 +3497,7 @@ setBuyFeatureBetAmount(amount: number): void {
 			{
 				fontSize: '30px',
 				color: '#00ff00', // Bright vibrant green as shown in image
-			
+				fontFamily: 'Poppins-Bold',
 			}
 		).setOrigin(0.5, 0.5).setDepth(15);
 		this.controllerContainer.add(this.freeSpinLabel);
@@ -3486,7 +3510,7 @@ setBuyFeatureBetAmount(amount: number): void {
 			{
 				fontSize: '30px',
 				color: '#00ff00', // Bright vibrant green as shown in image
-		
+				fontFamily: 'Poppins-Bold',
 			}
 		).setOrigin(0.5, 0.5).setDepth(15);
 		this.controllerContainer.add(this.freeSpinSubLabel);
@@ -3496,7 +3520,7 @@ setBuyFeatureBetAmount(amount: number): void {
             freeSpinX + 110,
             freeSpinY + 5,
             '0',
-            { fontSize: '80px', color: '#ffffff'}
+            { fontSize: '80px', color: '#ffffff', fontFamily: 'Poppins-Bold', }
         ).setOrigin(0.5, 0.5).setDepth(15);
         this.freeSpinNumber.setVisible(false);
         this.controllerContainer.add(this.freeSpinNumber);
@@ -3895,14 +3919,25 @@ public updateAutoplayButtonState(): void {
 			return;
 		}
 		
+		// Lock buy feature to prevent spamming while drawer is open/processing
+		this.isBuyFeatureLocked = true;
+		
 		// Show the buy feature drawer
 		this.buyFeature.show({
 			featurePrice: 24000.00, // Default feature price
 			onClose: () => {
 				console.log('[SlotController] Buy feature drawer closed');
+				// Unlock when drawer is closed without purchase
+				this.isBuyFeatureLocked = false;
 			},
 			onConfirm: () => {
 				console.log('[SlotController] Buy feature confirmed');
+				// Ensure symbols container is above reel background; full reset/visibility will happen on SPIN event
+				try {
+					const gameScene: any = this.scene as any;
+					const symbols = gameScene?.symbols;
+					symbols?.restoreSymbolsAboveReelBg?.();
+				} catch {}
 				// Immediately disable interactions to prevent other actions
 				this.disableSpinButton();
 				this.disableAutoplayButton();
@@ -3910,6 +3945,8 @@ public updateAutoplayButtonState(): void {
 				this.disableBetButtons();
 				this.disableAmplifyButton();
 				this.handleBuyFeature();
+				// Unlock after starting buy feature processing; spin lock will protect spin flow
+				this.isBuyFeatureLocked = false;
 			}
 		});
 	}
@@ -4326,6 +4363,12 @@ public updateAutoplayButtonState(): void {
 	public enableSpinButton(): void {
 		const spinButton = this.buttons.get('spin');
 		if (spinButton) {
+			// Safety guard: never enable spin while reels are spinning or while a spin is locked
+			if (this.isSpinLocked || gameStateManager.isReelSpinning) {
+				console.log('[SlotController] enableSpinButton skipped - isSpinLocked or reels still spinning');
+				spinButton.disableInteractive();
+				return;
+			}
 			spinButton.clearTint(); // Remove gray tint
 			spinButton.setInteractive();
 			console.log('[SlotController] Spin button enabled');

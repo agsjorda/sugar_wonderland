@@ -66,7 +66,7 @@ export class TokenExpiredPopup extends GameObjects.Container {
             -40,
             'Your session has expired.\nPlease log in again to keep playing. \n\nIf you were actively playing a game, your progress has been saved, and you can pick up right where you left off after logging back in.',
             {
-                fontFamily: 'poppins-regular',
+                fontFamily: 'Poppins-Regular',
                 fontSize: '21px',
                 color: '#ffffff',
                 align: 'center',
@@ -99,7 +99,7 @@ export class TokenExpiredPopup extends GameObjects.Container {
             buttonY,
             'REFRESH',
             {
-                fontFamily: 'poppins-regular',
+                fontFamily: 'Poppins-Bold',
                 fontSize: '24px',
                 color: '#000000',
                 align: 'center'

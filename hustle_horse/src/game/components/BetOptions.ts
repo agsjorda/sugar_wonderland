@@ -89,7 +89,7 @@ export class BetOptions {
 		const betTitle = scene.add.text(x - 180, y - 150, 'BET', {
 			fontSize: '24px',
 			color: '#00ff00',
-			fontFamily: 'Poppins-Bold'
+			fontFamily: 'poppins-bold'
 		});
 		betTitle.setOrigin(0, 0.5);
 		this.container.add(betTitle);
@@ -175,7 +175,7 @@ export class BetOptions {
 		const buttonText = scene.add.text(width/2, height/2, value.toString(), {
 			fontSize: '24px',
 			color: '#ffffff',
-			fontFamily: 'Poppins-Bold'
+			fontFamily: 'poppins-bold'
 		});
 		buttonText.setOrigin(0.5, 0.5);
 		container.add(buttonText);
@@ -270,7 +270,7 @@ export class BetOptions {
 		this.confirmButton = scene.add.text(x, y, 'CONFIRM', {
 			fontSize: '24px',
 			color: '#000000',
-			fontFamily: 'Poppins-Bold'
+			fontFamily: 'poppins-bold'
 		});
 		this.confirmButton.setOrigin(0.5, 0.5);
 		this.container.add(this.confirmButton);

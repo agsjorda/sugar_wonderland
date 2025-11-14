@@ -479,10 +479,23 @@ export class AudioManager {
 			return;
 		}
 
-		// Stop any music that might still be playing (defensive against scene overlays)
-		this.stopAllMusicByKeys();
-
 		const music = this.musicInstances.get(musicType);
+		// If the requested music is already current and playing, do nothing to avoid a hard restart
+		if (this.currentMusic === musicType && music && music.isPlaying) {
+			console.log(`[AudioManager] ${musicType} already playing; skipping restart`);
+			this.startAmbientAudio();
+			return;
+		}
+
+		// Stop only non-target tracks that may be playing
+		try {
+			this.musicInstances.forEach((inst, type) => {
+				if (type !== musicType && inst && inst.isPlaying) {
+					try { inst.stop(); } catch {}
+				}
+			});
+		} catch {}
+
 		if (music) {
 			try {
 				music.play();
@@ -508,7 +521,20 @@ export class AudioManager {
 			console.log(`[AudioManager] Music locked to ${this.lockedMusic}, ignoring exclusive set to ${musicType}`);
 			return;
 		}
-		this.stopAllMusicByKeys();
+		// If already playing the requested type, don't restart to avoid audible glitch
+		const current = this.musicInstances.get(musicType);
+		if (this.currentMusic === musicType && current && current.isPlaying) {
+			console.log(`[AudioManager] ${musicType} already playing (exclusive); skipping restart`);
+			return;
+		}
+		// Stop only non-target tracks
+		try {
+			this.musicInstances.forEach((inst, type) => {
+				if (type !== musicType && inst && inst.isPlaying) {
+					try { inst.stop(); } catch {}
+				}
+			});
+		} catch {}
 		this.playBackgroundMusic(musicType);
 	}
 

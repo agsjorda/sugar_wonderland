@@ -2007,7 +2007,10 @@ export class ScatterWinOverlay {
     // Switch to bonus background music exclusively
     try {
       const audio = (window as any).audioManager;
-      if (audio && typeof audio.setExclusiveBackground === 'function') {
+      if (audio && typeof audio.crossfadeTo === 'function') {
+        audio.crossfadeTo(MusicType.BONUS, 450);
+      } else if (audio && typeof audio.setExclusiveBackground === 'function') {
+        // Fallback for older AudioManager
         audio.setExclusiveBackground(MusicType.BONUS);
       }
       // Now that BONUS is active, release lock

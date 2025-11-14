@@ -232,12 +232,9 @@ export class AssetConfig {
 		
 		return {
 			fonts: {
-				'poppins-thin': 'assets/fonts/poppins/Poppins-Thin.ttf',
-				'poppins-bold': 'assets/fonts/poppins/Poppins-Bold.ttf',
-				'poppins-regular': 'assets/fonts/poppins/Poppins-Regular.ttf',
-				// Inter font - add font files to assets/fonts/inter/ directory if not using web font
-				'inter-regular': 'assets/fonts/inter/Inter-Regular.ttf',
-				'inter-bold': 'assets/fonts/inter/Inter-Bold.ttf'
+				'Poppins-Thin': 'assets/fonts/poppins/Poppins-Thin.ttf',
+				'Poppins-Bold': 'assets/fonts/poppins/Poppins-Bold.ttf',
+				'Poppins-Regular': 'assets/fonts/poppins/Poppins-Regular.ttf',
 			}
 		};
 	}

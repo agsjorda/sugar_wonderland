@@ -48,6 +48,7 @@ import { SuperWinOverlay } from '../components/SuperWinOverlay';
 import { ScatterAnimationManager } from '../../managers/ScatterAnimationManager';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { TurboConfig } from '../../config/TurboConfig';
+import { WinTracker } from '../components/WinTracker';
 
 // Extend the Phaser Scene type to include the spine plugin
 export class Game extends Scene {
@@ -70,6 +71,7 @@ export class Game extends Scene {
 	private autoplayOptions!: AutoplayOptions;
 	private irisTransition!: IrisTransition;
 	private coinAnimation!: CoinAnimation;
+	private winTracker!: WinTracker;
 	public gameAPI!: GameAPI;
 	public audioManager!: AudioManager;
 	private menu!: Menu;
@@ -112,6 +114,7 @@ export class Game extends Scene {
         this.megaWinOverlay = new MegaWinOverlay();
         this.epicWinOverlay = new EpicWinOverlay();
         this.superWinOverlay = new SuperWinOverlay();
+		this.winTracker = new WinTracker();
 	}
 
 	init (data: any)
@@ -334,6 +337,9 @@ export class Game extends Scene {
 		this.symbols.create(this);
 		// Expose symbols on the scene for cross-component access (e.g., ScatterAnticipation)
 		try { (this as any).symbols = this.symbols; } catch {}
+		// Create win tracker bar below the reels in the base scene
+		this.winTracker.create(this);
+		try { (this as any).winTracker = this.winTracker; } catch {}
 
 		// Initialize AudioManager
 		this.audioManager = new AudioManager(this);
@@ -582,8 +588,8 @@ export class Game extends Scene {
 
 		// Listen for win start to spawn coins based on win amount
 		gameEventManager.on(GameEventType.WIN_START, (data: any) => {
-			console.log('[Game] WIN_START event received - coin pop effect disabled (keeping dragon burst only)');
-			// Disable all win-based coin spawns in both base and bonus scenes
+			console.log('[Game] WIN_START event received - winlines will control WinTracker per payline');
+			// Coin pop effect remains disabled (keeping dragon burst only)
 			return;
 		});
 
@@ -601,6 +607,8 @@ export class Game extends Scene {
 				const betAmount = parseFloat(spinData.bet);
 				
 				console.log(`[Game] WIN_STOP: Total win calculated: $${totalWin}, bet: $${betAmount}`);
+				// Schedule win tracker auto-hide shortly after win animations complete
+				try { this.winTracker.autoHideAfter(1500); } catch {}
 				
 				if (totalWin > 0) {
 					// Note: Win dialog threshold check moved to Symbols component for earlier detection
@@ -688,6 +696,8 @@ export class Game extends Scene {
 		// Listen for any spin to start (manual or autoplay)
 		gameEventManager.on(GameEventType.SPIN, (eventData: any) => {
 			console.log('[Game] SPIN event received - clearing win queue for new spin');
+			// Clear win tracker display for the new spin so it only shows during active winlines
+			try { this.winTracker.clear(); } catch {}
 			// Reset winlines tracking for the new spin
 			this.hasWinlinesThisSpin = false;
 			// Allow win dialogs again on the next spin
@@ -1292,8 +1302,8 @@ export class Game extends Scene {
 
 				// Switch to bonus background music
 				if (this.audioManager) {
-					this.audioManager.setExclusiveBackground(MusicType.BONUS);
-					console.log('[Game] Switched to bonus background music (exclusive)');
+					this.audioManager.crossfadeTo(MusicType.BONUS, 450);
+					console.log('[Game] Switched to bonus background music (crossfade)');
 				}
 			} else {
 				console.log('[Game] Bonus mode ended - enabling winningsDisplay');

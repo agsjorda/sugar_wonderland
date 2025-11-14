@@ -12,7 +12,7 @@ const ANIMATION_CONFIG = {
     EASE: 'Cubic.easeOut',
     HIDE_EASE: 'Cubic.easeIn',
     BASE_OVERLAY_OPACITY: 0.2,
-    OVERLAY_OPACITY: 0.7
+    OVERLAY_OPACITY: 0.85
   },
   SHAKE: {
     DURATION: 2500,
@@ -38,6 +38,8 @@ export class ScatterAnticipation {
   private desiredY?: number;
   private desiredScale?: number;
   private isVisible: boolean = false;
+  // Flag to control use of legacy anticipation black overlay graphics
+  private useLegacyAnticipationOverlay: boolean = false;
 
   private playDefaultLoop(): void {
     if (!this.spineObject) return;
@@ -187,6 +189,22 @@ export class ScatterAnticipation {
       const symbols = (this.scene as any)?.symbols;
       if (!symbols) return;
 
+		  // Always ensure symbols container renders above reel background during anticipation
+		  try { symbols.restoreSymbolsAboveReelBg?.(); } catch {}
+
+      // If legacy anticipation overlay is disabled, only drive reel background tint
+      if (!this.useLegacyAnticipationOverlay) {
+        try {
+          if (show) {
+            symbols.tweenReelBackgroundToAnticipationTint?.(ANIMATION_CONFIG.OVERLAY.DURATION);
+          } else {
+            symbols.tweenReelBackgroundToDefaultTint?.(ANIMATION_CONFIG.OVERLAY.DURATION);
+          }
+        } catch {}
+        console.log('[ScatterAnticipation] startOverlayTransition (legacy overlay disabled) - using reel background tint only');
+        return;
+      }
+
       this.ensureOverlaysExist(symbols);
       
       if (show) {
@@ -220,12 +238,11 @@ export class ScatterAnticipation {
       ease: EASE
     });
 
-    // Fade in black overlay
-    overlayRect.fillStyle(0x000000, OVERLAY_OPACITY);
+    // Fade in black overlay (opacity controlled by graphics alpha)
     overlayRect.setAlpha(0);
     this.scene.tweens.add({
       targets: overlayRect,
-      alpha: 1,
+      alpha: OVERLAY_OPACITY,
       duration: DURATION,
       ease: EASE,
       onStart: () => overlayRect.setVisible(true)

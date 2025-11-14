@@ -122,7 +122,7 @@ export class StudioLoadingScreen {
                 
                 // Create text with specified styles matching CSS properties:
                 // color: rgba(255, 255, 255, 0.50)
-                // font-family: poppins-regular
+                // font-family: Poppins-Regular
                 // font-size: 14px
                 // font-style: normal
                 // font-weight: 500
@@ -132,7 +132,7 @@ export class StudioLoadingScreen {
                     textY,
                     this.options.text.toUpperCase(), // text-transform: uppercase
                     {
-                        fontFamily: 'poppins-regular',
+                        fontFamily: 'Poppins-Regular',
                         fontSize: `${fontSize}px`,
                         color: textColor,
                         fontStyle: 'normal',
@@ -153,8 +153,8 @@ export class StudioLoadingScreen {
                             originalUpdateText();
                             // Set canvas context font with weight 500
                             if (this.context) {
-                                // Format: "500 14px poppins-regular" (weight size family)
-                                this.context.font = `500 ${fontSize}px poppins-regular`;
+                                // Format: "500 14px Poppins-Regular" (weight size family)
+                                this.context.font = `500 ${fontSize}px Poppins-Regular`;
                             }
                         }.bind(textObj);
                         // Force update to apply the font weight
@@ -194,9 +194,9 @@ export class StudioLoadingScreen {
                 const text2 = this.scene.add.text(
                     text2X,
                     text2Y,
-                    this.options.text2.toUpperCase(), // text-transform: uppercase
+                    this.options.text2,
                     {
-                        fontFamily: 'poppins-regular',
+                        fontFamily: 'Poppins-Regular',
                         fontSize: `${fontSize}px`,
                         color: textColor,
                         fontStyle: 'normal',
@@ -218,7 +218,7 @@ export class StudioLoadingScreen {
                             // Set canvas context font with weight 500
                             if (this.context) {
                                 // Format: "500 14px poppins-regular" (weight size family)
-                                this.context.font = `500 ${fontSize}px poppins-regular`;
+                                this.context.font = `500 ${fontSize}px Poppins-Regular`;
                             }
                         }.bind(textObj);
                         // Force update to apply the font weight
