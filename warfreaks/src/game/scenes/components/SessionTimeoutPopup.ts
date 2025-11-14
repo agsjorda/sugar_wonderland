@@ -21,6 +21,7 @@ export class SessionTimeoutPopup {
     }
 
     create(scene: GameScene): void {
+        return;
         this.isMobile = this.isMobileDevice();
 
         const width = scene.scale.width;
