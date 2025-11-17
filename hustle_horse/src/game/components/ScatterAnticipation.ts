@@ -189,10 +189,16 @@ export class ScatterAnticipation {
       const symbols = (this.scene as any)?.symbols;
       if (!symbols) return;
 
-		  // Always ensure symbols container renders above reel background during anticipation
-		  try { symbols.restoreSymbolsAboveReelBg?.(); } catch {}
+      try {
+        if (show) {
+          symbols.pushAllSymbolsBehindReelBg?.();
+          symbols.liftScatterSymbolsAboveReelBg?.();
+        } else {
+          symbols.restoreLiftedScatterSymbols?.();
+          symbols.restoreSymbolsAboveReelBg?.();
+        }
+      } catch {}
 
-      // If legacy anticipation overlay is disabled, only drive reel background tint
       if (!this.useLegacyAnticipationOverlay) {
         try {
           if (show) {

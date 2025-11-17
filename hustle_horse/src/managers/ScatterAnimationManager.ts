@@ -520,24 +520,9 @@ export class ScatterAnimationManager {
   }
 
   /**
-   * Check if we're currently in an active bonus mode (free spins)
-   */
-  private isInActiveBonusMode(): boolean {
-    // Check if we have free spins remaining or if we're in bonus mode
-    // Use SpinData freespin count
-    const hasFreeSpins = this.getCurrentFreeSpinsCount() > 0;
-    const isBonusMode = gameStateManager.isBonus;
-
-    console.log(`[ScatterAnimationManager] Checking bonus mode: hasFreeSpins=${hasFreeSpins}, isBonus=${isBonusMode}`);
-
-    return hasFreeSpins || isBonusMode;
-  }
-
-  /**
    * Get the current free spins count from SpinData
    */
   private getCurrentFreeSpinsCount(): number {
-    // Try to get free spins count from the current spin data
     if (this.scene) {
       const gameScene = this.scene as any; // Cast to access symbols property
       if (gameScene.symbols) {
@@ -547,141 +532,87 @@ export class ScatterAnimationManager {
         }
       }
     }
-
     // No SpinData available - return 0
     return 0;
   }
 
-  /**
-   * Consume one free spin (decrement count)
-   * Note: freespin.count should remain the original total count from API response
-   */
-  public consumeFreeSpin(): void {
-    const currentCount = this.getCurrentFreeSpinsCount();
-    if (currentCount > 0) {
-      const newCount = currentCount - 1;
-      console.log(`[ScatterAnimationManager] Consuming free spin: ${currentCount} -> ${newCount}`);
-
-      // Note: We should NOT modify freespin.count as it represents the original total won
-      // The remaining spins should be tracked separately for display purposes
-
-      // Free spins count updated in SpinData
-
-      // If no more free spins, end bonus mode
-      if (newCount === 0) {
-        this.endBonusMode();
-      }
-    }
-  }
-
-  /**
-   * End bonus mode when free spins are completed
-   */
-  public endBonusMode(): void {
-    console.log('[ScatterAnimationManager] Ending bonus mode');
-    gameStateManager.isBonus = false;
-
-    // Note: We should NOT modify freespin.count as it represents the original total won
-    // Only clear the items array and totalWin for cleanup
-    if (this.scene) {
-      const gameScene = this.scene as any; // Cast to access symbols property
-      if (gameScene.symbols && gameScene.symbols.currentSpinData) {
-        if (gameScene.symbols.currentSpinData.slot && gameScene.symbols.currentSpinData.slot.freespin) {
-          // Keep original count - don't modify freespin.count
-          gameScene.symbols.currentSpinData.slot.freespin.totalWin = 0;
-          gameScene.symbols.currentSpinData.slot.freespin.items = [];
-        }
-      }
-    }
-
-    // Free spins data cleared from SpinData (except original count)
-
-    // Emit events to switch back to normal mode
-    if (this.scene) {
-      this.scene.events.emit('hideBonusBackground');
-      this.scene.events.emit('hideBonusHeader');
-    }
-  }
-
-  /**
-   * Reset all symbols and animations after scatter bonus completes
-   */
-  private async resetAllSymbolsAndAnimations(): Promise<void> {
-    console.log('[ScatterAnimationManager] Resetting all symbols and animations...');
-
+  private resetAllSymbolsAndAnimations(): void {
+    // Stop any active background music to let overlays/scenes manage BGM exclusively
     try {
-      // Ensure no conflicting BG music during overlay/transition; overlay will manage BGM exclusively
-      try {
-        const audioMgr = (window as any).audioManager;
-        if (audioMgr && typeof audioMgr.stopCurrentMusic === 'function') {
-          audioMgr.stopCurrentMusic();
-          console.log('[ScatterAnimationManager] Stopped current background music to defer control to overlay');
-        }
-      } catch {}
+      const audioMgr = (window as any).audioManager;
+      if (audioMgr && typeof audioMgr.stopCurrentMusic === 'function') {
+        audioMgr.stopCurrentMusic();
+        console.log('[ScatterAnimationManager] Stopped current background music to defer control to overlay');
+      }
+    } catch {}
 
-      // Reset game state - but don't reset isBonus if we're in an active bonus mode
-      gameStateManager.isScatter = false;
-
-      // Only reset isBonus if we're not in an active bonus mode (free spins)
-      // The bonus mode should persist throughout the free spins
+    // Reset game state - but don't reset isBonus if we're in an active bonus mode
+    try { gameStateManager.isScatter = false; } catch {}
+    try {
       if (!this.isInActiveBonusMode()) {
         console.log('[ScatterAnimationManager] Not in active bonus mode, resetting isBonus to false');
         gameStateManager.isBonus = false;
       } else {
         console.log('[ScatterAnimationManager] In active bonus mode, keeping isBonus as true');
       }
+    } catch {}
+    try { gameStateManager.scatterIndex = 0; } catch {}
 
-      gameStateManager.scatterIndex = 0;
-
-      // Reset symbols container visibility
+    // Reset symbols container visibility
+    try {
       if (this.symbolsContainer) {
         this.symbolsContainer.setAlpha(1);
         this.symbolsContainer.setVisible(true);
         console.log('[ScatterAnimationManager] Symbols container reset to visible with alpha 1');
       }
+    } catch {}
 
-      // Re-enable scatter symbols
-      this.showScatterSymbols();
+    // Re-enable scatter symbols
+    try { this.showScatterSymbols(); } catch {}
 
-      // Hide spinner container
+    // Hide spinner container and kill its tweens
+    try {
       if (this.spinnerContainer) {
         this.spinnerContainer.setVisible(false);
         console.log('[ScatterAnimationManager] Spinner container hidden');
-      }
-
-      // Hide overlay if shown
-      try { this.overlayComponent?.hide?.(300); } catch {}
-
-      // Reset any active tweens on the spinner
-      if (this.spinnerContainer) {
         this.scene?.tweens.killTweensOf(this.spinnerContainer);
         console.log('[ScatterAnimationManager] Spinner tweens killed');
       }
+    } catch {}
 
-      
-      // Kill any active tweens on the symbols container
+    // Hide overlay if shown
+    try { this.overlayComponent?.hide?.(300); } catch {}
+
+    // Kill any active tweens on the symbols container
+    try {
       if (this.symbolsContainer) {
         this.scene?.tweens.killTweensOf(this.symbolsContainer);
         console.log('[ScatterAnimationManager] Symbols container tweens killed');
       }
-      
-      // Emit event to notify Symbols component to restore symbol visibility
+    } catch {}
+
+    // Notify Symbols to restore visibility and layering
+    try {
       if (this.scene) {
         this.scene.events.emit('scatterBonusCompleted');
         console.log('[ScatterAnimationManager] Emitted scatterBonusCompleted event');
       }
-      
-      console.log('[ScatterAnimationManager] All symbols and animations reset successfully');
-      
-    } catch (error) {
-      console.error('[ScatterAnimationManager] Error resetting symbols and animations:', error);
-    }
+    } catch {}
+
+    console.log('[ScatterAnimationManager] All symbols and animations reset successfully');
   }
 
-  public hideSpinner(): void {
-    if (this.spinnerContainer) {
-      this.spinnerContainer.setVisible(false);
-    }
+  /**
+   * Check if we're currently in an active bonus mode (free spins)
+   */
+  private isInActiveBonusMode(): boolean {
+    // Use SpinData freespin count
+    const hasFreeSpins = this.getCurrentFreeSpinsCount() > 0;
+    const isBonusMode = gameStateManager.isBonus;
+
+    console.log(`[ScatterAnimationManager] Checking bonus mode: hasFreeSpins=${hasFreeSpins}, isBonus=${isBonusMode}`);
+
+    return hasFreeSpins || isBonusMode;
   }
 
   private hideScatterSymbols(): void {

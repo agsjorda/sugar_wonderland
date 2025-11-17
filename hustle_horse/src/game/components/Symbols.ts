@@ -33,10 +33,13 @@ export class Symbols {
   public scatterAnimationManager: ScatterAnimationManager;
   public symbolDetector: SymbolDetector;
   public winLineDrawer!: WinLineDrawer;
-  private overlayRect?: Phaser.GameObjects.Graphics;
-  private baseOverlayRect?: Phaser.GameObjects.Graphics;
+  public overlayRect?: Phaser.GameObjects.Graphics;
+  public baseOverlayRect?: Phaser.GameObjects.Graphics;
   private baseOverlayBounds?: Phaser.Geom.Rectangle;
   private reelBackground?: Phaser.GameObjects.Image;
+  private reelBgTintTween?: Phaser.Tweens.Tween;
+  private scatterForegroundContainer?: Phaser.GameObjects.Container;
+  private liftedScatterSymbols: Array<{ obj: any; col: number; row: number }> = [];
   // Reel background modifiers
   private reelBgScale: number = 1.0; // uniform scale to apply after size fitting
   private reelBgOffsetX: number = 0;  // pixel offset on X
@@ -74,6 +77,12 @@ export class Symbols {
   public gridMaskPaddingRight: number = 20;
   public gridMaskPaddingTop: number = 11;
   public gridMaskPaddingBottom: number = 25;
+
+  // Flash overlay defaults (used by flashAllSymbolsOverlay)
+  private flashOverlayAlphaStart: number = 0.9;
+  private flashOverlayFadeTo: number = 0.0;
+  private flashOverlayDurationMs: number = 120;
+  private flashOverlaySpeedMultiplier: number = 1.0;
 
   // Bonus dragon border spine Y-offsets (apply only to spines/images in bonus)
   public bonusDragonTopOffsetY: number = 0;
@@ -183,18 +192,172 @@ export class Symbols {
   private stickyMultiplierPositions: Array<{ col: number; row: number; symbol: number }> = [];
   private stickyMultiplierOverlays: Array<{ col: number; row: number; sprite: Phaser.GameObjects.Sprite }> = [];
 
-  // Flash overlay configuration
-  private flashOverlayAlphaStart: number = 0.5;
-  private flashOverlayFadeTo: number = 0.0;
-  private flashOverlayDurationMs: number = 200;
-  private flashOverlaySpeedMultiplier: number = 1.0; // >1 = faster, <1 = slower
-  
   // Scatter anticipation overlay
   private scatterOverlay: Phaser.GameObjects.Graphics | null = null;
 
   constructor() { 
     this.scatterAnimationManager = ScatterAnimationManager.getInstance();
     this.symbolDetector = new SymbolDetector();
+  }
+
+  public fadeOutAllReelVisuals(durationMs: number = 250): void {
+    try {
+      if (this.container) {
+        this.scene.tweens.killTweensOf(this.container);
+        this.scene.tweens.add({ targets: this.container, alpha: 0, duration: durationMs, ease: 'Cubic.easeOut', onComplete: () => { try { this.container?.setVisible(false); } catch {} } });
+      }
+      if (this.scatterForegroundContainer) {
+        this.scene.tweens.killTweensOf(this.scatterForegroundContainer);
+        this.scene.tweens.add({ targets: this.scatterForegroundContainer, alpha: 0, duration: durationMs, ease: 'Cubic.easeOut', onComplete: () => { try { this.scatterForegroundContainer?.setVisible(false); } catch {} } });
+      }
+      try {
+        if (this.symbols) {
+          for (let c = 0; c < this.symbols.length; c++) {
+            const col = this.symbols[c];
+            if (!Array.isArray(col)) continue;
+            for (let r = 0; r < col.length; r++) {
+              const obj: any = col[r];
+              if (!obj) continue;
+              const p = (obj as any).parentContainer as Phaser.GameObjects.Container | undefined;
+              if (p !== this.container && p !== this.scatterForegroundContainer) {
+                try { this.scene.tweens.killTweensOf(obj); } catch {}
+                try { this.scene.tweens.add({ targets: obj, alpha: 0, duration: durationMs, ease: 'Cubic.easeOut', onComplete: () => { try { obj.setVisible?.(false); } catch {} } }); } catch {}
+              }
+            }
+          }
+        }
+      } catch {}
+      try {
+        if (this.overlayRect) {
+          this.scene.tweens.killTweensOf(this.overlayRect);
+          this.scene.tweens.add({ targets: this.overlayRect, alpha: 0, duration: durationMs, ease: 'Cubic.easeIn', onComplete: () => { try { this.overlayRect?.setVisible(false); } catch {} } });
+        }
+      } catch {}
+      try {
+        if (this.baseOverlayRect) {
+          this.scene.tweens.killTweensOf(this.baseOverlayRect);
+          this.baseOverlayRect.setVisible(true);
+          this.scene.tweens.add({ targets: this.baseOverlayRect, alpha: 0, duration: durationMs, ease: 'Cubic.easeIn', onComplete: () => { try { this.baseOverlayRect?.setVisible(false); } catch {} } });
+        }
+      } catch {}
+      try { this.fadeOutReelBackground(durationMs); } catch {}
+      try { this.scene.time.delayedCall(Math.max(0, durationMs + 50), () => { try { this.clearWinLines(); } catch {} }); } catch {}
+    } catch {}
+  }
+
+  public flashReelOverlay(reelIndex: number): void {
+    try {
+      if (!this.symbols || !this.symbols.length || !this.symbols[0] || !this.symbols[0].length) return;
+      let overlaysCreated = 0;
+      let pending = 0;
+      for (let col = 0; col < this.symbols.length; col++) {
+        const obj = this.symbols[col][reelIndex];
+        if (!obj) continue;
+        if ((obj as any).animationState) {
+          const center = (this as any).getCellCenter(col, reelIndex);
+          const w = Math.max(2, this.displayWidth);
+          const h = Math.max(2, this.displayHeight);
+          const g = this.scene.add.graphics();
+          g.fillStyle(0xffffff, Math.max(0, Math.min(1, this.flashOverlayAlphaStart)));
+          g.fillRect(center.x - w * 0.5, center.y - h * 0.5, w, h);
+          try { g.setDepth(1005); } catch {}
+          overlaysCreated++;
+          const effectiveSpeed = Math.max(0.05, this.flashOverlaySpeedMultiplier);
+          const dur = Math.max(20, Math.floor(this.flashOverlayDurationMs / effectiveSpeed));
+          pending++;
+          this.scene.tweens.add({
+            targets: g,
+            alpha: Math.max(0, Math.min(1, this.flashOverlayFadeTo)),
+            duration: dur,
+            ease: 'Sine.easeOut',
+            onComplete: () => {
+              try { g.destroy(); } catch {}
+              try {
+                pending--;
+                if (pending === 0 && overlaysCreated > 0) {
+                  this.clearWinLines();
+                }
+              } catch {}
+            }
+          });
+          continue;
+        }
+        let symbolValue: number | undefined;
+        try {
+          const key: string | undefined = (obj as any)?.texture?.key;
+          if (key && key.startsWith('symbol_')) {
+            const parts = key.split('_');
+            const parsed = parseInt(parts[1], 10);
+            if (!Number.isNaN(parsed)) symbolValue = parsed;
+          }
+        } catch {}
+        const pngKey = symbolValue !== undefined ? `symbol_${symbolValue}` : ((obj as any)?.texture?.key || '');
+        if (!pngKey || !this.scene.textures.exists(pngKey)) continue;
+        const home = (obj as any).__pngHome as { x: number; y: number } | undefined;
+        const size = (obj as any).__pngSize as { w: number; h: number } | undefined;
+        const nudge = (obj as any).__pngNudge as { x: number; y: number } | undefined;
+        const overlayOnly = (symbolValue !== undefined ? this.getOverlayNudge(symbolValue) : undefined) || { x: 0, y: 0 };
+        const centerX = (home?.x ?? obj.x) + (nudge?.x ?? 0) + overlayOnly.x;
+        const centerY = (home?.y ?? obj.y) + (nudge?.y ?? 0) + overlayOnly.y;
+        const w = Math.max(2, size?.w ?? obj.displayWidth ?? 0);
+        const h = Math.max(2, size?.h ?? obj.displayHeight ?? 0);
+        const overlayImg = this.scene.add.image(centerX, centerY, pngKey);
+        overlayImg.setOrigin(0.5, 0.5);
+        overlayImg.setDisplaySize(w, h);
+        try { overlayImg.setDepth(1005); } catch {}
+        if (typeof (overlayImg as any).setBlendMode === 'function') {
+          (overlayImg as any).setBlendMode(Phaser.BlendModes.ADD);
+        }
+        if (typeof (overlayImg as any).setTintFill === 'function') {
+          (overlayImg as any).setTintFill(0xffffff);
+        } else if (typeof (overlayImg as any).setTint === 'function') {
+          (overlayImg as any).setTint(0xffffff);
+        }
+        overlayImg.setAlpha(Math.max(0, Math.min(1, this.flashOverlayAlphaStart)));
+        overlayImg.setVisible(true);
+        overlaysCreated++;
+        const effectiveSpeed2 = Math.max(0.05, this.flashOverlaySpeedMultiplier);
+        const dur2 = Math.max(20, Math.floor(this.flashOverlayDurationMs / effectiveSpeed2));
+        pending++;
+        this.scene.tweens.add({
+          targets: overlayImg,
+          alpha: Math.max(0, Math.min(1, this.flashOverlayFadeTo)),
+          duration: dur2,
+          ease: 'Sine.easeOut',
+          onComplete: () => {
+            try { overlayImg.destroy(); } catch {}
+            try {
+              pending--;
+              if (pending === 0 && overlaysCreated > 0) {
+                this.clearWinLines();
+              }
+            } catch {}
+          }
+        });
+      }
+      console.log(`[Symbols] flashReelOverlay overlays: ${overlaysCreated} (reel ${reelIndex})`);
+    } catch {}
+  }
+
+  public liftReelSymbolsAboveReelBg(reelRowIndex: number): void {
+    try {
+      this.ensureScatterForegroundContainer();
+      const grid = (this.newSymbols && this.newSymbols.length > 0) ? this.newSymbols : this.symbols;
+      if (!grid) return;
+      for (let col = 0; col < grid.length; col++) {
+        try {
+          const column = grid[col];
+          const obj = column?.[reelRowIndex];
+          if (!obj) continue;
+          const parent = (obj as any).parentContainer as Phaser.GameObjects.Container | undefined;
+          if (parent === this.scatterForegroundContainer) continue;
+          try { this.container?.remove(obj); } catch {}
+          try { this.scatterForegroundContainer?.add(obj); } catch {}
+          this.liftedScatterSymbols.push({ obj, col, row: reelRowIndex });
+        } catch {}
+      }
+      try { (this.scene as any)?.children?.bringToTop?.(this.scatterForegroundContainer); } catch {}
+    } catch {}
   }
 
   /** Accessor: container that holds dragon_default and related base border visuals */
@@ -510,13 +673,19 @@ export class Symbols {
     if (!this.reelBackground) return;
     try {
       const img = this.reelBackground as any;
+      try { this.reelBgTintTween?.stop(); } catch {}
       this.scene.tweens.killTweensOf(img);
       const start = Phaser.Display.Color.IntegerToRGB(img.tintTopLeft ?? 0xffffff);
       const target = Phaser.Display.Color.IntegerToRGB(this.reelBgTintDefaultColor);
       const data: any = { r: start.r, g: start.g, b: start.b, a: img.alpha ?? this.reelBgTintDefaultAlpha };
       const turboMul = gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1.0;
       const effDuration = Math.max(0, Math.floor(durationMs * turboMul));
-      this.scene.tweens.add({
+      if (effDuration <= 0) {
+        try { img.setTint(Phaser.Display.Color.GetColor(target.r, target.g, target.b)); } catch {}
+        try { img.setAlpha(this.reelBgTintDefaultAlpha); } catch {}
+        return;
+      }
+      this.reelBgTintTween = this.scene.tweens.add({
         targets: data,
         r: target.r,
         g: target.g,
@@ -526,7 +695,8 @@ export class Symbols {
         onUpdate: () => {
           try { img.setTint(Phaser.Display.Color.GetColor(Math.floor(data.r), Math.floor(data.g), Math.floor(data.b))); } catch {}
           try { img.setAlpha(data.a); } catch {}
-        }
+        },
+        onComplete: () => { try { this.reelBgTintTween = undefined; } catch {} }
       });
     } catch {}
   }
@@ -535,13 +705,19 @@ export class Symbols {
     if (!this.reelBackground) return;
     try {
       const img = this.reelBackground as any;
+      try { this.reelBgTintTween?.stop(); } catch {}
       this.scene.tweens.killTweensOf(img);
       const start = Phaser.Display.Color.IntegerToRGB(img.tintTopLeft ?? 0xffffff);
       const target = Phaser.Display.Color.IntegerToRGB(this.reelBgTintSpinColor);
       const data: any = { r: start.r, g: start.g, b: start.b, a: img.alpha ?? this.reelBgTintSpinAlpha };
       const turboMul = gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1.0;
       const effDuration = Math.max(0, Math.floor(durationMs * turboMul));
-      this.scene.tweens.add({
+      if (effDuration <= 0) {
+        try { img.setTint(Phaser.Display.Color.GetColor(target.r, target.g, target.b)); } catch {}
+        try { img.setAlpha(this.reelBgTintSpinAlpha); } catch {}
+        return;
+      }
+      this.reelBgTintTween = this.scene.tweens.add({
         targets: data,
         r: target.r,
         g: target.g,
@@ -551,7 +727,8 @@ export class Symbols {
         onUpdate: () => {
           try { img.setTint(Phaser.Display.Color.GetColor(Math.floor(data.r), Math.floor(data.g), Math.floor(data.b))); } catch {}
           try { img.setAlpha(data.a); } catch {}
-        }
+        },
+        onComplete: () => { try { this.reelBgTintTween = undefined; } catch {} }
       });
     } catch {}
   }
@@ -560,13 +737,19 @@ export class Symbols {
     if (!this.reelBackground) return;
     try {
       const img = this.reelBackground as any;
+      try { this.reelBgTintTween?.stop(); } catch {}
       this.scene.tweens.killTweensOf(img);
       const start = Phaser.Display.Color.IntegerToRGB(img.tintTopLeft ?? 0xffffff);
       const target = Phaser.Display.Color.IntegerToRGB(this.reelBgTintWinColor);
       const data: any = { r: start.r, g: start.g, b: start.b, a: img.alpha ?? this.reelBgTintWinAlpha };
       const turboMul = gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1.0;
       const effDuration = Math.max(0, Math.floor(durationMs * turboMul));
-      this.scene.tweens.add({
+      if (effDuration <= 0) {
+        try { img.setTint(Phaser.Display.Color.GetColor(target.r, target.g, target.b)); } catch {}
+        try { img.setAlpha(this.reelBgTintWinAlpha); } catch {}
+        return;
+      }
+      this.reelBgTintTween = this.scene.tweens.add({
         targets: data,
         r: target.r,
         g: target.g,
@@ -576,7 +759,8 @@ export class Symbols {
         onUpdate: () => {
           try { img.setTint(Phaser.Display.Color.GetColor(Math.floor(data.r), Math.floor(data.g), Math.floor(data.b))); } catch {}
           try { img.setAlpha(data.a); } catch {}
-        }
+        },
+        onComplete: () => { try { this.reelBgTintTween = undefined; } catch {} }
       });
     } catch {}
   }
@@ -585,13 +769,19 @@ export class Symbols {
     if (!this.reelBackground) return;
     try {
       const img = this.reelBackground as any;
+      try { this.reelBgTintTween?.stop(); } catch {}
       this.scene.tweens.killTweensOf(img);
       const start = Phaser.Display.Color.IntegerToRGB(img.tintTopLeft ?? 0xffffff);
       const target = Phaser.Display.Color.IntegerToRGB(this.reelBgTintAnticipationColor);
       const data: any = { r: start.r, g: start.g, b: start.b, a: img.alpha ?? this.reelBgTintAnticipationAlpha };
       const turboMul = gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1.0;
       const effDuration = Math.max(0, Math.floor(durationMs * turboMul));
-      this.scene.tweens.add({
+      if (effDuration <= 0) {
+        try { img.setTint(Phaser.Display.Color.GetColor(target.r, target.g, target.b)); } catch {}
+        try { img.setAlpha(this.reelBgTintAnticipationAlpha); } catch {}
+        return;
+      }
+      this.reelBgTintTween = this.scene.tweens.add({
         targets: data,
         r: target.r,
         g: target.g,
@@ -601,7 +791,8 @@ export class Symbols {
         onUpdate: () => {
           try { img.setTint(Phaser.Display.Color.GetColor(Math.floor(data.r), Math.floor(data.g), Math.floor(data.b))); } catch {}
           try { img.setAlpha(data.a); } catch {}
-        }
+        },
+        onComplete: () => { try { this.reelBgTintTween = undefined; } catch {} }
       });
     } catch {}
   }
@@ -611,7 +802,17 @@ export class Symbols {
   }
 
   public showReelBackground(): void {
-    try { this.reelBackground?.setVisible(true); } catch {}
+    try {
+      const img: any = this.reelBackground;
+      if (!img) return;
+      img.setVisible(true);
+      // Ensure it's not fully transparent before tint tween runs
+      try {
+        if (typeof img.alpha !== 'number' || img.alpha < this.reelBgTintDefaultAlpha) {
+          img.setAlpha(this.reelBgTintDefaultAlpha);
+        }
+      } catch {}
+    } catch {}
   }
 
   public fadeOutReelBackground(durationMs: number = 300): void {
@@ -997,18 +1198,7 @@ export class Symbols {
     this.setupDialogEventListeners();
     this.setupSpinEventListener(); // Re-enabled to clean up symbols at spin start
     
-    // External trigger to flash all symbols with white overlay at spin-click time
-    this.scene.events.on('flashAllSymbolsNow', () => {
-      try {
-        // Ensure PNGs so overlay aligns perfectly
-        this.ensureCleanSymbolState();
-        // Avoid briefly revealing symbols during scatter/overlay transitions
-        if (!gameStateManager.isScatter) {
-          this.restoreSymbolVisibility();
-        }
-        this.flashAllSymbolsOverlay();
-      } catch {}
-    });
+    // Flash handling is centralized via beginSpinPhase; listener set in setupSpinEventListener
     
     // Create a persistent light grey, semi-transparent background behind the symbol grid
     this.createBaseOverlayRect();
@@ -1024,311 +1214,91 @@ export class Symbols {
     }
 
     // Listen for a full free spin reset request (after congrats/bonus end)
-    this.scene.events.on('resetFreeSpinState', () => {
-      console.log('[Symbols] resetFreeSpinState received - clearing free spin autoplay state');
-      if (this.freeSpinAutoplayTimer) {
-        this.freeSpinAutoplayTimer.destroy();
-        this.freeSpinAutoplayTimer = null;
+    try {
+      if (this.winLineDrawer) {
+        const hasActive = this.winLineDrawer.hasActiveLines();
+        const isManual = !gameStateManager.isAutoPlaying;
+        if (isManual || !hasActive) {
+          this.winLineDrawer.stopLooping();
+          this.winLineDrawer.clearLines();
+        }
       }
-      this.freeSpinAutoplayActive = false;
-      this.freeSpinAutoplaySpinsRemaining = 0;
-      this.freeSpinAutoplayWaitingForReelsStop = false;
-      this.freeSpinAutoplayWaitingForWinlines = false;
-      this.freeSpinAutoplayTriggered = false;
-      this.dialogListenerSetup = false;
+    } catch {}
+    try { this.hideWinningOverlay(); } catch {}
+    try { this.resetSymbolDepths(); } catch {}
+    try { this.restoreSymbolVisibility(); } catch {}
+    try { this.restoreSymbolsAboveReelBg(); } catch {}
+    // Ensure reel background starts at default tint on initial create
+    // try { this.tweenReelBackgroundToDefaultTint(0); } catch {}
+
+    // External trigger to flash all symbols with white overlay at spin-click time
+    this.scene.events.on('flashAllSymbolsNow', () => {
+      try {
+        // Ensure PNGs so overlay aligns perfectly
+        this.ensureCleanSymbolState();
+        // Avoid briefly revealing symbols during scatter/overlay transitions
+        if (!gameStateManager.isScatter) {
+          this.restoreSymbolVisibility();
+        }
+        this.flashAllSymbolsOverlay();
+      } catch {}
     });
-
-    // Apply turbo timeScale to active symbol Spine animations when turbo toggles
-    try {
-      gameEventManager.on(GameEventType.TURBO_ON, () => this.applyTurboToActiveSymbolSpines());
-      gameEventManager.on(GameEventType.TURBO_OFF, () => this.applyTurboToActiveSymbolSpines());
-    } catch {}
-    // Console helpers for live tuning (mask padding and dragon offsets)
-    try {
-      (window as any).setGridMaskPadding = (opts: { left?: number; right?: number; top?: number; bottom?: number }) => {
-        this.setGridMaskPadding(opts);
-        return { left: this.gridMaskPaddingLeft, right: this.gridMaskPaddingRight, top: this.gridMaskPaddingTop, bottom: this.gridMaskPaddingBottom };
-      };
-      (window as any).setBonusDragonOffsets = (opts: { topY?: number; bottomY?: number }) => {
-        this.setBonusDragonOffsets(opts);
-        return { topY: this.bonusDragonTopOffsetY, bottomY: this.bonusDragonBottomOffsetY };
-      };
-      (window as any).setBaseOverlayPadding = (opts: { left?: number; right?: number; top?: number; bottom?: number }) => {
-        this.setBaseOverlayPadding(opts);
-        return { left: this.baseOverlayPaddingLeft, right: this.baseOverlayPaddingRight, top: this.baseOverlayPaddingTop, bottom: this.baseOverlayPaddingBottom };
-      };
-      (window as any).setBorderOffsets = (opts: { topY?: number; bottomY?: number }) => {
-        this.setBorderOffsets(opts);
-        return { topY: this.borderTopOffsetY, bottomY: this.borderBottomOffsetY };
-      };
-      console.log('[Symbols] Console helpers available: setGridMaskPadding({...}), setBonusDragonOffsets({...}), setBaseOverlayPadding({...}), setBorderOffsets({...})');
-    } catch {}
   }
 
-  /** Update the grid mask padding and re-apply the mask. */
-  private setGridMaskPadding(opts: { left?: number; right?: number; top?: number; bottom?: number }): void {
-    if (opts.left !== undefined) this.gridMaskPaddingLeft = opts.left;
-    if (opts.right !== undefined) this.gridMaskPaddingRight = opts.right;
-    if (opts.top !== undefined) this.gridMaskPaddingTop = opts.top;
-    if (opts.bottom !== undefined) this.gridMaskPaddingBottom = opts.bottom;
-    if (!this.gridMaskShape) return;
-    try {
-      this.gridMaskShape.clear();
-      this.gridMaskShape.fillRect(
-        this.slotX - this.totalGridWidth * 0.5 - this.gridMaskPaddingLeft,
-        this.slotY - this.totalGridHeight * 0.5 - this.gridMaskPaddingTop,
-        this.totalGridWidth + this.gridMaskPaddingLeft + this.gridMaskPaddingRight,
-        this.totalGridHeight + this.gridMaskPaddingTop + this.gridMaskPaddingBottom
-      );
-      console.log('[Symbols] Updated mask padding:', {
-        left: this.gridMaskPaddingLeft,
-        right: this.gridMaskPaddingRight,
-        top: this.gridMaskPaddingTop,
-        bottom: this.gridMaskPaddingBottom
-      });
-    } catch {}
+  /** Synchronized: wrap up win visuals and restore layering */
+  private endWinPhase(): void {
+    try { this.clearWinLines(); } catch {}
+    try { this.hideWinningOverlay(); } catch {}
+    try { this.resetSymbolDepths(); } catch {}
+    try { this.restoreSymbolsAboveReelBg(); } catch {}
+    try { this.tweenReelBackgroundToDefaultTint(300); } catch {}
   }
 
-  /** Update bonus dragon border Y offsets and apply to existing borders if present. */
-  private setBonusDragonOffsets(opts: { topY?: number; bottomY?: number }): void {
-    if (opts.topY !== undefined) this.bonusDragonTopOffsetY = opts.topY;
-    if (opts.bottomY !== undefined) this.bonusDragonBottomOffsetY = opts.bottomY;
-    // Reposition existing borders if we have bounds
+  /** Synchronized: start win visuals and layering */
+  private beginWinPhase(): void {
+    // Show win overlay/tint first for consistent background
+    try { this.showWinningOverlay(); } catch {}
+    // Move winning symbols to front using current spin data if available
     try {
-      if (!this.baseOverlayBounds) return;
-      const gridBounds = this.baseOverlayBounds;
-      const expandX = 0;
-      const expandY = 0;
-      const baseTopY = gridBounds.y - expandY;
-      const baseBottomY = gridBounds.y - expandY + (gridBounds.height + expandY * 2);
-      const topY = baseTopY + BORDER_UPPER_OFFSET_Y + this.bonusDragonTopOffsetY;
-      const bottomY = baseBottomY + BORDER_LOWER_OFFSET_Y + this.bonusDragonBottomOffsetY;
-      if (this.baseOverlayBorderUpper && typeof this.baseOverlayBorderUpper.setY === 'function') {
-        this.baseOverlayBorderUpper.setY(topY);
+      const data = this.currentSpinData;
+      if (data) { this.moveWinningSymbolsToFront(data); }
+    } catch {}
+    // Push non-winning behind reel background in base mode
+    try { this.setNonWinningSymbolsBehindReelBg(true); } catch {}
+  }
+
+  /** Synchronized: wrap up spin when reels stop and there are no wins */
+  private endSpinPhase(): void {
+    try {
+      const noWins = !this.hasCurrentWins();
+      if (noWins) {
+        // No wins: ensure clean default state
+        this.clearWinLines();
+        this.hideWinningOverlay();
+        try { this.resetSymbolDepths(); } catch {}
+        try { this.restoreSymbolsAboveReelBg(); } catch {}
+        try { this.tweenReelBackgroundToDefaultTint(300); } catch {}
       }
-      if (this.baseOverlayBorderLower && typeof this.baseOverlayBorderLower.setY === 'function') {
-        this.baseOverlayBorderLower.setY(bottomY);
-      }
-      console.log('[Symbols] Applied dragon Y offsets:', { topY: this.bonusDragonTopOffsetY, bottomY: this.bonusDragonBottomOffsetY });
     } catch {}
   }
 
-  /** Update base overlay paddings and rebuild the overlay and borders to reflect changes. */
-  private setBaseOverlayPadding(opts: { left?: number; right?: number; top?: number; bottom?: number }): void {
-    if (opts.left !== undefined) this.baseOverlayPaddingLeft = opts.left;
-    if (opts.right !== undefined) this.baseOverlayPaddingRight = opts.right;
-    if (opts.top !== undefined) this.baseOverlayPaddingTop = opts.top;
-    if (opts.bottom !== undefined) this.baseOverlayPaddingBottom = opts.bottom;
+  private beginSpinPhase(): void {
+    try { this.clearWinLines(); } catch {}
+    try { this.hideWinningOverlay(); } catch {}
+    try { this.resetSymbolDepths(); } catch {}
+    try { this.restoreSymbolsAboveReelBg(); } catch {}
+    try { this.restoreSymbolVisibility(); } catch {}
+    try { this.restoreLiftedScatterSymbols(); } catch {}
+    try { this.container?.setVisible(true); this.container?.setAlpha(1); } catch {}
+    try { this.scatterForegroundContainer?.setVisible(true); this.scatterForegroundContainer?.setAlpha(1); } catch {}
     try {
-      // Recreate the base overlay and borders with new paddings
-      this.createBaseOverlayRect();
-      console.log('[Symbols] Updated base overlay paddings:', {
-        left: this.baseOverlayPaddingLeft,
-        right: this.baseOverlayPaddingRight,
-        top: this.baseOverlayPaddingTop,
-        bottom: this.baseOverlayPaddingBottom
-      });
-    } catch {}
-  }
-
-  /** Update PNG border Y offsets and apply to existing PNG borders immediately. */
-  private setBorderOffsets(opts: { topY?: number; bottomY?: number }): void {
-    if (opts.topY !== undefined) this.borderTopOffsetY = opts.topY;
-    if (opts.bottomY !== undefined) this.borderBottomOffsetY = opts.bottomY;
-    try {
-      if (!this.baseOverlayBounds) return;
-      const gridBounds = this.baseOverlayBounds;
-      const padT = this.baseOverlayPaddingTop;
-      const padB = this.baseOverlayPaddingBottom;
-      const baseTopY = gridBounds.y; // already includes padding top in bounds origin
-      const baseBottomY = gridBounds.y + gridBounds.height; // includes bottom padding
-      const topY = baseTopY + BORDER_UPPER_OFFSET_Y + this.borderTopOffsetY;
-      const bottomY = baseBottomY + BORDER_LOWER_OFFSET_Y + this.borderBottomOffsetY;
-      if (this.baseOverlayBorderUpper && typeof this.baseOverlayBorderUpper.setY === 'function') {
-        this.baseOverlayBorderUpper.setY(topY);
+      if (gameStateManager.isBonus) {
+        try { this.showReelBackground(); } catch {}
+        this.tweenReelBackgroundToSpinTint(300);
+      } else {
+        this.tweenReelBackgroundToDefaultTint(300);
       }
-      if (this.baseOverlayBorderLower && typeof this.baseOverlayBorderLower.setY === 'function') {
-        this.baseOverlayBorderLower.setY(bottomY);
-      }
-      console.log('[Symbols] Applied PNG border Y offsets:', { topY: this.borderTopOffsetY, bottomY: this.borderBottomOffsetY });
     } catch {}
-  }
-
-  // Turbo helpers: apply timeScale to existing symbol Spine animations
-  private applyTurboToActiveSymbolSpines(): void {
-    try {
-      if (!this.symbols || !this.symbols.length) return;
-      const isTurbo = (window as any)?.gameStateManager?.isTurbo ?? false;
-      const speed = isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1.0;
-      for (let col = 0; col < this.symbols.length; col++) {
-        const column = this.symbols[col];
-        for (let row = 0; row < column.length; row++) {
-          const obj: any = column[row];
-          if (obj && obj.animationState) {
-            try { obj.animationState.timeScale = Math.max(0.0001, speed); } catch {}
-          }
-        }
-      }
-      console.log(`[Symbols] Applied turbo timeScale ${speed} to active symbol Spine animations (isTurbo=${isTurbo})`);
-    } catch {}
-  }
-
-  
-
-  /**
-   * Applies a subtle flash effect to all symbols
-   */
-  private flashSymbols(): void {
-    if (!this.symbols || this.symbols.length === 0) return;
-    
-    const flashDuration = 300; // Duration of the flash effect in milliseconds
-    const targetAlpha = 0.6;   // Target alpha for the flash (0.6 = 60% opacity)
-    
-    for (let col = 0; col < this.symbols.length; col++) {
-      for (let row = 0; row < this.symbols[col].length; row++) {
-        const symbol = this.symbols[col][row];
-        if (symbol && symbol.setAlpha) {
-          // Store original alpha if not already stored
-          if (symbol.originalAlpha === undefined) {
-            symbol.originalAlpha = symbol.alpha;
-          }
-          
-          // Flash to target alpha
-          this.scene.tweens.add({
-            targets: symbol,
-            alpha: targetAlpha,
-            duration: flashDuration / 2,
-            ease: 'Linear',
-            yoyo: true,  // Return to original alpha
-            onComplete: () => {
-              // Restore original alpha if it was stored
-              if (symbol.originalAlpha !== undefined) {
-                symbol.setAlpha(symbol.originalAlpha);
-                delete symbol.originalAlpha;
-              }
-            }
-          });
-        }
-      }
-    }
-
-    // Restore container depth so symbols render above reel background again
-    this.setNonWinningSymbolsBehindReelBg(false);
-  }
-
-  // Lower the symbols container so non-winning symbols (remaining in container) render behind the reel background
-  private setNonWinningSymbolsBehindReelBg(enable: boolean): void {
-    try {
-      if (!this.container) return;
-      // Reel bg depth is -3; set container to -4 to place it behind
-      this.container.setDepth(enable ? -4 : 0);
-    } catch {}
-  }
-
-  // Public helper to restore symbol container above reel background immediately
-  public restoreSymbolsAboveReelBg(): void {
-    this.setNonWinningSymbolsBehindReelBg(false);
-  }
-
-  /**
-   * Flash all PNG symbols with a white overlay pulse (same style as reel overlay)
-   */
-  private flashAllSymbolsOverlay(): void {
-    try {
-      if (!this.symbols || !this.symbols.length || !this.symbols[0] || !this.symbols[0].length) return;
-      let overlaysCreated = 0;
-
-      // Flash per reel (group of 3 symbols vertically), retaining the same visual output
-      const reelsCount = this.symbols[0].length; // horizontal count
-      for (let reelIndex = 0; reelIndex < reelsCount; reelIndex++) {
-        for (let col = 0; col < this.symbols.length; col++) {
-          const obj = this.symbols[col][reelIndex];
-          if (!obj) continue;
-          if ((obj as any).animationState) continue; // only PNGs
-
-          // Determine symbol value to find its PNG texture
-          let symbolValue: number | undefined;
-          try {
-            const key: string | undefined = (obj as any)?.texture?.key;
-            if (key && key.startsWith('symbol_')) {
-              const parts = key.split('_');
-              const parsed = parseInt(parts[1], 10);
-              if (!Number.isNaN(parsed)) symbolValue = parsed;
-            }
-          } catch {}
-          const pngKey = symbolValue !== undefined ? `symbol_${symbolValue}` : ((obj as any)?.texture?.key || '');
-          if (!pngKey || !this.scene.textures.exists(pngKey)) continue;
-
-          // Prefer aligning to the original PNG anchor and size, plus the same nudge used for Spine
-          const home = (obj as any).__pngHome as { x: number; y: number } | undefined;
-          const size = (obj as any).__pngSize as { w: number; h: number } | undefined;
-          const nudge = (obj as any).__pngNudge as { x: number; y: number } | undefined;
-          const overlayOnly = (symbolValue !== undefined ? this.getOverlayNudge(symbolValue) : undefined) || { x: 0, y: 0 };
-          const centerX = (home?.x ?? obj.x) + (nudge?.x ?? 0) + overlayOnly.x;
-          const centerY = (home?.y ?? obj.y) + (nudge?.y ?? 0) + overlayOnly.y;
-          const w = Math.max(2, size?.w ?? obj.displayWidth ?? 0);
-          const h = Math.max(2, size?.h ?? obj.displayHeight ?? 0);
-
-          const overlayImg = this.scene.add.image(centerX, centerY, pngKey);
-          overlayImg.setOrigin(0.5, 0.5);
-          overlayImg.setDisplaySize(w, h);
-          // Draw on scene root (not in symbols container) so it can render above the dark overlay
-          try { overlayImg.setDepth(1005); } catch {}
-          if (typeof (overlayImg as any).setBlendMode === 'function') {
-            (overlayImg as any).setBlendMode(Phaser.BlendModes.ADD);
-          }
-          // Ensure it's bright white regardless of source
-          if (typeof (overlayImg as any).setTintFill === 'function') {
-            (overlayImg as any).setTintFill(0xffffff);
-          } else if (typeof (overlayImg as any).setTint === 'function') {
-            (overlayImg as any).setTint(0xffffff);
-          }
-          overlayImg.setAlpha(Math.max(0, Math.min(1, this.flashOverlayAlphaStart)));
-          overlayImg.setVisible(true);
-          overlaysCreated++;
-
-          const effectiveSpeed = Math.max(0.05, this.flashOverlaySpeedMultiplier);
-          const dur = Math.max(20, Math.floor(this.flashOverlayDurationMs / effectiveSpeed));
-          this.scene.tweens.add({
-            targets: overlayImg,
-            alpha: Math.max(0, Math.min(1, this.flashOverlayFadeTo)),
-            duration: dur,
-            ease: 'Sine.easeOut',
-            onComplete: () => {
-              try { overlayImg.destroy(); } catch {}
-            }
-          });
-        }
-      }
-      console.log(`[Symbols] flashAllSymbolsOverlay created overlays (per reel): ${overlaysCreated}`);
-    } catch {}
-  }
-
-  /**
-   * Configure the flash overlay effect
-   * - alphaStart: starting opacity (0..1)
-   * - fadeTo: target opacity to fade to (0..1)
-   * - durationMs: base duration in ms (before applying speedMultiplier)
-   * - speedMultiplier: >1 speeds up, <1 slows down
-   */
-  public setFlashOverlayOptions(options: {
-    alphaStart?: number;
-    fadeTo?: number;
-    durationMs?: number;
-    speedMultiplier?: number;
-  }): void {
-    if (options.alphaStart !== undefined) {
-      this.flashOverlayAlphaStart = Math.max(0, Math.min(1, options.alphaStart));
-    }
-    if (options.fadeTo !== undefined) {
-      this.flashOverlayFadeTo = Math.max(0, Math.min(1, options.fadeTo));
-    }
-    if (options.durationMs !== undefined) {
-      this.flashOverlayDurationMs = Math.max(20, Math.floor(options.durationMs));
-    }
-    if (options.speedMultiplier !== undefined) {
-      this.flashOverlaySpeedMultiplier = Math.max(0.05, options.speedMultiplier);
-    }
   }
 
   private setupSpinEventListener() {
@@ -1343,43 +1313,10 @@ export class Symbols {
         console.log('[Symbols] Manual spins are still allowed to proceed');
         return;
       }
-      
-      // Check if scatter animation is in progress before proceeding
-      if (this.scatterAnimationManager && this.scatterAnimationManager.isAnimationInProgress()) {
-        console.log('[Symbols] WARNING: SPIN event received during scatter bonus - this should not happen!');
-        console.log('[Symbols] Stack trace:', new Error().stack);
-        return;
-      }
-      
-      // First convert any Spine symbols back to PNG so the flash applies to PNG sprites
-      this.ensureCleanSymbolState();
-      
-      // Only clear winlines if they're not still animating or if this is a manual spin
-      // This prevents interrupting winline animations during autoplay continuation
-      if (this.winLineDrawer) {
-        const hasActiveWinlines = this.winLineDrawer.hasActiveLines();
-        const isManualSpin = !gameStateManager.isAutoPlaying;
-        
-        if (isManualSpin || !hasActiveWinlines) {
-          console.log('[Symbols] Clearing winlines - manual spin or no active winlines');
-          this.winLineDrawer.stopLooping();
-          this.winLineDrawer.clearLines();
-        } else {
-          console.log('[Symbols] Preserving active winlines during autoplay continuation');
-        }
-      }
-      // Hide winning overlay when spin starts
-      this.hideWinningOverlay();
-      // Reset symbol depths
-      this.resetSymbolDepths();
-      // Restore symbol visibility for new spin
-      this.restoreSymbolVisibility();
-
-      // Flash all symbols with white overlay after PNG restoration
-      this.flashAllSymbolsOverlay();
+      this.beginSpinPhase();
     });
     
-    // Listen for winline completion to resume autoplay
+    // Listen for winline completion to resume autoplay and end win phase
     gameEventManager.on(GameEventType.WIN_STOP, () => {
       console.log('[Symbols] WIN_STOP event received - resuming autoplay');
       console.log('[Symbols] freeSpinAutoplayWaitingForWinlines:', this.freeSpinAutoplayWaitingForWinlines);
@@ -1387,12 +1324,8 @@ export class Symbols {
       
       // Handle free spin autoplay waiting for winlines
       this.handleFreeSpinAutoplayWinStop();
-      
-      // Clear win lines for autoplay to ensure clean start for next spin
       if (gameStateManager.isAutoPlaying) {
-        console.log('[Symbols] Clearing win lines for autoplay on WIN_STOP');
-        this.clearWinLines();
-        this.hideWinningOverlay();
+        this.endWinPhase();
       }
       
       resumeAutoplayAfterWinlines(this.scene.gameData);
@@ -1405,10 +1338,11 @@ export class Symbols {
       }
     });
     
-    // Listen for winline start to pause autoplay
+    // Listen for winline start to pause autoplay and start win visuals
     gameEventManager.on(GameEventType.WIN_START, () => {
       console.log('[Symbols] WIN_START event received - pausing autoplay');
       pauseAutoplayForWinlines(this.scene.gameData);
+      this.beginWinPhase();
     });
 
     // Listen for win dialog close
@@ -1424,6 +1358,18 @@ export class Symbols {
         this.showCongratsDialogAfterDelay();
         gameStateManager.isBonusFinished = false;
       }
+    });
+
+    // Ensure spin tint is applied at every bonus REELS_START from within Symbols (avoids ordering issues)
+    gameEventManager.on(GameEventType.REELS_START, () => {
+      try {
+        if (gameStateManager.isBonus) {
+          console.log('[Symbols] REELS_START in bonus - enforcing spin tint');
+          this.showReelBackground();
+          this.restoreSymbolsAboveReelBg();
+          this.tweenReelBackgroundToSpinTint(0);
+        }
+      } catch {}
     });
 
   }
@@ -1500,6 +1446,8 @@ export class Symbols {
       // Note: Autoplay continuation is now handled in onSpinDataReceived after winline animations complete
       // This prevents conflicts and ensures proper timing
       console.log('[Symbols] REELS_STOP received - autoplay continuation handled separately in onSpinDataReceived');
+      // End-of-spin synchronized cleanup when there are no wins
+      try { this.endSpinPhase(); } catch {}
     });
   }
 
@@ -1523,7 +1471,36 @@ export class Symbols {
     this.scene.events.on('scatterBonusActivated', (data: { scatterIndex: number; actualFreeSpins: number }) => {
       console.log(`[Symbols] Scatter bonus activated with ${data.actualFreeSpins} free spins - storing data for autoplay`);
       this.pendingFreeSpinsData = data;
+      try { this.container?.setVisible(true); this.container?.setAlpha(1); } catch {}
+      try { this.scatterForegroundContainer?.setVisible(true); this.scatterForegroundContainer?.setAlpha(1); } catch {}
+      try { this.restoreSymbolsAboveReelBg(); } catch {}
+      try { this.restoreSymbolVisibility(); } catch {}
+      try { this.convertScatterSpinesToPNGs(true); } catch {}
+      try { this.ensureScatterSymbolsVisible(); } catch {}
     });
+
+    gameEventManager.on(GameEventType.IS_BONUS, () => {
+      try { this.container?.setVisible(true); this.container?.setAlpha(1); } catch {}
+      try { this.scatterForegroundContainer?.setVisible(true); this.scatterForegroundContainer?.setAlpha(1); } catch {}
+      try { this.restoreSymbolsAboveReelBg(); } catch {}
+      try { this.restoreSymbolVisibility(); } catch {}
+      try { this.convertScatterSpinesToPNGs(true); } catch {}
+      try { this.ensureScatterSymbolsVisible(); } catch {}
+    });
+
+    const __turboLayerFix = () => {
+      try {
+        const active = !!(this.scene as any)?.__isScatterAnticipationActive;
+        if (!active) return;
+        try { this.pushAllSymbolsBehindReelBg(); } catch {}
+        try { this.liftScatterSymbolsAboveReelBg(); } catch {}
+        try { this.liftReelSymbolsAboveReelBg((SLOT_ROWS - 1)); } catch {}
+        try { (this.scene as any)?.children?.bringToTop?.(this.container); } catch {}
+        try { (this.scene as any)?.children?.bringToTop?.(this.scatterForegroundContainer); } catch {}
+      } catch {}
+    };
+    gameEventManager.on(GameEventType.TURBO_ON, __turboLayerFix);
+    gameEventManager.on(GameEventType.TURBO_OFF, __turboLayerFix);
 
     // Listen for bonus mode toggles to recreate borders with correct assets
     this.scene.events.on('setBonusMode', (isBonus: boolean) => {
@@ -1536,6 +1513,18 @@ export class Symbols {
             });
           } catch {}
           this.stickyMultiplierOverlays = [];
+          try { this.restoreLiftedScatterSymbols(); } catch {}
+          try { this.resetSymbolDepths(); } catch {}
+          try { this.restoreSymbolsAboveReelBg(); } catch {}
+          try { this.restoreSymbolVisibility(); } catch {}
+          try { this.tweenReelBackgroundToDefaultTint(0); } catch {}
+        } else {
+          try { this.container?.setVisible(true); this.container?.setAlpha(1); } catch {}
+          try { this.scatterForegroundContainer?.setVisible(true); this.scatterForegroundContainer?.setAlpha(1); } catch {}
+          try { this.restoreSymbolsAboveReelBg(); } catch {}
+          try { this.restoreSymbolVisibility(); } catch {}
+          try { this.convertScatterSpinesToPNGs(true); } catch {}
+          try { this.ensureScatterSymbolsVisible(); } catch {}
         }
         // Recreate borders if base overlay exists
         if (this.baseOverlayRect && this.baseOverlayBounds) {
@@ -1665,10 +1654,7 @@ export class Symbols {
                 let played = false;
                 try { state.setAnimation(0, 'animation', true); played = true; } catch {}
                 if (!played) {
-                  try {
-                    const anims = (upper as any)?.skeleton?.data?.animations || [];
-                    const first = anims[0]?.name; if (first) state.setAnimation(0, first, true);
-                  } catch {}
+                  try { const anims = (upper as any)?.skeleton?.data?.animations || []; const first = anims[0]?.name; if (first) state.setAnimation(0, first, true); } catch {}
                 }
                 // Apply configured timeScale / frame stepping
                 try {
@@ -1791,6 +1777,11 @@ export class Symbols {
       
       // Restore all symbols to visible state
       this.restoreSymbolVisibility();
+      
+      // Ensure symbols are above reel background and default tint restored in base
+      try { this.resetSymbolDepths(); } catch {}
+      try { this.restoreSymbolsAboveReelBg(); } catch {}
+      try { this.tweenReelBackgroundToDefaultTint(0); } catch {}
       
       // Specifically ensure scatter symbols are visible
       this.ensureScatterSymbolsVisible();
@@ -2098,8 +2089,10 @@ export class Symbols {
         const overlayImg = this.scene.add.image(centerX, centerY, pngKey);
         overlayImg.setOrigin(0.5, 0.5);
         overlayImg.setDisplaySize(w, h);
-        if (this.container) this.container.add(overlayImg);
-        try { overlayImg.setDepth(650); } catch {}
+        // Add to the same container as symbols to inherit positioning/scale and avoid UI offset
+        try { this.container?.add(overlayImg); } catch {}
+        // Keep local depth low within the symbols layer so it never overlaps HUD/controllers
+        try { overlayImg.setDepth(1); } catch {}
         if (typeof (overlayImg as any).setBlendMode === 'function') {
           (overlayImg as any).setBlendMode(Phaser.BlendModes.ADD);
         }
@@ -2341,158 +2334,6 @@ export class Symbols {
     }
     
     console.log(`[Symbols] Scatter symbols state: ${visibleScatterCount}/${scatterCount} visible`);
-  }
-
-  /**
-   * Stop all Spine animations on symbols (without converting them)
-   */
-  public stopAllSpineAnimations(): void {
-    console.log('[Symbols] Stopping all Spine animations on symbols...');
-    
-    if (this.symbols && this.symbols.length > 0) {
-      let spineAnimationsStopped = 0;
-      
-      for (let col = 0; col < this.symbols.length; col++) {
-        for (let row = 0; row < this.symbols[col].length; row++) {
-          const symbol = this.symbols[col][row];
-          if (symbol && symbol.animationState) {
-            try {
-              if (symbol.animationState.clearTracks) {
-                symbol.animationState.clearTracks();
-                spineAnimationsStopped++;
-                console.log(`[Symbols] Stopped Spine animation at (${row}, ${col})`);
-              }
-            } catch (error) {
-              console.warn(`[Symbols] Could not stop Spine animation at (${row}, ${col}):`, error);
-            }
-          }
-        }
-      }
-      
-      console.log(`[Symbols] Stopped ${spineAnimationsStopped} Spine animations`);
-    }
-  }
-
-  /**
-   * Stop all active animations on symbols and convert Spine symbols back to PNG
-   */
-  public stopAllSymbolAnimations(): void {
-    console.log('[Symbols] Stopping all active symbol animations and converting Spine symbols back to PNG...');
-    
-    if (this.symbols && this.symbols.length > 0) {
-      let animationsStopped = 0;
-      let spineSymbolsConverted = 0;
-      
-      for (let col = 0; col < this.symbols.length; col++) {
-        for (let row = 0; row < this.symbols[col].length; row++) {
-          const symbol = this.symbols[col][row];
-          if (symbol) {
-            // Kill any active tweens on this symbol
-            this.scene.tweens.killTweensOf(symbol);
-            animationsStopped++;
-            
-            // Check if this is a Spine animation (winning symbol) and convert it back to PNG
-            if (symbol.animationState) {
-              // Stop the Spine animation immediately
-              try {
-                if (symbol.animationState.clearTracks) {
-                  symbol.animationState.clearTracks();
-                  console.log(`[Symbols] Stopped Spine animation at (${row}, ${col})`);
-                }
-              } catch (error) {
-                console.warn(`[Symbols] Could not stop Spine animation at (${row}, ${col}):`, error);
-              }
-              
-              // Convert back to PNG if we have the data
-              if (this.currentSymbolData) {
-                try {
-                  console.log(`[Symbols] Converting Spine symbol back to PNG at (${row}, ${col})`);
-                  
-                  // Get the original symbol value from currentSymbolData
-                  const symbolValue = this.currentSymbolData[col]?.[row];
-                  if (symbolValue !== undefined) {
-                    const x = symbol.x;
-                    const y = symbol.y;
-                    const spriteKey = 'symbol_' + symbolValue;
-                    
-                    if (this.scene.textures.exists(spriteKey)) {
-                      // Remove from container and destroy Spine object
-                      this.container.remove(symbol);
-                      symbol.destroy();
-                      
-                      // Create PNG sprite in its place using stored PNG home if available, else cell center
-                      const home = (symbol as any).__pngHome as { x: number; y: number } | undefined;
-                      const fallback = this.getCellCenter(col, row);
-                      const px = (home && typeof home.x === 'number') ? home.x : fallback.x;
-                      const py = (home && typeof home.y === 'number') ? home.y : fallback.y;
-                      const pngSprite = this.scene.add.sprite(px, py, spriteKey);
-                      pngSprite.displayWidth = this.displayWidth;
-                      pngSprite.displayHeight = this.displayHeight;
-                      
-                      // Add to container and update reference
-                      this.container.add(pngSprite);
-                      this.symbols[col][row] = pngSprite;
-                      
-                      spineSymbolsConverted++;
-                      console.log(`[Symbols] Successfully converted Spine to PNG at (${row}, ${col}): ${spriteKey}`);
-                    } else {
-                      console.error(`[Symbols] Sprite texture '${spriteKey}' does not exist for conversion`);
-                    }
-                  }
-                } catch (error) {
-                  console.error(`[Symbols] Error converting Spine symbol at (${row}, ${col}):`, error);
-                }
-              } else {
-                console.warn(`[Symbols] Cannot convert Spine symbol at (${row}, ${col}): currentSymbolData not available`);
-              }
-            }
-          }
-        }
-      }
-      
-      console.log(`[Symbols] Stopped animations on ${animationsStopped} symbols, converted ${spineSymbolsConverted} Spine symbols to PNG`);
-    }
-    
-    // Also kill any tweens on the container
-    if (this.container) {
-      this.scene.tweens.killTweensOf(this.container);
-      console.log('[Symbols] Container tweens killed');
-    }
-  }
-
-  /**
-   * Specifically ensure scatter symbols are visible
-   */
-  public ensureScatterSymbolsVisible(): void {
-    console.log('[Symbols] Specifically ensuring scatter symbols are visible');
-    
-    if (this.symbols && this.symbols.length > 0) {
-      let scatterFound = 0;
-      let scatterMadeVisible = 0;
-      
-      for (let col = 0; col < this.symbols.length; col++) {
-        for (let row = 0; row < this.symbols[col].length; row++) {
-          const symbol = this.symbols[col][row];
-          if (symbol && symbol.texture && symbol.texture.key === 'symbol_0') {
-            scatterFound++;
-            
-            if (typeof symbol.setVisible === 'function') {
-              symbol.setVisible(true);
-              scatterMadeVisible++;
-              console.log(`[Symbols] Made scatter symbol visible at (${row}, ${col}): visible=${symbol.visible}, alpha=${symbol.alpha}`);
-            }
-          }
-        }
-      }
-      
-      console.log(`[Symbols] Found ${scatterFound} scatter symbols, made ${scatterMadeVisible} visible`);
-      
-      // Log the state after making them visible
-      if (scatterFound > 0) {
-        console.log('[Symbols] Scatter symbols state after ensuring visibility:');
-        this.logScatterSymbolsState();
-      }
-    }
   }
 
   /**
@@ -2807,6 +2648,194 @@ export class Symbols {
     console.log('[Symbols] Semi-transparent overlay rectangle created (hidden by default)');
   }
 
+  // Lower the symbols container so non-winning symbols (remaining in container) render behind the reel background
+  private setNonWinningSymbolsBehindReelBg(enable: boolean): void {
+    try {
+      if (!this.container) return;
+      // Reel bg depth is -3; set container to -4 to place it behind
+      this.container.setDepth(enable ? -4 : 0);
+    } catch {}
+  }
+
+  // Public helper to restore symbol container above reel background immediately
+  public restoreSymbolsAboveReelBg(): void {
+    this.setNonWinningSymbolsBehindReelBg(false);
+    try {
+      if (this.container && (this.scene as any)?.children?.bringToTop) {
+        (this.scene as any).children.bringToTop(this.container);
+      }
+    } catch {}
+  }
+
+  public pushAllSymbolsBehindReelBg(): void {
+    this.setNonWinningSymbolsBehindReelBg(true);
+  }
+
+  private ensureScatterForegroundContainer(): void {
+    if (!this.scatterForegroundContainer) {
+      try {
+        this.scatterForegroundContainer = this.scene.add.container(0, 0);
+        this.scatterForegroundContainer.setDepth(0);
+      } catch {}
+    }
+    try { if (this.gridMask) { this.scatterForegroundContainer?.setMask(this.gridMask); } } catch {}
+    try { (this.scene as any)?.children?.bringToTop?.(this.scatterForegroundContainer); } catch {}
+  }
+
+  public liftScatterSymbolsAboveReelBg(): void {
+    try {
+      this.ensureScatterForegroundContainer();
+      this.liftedScatterSymbols = [];
+
+      const data = this.currentSymbolData;
+      const grid = (this.newSymbols && this.newSymbols.length > 0) ? this.newSymbols : this.symbols;
+      if (!grid || !data) return;
+
+      for (let col = 0; col < grid.length; col++) {
+        const column = grid[col];
+        for (let row = 0; row < (column ? column.length : 0); row++) {
+          try {
+            const val = data?.[col]?.[row];
+            if (val === 0) { // Symbol0_HTBH (scatter)
+              const obj = column[row];
+              if (!obj) continue;
+              const parent = (obj as any).parentContainer as Phaser.GameObjects.Container | undefined;
+              if (parent === this.scatterForegroundContainer) continue;
+              try { this.container?.remove(obj); } catch {}
+              try { this.scatterForegroundContainer?.add(obj); } catch {}
+              this.liftedScatterSymbols.push({ obj, col, row });
+            }
+          } catch {}
+        }
+      }
+      try { (this.scene as any)?.children?.bringToTop?.(this.scatterForegroundContainer); } catch {}
+    } catch {}
+  }
+
+  public restoreLiftedScatterSymbols(): void {
+    try {
+      for (const entry of this.liftedScatterSymbols) {
+        const obj = entry.obj;
+        if (!obj || !obj.active) continue;
+        try { this.scatterForegroundContainer?.remove(obj); } catch {}
+        try { this.container?.add(obj); } catch {}
+      }
+    } catch {}
+    this.liftedScatterSymbols = [];
+  }
+
+  /**
+   * Flash all PNG symbols with a white overlay pulse (same style as reel overlay)
+   */
+  private flashAllSymbolsOverlay(): void {
+    try {
+      if (!this.symbols || !this.symbols.length || !this.symbols[0] || !this.symbols[0].length) return;
+      let overlaysCreated = 0;
+      let pending = 0;
+
+      // Flash per reel (group of 3 symbols vertically), retaining the same visual output
+      const reelsCount = this.symbols[0].length; // horizontal count
+      for (let reelIndex = 0; reelIndex < reelsCount; reelIndex++) {
+        for (let col = 0; col < this.symbols.length; col++) {
+          const obj = this.symbols[col][reelIndex];
+          if (!obj) continue;
+          // If it's a Spine symbol, flash with a white rectangle overlay sized to the cell
+          if ((obj as any).animationState) {
+            const center = (this as any).getCellCenter(col, reelIndex);
+            const w = Math.max(2, this.displayWidth);
+            const h = Math.max(2, this.displayHeight);
+            const g = this.scene.add.graphics();
+            g.fillStyle(0xffffff, Math.max(0, Math.min(1, this.flashOverlayAlphaStart)));
+            // Draw a rectangle centered on the cell
+            g.fillRect(center.x - w * 0.5, center.y - h * 0.5, w, h);
+            try { g.setDepth(1005); } catch {}
+            overlaysCreated++;
+            const effectiveSpeed = Math.max(0.05, this.flashOverlaySpeedMultiplier);
+            const dur = Math.max(20, Math.floor(this.flashOverlayDurationMs / effectiveSpeed));
+            pending++;
+            this.scene.tweens.add({
+              targets: g,
+              alpha: Math.max(0, Math.min(1, this.flashOverlayFadeTo)),
+              duration: dur,
+              ease: 'Sine.easeOut',
+              onComplete: () => {
+                try { g.destroy(); } catch {}
+                try {
+                  pending--;
+                  if (pending === 0 && overlaysCreated > 0) {
+                    this.clearWinLines();
+                  }
+                } catch {}
+              }
+            });
+            continue;
+          }
+
+          // Determine symbol value to find its PNG texture
+          let symbolValue: number | undefined;
+          try {
+            const key: string | undefined = (obj as any)?.texture?.key;
+            if (key && key.startsWith('symbol_')) {
+              const parts = key.split('_');
+              const parsed = parseInt(parts[1], 10);
+              if (!Number.isNaN(parsed)) symbolValue = parsed;
+            }
+          } catch {}
+          const pngKey = symbolValue !== undefined ? `symbol_${symbolValue}` : ((obj as any)?.texture?.key || '');
+          if (!pngKey || !this.scene.textures.exists(pngKey)) continue;
+
+          // Prefer aligning to the original PNG anchor and size, plus the same nudge used for Spine
+          const home = (obj as any).__pngHome as { x: number; y: number } | undefined;
+          const size = (obj as any).__pngSize as { w: number; h: number } | undefined;
+          const nudge = (obj as any).__pngNudge as { x: number; y: number } | undefined;
+          const overlayOnly = (symbolValue !== undefined ? this.getOverlayNudge(symbolValue) : undefined) || { x: 0, y: 0 };
+          const centerX = (home?.x ?? obj.x) + (nudge?.x ?? 0) + overlayOnly.x;
+          const centerY = (home?.y ?? obj.y) + (nudge?.y ?? 0) + overlayOnly.y;
+          const w = Math.max(2, size?.w ?? obj.displayWidth ?? 0);
+          const h = Math.max(2, size?.h ?? obj.displayHeight ?? 0);
+
+          const overlayImg = this.scene.add.image(centerX, centerY, pngKey);
+          overlayImg.setOrigin(0.5, 0.5);
+          overlayImg.setDisplaySize(w, h);
+          // Draw on scene root (not in symbols container) so it can render above the dark overlay
+          try { overlayImg.setDepth(1005); } catch {}
+          if (typeof (overlayImg as any).setBlendMode === 'function') {
+            (overlayImg as any).setBlendMode(Phaser.BlendModes.ADD);
+          }
+          // Ensure it's bright white regardless of source
+          if (typeof (overlayImg as any).setTintFill === 'function') {
+            (overlayImg as any).setTintFill(0xffffff);
+          } else if (typeof (overlayImg as any).setTint === 'function') {
+            (overlayImg as any).setTint(0xffffff);
+          }
+          overlayImg.setAlpha(Math.max(0, Math.min(1, this.flashOverlayAlphaStart)));
+          overlayImg.setVisible(true);
+          overlaysCreated++;
+
+          const effectiveSpeed = Math.max(0.05, this.flashOverlaySpeedMultiplier);
+          const dur = Math.max(20, Math.floor(this.flashOverlayDurationMs / effectiveSpeed));
+          pending++;
+          this.scene.tweens.add({
+            targets: overlayImg,
+            alpha: Math.max(0, Math.min(1, this.flashOverlayFadeTo)),
+            duration: dur,
+            ease: 'Sine.easeOut',
+            onComplete: () => {
+              try { overlayImg.destroy(); } catch {}
+              try {
+                pending--;
+                if (pending === 0 && overlaysCreated > 0) {
+                  this.clearWinLines();
+                }
+              } catch {}
+            }
+          });
+        }
+      }
+      console.log(`[Symbols] flashAllSymbolsOverlay created overlays (per reel): ${overlaysCreated}`);
+    } catch {}
+  }
+
   /**
    * Show overlay for winning patterns with fade in animation
    */
@@ -2862,7 +2891,14 @@ export class Symbols {
   public hideWinningOverlay(): void {
     // If legacy overlay is disabled, only restore reel background tint
     if (!this.useLegacyWinningOverlay) {
-      try { this.tweenReelBackgroundToDefaultTint(300); } catch {}
+      try {
+        if (gameStateManager.isBonus && gameStateManager.isReelSpinning) {
+          // During an active bonus spin, keep spin tint instead of reverting to default
+          this.tweenReelBackgroundToSpinTint(0);
+        } else {
+          this.tweenReelBackgroundToDefaultTint(300);
+        }
+      } catch {}
       console.log('[Symbols] hideWinningOverlay (legacy overlay disabled) - restoring default tint only');
       return;
     }
@@ -2888,7 +2924,13 @@ export class Symbols {
         }
       });
       // Restore reel background to its default tint when win overlay hides
-      try { this.tweenReelBackgroundToDefaultTint(300); } catch {}
+      try {
+        if (gameStateManager.isBonus && gameStateManager.isReelSpinning) {
+          this.tweenReelBackgroundToSpinTint(0);
+        } else {
+          this.tweenReelBackgroundToDefaultTint(300);
+        }
+      } catch {}
       console.log('[Symbols] Winning overlay fade out started');
     }
   }
@@ -2942,11 +2984,11 @@ export class Symbols {
 
     console.log(`[Symbols] Successfully moved ${movedCount} out of ${uniqueGrids.length} winning symbols to front`);
 
-    // For manual spins, push remaining non-winning symbols behind the reel background by lowering container depth.
-    // Avoid this during autoplay or free-spin autoplay to keep the grid consistently above the reel background.
+    // Push remaining non-winning symbols behind the reel background in base scene
+    // Apply this even during autoplay when NOT in bonus mode, per base-scene requirement
     try {
-      const isAuto = gameStateManager.isAutoPlaying || this.freeSpinAutoplayActive;
-      if (!isAuto) {
+      const inBonus = gameStateManager.isBonus;
+      if (!inBonus) {
         this.setNonWinningSymbolsBehindReelBg(true);
       }
     } catch {}
@@ -3069,9 +3111,7 @@ export class Symbols {
     
     // Reset winning symbols spine animations back to PNG after scatter symbol animations
     this.stopAllSymbolAnimations();
-    this.hideAllSymbols();
-    this.hideWinningOverlay();
-    this.clearWinLines();
+    this.fadeOutAllReelVisuals(300);
     
     // Hide winnings display when scatter animation starts
     const header = (this.scene as any).header;
@@ -3309,6 +3349,130 @@ export class Symbols {
             ease: 'Power2',
             onComplete: () => { try { this.baseOverlayRect?.setVisible(false); } catch {} }
           });
+        }
+      }
+    } catch {}
+  }
+
+  /**
+   * Stop all Spine animations on current symbol objects without destroying them.
+   * Safe to call even if symbols contain plain Sprites.
+   */
+  public stopAllSpineAnimations(): void {
+    try {
+      if (!this.symbols) return;
+      for (let c = 0; c < this.symbols.length; c++) {
+        const col = this.symbols[c];
+        if (!Array.isArray(col)) continue;
+        for (let r = 0; r < col.length; r++) {
+          const obj: any = col[r];
+          if (!obj) continue;
+          try { this.scene?.tweens?.killTweensOf?.(obj); } catch {}
+          try {
+            const st = obj.animationState;
+            if (st) {
+              try { st.clearTracks?.(); } catch {}
+              try { st.setEmptyAnimation?.(0, 0); } catch {}
+              try { st.timeScale = 0; } catch {}
+            }
+          } catch {}
+        }
+      }
+    } catch (e) {
+      console.warn('[Symbols] stopAllSpineAnimations encountered an error', e);
+    }
+  }
+
+  /**
+   * Stop all symbol-related animations (both Spine and Sprite tweens/anims).
+   * Does not convert Spine back to PNG; it only halts motion for safety.
+   */
+  public stopAllSymbolAnimations(): void {
+    try {
+      if (!this.symbols) return;
+      for (let c = 0; c < this.symbols.length; c++) {
+        const col = this.symbols[c];
+        if (!Array.isArray(col)) continue;
+        for (let r = 0; r < col.length; r++) {
+          const obj: any = col[r];
+          if (!obj) continue;
+          try { this.scene?.tweens?.killTweensOf?.(obj); } catch {}
+          try { obj.anims?.stop?.(); } catch {}
+          try {
+            const st = obj.animationState;
+            if (st) {
+              try { st.clearTracks?.(); } catch {}
+              try { st.setEmptyAnimation?.(0, 0); } catch {}
+              try { st.timeScale = 0; } catch {}
+            }
+          } catch {}
+        }
+      }
+    } catch (e) {
+      console.warn('[Symbols] stopAllSymbolAnimations encountered an error', e);
+    }
+  }
+
+  public ensureScatterSymbolsVisible(): void {
+    try {
+      const data = this.currentSymbolData;
+      const grid = this.symbols;
+      if (!grid || !data) return;
+      for (let col = 0; col < grid.length; col++) {
+        const column = grid[col];
+        for (let row = 0; row < (column ? column.length : 0); row++) {
+          try {
+            const val = data?.[col]?.[row];
+            if (val === 0) {
+              const obj = column[row];
+              if (obj && typeof obj.setVisible === 'function') {
+                obj.setVisible(true);
+              }
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+  }
+
+  public convertScatterSpinesToPNGs(makeVisible: boolean = true): void {
+    try {
+      const data = this.currentSymbolData;
+      const grid = this.symbols;
+      if (!grid || !data) return;
+      for (let col = 0; col < grid.length; col++) {
+        const column = grid[col];
+        for (let row = 0; row < (column ? column.length : 0); row++) {
+          try {
+            const val = data?.[col]?.[row];
+            if (val !== 0) continue;
+            const obj: any = column[row];
+            if (!obj) continue;
+            const isSpine = !!obj.animationState;
+            if (!isSpine) {
+              try { if (makeVisible && typeof obj.setVisible === 'function') obj.setVisible(true); } catch {}
+              continue;
+            }
+            try { this.scene?.tweens?.killTweensOf?.(obj); } catch {}
+            try { this.scatterAnimationManager?.unregisterScatterSymbol?.(obj); } catch {}
+            const x = obj.x;
+            const y = obj.y;
+            const home = (obj as any).__pngHome as { x: number; y: number } | undefined;
+            const px = (home && typeof home.x === 'number') ? home.x : x;
+            const py = (home && typeof home.y === 'number') ? home.y : y;
+            try { this.scene?.children?.remove?.(obj); } catch {}
+            try { obj.destroy?.(); } catch {}
+            const spriteKey = 'symbol_0';
+            if (this.scene.textures.exists(spriteKey)) {
+              const pngSprite = this.scene.add.sprite(px, py, spriteKey);
+              pngSprite.setOrigin(0.5, 0.5);
+              pngSprite.displayWidth = this.displayWidth;
+              pngSprite.displayHeight = this.displayHeight;
+              try { this.container?.add(pngSprite); } catch {}
+              column[row] = pngSprite;
+              try { if (makeVisible) pngSprite.setVisible(true); } catch {}
+            }
+          } catch {}
         }
       }
     } catch {}
@@ -4049,6 +4213,11 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   
   self.resetSymbolDepths();
   self.restoreSymbolVisibility();
+  // Safety: ensure symbol container is above reel background at start of this spin (base & bonus)
+  self.restoreSymbolsAboveReelBg();
+  // Re-apply spin tint after cleanup so it persists during this spin's drop/reel animation
+  try { self.showReelBackground(); } catch {}
+  try { self.tweenReelBackgroundToSpinTint(300); } catch {}
     
     self.resetSymbolDepths();
     self.restoreSymbolVisibility();
@@ -4105,6 +4274,14 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   
   // Set spinning state
   gameStateManager.isReelSpinning = true;
+  // Immediately enforce spin tint after reels are marked spinning (bonus)
+  try {
+    if (gameStateManager.isBonus) {
+      self.showReelBackground();
+      self.restoreSymbolsAboveReelBg();
+      self.tweenReelBackgroundToSpinTint(0);
+    }
+  } catch {}
   
   // Use the existing createNewSymbols function
   createNewSymbols(self, mockData);
@@ -4439,6 +4616,15 @@ async function dropReels(self: Symbols, data: Data): Promise<void> {
   // Remove init check since we're not using it anymore
   console.log('[Symbols] dropReels called with data:', data);
   console.log('[Symbols] SLOT_ROWS:', SLOT_ROWS);
+  // Safety: ensure symbols are above reel background during reel drop animations
+  try { self.restoreSymbolsAboveReelBg(); } catch {}
+  // Bonus: enforce spin tint right before drop sequence starts
+  try {
+    if (gameStateManager.isBonus) {
+      self.showReelBackground();
+      self.tweenReelBackgroundToSpinTint(0);
+    }
+  } catch {}
 
   // Play turbo drop sound effect at the start of reel drop sequence when in turbo mode
   if (self.scene.gameData.isTurbo && (window as any).audioManager) {
@@ -4519,7 +4705,7 @@ function dropPrevSymbols(self: Symbols, index: number, extendDuration: boolean =
         {
           y: `+= ${DROP_DISTANCE}`,
           duration: self.scene.gameData.dropReelsDuration + extraMs,
-          ease: Phaser.Math.Easing.Bounce.Out,
+          ease: (((self.scene as any)?.__isScatterAnticipationActive) && index === (SLOT_ROWS - 1)) ? Phaser.Math.Easing.Cubic.Out : Phaser.Math.Easing.Bounce.Out,
         },
       ],
     });
@@ -4556,7 +4742,20 @@ function dropFillers(self: Symbols, index: number, extendDuration: boolean = fal
     let symbol = self.scene.add.sprite(x, y, 'symbol_' + Math.floor(Math.random() * Data.ALL_SYMBOLS.length));
     symbol.displayWidth = self.displayWidth;
     symbol.displayHeight = self.displayHeight;
-    self.container.add(symbol);
+    try {
+      const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
+      if (isAnticipation && index === (SLOT_ROWS - 1)) {
+        try { (self as any).ensureScatterForegroundContainer?.(); } catch {}
+        const fg: Phaser.GameObjects.Container | undefined = (self as any).scatterForegroundContainer;
+        if (fg && typeof fg.add === 'function') {
+          fg.add(symbol);
+        } else {
+          self.container.add(symbol);
+        }
+      } else {
+        self.container.add(symbol);
+      }
+    } catch { self.container.add(symbol); }
 
     fillerSymbols.push(symbol);
   }
@@ -4573,7 +4772,7 @@ function dropFillers(self: Symbols, index: number, extendDuration: boolean = fal
         {
           y: `+= ${DROP_DISTANCE}`,
           duration: (self.scene.gameData.dropDuration * 0.9) + extraMs,
-          ease: Phaser.Math.Easing.Linear,
+          ease: (((self.scene as any)?.__isScatterAnticipationActive) && index === (SLOT_ROWS - 1)) ? Phaser.Math.Easing.Cubic.Out : Phaser.Math.Easing.Linear,
         },
         {
           y: `+= ${40}`,
@@ -4616,6 +4815,13 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
     let completedAnimations = 0;
     const totalAnimations = self.newSymbols.length;
 
+    try {
+      const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
+      if (isAnticipation && index === (SLOT_ROWS - 1)) {
+        self.liftReelSymbolsAboveReelBg(index);
+      }
+    } catch {}
+
     for (let col = 0; col < self.newSymbols.length; col++) {
       let symbol = self.newSymbols[col][index];
 
@@ -4634,7 +4840,7 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
           {
             y: `+= ${DROP_DISTANCE}`,
             duration: (self.scene.gameData.dropDuration * 0.9) + extraMs,
-            ease: Phaser.Math.Easing.Linear,
+            ease: (((self.scene as any)?.__isScatterAnticipationActive) && index === (SLOT_ROWS - 1)) ? Phaser.Math.Easing.Cubic.Out : Phaser.Math.Easing.Linear,
           },
           {
             y: `+= ${40}`,
@@ -4683,6 +4889,8 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
                         ease: 'Cubic.easeOut'
                       });
                     }
+                    // Also tint reel background to anticipation state
+                    try { self.tweenReelBackgroundToAnticipationTint(300); } catch {}
                     
                     // Show scatter anticipation animations
                     const sa = (self.scene as any)?.scatterAnticipation;
@@ -4738,6 +4946,7 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
                         });
                       }
                     }
+                    try { self.flashReelOverlay(index); } catch {}
                     
                     console.log('[Symbols] Scatter anticipation hidden after last reel drop');
                     // Reset anticipation flag for safety

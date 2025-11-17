@@ -97,7 +97,9 @@ export class WinTracker {
     this.container.setAlpha(1);
 
     const summary = new Map<number, SymbolSummary>();
-    summary.set(payline.symbol, { lines: 1, totalWin: payline.win });
+    // For a single payline preview, show the count of matching symbols on that line (payline.count)
+    // rather than the number of lines.
+    summary.set(payline.symbol, { lines: payline.count, totalWin: payline.win });
     this.renderFromSummary(summary);
   }
 
@@ -139,7 +141,8 @@ export class WinTracker {
     const summary = new Map<number, SymbolSummary>();
     for (const payline of spinData.slot.paylines) {
       const existing = summary.get(payline.symbol) || { lines: 0, totalWin: 0 };
-      existing.lines += 1;
+      // Track the total count of matching symbols across winning lines for this symbol
+      existing.lines += (payline.count || 0);
       existing.totalWin += payline.win;
       summary.set(payline.symbol, existing);
     }
@@ -191,11 +194,29 @@ export class WinTracker {
     valueLabel.setOrigin(0.5, 0.5);
     valueLabel.setShadow(3, 3, '#000000', 4, true, true);
 
+    const eqLabel = this.scene.add.text(
+      0,
+      0,
+      '=',
+      {
+        fontSize: `${this.labelFontSize}px`,
+        color: '#ffffff',
+        fontFamily: this.labelFontFamily,
+        stroke: '#000000',
+        strokeThickness: 4,
+        align: 'center'
+      }
+    );
+    eqLabel.setOrigin(0.5, 0.5);
+    eqLabel.setShadow(3, 3, '#000000', 4, true, true);
+
     const gap = this.innerGap;
     const totalWidth =
       countLabel.displayWidth +
       gap +
       icon.displayWidth +
+      gap +
+      eqLabel.displayWidth +
       gap +
       valueLabel.displayWidth;
 
@@ -208,11 +229,15 @@ export class WinTracker {
     shadow.setPosition(icon.x + this.shadowOffsetX, icon.y + this.shadowOffsetY);
     cursor += icon.displayWidth + gap;
 
+    eqLabel.setPosition(cursor + eqLabel.displayWidth * 0.5, 0);
+    cursor += eqLabel.displayWidth + gap;
+
     valueLabel.setPosition(cursor + valueLabel.displayWidth * 0.5, 0);
 
     this.container.add(shadow);
     this.container.add(icon);
     this.container.add(countLabel);
+    this.container.add(eqLabel);
     this.container.add(valueLabel);
   }
 
