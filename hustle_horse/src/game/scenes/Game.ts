@@ -238,7 +238,15 @@ export class Game extends Scene {
 				// Target position (inside screen) with offset modifiers
 				const targetX = (width * 0.18) + this.dragonOffsetX;
 				const targetY = (height * 0.70) + this.dragonOffsetY;
-				this.sound.play('roar_hh');
+				try {
+                    const audio = (window as any).audioManager;
+                    if (audio && typeof audio.playOneShot === 'function') {
+                        audio.playOneShot('roar_hh');
+                    } else {
+                        this.sound.play('roar_hh');
+                    }
+                } catch { this.sound.play('roar_hh'); }
+
 				// Spawn off-screen (upper side) then slide down
 				const dragon: any = (this.add as any).spine(targetX, -50, 'Big_Dragon', 'Big_Dragon-atlas');
 				if (dragon?.setOrigin) dragon.setOrigin(0.5, 0.5);
@@ -386,7 +394,7 @@ export class Game extends Scene {
 		this.dialogs.create(this);
 		
         // Initialize scatter win overlay now that the scene is ready
-		this.scatterWinOverlay.initialize(this);
+        this.scatterWinOverlay.initialize(this, this.networkManager, this.screenModeManager);
         // Expose for quick console testing
         (window as any).scatterWinOverlay = this.scatterWinOverlay;
 

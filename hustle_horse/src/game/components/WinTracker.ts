@@ -12,6 +12,7 @@ interface WinTrackerLayoutOptions {
 interface SymbolSummary {
   lines: number;
   totalWin: number;
+  multiplier: number;
 }
 
 export class WinTracker {
@@ -99,7 +100,8 @@ export class WinTracker {
     const summary = new Map<number, SymbolSummary>();
     // For a single payline preview, show the count of matching symbols on that line (payline.count)
     // rather than the number of lines.
-    summary.set(payline.symbol, { lines: payline.count, totalWin: payline.win });
+    const m = this.getPaylineMultiplier(payline);
+    summary.set(payline.symbol, { lines: payline.count, totalWin: payline.win, multiplier: m });
     this.renderFromSummary(summary);
   }
 
@@ -140,10 +142,12 @@ export class WinTracker {
 
     const summary = new Map<number, SymbolSummary>();
     for (const payline of spinData.slot.paylines) {
-      const existing = summary.get(payline.symbol) || { lines: 0, totalWin: 0 };
+      const m = this.getPaylineMultiplier(payline);
+      const existing = summary.get(payline.symbol) || { lines: 0, totalWin: 0, multiplier: 1 };
       // Track the total count of matching symbols across winning lines for this symbol
       existing.lines += (payline.count || 0);
       existing.totalWin += payline.win;
+      existing.multiplier = Math.max(existing.multiplier || 1, m || 1);
       summary.set(payline.symbol, existing);
     }
     return summary;
@@ -165,7 +169,7 @@ export class WinTracker {
     const countLabel = this.scene.add.text(
       0,
       0,
-      `${data.lines}x`,
+      `${data.lines}`,
       {
         fontSize: `${this.labelFontSize}px`,
         color: '#ffffff',
@@ -178,21 +182,43 @@ export class WinTracker {
     countLabel.setOrigin(0.5, 0.5);
     countLabel.setShadow(3, 3, '#000000', 4, true, true);
 
-    const valueLabel = this.scene.add.text(
-      0,
-      0,
-      `$${data.totalWin.toFixed(2)}`,
-      {
-        fontSize: `${this.labelFontSize}px`,
-        color: '#ffffff',
-        fontFamily: this.labelFontFamily,
-        stroke: '#000000',
-        strokeThickness: 4,
-        align: 'center'
-      }
-    );
-    valueLabel.setOrigin(0.5, 0.5);
-    valueLabel.setShadow(3, 3, '#000000', 4, true, true);
+    const hasMul = Math.max(1, Math.floor((data.multiplier || 1))) > 1;
+    let xLabel: Phaser.GameObjects.Text | null = null;
+    let multiplierLabel: Phaser.GameObjects.Text | null = null;
+    if (hasMul) {
+      xLabel = this.scene.add.text(
+        0,
+        0,
+        'x',
+        {
+          fontSize: `${this.labelFontSize}px`,
+          color: '#ffffff',
+          fontFamily: this.labelFontFamily,
+          stroke: '#000000',
+          strokeThickness: 4,
+          align: 'center'
+        }
+      );
+      xLabel.setOrigin(0.5, 0.5);
+      xLabel.setShadow(3, 3, '#000000', 4, true, true);
+
+      const multiplierText = `${Math.max(1, Math.floor((data.multiplier || 1)))}`;
+      multiplierLabel = this.scene.add.text(
+        0,
+        0,
+        multiplierText,
+        {
+          fontSize: `${this.labelFontSize}px`,
+          color: '#ffffff',
+          fontFamily: this.labelFontFamily,
+          stroke: '#000000',
+          strokeThickness: 4,
+          align: 'center'
+        }
+      );
+      multiplierLabel.setOrigin(0.5, 0.5);
+      multiplierLabel.setShadow(3, 3, '#000000', 4, true, true);
+    }
 
     const eqLabel = this.scene.add.text(
       0,
@@ -210,12 +236,29 @@ export class WinTracker {
     eqLabel.setOrigin(0.5, 0.5);
     eqLabel.setShadow(3, 3, '#000000', 4, true, true);
 
+    const valueLabel = this.scene.add.text(
+      0,
+      0,
+      `$${data.totalWin.toFixed(2)}`,
+      {
+        fontSize: `${this.labelFontSize}px`,
+        color: '#ffffff',
+        fontFamily: this.labelFontFamily,
+        stroke: '#000000',
+        strokeThickness: 4,
+        align: 'center'
+      }
+    );
+    valueLabel.setOrigin(0.5, 0.5);
+    valueLabel.setShadow(3, 3, '#000000', 4, true, true);
+
     const gap = this.innerGap;
     const totalWidth =
       countLabel.displayWidth +
       gap +
       icon.displayWidth +
       gap +
+      (hasMul && xLabel && multiplierLabel ? (xLabel.displayWidth + gap + multiplierLabel.displayWidth + gap) : 0) +
       eqLabel.displayWidth +
       gap +
       valueLabel.displayWidth;
@@ -229,6 +272,14 @@ export class WinTracker {
     shadow.setPosition(icon.x + this.shadowOffsetX, icon.y + this.shadowOffsetY);
     cursor += icon.displayWidth + gap;
 
+    if (hasMul && xLabel && multiplierLabel) {
+      xLabel.setPosition(cursor + xLabel.displayWidth * 0.5, 0);
+      cursor += xLabel.displayWidth + gap;
+
+      multiplierLabel.setPosition(cursor + multiplierLabel.displayWidth * 0.5, 0);
+      cursor += multiplierLabel.displayWidth + gap;
+    }
+
     eqLabel.setPosition(cursor + eqLabel.displayWidth * 0.5, 0);
     cursor += eqLabel.displayWidth + gap;
 
@@ -237,8 +288,38 @@ export class WinTracker {
     this.container.add(shadow);
     this.container.add(icon);
     this.container.add(countLabel);
+    if (hasMul && xLabel && multiplierLabel) {
+      this.container.add(xLabel);
+      this.container.add(multiplierLabel);
+    }
     this.container.add(eqLabel);
     this.container.add(valueLabel);
+  }
+
+  private getPaylineMultiplier(payline: PaylineData): number {
+    try {
+      const arr = (payline && Array.isArray(payline.multipliers)) ? payline.multipliers : [];
+      let factor = 1;
+      for (const m of arr) {
+        const base = this.getMultiplierValueForSymbol(m?.symbol);
+        const count = Math.max(0, Math.floor(m?.count || 0));
+        if (base > 1 && count > 0) {
+          factor *= Math.pow(base, count);
+        }
+      }
+      return Math.max(1, Math.floor(factor));
+    } catch {
+      return 1;
+    }
+  }
+
+  private getMultiplierValueForSymbol(symbolId: number | undefined): number {
+    switch (symbolId) {
+      case 12: return 2;
+      case 13: return 3;
+      case 14: return 4;
+      default: return 1;
+    }
   }
 
   public setLayout(options: WinTrackerLayoutOptions): void {

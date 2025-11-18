@@ -37,7 +37,6 @@ export class AssetConfig {
 		return {
 			images: {
 				'BG-Normal': `${prefix}/background/BG-Normal.png`,
-				'reel-frame': `${prefix}/background/reel-frame.png`,
 				// Mostly for landscape bg
 				// 'balloon-01': `${prefix}/background/balloon-01.png`,
 				// 'balloon-02': `${prefix}/background/balloon-02.png`,
@@ -53,15 +52,6 @@ export class AssetConfig {
 				'dragon_default': {
 					atlas: `${prefix}/background/dragon_default.atlas`,
 					json: `${prefix}/background/dragon_default.json`
-				},
-				// Bonus-only border spines
-				'Dragon_Top_Bonus': {
-					atlas: `${prefix}/background/Dragon_Top_Bonus.atlas`,
-					json: `${prefix}/background/Dragon_Top_Bonus.json`
-				},
-				'Dragon_Bottom_Bonus': {
-					atlas: `${prefix}/background/Dragon_Bottom_Bonus.atlas`,
-					json: `${prefix}/background/Dragon_Bottom_Bonus.json`
 				}
 			}
 		};
@@ -239,21 +229,6 @@ export class AssetConfig {
 		};
 	}
 
-	getSpinnerAssets(): AssetGroup {
-		const prefix = this.getAssetPrefix();
-		
-		console.log(`[AssetConfig] Loading spinner assets with prefix: ${prefix}`);
-		
-		return {
-			images: {
-				'spin_01': `${prefix}/spinner/spin_01.png`,
-				'spin_02': `${prefix}/spinner/spin_02.png`,
-				'spin_03': `${prefix}/spinner/spin_03.png`,
-				'spin_04': `${prefix}/spinner/spin_04.png`,
-			}
-		};
-	}
-
 	getMenuAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix();
 		return {
@@ -329,21 +304,14 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				// Static background image for Congrats dialog
 				'congrats-bg': `${prefix}/dialogs/congrats-bg.png`,
-				// Congrats title image used on the congrats overlay
 				'congratulations-you-won': `${prefix}/dialogs/congratulations-you-won.png`
 			},
 			spine: {
-				// Fire background element for Congrats overlay (replaces 3rd_Fire)
 				'fireanimation01_HTBH': {
 					atlas: `${prefix}/fire_animations/fireanimation01_HTBH.atlas`,
 					json: `${prefix}/fire_animations/fireanimation01_HTBH.json`
 				},
-				// Removed unused dialog effect spines (confetti_KA, Paint_KA, Explosion_AK)
-				// Legacy Small/Medium/Large/Super win dialogs removed in favor of overlay components
-				// Removed FreeSpinDialog_KA (not used)
-				// Character spine used on top of the congrats background
 				'HustleForSpine': {
 					atlas: `assets/characters/HustleForSpine.atlas`,
 					json: `assets/characters/HustleForSpine.json`
@@ -456,7 +424,7 @@ export class AssetConfig {
 				'PickACard': `${prefix}/scatter_win/PickACard.png`,
 				'congrats': `${prefix}/scatter_win/congrats.png`,
 				// Fire animation will use sprite-based fallback to avoid multi-page atlas issues
-				'fireanimation01_HTBH_img': `assets/animations/Fire/fireanimation01_HTBH.png`
+				'fireanimation01_HTBH_img': `${prefix}/fire_animations/fireanimation01_HTBH.png`
 			}
 		};
 	}
@@ -490,7 +458,6 @@ export class AssetConfig {
 				// Hit win SFX
 				'hitwin_hh': 'assets/sounds/SFX/hitwin_hh.ogg',
 				// Wild multi SFX
-				'wildmulti_hh': 'assets/sounds/SFX/wildmulti_hh.ogg',
 				'scatter_hh': 'assets/sounds/SFX/scatter_hh.ogg',
 				'anticipation_hh': 'assets/sounds/SFX/anticipation_hh.ogg',
 				// Winline SFX
@@ -527,7 +494,6 @@ export class AssetConfig {
 			symbols: this.getSymbolAssets(),
 			buttons: this.getButtonAssets(),
 			fonts: this.getFontAssets(),
-			spinner: this.getSpinnerAssets(),
 			dialogs: this.getDialogAssets(),
 			numbers: this.getNumberAssets(),
 			coin: this.getCoinAssets(),

@@ -136,12 +136,22 @@ export class Dialogs {
 	private congratsCharScaleContainer: Phaser.GameObjects.Container | null = null; // scale/rotation
 
 	// Dialog configuration
-private dialogScales: Record<string, number> = {};
+	private dialogScales: Record<string, number> = {};
 
 	// Dialog positions (relative: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom)
-private dialogPositions: Record<string, { x: number; y: number }> = {};
+	private dialogPositions: Record<string, { x: number; y: number }> = {};
 
-private dialogLoops: Record<string, boolean> = {};
+	private dialogLoops: Record<string, boolean> = {};
+
+	private getAssetPrefix(): string {
+		try {
+			const isPortrait = !!this.screenModeManager?.getScreenConfig?.().isPortrait;
+			const isHigh = !!this.networkManager?.getNetworkSpeed?.();
+			const orientation = isPortrait ? 'portrait' : 'landscape';
+			const quality = isHigh ? 'high' : 'low';
+			return `assets/${orientation}/${quality}`;
+		} catch { return 'assets/portrait/high'; }
+	}
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -164,8 +174,9 @@ private dialogLoops: Record<string, boolean> = {};
 					return;
 				}
                 const loader = (this.currentScene as any).load;
-                try { loader?.spineAtlas?.('fire_transition_atlas', resolveAssetUrl('/assets/animations/Fire/Fire_Transition.atlas')); } catch {}
-                try { loader?.spineJson?.('fire_transition', resolveAssetUrl('/assets/animations/Fire/Fire_Transition.json')); } catch {}
+                const prefix = this.getAssetPrefix();
+				try { loader?.spineAtlas?.('fire_transition_atlas', resolveAssetUrl(`${prefix}/fire_animations/Fire_Transition.atlas`)); } catch {}
+				try { loader?.spineJson?.('fire_transition', resolveAssetUrl(`${prefix}/fire_animations/Fire_Transition.json`)); } catch {}
 				const onComplete = () => { this.endFireTransitionLoadState = 'loaded'; resolve(true); };
 				const onError = () => { this.endFireTransitionLoadState = 'failed'; resolve(false); };
 				try { (this.currentScene as any).load?.once('complete', onComplete); } catch {}

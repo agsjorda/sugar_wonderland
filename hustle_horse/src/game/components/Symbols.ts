@@ -38,6 +38,7 @@ export class Symbols {
   private baseOverlayBounds?: Phaser.Geom.Rectangle;
   private reelBackground?: Phaser.GameObjects.Image;
   private reelBgTintTween?: Phaser.Tweens.Tween;
+  private reelBgFlashTween?: Phaser.Tweens.Tween;
   private scatterForegroundContainer?: Phaser.GameObjects.Container;
   private liftedScatterSymbols: Array<{ obj: any; col: number; row: number }> = [];
   // Reel background modifiers
@@ -55,6 +56,7 @@ export class Symbols {
   private reelBgTintWinAlpha: number = 0.7;
   private reelBgTintAnticipationColor: number = 0x000000;
   private reelBgTintAnticipationAlpha: number = 0.8;
+  private reelBgTintAnticipationTransfer: number = 0x2D2D2D;
   // Flag to control use of legacy black winning overlay graphics
   private useLegacyWinningOverlay: boolean = false;
   private baseOverlayBorderUpper?: any;
@@ -191,6 +193,8 @@ export class Symbols {
   // Sticky wild / multiplier tracking for bonus free spins (client-side visual layer)
   private stickyMultiplierPositions: Array<{ col: number; row: number; symbol: number }> = [];
   private stickyMultiplierOverlays: Array<{ col: number; row: number; sprite: Phaser.GameObjects.Sprite }> = [];
+  // Previous-spin sticky positions (used to decide which cells should be reused/skipped this spin)
+  private prevStickyMultiplierPositions: Array<{ col: number; row: number; symbol: number }> = [];
 
   // Scatter anticipation overlay
   private scatterOverlay: Phaser.GameObjects.Graphics | null = null;
@@ -198,6 +202,41 @@ export class Symbols {
   constructor() { 
     this.scatterAnimationManager = ScatterAnimationManager.getInstance();
     this.symbolDetector = new SymbolDetector();
+  }
+
+  public startReelBgAnticipationFlash(cycleDurationMs: number = 600): void {
+    if (!this.reelBackground || !this.scene) return;
+    try {
+      const img = this.reelBackground as any;
+      try { this.reelBgTintTween?.stop(); this.reelBgTintTween = undefined; } catch {}
+      try { this.reelBgFlashTween?.stop(); this.reelBgFlashTween = undefined; } catch {}
+      this.scene.tweens.killTweensOf(img);
+      const from = Phaser.Display.Color.IntegerToRGB(this.reelBgTintAnticipationTransfer);
+      const to = Phaser.Display.Color.IntegerToRGB(this.reelBgTintAnticipationColor);
+      const data: any = { r: from.r, g: from.g, b: from.b };
+      const turboMul = gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1.0;
+      const eff = Math.max(60, Math.floor(cycleDurationMs * turboMul));
+      img.setVisible(true);
+      this.reelBgFlashTween = this.scene.tweens.add({
+        targets: data,
+        r: to.r,
+        g: to.g,
+        b: to.b,
+        duration: eff,
+        ease: 'Sine.easeInOut',
+        yoyo: true,
+        repeat: -1,
+        onUpdate: () => {
+          try { img.setTint(Phaser.Display.Color.GetColor(Math.floor(data.r), Math.floor(data.g), Math.floor(data.b))); } catch {}
+          try { img.setAlpha(this.reelBgTintAnticipationAlpha); } catch {}
+        }
+      });
+    } catch {}
+  }
+
+  public stopReelBgAnticipationFlash(): void {
+    try { this.reelBgFlashTween?.stop(); } catch {}
+    try { this.reelBgFlashTween = undefined; } catch {}
   }
 
   public fadeOutAllReelVisuals(durationMs: number = 250): void {
@@ -539,7 +578,7 @@ export class Symbols {
   public getIdleSymbolNudge(symbolValue: number): { x: number; y: number } | undefined {
     const nudges: { [k: number]: { x: number; y: number } } = {
       // Tweak these to align idle placement precisely per symbol
-      1:  { x: -11.5, y: -10.5 },
+      1:  { x: 0, y: 0 },
       13: { x: 0, y: 0 },
       14: { x: 0, y: 0 }
     };
@@ -550,7 +589,7 @@ export class Symbols {
   public getWinSymbolNudge(symbolValue: number): { x: number; y: number } | undefined {
     const nudges: { [k: number]: { x: number; y: number } } = {
       // Provide separate offsets for win/hit animations if their bounds differ
-      1:  { x: 4, y: 4 },
+      1:  { x: 0, y: 0 },
       13: { x: 0, y: 0 },
       14: { x: 0, y: 0 }
     };
@@ -561,7 +600,7 @@ export class Symbols {
   private getOverlayNudge(symbolValue: number): { x: number; y: number } | undefined {
     const nudges: { [k: number]: { x: number; y: number } } = {
       // Adjust these to fine-tune overlay alignment without affecting Spine placement
-      1: { x: 5, y: 5 }, // Symbol1_HTBH overlay-only nudge (edit here)
+      1: { x: 0, y: 0 }, // Symbol1_HTBH overlay-only nudge (edit here)
     };
     return nudges[symbolValue];
   }
@@ -672,6 +711,7 @@ export class Symbols {
   public tweenReelBackgroundToDefaultTint(durationMs: number = 300): void {
     if (!this.reelBackground) return;
     try {
+      try { this.reelBgFlashTween?.stop(); this.reelBgFlashTween = undefined; } catch {}
       const img = this.reelBackground as any;
       try { this.reelBgTintTween?.stop(); } catch {}
       this.scene.tweens.killTweensOf(img);
@@ -704,6 +744,7 @@ export class Symbols {
   public tweenReelBackgroundToSpinTint(durationMs: number = 300): void {
     if (!this.reelBackground) return;
     try {
+      try { this.reelBgFlashTween?.stop(); this.reelBgFlashTween = undefined; } catch {}
       const img = this.reelBackground as any;
       try { this.reelBgTintTween?.stop(); } catch {}
       this.scene.tweens.killTweensOf(img);
@@ -736,6 +777,7 @@ export class Symbols {
   public tweenReelBackgroundToWinTint(durationMs: number = 300): void {
     if (!this.reelBackground) return;
     try {
+      try { this.reelBgFlashTween?.stop(); this.reelBgFlashTween = undefined; } catch {}
       const img = this.reelBackground as any;
       try { this.reelBgTintTween?.stop(); } catch {}
       this.scene.tweens.killTweensOf(img);
@@ -768,6 +810,7 @@ export class Symbols {
   public tweenReelBackgroundToAnticipationTint(durationMs: number = 300): void {
     if (!this.reelBackground) return;
     try {
+      try { this.reelBgFlashTween?.stop(); this.reelBgFlashTween = undefined; } catch {}
       const img = this.reelBackground as any;
       try { this.reelBgTintTween?.stop(); } catch {}
       this.scene.tweens.killTweensOf(img);
@@ -798,6 +841,7 @@ export class Symbols {
   }
 
   public hideReelBackground(): void {
+    try { this.stopReelBgAnticipationFlash(); } catch {}
     try { this.reelBackground?.setVisible(false); } catch {}
   }
 
@@ -818,6 +862,7 @@ export class Symbols {
   public fadeOutReelBackground(durationMs: number = 300): void {
     if (!this.reelBackground || !this.scene) return;
     try {
+      try { this.stopReelBgAnticipationFlash(); } catch {}
       const img = this.reelBackground as any;
       this.scene.tweens.killTweensOf(img);
       const turboMul = gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1.0;
@@ -1256,7 +1301,15 @@ export class Symbols {
 
   /** Synchronized: start win visuals and layering */
   private beginWinPhase(): void {
-    // Show win overlay/tint first for consistent background
+    try { (this.scene as any).__isScatterAnticipationActive = false; } catch {}
+    try { this.restoreLiftedScatterSymbols(); } catch {}
+    try { this.restoreSymbolsAboveReelBg(); } catch {}
+    try { if (this.overlayRect) this.scene.tweens.killTweensOf(this.overlayRect); } catch {}
+    try { this.overlayRect?.setVisible(false); this.overlayRect?.setAlpha(0); } catch {}
+    try { if (this.baseOverlayRect) this.scene.tweens.killTweensOf(this.baseOverlayRect); } catch {}
+    try { this.baseOverlayRect?.setAlpha(0); } catch {}
+    try { this.tweenReelBackgroundToDefaultTint(0); } catch {}
+    try { const sa = (this.scene as any)?.scatterAnticipation; sa?.hide?.(); } catch {}
     try { this.showWinningOverlay(); } catch {}
     // Move winning symbols to front using current spin data if available
     try {
@@ -2566,6 +2619,16 @@ export class Symbols {
           continue;
         }
 
+        // If the actual symbol exists in the grid, do NOT create an overlay.
+        // This keeps the visual as the real symbol “stuck” in the cell.
+        const baseSprite = this.symbols[col]?.[row];
+        if (baseSprite) {
+          // Ensure visibility of the base symbol
+          try { baseSprite.setVisible(true); } catch {}
+          // If there is an existing overlay for this cell, it will be destroyed in the cleanup loop below
+          continue;
+        }
+
         let overlay = this.stickyMultiplierOverlays.find(e => e.col === col && e.row === row);
         if (!overlay) {
           const center = (this as any).getCellCenter(col, row);
@@ -3771,21 +3834,43 @@ export class Symbols {
       return;
     }
 
-    // Check if win dialog is showing - pause autoplay if so
     if (gameStateManager.isShowingWinDialog) {
       console.log('[Symbols] Win dialog is showing - pausing free spin autoplay');
-      // Wait for dialog animations to complete instead of using a fixed delay
-      console.log('[Symbols] Waiting for dialogAnimationsComplete event before continuing free spin autoplay');
-      this.scene.events.once('dialogAnimationsComplete', () => {
-        console.log('[Symbols] Dialog animations complete - continuing free spin autoplay');
-        // Use the same timing as normal autoplay (1000ms base with turbo multiplier)
-        const baseDelay = 500;
-        const turboDelay = gameStateManager.isTurbo ? 
-          baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER : baseDelay;
+      const baseDelay = 500;
+      const turboDelay = gameStateManager.isTurbo ? baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER : baseDelay;
+      let resumed = false;
+      const resume = () => {
+        if (resumed) return;
+        resumed = true;
         console.log(`[Symbols] Scheduling free spin retry in ${turboDelay}ms (base: ${baseDelay}ms, turbo: ${gameStateManager.isTurbo})`);
-        this.scene.time.delayedCall(turboDelay, () => {
-          this.performFreeSpinAutoplay();
-        });
+        this.scene.time.delayedCall(turboDelay, () => { this.performFreeSpinAutoplay(); });
+      };
+      if (!gameStateManager.isShowingWinDialog) { resume(); return; }
+      try {
+        const wom: any = (this.scene as any).winOverlayManager;
+        const hasOverlay = !!(wom && typeof wom.hasActiveOrQueued === 'function' && wom.hasActiveOrQueued());
+        if (!hasOverlay) {
+          console.log('[Symbols] No active/queued win overlay but isShowingWinDialog=true - clearing flag and resuming');
+          gameStateManager.isShowingWinDialog = false;
+          resume();
+          return;
+        }
+      } catch {}
+      console.log('[Symbols] Waiting for dialog completion events before continuing free spin autoplay');
+      this.scene.events.once('dialogAnimationsComplete', () => { console.log('[Symbols] dialogAnimationsComplete received'); resume(); });
+      gameEventManager.once(GameEventType.WIN_DIALOG_CLOSED, () => { console.log('[Symbols] WIN_DIALOG_CLOSED received'); resume(); });
+      this.scene.time.delayedCall(0, () => { if (!gameStateManager.isShowingWinDialog) { resume(); } });
+      this.scene.time.delayedCall(1800, () => {
+        if (resumed) return;
+        try {
+          const wom: any = (this.scene as any).winOverlayManager;
+          const hasOverlay = !!(wom && typeof wom.hasActiveOrQueued === 'function' && wom.hasActiveOrQueued());
+          if (!hasOverlay) {
+            console.log('[Symbols] Safety resume: clearing stale isShowingWinDialog and continuing');
+            gameStateManager.isShowingWinDialog = false;
+            resume();
+          }
+        } catch {}
       });
       return;
     }
@@ -4173,8 +4258,11 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   try {
     if (!gameStateManager.isBonus) {
       self["stickyMultiplierPositions"] = [];
+      self["prevStickyMultiplierPositions"] = [];
     } else {
       const stickyList: Array<{ col: number; row: number; symbol: number }> = (self as any)["stickyMultiplierPositions"] || [];
+      // Snapshot previous sticky positions for this spin's reuse/skip logic
+      (self as any)["prevStickyMultiplierPositions"] = Array.isArray(stickyList) ? stickyList.map(p => ({ ...p })) : [];
       if (Array.isArray(stickyList) && stickyList.length > 0) {
         for (const pos of stickyList) {
           const { col, row, symbol } = pos;
@@ -4290,6 +4378,18 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   await dropReels(self, mockData);
   
   // Update symbols after animation
+  try {
+    if (gameStateManager.isBonus) {
+      const stickyPrev: Array<{ col: number; row: number; symbol: number }> = (self as any)["prevStickyMultiplierPositions"] || [];
+      for (const pos of stickyPrev) {
+        try {
+          if (self.symbols && self.symbols[pos.col] && self.symbols[pos.col][pos.row]) {
+            self.symbols[pos.col][pos.row] = null as any;
+          }
+        } catch {}
+      }
+    }
+  } catch {}
   disposeSymbols(self.symbols);
   self.symbols = self.newSymbols;
   self.newSymbols = [];
@@ -4341,7 +4441,6 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
     
     if (multiplier >= 20) {
       console.log(`[Symbols] Win meets dialog threshold (${multiplier.toFixed(2)}x) - pausing autoplay immediately`);
-      gameStateManager.isShowingWinDialog = true;
     } else {
       console.log(`[Symbols] Win below dialog threshold (${multiplier.toFixed(2)}x) - autoplay continues`);
     }
@@ -4600,10 +4699,38 @@ function createNewSymbols(self: Symbols, data: Data) {
       const x = startX + row * symbolTotalWidth + symbolTotalWidth * 0.5;
       const y = startY + col * symbolTotalHeight + symbolTotalHeight * 0.5;
 
-      let symbol = scene.add.sprite(x, y, 'symbol_' + symbols[col][row]);
-      symbol.displayWidth = self.displayWidth;
-      symbol.displayHeight = self.displayHeight;
-      self.container.add(symbol);
+      let symbol: any;
+      try {
+        const stickyPrev: Array<{ col: number; row: number; symbol: number }> = (self as any)["prevStickyMultiplierPositions"] || [];
+        const isSticky = gameStateManager.isBonus && stickyPrev.some(p => p.col === col && p.row === row);
+        if (isSticky && self.symbols && self.symbols[col] && self.symbols[col][row]) {
+          symbol = self.symbols[col][row];
+          try {
+            const center = (self as any).getCellCenter(col, row);
+            symbol.x = center.x;
+            symbol.y = center.y;
+            symbol.displayWidth = self.displayWidth;
+            symbol.displayHeight = self.displayHeight;
+          } catch {}
+          try {
+            const parent: any = (symbol as any).parentContainer;
+            if (parent !== self.container) {
+              try { parent?.remove?.(symbol); } catch {}
+              try { self.container.add(symbol); } catch {}
+            }
+          } catch {}
+        } else {
+          symbol = scene.add.sprite(x, y, 'symbol_' + symbols[col][row]);
+          symbol.displayWidth = self.displayWidth;
+          symbol.displayHeight = self.displayHeight;
+          self.container.add(symbol);
+        }
+      } catch {
+        symbol = scene.add.sprite(x, y, 'symbol_' + symbols[col][row]);
+        symbol.displayWidth = self.displayWidth;
+        symbol.displayHeight = self.displayHeight;
+        self.container.add(symbol);
+      }
 
       rows.push(symbol);
     }
@@ -4693,7 +4820,14 @@ function dropPrevSymbols(self: Symbols, index: number, extendDuration: boolean =
       console.warn(`[Symbols] dropPrevSymbols: skipping invalid row ${i} or index ${index}`);
       continue;
     }
-    
+    try {
+      const stickyPrev: Array<{ col: number; row: number; symbol: number }> = (self as any)["prevStickyMultiplierPositions"] || [];
+      const isSticky = gameStateManager.isBonus && stickyPrev.some(p => p.col === i && p.row === index);
+      if (isSticky) {
+        continue;
+      }
+    } catch {}
+
     self.scene.tweens.chain({
       targets: self.symbols[i][index],
       tweens: [
@@ -4824,6 +4958,88 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
 
     for (let col = 0; col < self.newSymbols.length; col++) {
       let symbol = self.newSymbols[col][index];
+
+      try {
+        const stickyPrev: Array<{ col: number; row: number; symbol: number }> = (self as any)["prevStickyMultiplierPositions"] || [];
+        const isSticky = gameStateManager.isBonus && stickyPrev.some(p => p.col === col && p.row === index);
+        if (isSticky) {
+          try {
+            const center = (self as any).getCellCenter(col, index);
+            if (symbol) {
+              symbol.x = center.x;
+              symbol.y = center.y;
+            }
+          } catch {}
+          completedAnimations++;
+          if (completedAnimations === totalAnimations) {
+            self.triggerIdleAnimationsForNewReel(index);
+            try {
+              const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
+              if (isAnticipation && index === 2) {
+                if (self.overlayRect) {
+                  if (self.baseOverlayRect) {
+                    self.scene.tweens.add({
+                      targets: self.baseOverlayRect,
+                      alpha: 0,
+                      duration: 300,
+                      ease: 'Cubic.easeOut'
+                    });
+                  }
+                  self.overlayRect.setAlpha(0);
+                  self.overlayRect.setVisible(true);
+                  self.scene.tweens.add({
+                    targets: self.overlayRect,
+                    alpha: 0.85,
+                    duration: 500,
+                    ease: 'Cubic.easeOut'
+                  });
+                }
+                try { self.tweenReelBackgroundToAnticipationTint(300); } catch {}
+                const sa = (self.scene as any)?.scatterAnticipation;
+                if (sa && typeof sa.show === 'function') { sa.show(); }
+                const sa2 = (self.scene as any)?.scatterAnticipation2;
+                if (sa2 && typeof sa2.show === 'function') { sa2.show(); }
+                console.log('[Symbols] Scatter anticipation shown after 3rd reel drop');
+              }
+            } catch {}
+            try {
+              const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
+              if (isAnticipation && index === (SLOT_ROWS - 1)) {
+                const sa = (self.scene as any)?.scatterAnticipation;
+                if (sa && typeof sa.hide === 'function') { sa.hide(); }
+                const sa2 = (self.scene as any)?.scatterAnticipation2;
+                if (sa2 && typeof sa2.hide === 'function') { sa2.hide(); }
+                if (self.overlayRect) {
+                  self.scene.tweens.add({
+                    targets: self.overlayRect,
+                    alpha: 0,
+                    duration: 300,
+                    ease: 'Cubic.easeIn',
+                    onComplete: () => {
+                      if (self.overlayRect) { self.overlayRect.setVisible(false); }
+                    }
+                  });
+                  if (self.baseOverlayRect) {
+                    self.baseOverlayRect.setAlpha(0);
+                    self.baseOverlayRect.setVisible(true);
+                    self.scene.tweens.add({
+                      targets: self.baseOverlayRect,
+                      alpha: 0.2,
+                      duration: 300,
+                      ease: 'Cubic.easeOut'
+                    });
+                  }
+                }
+                try { self.flashReelOverlay(index); } catch {}
+                console.log('[Symbols] Scatter anticipation hidden after last reel drop');
+                (self.scene as any).__isScatterAnticipationActive = false;
+              }
+            } catch {}
+            resolve();
+          }
+          continue;
+        }
+      } catch {}
 
       const START_INDEX_Y = -(Symbols.FILLER_COUNT + SLOT_COLUMNS + extraRows);
       const y = getYPos(self, col + START_INDEX_Y)

@@ -114,12 +114,6 @@ export class AssetLoader {
 		console.log('[AssetLoader] Font assets loaded');
 	}
 
-	loadSpinnerAssets(scene: Scene): void {
-		console.log('[AssetLoader] Loading spinner assets...');
-		this.loadAssetGroup(scene, this.assetConfig.getSpinnerAssets());
-		console.log('[AssetLoader] Spinner assets loaded');
-	}
-
 	loadMenuAssets(scene: Scene): void {
 		console.log('[AssetLoader] Loading menu assets...');
 		this.loadAssetGroup(scene, this.assetConfig.getMenuAssets());
@@ -177,6 +171,12 @@ export class AssetLoader {
 		this.loadAssetGroup(scene, this.assetConfig.getBuyFeatureAssets());
 		console.log('[AssetLoader] Buy feature assets loaded');
 	}
+	
+	loadSpinCardAssets(scene: Scene): void {
+		console.log('[AssetLoader] Loading spin card assets...');
+		this.loadAssetGroup(scene, this.assetConfig.getFreeSpinCardAssets());
+		console.log('[AssetLoader] Spin card assets loaded');
+	}
 
 	loadAudioAssets(scene: Scene): void {
 		console.log('[AssetLoader] Loading audio assets...');
@@ -195,30 +195,43 @@ export class AssetLoader {
 	}
 
 	private preloadFont(fontFamily: string, fontPath: string): void {
-		// Create a link element to preload the font
-		const link = document.createElement('link');
-		link.rel = 'preload';
-		link.as = 'font';
-		link.type = 'font/ttf';
-		link.href = resolveAssetUrl(fontPath);
-		link.crossOrigin = 'anonymous';
-		
-		// Add to document head
-		document.head.appendChild(link);
-		
-		// Also create a style element to ensure the font is available
-		const style = document.createElement('style');
-		style.textContent = `
-			@font-face {
-				font-family: '${fontFamily}';
-				src: url('${resolveAssetUrl(fontPath)}') format('truetype');
-				font-display: swap;
-			}
-		`;
-		document.head.appendChild(style);
-		
-		console.log(`[AssetLoader] Font ${fontFamily} preloaded from ${fontPath}`);
-	}
+        const srcUrl = resolveAssetUrl(fontPath);
+
+        // Register @font-face for CSS usage (fallback-compatible)
+        const style = document.createElement('style');
+        style.textContent = `
+            @font-face {
+                font-family: '${fontFamily}';
+                src: url('${srcUrl}') format('truetype');
+                font-display: swap;
+                font-style: normal;
+                font-weight: 400;
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Proactively load using FontFace API to ensure availability without 'preload' warnings
+        try {
+            if (typeof FontFace !== 'undefined') {
+                const face = new FontFace(fontFamily, `url('${srcUrl}') format('truetype')`, { style: 'normal', weight: '400', display: 'swap' as any });
+                face.load().then(loaded => {
+                    (document as any).fonts?.add(loaded);
+                    // Force a layout by attempting a fonts.load as well (best-effort)
+                    try { (document as any).fonts?.load?.(`1em ${fontFamily}`); } catch {}
+                    console.log(`[AssetLoader] Font ${fontFamily} loaded via FontFace API`);
+                }).catch(err => {
+                    console.warn(`[AssetLoader] FontFace load failed for ${fontFamily}:`, err);
+                });
+            } else {
+                // Fallback: nudge browser to fetch via CSS by requesting it
+                try { (document as any).fonts?.load?.(`1em ${fontFamily}`); } catch {}
+            }
+        } catch (e) {
+            console.warn('[AssetLoader] Error while using FontFace API:', e);
+        }
+
+        console.log(`[AssetLoader] Font ${fontFamily} registered from ${fontPath}`);
+    }
 
 	private ensureFontsLoaded(): void {
 		// Wait for fonts to be loaded using document.fonts API
@@ -235,4 +248,6 @@ export class AssetLoader {
 			}, 1000);
 		}
 	}
+
+
 } 

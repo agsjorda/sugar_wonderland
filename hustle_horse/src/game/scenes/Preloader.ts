@@ -23,6 +23,7 @@ export class Preloader extends Scene
 	private buttonSpin?: Phaser.GameObjects.Image;
 	private buttonBg?: Phaser.GameObjects.Image;
 	private pressToPlayText?: Phaser.GameObjects.Text;
+	private progressText?: Phaser.GameObjects.Text;
 	private fullscreenBtn?: Phaser.GameObjects.Image;
 	private clockDisplay?: ClockDisplay;
 	private preloaderVerticalOffsetModifier: number = 10; // Vertical offset for Preloader elements only
@@ -303,32 +304,26 @@ export class Preloader extends Scene
 		EventBus.emit('current-scene-ready', this);
 	}
 
-	preload ()
-	{
-		// Show debug info
-		this.assetConfig.getDebugInfo();
-
-		
-		// Load background and header assets (will be used in Game scene)
-		this.assetLoader.loadBackgroundAssets(this);
-		this.assetLoader.loadHeaderAssets(this);
-		this.assetLoader.loadBonusHeaderAssets(this);
-		this.assetLoader.loadSymbolAssets(this);
-		this.assetLoader.loadButtonAssets(this);
-		this.assetLoader.loadFontAssets(this);
-		this.assetLoader.loadDialogAssets(this);
-		// Load free-spin card spine for scatter card overlay
-		this.assetLoader.loadAssetGroup(this, this.assetConfig.getFreeSpinCardAssets());
-		// Ensure scatter win overlay assets (including fire spine) are loaded
-		this.assetLoader.loadAssetGroup(this, this.assetConfig.getScatterWinOverlayAssets());
-		// Load Scatter Anticipation spine (portrait/high only asset paths)
-		this.assetLoader.loadScatterAnticipationAssets(this);
-		this.assetLoader.loadBonusBackgroundAssets(this);
-		this.assetLoader.loadNumberAssets(this);
+	preload () {
 		this.assetLoader.loadCoinAssets(this);
 		this.assetLoader.loadBuyFeatureAssets(this);
+		this.assetLoader.loadBackgroundAssets(this);
+		this.assetLoader.loadBonusBackgroundAssets(this);
+		this.assetLoader.loadBonusHeaderAssets(this);
+		this.assetLoader.loadScatterAnticipationAssets(this);
+		this.assetLoader.loadButtonAssets(this);
+		this.assetLoader.loadFontAssets(this);
+		this.assetLoader.loadHeaderAssets(this);
+		this.assetLoader.loadLoadingAssets(this);
 		this.assetLoader.loadMenuAssets(this);
 		this.assetLoader.loadHelpScreenAssets(this);
+		this.assetLoader.loadSymbolAssets(this);
+		this.assetLoader.loadMenuAssets(this);
+		this.assetLoader.loadHelpScreenAssets(this);
+		this.assetLoader.loadNumberAssets(this);
+		this.assetLoader.loadAudioAssets(this);
+		this.assetLoader.loadAllAssets(this);
+		this.assetLoader.loadSpinCardAssets(this);
 		
 		console.log(`[Preloader] Loading assets for Preloader and Game scenes`);
 	}

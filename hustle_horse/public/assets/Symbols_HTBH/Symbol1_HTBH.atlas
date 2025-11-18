@@ -1,86 +1,26 @@
 Symbol1_HTBH.png
-size:492,492
+size:96,96
 filter:Linear,Linear
 pma:true
 scale:0.078
-Fire Breath/Fire_Breath_00000
-bounds:2,412,78,78
-Fire Breath/Fire_Breath_00029
-bounds:2,412,78,78
-Fire Breath/Fire_Breath_00001
-bounds:2,332,78,78
-Fire Breath/Fire_Breath_00002
-bounds:82,412,78,78
-Fire Breath/Fire_Breath_00003
-bounds:2,252,78,78
-Fire Breath/Fire_Breath_00004
-bounds:82,332,78,78
-Fire Breath/Fire_Breath_00005
-bounds:162,412,78,78
-Fire Breath/Fire_Breath_00006
-bounds:2,172,78,78
-Fire Breath/Fire_Breath_00007
-bounds:82,252,78,78
-Fire Breath/Fire_Breath_00008
-bounds:162,332,78,78
-Fire Breath/Fire_Breath_00009
-bounds:242,412,78,78
-Fire Breath/Fire_Breath_00010
-bounds:2,92,78,78
-Fire Breath/Fire_Breath_00011
-bounds:82,172,78,78
-Fire Breath/Fire_Breath_00012
-bounds:162,252,78,78
-Fire Breath/Fire_Breath_00013
-bounds:242,332,78,78
-Fire Breath/Fire_Breath_00014
-bounds:322,412,78,78
-Fire Breath/Fire_Breath_00015
-bounds:2,12,78,78
-Fire Breath/Fire_Breath_00016
-bounds:82,92,78,78
-Fire Breath/Fire_Breath_00017
-bounds:162,172,78,78
-Fire Breath/Fire_Breath_00018
-bounds:242,252,78,78
-Fire Breath/Fire_Breath_00019
-bounds:322,332,78,78
-Fire Breath/Fire_Breath_00020
-bounds:402,412,78,78
-Fire Breath/Fire_Breath_00021
-bounds:82,12,78,78
-Fire Breath/Fire_Breath_00022
-bounds:162,92,78,78
-Fire Breath/Fire_Breath_00023
-bounds:242,172,78,78
-Fire Breath/Fire_Breath_00024
-bounds:322,252,78,78
-Fire Breath/Fire_Breath_00025
-bounds:402,332,78,78
-Fire Breath/Fire_Breath_00026
-bounds:162,12,78,78
-Fire Breath/Fire_Breath_00027
-bounds:242,92,78,78
-Fire Breath/Fire_Breath_00028
-bounds:322,172,78,78
 symbol1_HTBH_Arm
-bounds:469,306,21,24
+bounds:29,29,21,24
 symbol1_HTBH_Arm2
-bounds:2,3,13,7
+bounds:2,2,13,7
 symbol1_HTBH_Chess
-bounds:242,48,25,42
+bounds:2,11,25,42
 offsets:1,5,29,47
 symbol1_HTBH_Head
-bounds:322,149,40,21
+bounds:34,73,40,21
 offsets:0,1,40,22
 symbol1_HTBH_Jaw
-bounds:434,317,33,13
+bounds:34,58,33,13
 symbol1_HTBH_Legs
-bounds:242,24,19,22
+bounds:29,5,19,22
 offsets:0,0,19,23
 symbol1_HTBH_LowerBody
-bounds:402,291,30,39
+bounds:2,55,30,39
 offsets:0,2,30,42
 symbol1_HTBH_Tail
-bounds:402,255,18,34
+bounds:76,60,18,34
 offsets:6,3,24,37
