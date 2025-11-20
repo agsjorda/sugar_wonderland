@@ -269,9 +269,14 @@ export class Preloader extends Scene
 			});
 		}
 
-		// Keep emitting for React overlay listeners if any
+		try { (window as any).hideBootLoader?.(); } catch {}
+
 		this.load.on('progress', (progress: number) => {
 			EventBus.emit('progress', progress);
+			try { (window as any).setBootLoaderProgress?.(0.25 + progress * 0.75); } catch {}
+		});
+		this.load.once('complete', () => {
+			try { (window as any).setBootLoaderProgress?.(1); } catch {}
 		});
 		
 		EventBus.emit('current-scene-ready', this);
