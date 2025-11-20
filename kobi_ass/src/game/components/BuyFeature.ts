@@ -81,7 +81,8 @@ export class BuyFeature {
 	 */
 	private initializeBetIndex(): void {
 		if (this.slotController) {
-			const currentBaseBet = this.slotController.getBaseBetAmount();
+			// Initialize from SlotController's independent Buy Feature bet (not main BET)
+			const currentBaseBet = (this.slotController as any).getBuyFeatureBetAmount ? (this.slotController as any).getBuyFeatureBetAmount() : this.slotController.getBaseBetAmount();
 			
 			// Find the closest bet option
 			let closestIndex = 0;
@@ -420,6 +421,10 @@ export class BuyFeature {
 			this.currentBet = this.betOptions[this.currentBetIndex];
 			this.updateBetDisplay();
 			this.updatePriceDisplay();
+			// Update HUD Buy Feature price indicator
+			if (this.slotController && (this.slotController as any).setBuyFeatureBetAmount) {
+				(this.slotController as any).setBuyFeatureBetAmount(this.currentBet);
+			}
 			console.log(`[BuyFeature] Previous bet selected: $${this.currentBet.toFixed(2)}`);
 		}
 	}
@@ -430,6 +435,10 @@ export class BuyFeature {
 			this.currentBet = this.betOptions[this.currentBetIndex];
 			this.updateBetDisplay();
 			this.updatePriceDisplay();
+			// Update HUD Buy Feature price indicator
+			if (this.slotController && (this.slotController as any).setBuyFeatureBetAmount) {
+				(this.slotController as any).setBuyFeatureBetAmount(this.currentBet);
+			}
 			console.log(`[BuyFeature] Next bet selected: $${this.currentBet.toFixed(2)}`);
 		}
 	}

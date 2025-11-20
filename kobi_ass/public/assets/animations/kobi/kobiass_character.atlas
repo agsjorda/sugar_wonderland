@@ -3,7 +3,8 @@ size:1532,1532
 filter:Linear,Linear
 pma:true
 body
-bounds:685,756,735,774
+bounds:685,756,731,774
+offsets:0,0,735,774
 close_eyes
 bounds:301,118,349,155
 offsets:1,2,350,160

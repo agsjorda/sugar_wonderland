@@ -14,6 +14,7 @@ export class WinLineDrawer {
   private lines: Phaser.GameObjects.Graphics[] = [];
   private symbolsReference: any;
   private currentWinPatterns: [number, Grid[]][] = []; // [lineKey, winningGrids][]
+  private currentPaylinesByKey: Map<number, PaylineData> = new Map();
   private isLooping: boolean = false;
   private loopTimer?: Phaser.Time.TimerEvent;
   private hasEmittedFirstLoopWinStop: boolean = false;
@@ -182,7 +183,13 @@ export class WinLineDrawer {
     }
 
     const [winlineIndex, winningGrids] = this.currentWinPatterns[currentIndex];
-    
+    try {
+      const payline = this.currentPaylinesByKey.get(winlineIndex) || null;
+      const tracker = (this.scene as any).winTracker;
+      if (tracker && typeof tracker.showForPayline === 'function') {
+        tracker.showForPayline(payline);
+      }
+    } catch {}
     
     // Get the complete winline pattern for continuity
     const completeWinlineGrids = this.getCompleteWinlineGrids(winlineIndex);
@@ -241,6 +248,13 @@ export class WinLineDrawer {
     this.clearLines();
 
     const [winlineIndex, winningGrids] = this.currentWinPatterns[currentIndex];
+    try {
+      const payline = this.currentPaylinesByKey.get(winlineIndex) || null;
+      const tracker = (this.scene as any).winTracker;
+      if (tracker && typeof tracker.showForPayline === 'function') {
+        tracker.showForPayline(payline);
+      }
+    } catch {}
     
     // Get the complete winline pattern for continuity
     const completeWinlineGrids = this.getCompleteWinlineGrids(winlineIndex);
@@ -937,10 +951,12 @@ export class WinLineDrawer {
    */
   private convertPaylinesToWinPatterns(spinData: SpinData): [number, Grid[]][] {
     const winPatterns: [number, Grid[]][] = [];
+    this.currentPaylinesByKey.clear();
     
     for (const payline of spinData.slot.paylines) {
       const lineKey = payline.lineKey;
       const winningGrids = this.getWinningGridsForPayline(spinData, payline);
+      this.currentPaylinesByKey.set(lineKey, payline);
       
       if (winningGrids.length > 0) {
         winPatterns.push([lineKey, winningGrids]);

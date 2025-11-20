@@ -17,6 +17,10 @@ export class Header {
 	private youWonText: Phaser.GameObjects.Text;
 	private currentWinnings: number = 0;
 	private pendingWinnings: number = 0;
+	private logoOffsetX: number = 0;
+	private logoOffsetY: number = 0;
+	private logoScaleMul: number = 0.1;
+	private logoSpine?: SpineGameObject;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -48,21 +52,56 @@ export class Header {
 
 	private createHeaderElements(scene: Scene, assetScale: number): void {
 
-		// Add logo
-		const logo = scene.add.image(
-			scene.scale.width * 0.39,
-			scene.scale.height * 0.13,
-			'kobi-logo'
-		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(1);
-		this.headerContainer.add(logo);
-
-		// Add tent (moved from Background)
-		const tent = scene.add.image(
-			scene.scale.width * 0.51,
-			scene.scale.height * 0.326,
-			'kobi-tent'
-		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(1).setAlpha(1);
-		this.headerContainer.add(tent);
+		// Add logo – prefer Spine animation (logo_kobo), fall back to PNG if unavailable
+		try {
+			if (!ensureSpineFactory(scene, '[Header] createHeaderElements logo')) {
+				console.warn('[Header] Spine factory unavailable. Skipping spine logo creation.');
+				const logo = scene.add.image(
+					scene.scale.width * 0.39 + this.logoOffsetX,
+					scene.scale.height * 0.13 + this.logoOffsetY,
+					'kobi-logo'
+				).setOrigin(0.5, 0.5).setScale(assetScale * this.logoScaleMul).setDepth(1);
+				this.headerContainer.add(logo);
+			} else if (!(scene.cache.json as any).has('logo_kobo')) {
+				console.warn('[Header] Spine json for logo_kobo not loaded. Falling back to PNG logo.');
+				const logo = scene.add.image(
+					scene.scale.width * 0.39 + this.logoOffsetX,
+					scene.scale.height * 0.13 + this.logoOffsetY,
+					'kobi-logo'
+				).setOrigin(0.5, 0.5).setScale(assetScale * this.logoScaleMul).setDepth(1);
+				this.headerContainer.add(logo);
+			} else {
+				const logoSpine = scene.add.spine(
+					scene.scale.width * 0.39 + this.logoOffsetX,
+					scene.scale.height * 0.13 + this.logoOffsetY,
+					'logo_kobo',
+					'logo_kobo-atlas'
+				);
+				logoSpine.setOrigin(0.5, 0.5);
+				logoSpine.setScale(assetScale * this.logoScaleMul);
+				logoSpine.setDepth(1);
+				try {
+					// Copy idle animation selection from the other project
+					const anySpine: any = logoSpine as any;
+					const animations = anySpine?.skeleton?.data?.animations;
+					if (animations && animations.length > 0) {
+						const names = animations.map((a: any) => a.name || a);
+						const idleName = names.includes('logo_idle_animation') ? 'logo_idle_animation' : names[0];
+						logoSpine.animationState.setAnimation(0, idleName, true);
+					}
+				} catch {}
+				this.headerContainer.add(logoSpine);
+				this.logoSpine = logoSpine;
+			}
+		} catch (e) {
+			console.warn('[Header] Failed to create spine logo, falling back to PNG:', e);
+			const logo = scene.add.image(
+				scene.scale.width * 0.39 + this.logoOffsetX,
+				scene.scale.height * 0.13 + this.logoOffsetY,
+				'kobi-logo'
+			).setOrigin(0.5, 0.5).setScale(assetScale * this.logoScaleMul).setDepth(1);
+			this.headerContainer.add(logo);
+		}
 
 		// Add Spine animated character (before win bar)
 		this.createCharacterSpineAnimation(scene, assetScale);
@@ -154,6 +193,13 @@ export class Header {
 		if (this.headerContainer) {
 			this.headerContainer.setSize(scene.scale.width, scene.scale.height);
 		}
+		if (this.logoSpine) {
+			// Match repositioning & scaling behaviour from the other project
+			const s = this.networkManager.getAssetScale();
+			this.logoSpine.x = scene.scale.width * 0.39 + this.logoOffsetX;
+			this.logoSpine.y = scene.scale.height * 0.13 + this.logoOffsetY;
+			this.logoSpine.setScale(s * this.logoScaleMul);
+		}
 	}
 
 	getContainer(): Phaser.GameObjects.Container {
@@ -225,6 +271,20 @@ export class Header {
 				this.hideWinningsDisplay();
 			}
 		});
+
+		// Play logo win animation when scatter anticipation results in a bonus (free spins)
+		// This is emitted by ScatterAnimationManager.showFreeSpinsDialog via GameEventType.IS_BONUS
+		gameEventManager.on(GameEventType.IS_BONUS, (data: any) => {
+			try {
+				const bonusType = data?.bonusType;
+				if (bonusType === 'freeSpins') {
+					console.log('[Header] IS_BONUS (freeSpins) received – playing logo win animation');
+					this.playLogoWin();
+				}
+			} catch (e) {
+				console.warn('[Header] Failed handling IS_BONUS for logo animation', e);
+			}
+		});
 	}
 
 	/**
@@ -247,6 +307,8 @@ export class Header {
 			// Hide both texts
 			this.youWonText.setVisible(false);
 			this.amountText.setVisible(false);
+			// Revert logo to idle animation when hiding winnings (copied behaviour)
+			this.playLogoIdle();
 			
 			console.log('[Header] Winnings display hidden');
 		} else {
@@ -268,6 +330,8 @@ export class Header {
 			// Show both texts
 			this.youWonText.setVisible(true);
 			this.amountText.setVisible(true);
+			// Trigger logo win animation while winnings are visible (copied behaviour)
+			this.playLogoWin();
 			
 			// Update amount text with winnings
 			this.amountText.setText(formattedWinnings);
@@ -332,6 +396,63 @@ export class Header {
 	 */
 	public resetWinnings(): void {
 		this.updateWinningsDisplay(0);
+	}
+
+	// --- Logo animation helpers copied from the other project ---
+
+	// Play logo idle animation if available, otherwise keep current
+	private playLogoIdle(): void {
+		try {
+			if (!this.logoSpine) return;
+			const anySpine: any = this.logoSpine as any;
+			const animations = anySpine?.skeleton?.data?.animations;
+			if (!animations || animations.length === 0) return;
+			const names = animations.map((a: any) => a.name || a);
+			const idleName = names.includes('logo_idle_animation') ? 'logo_idle_animation' : null;
+			if (!idleName) return;
+			const current = this.logoSpine.animationState.getCurrent(0);
+			const currentName = current?.animation?.name;
+			// Do not restart if already playing idle
+			if (currentName === idleName) return;
+			this.logoSpine.animationState.setAnimation(0, idleName, true);
+		} catch {}
+	}
+
+	// Play logo win animation once, then queue back to idle
+	private playLogoWin(): void {
+		try {
+			if (!this.logoSpine) return;
+			const anySpine: any = this.logoSpine as any;
+			const animations = anySpine?.skeleton?.data?.animations;
+			if (!animations || animations.length === 0) return;
+			const names = animations.map((a: any) => a.name || a);
+			const winName = names.includes('logo_win_animation') ? 'logo_win_animation' : null;
+			if (winName) {
+				// Loop win animation during active winnings
+				this.logoSpine.animationState.setAnimation(0, winName, true);
+			}
+		} catch {}
+	}
+
+	public setLogoOffset(x: number, y: number): void {
+		this.logoOffsetX = x;
+		this.logoOffsetY = y;
+		if (this.logoSpine) {
+			this.logoSpine.x = (this.logoSpine.scene.scale.width * 0.39) + this.logoOffsetX;
+			this.logoSpine.y = (this.logoSpine.scene.scale.height * 0.13) + this.logoOffsetY;
+		}
+	}
+
+	public setLogoScaleMultiplier(multiplier: number): void {
+		this.logoScaleMul = multiplier;
+		if (this.logoSpine) {
+			const s = this.networkManager.getAssetScale();
+			this.logoSpine.setScale(s * this.logoScaleMul);
+		}
+	}
+
+	public getLogoConfig(): { offsetX: number; offsetY: number; scaleMultiplier: number } {
+		return { offsetX: this.logoOffsetX, offsetY: this.logoOffsetY, scaleMultiplier: this.logoScaleMul };
 	}
 
 	/**

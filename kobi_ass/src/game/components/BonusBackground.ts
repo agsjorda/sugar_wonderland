@@ -7,6 +7,10 @@ export class BonusBackground {
 	private bonusContainer: Phaser.GameObjects.Container;
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
+	private propsBonusSpine?: any;
+	private propsBonusContainer: Phaser.GameObjects.Container | null = null;
+	private propsBonusOffsetX: number = -23.2;
+	private propsBonusOffsetY: number = 0;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -40,6 +44,94 @@ export class BonusBackground {
 			this.createPortraitBonusBackground(scene, assetScale);
 		} else {
 			this.createLandscapeBonusBackground(scene, assetScale);
+		}
+	}
+
+	public setPropsBonusOffset(x: number, y: number): void {
+		this.propsBonusOffsetX = x;
+		this.propsBonusOffsetY = y;
+
+		if (this.propsBonusSpine) {
+			const scene = this.propsBonusSpine.scene;
+			if (scene) {
+				this.propsBonusSpine.x = (scene.scale.width * 0.5) + this.propsBonusOffsetX;
+				this.propsBonusSpine.y = (scene.scale.height * 0.5) + this.propsBonusOffsetY;
+			}
+		}
+	}
+
+	public getPropsBonusOffset(): { x: number; y: number } {
+		return {
+			x: this.propsBonusOffsetX,
+			y: this.propsBonusOffsetY,
+		};
+	}
+
+	private createPropsBonusSpine(scene: Scene, assetScale: number): void {
+		try {
+			if (!ensureSpineFactory(scene, '[BonusBackground] createPropsBonusSpine')) {
+				console.warn('[BonusBackground] Spine factory unavailable. Skipping props-bonus spine.');
+				return;
+			}
+
+			const cacheJson: any = scene.cache.json as any;
+			const hasJson = cacheJson && typeof cacheJson.has === 'function' && cacheJson.has('props-bonus');
+
+			if (!hasJson) {
+				console.warn('[BonusBackground] Spine json for props-bonus not loaded. Skipping props-bonus spine.');
+				return;
+			}
+
+			// Ensure a dedicated container exists for the props-bonus spine so we can
+			// layer it above the reels (similar to base game props).
+			if (!this.propsBonusContainer) {
+				this.propsBonusContainer = scene.add.container(0, 0);
+				// Match base props layering: above symbols but below UI
+				this.propsBonusContainer.setDepth(600);
+				// Hidden by default; will be toggled by Game scene events
+				this.propsBonusContainer.setVisible(false);
+			}
+
+			const width = scene.scale.width;
+			const height = scene.scale.height;
+
+			const propsBonusSpine = scene.add.spine(
+				(width * 0.5) + this.propsBonusOffsetX,
+				(height * 0.5) + this.propsBonusOffsetY,
+				"props-bonus",
+				"props-bonus-atlas"
+			);
+
+			propsBonusSpine.setOrigin(0.5, 0.5);
+			propsBonusSpine.setScale(assetScale);
+
+			// Add to the dedicated props container (not the main bonus background container)
+			this.propsBonusContainer.add(propsBonusSpine);
+			this.propsBonusSpine = propsBonusSpine;
+
+			try {
+				const anySpine: any = propsBonusSpine as any;
+				const animations = anySpine?.skeleton?.data?.animations || [];
+
+				if (animations.length > 0) {
+					const animName = animations[0].name || animations[0];
+					console.log(`[BonusBackground] Playing props-bonus animation: ${animName}`);
+
+					scene.time.delayedCall(100, () => {
+						try {
+							propsBonusSpine.animationState.setAnimation(0, animName, true);
+						} catch (e) {
+							console.error('[BonusBackground] Failed to start props-bonus animation:', e);
+						}
+					});
+				} else {
+					console.warn('[BonusBackground] No animations found in props-bonus spine data');
+				}
+			} catch (e) {
+				console.error('[BonusBackground] Error configuring props-bonus animation:', e);
+			}
+		} catch (error) {
+			console.error('[BonusBackground] Error creating props-bonus Spine animation:', error);
 		}
 	}
 
@@ -82,24 +174,12 @@ export class BonusBackground {
 		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(1);
 		this.bonusContainer.add(bonusBg);
 
-		// Kobi tent bonus
-		const kobiTentBonus = scene.add.image(
-			scene.scale.width * 0.5,
-			scene.scale.height * 0.3275,
-			'kobi-tent-bonus'
-		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(3);
-		this.bonusContainer.add(kobiTentBonus);
+		// Background spine animation visible only in bonus mode
+		this.createPropsBonusSpine(scene, assetScale);
 
 		// Mobile disco lights spine animation
 		this.createMobileDiscoLights(scene, assetScale);
 
-		// Grass element (created last to ensure it's on top)
-		const grass = scene.add.image(
-			scene.scale.width * 0.5,
-			scene.scale.height * 0.884,
-			'grass'
-		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(20);
-		this.bonusContainer.add(grass);
 	}
 
 	private createLandscapeBonusBackground(scene: Scene, assetScale: number): void {
@@ -113,24 +193,12 @@ export class BonusBackground {
 		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(1);
 		this.bonusContainer.add(bonusBg);
 
-		// Kobi tent bonus
-		const kobiTentBonus = scene.add.image(
-			scene.scale.width * 0.3,
-			scene.scale.height * 0.4,
-			'kobi-tent-bonus'
-		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(3);
-		this.bonusContainer.add(kobiTentBonus);
+		// Background spine animation visible only in bonus mode
+		this.createPropsBonusSpine(scene, assetScale);
 
 		// Mobile disco lights spine animation
 		this.createMobileDiscoLights(scene, assetScale);
 
-		// Grass element (created last to ensure it's on top)
-		const grass = scene.add.image(
-			scene.scale.width * 0.5,
-			scene.scale.height * 0.5,
-			'grass'
-		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(20);
-		this.bonusContainer.add(grass);
 	}
 
 	resize(scene: Scene): void {
@@ -139,11 +207,31 @@ export class BonusBackground {
 		}
 	}
 
+	public showProps(): void {
+		if (this.propsBonusContainer) {
+			this.propsBonusContainer.setVisible(true);
+		}
+	}
+
+	public hideProps(): void {
+		if (this.propsBonusContainer) {
+			this.propsBonusContainer.setVisible(false);
+		}
+	}
+
 	getContainer(): Phaser.GameObjects.Container {
 		return this.bonusContainer;
 	}
 
 	destroy(): void {
+		if (this.propsBonusContainer) {
+			this.propsBonusContainer.removeAll(true);
+			this.propsBonusContainer.destroy();
+			this.propsBonusContainer = null;
+		}
+
+		this.propsBonusSpine = undefined;
+
 		if (this.bonusContainer) {
 			this.bonusContainer.destroy();
 		}

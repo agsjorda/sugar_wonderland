@@ -34,7 +34,7 @@ export class AssetConfig {
 			images: {
 				'BG-Default': `${prefix}/background/BG-Default.png`,
 				'reel-frame': `${prefix}/background/reel-frame.png`,
-				'kobi-tent': `${prefix}/background/kobi-tent.png`,
+				'reel-frame-2': `${prefix}/background/reel-frame-2.png`,
 				// Mostly for landscape bg
 				// 'balloon-01': `${prefix}/background/balloon-01.png`,
 				// 'balloon-02': `${prefix}/background/balloon-02.png`,
@@ -44,6 +44,16 @@ export class AssetConfig {
 				// 'bulb-01': `${prefix}/background/bulb-01.png`,
 				// 'bulb-02': `${prefix}/background/bulb-02.png`,
 				// 'bulb-03': `${prefix}/background/bulb-03.png`,
+			},
+			spine: {
+				'props': {
+					atlas: `${prefix}/background/spine-background/props.atlas`,
+					json: `${prefix}/background/spine-background/props.json`
+				},
+				'props-bonus': {
+					atlas: `${prefix}/background/spine-background/props-bonus.atlas`,
+					json: `${prefix}/background/spine-background/props-bonus.json`
+				}
 			}
 		};
 	}
@@ -54,8 +64,6 @@ export class AssetConfig {
 		return {
 			images: {
 				'bonus_background': `${prefix}/bonus_background/BG-Bonus.png`,
-                'grass': `${prefix}/bonus_background/grass.png`,
-                'kobi-tent-bonus': `${prefix}/bonus_background/kobi-tent-bonus.png`,
                 'spotlight': `${prefix}/bonus_background/spotlight.png`,
 				'mobile_disco_lights': `${prefix}/bonus_background/mobile_disco_lights/mobile_disco_lights.png`,
 				'mobile_disco_lights_2': `${prefix}/bonus_background/mobile_disco_lights/mobile_disco_lights_2.png`,
@@ -89,6 +97,10 @@ export class AssetConfig {
 				'Cat_default': {
 					atlas: `${prefix}/header/cat_KA_default/Cat_default.atlas`,
 					json: `${prefix}/header/cat_KA_default/Cat_default.json`
+				},
+				'logo_kobo': {
+					atlas: `${prefix}/header/kobo-logo-spine/logo_kobo.atlas`,
+					json: `${prefix}/header/kobo-logo-spine/logo_kobo.json`
 				}
 				// Add more Spine animations here
 			}
@@ -125,7 +137,11 @@ export class AssetConfig {
 				'loading_background': `${prefix}/loading/image.png`,
 				'button_bg': `${prefix}/loading/button_bg.png`,
 				'button_spin': `${prefix}/loading/button_spin.png`,
-				'kobi_logo_loading': `${prefix}/loading/kobi-logo-loading.png`
+				'kobi_logo_loading': `${prefix}/loading/kobi-logo-loading.png`,
+				// Studio loading visual elements (DiJoker theme)
+				'loading_frame': `${prefix}/loading/loading-frame.png`,
+				'loading_frame_2': `${prefix}/loading/loading-frame-2.png`,
+				'dijoker_logo': `${prefix}/loading/DiJoker-logo.png`
 			},
 			spine: {
 				// Studio loading spine (DI JOKER) – only available in portrait/high

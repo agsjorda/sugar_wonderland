@@ -55,6 +55,10 @@ export class SlotController {
 	
 	// Autoplay stop icon overlay
 	private autoplayStopIcon: Phaser.GameObjects.Image | null = null;
+	
+	// Global UI offset for all controller elements
+	private uiGlobalOffsetX: number = 0;
+	private uiGlobalOffsetY: number = 50;
 
 	// Guard to ensure we decrement autoplay counter once per spin at REELS_START
 	private hasDecrementedAutoplayForCurrentSpin: boolean = false;
@@ -80,6 +84,9 @@ export class SlotController {
 	// Store the base bet amount (without amplify bet increase) for API calls
 	private baseBetAmount: number = 0;
 	
+	// Store an independent Buy Feature bet amount (decoupled from main BET)
+	private buyFeatureBetAmount: number = 0.2;
+	
 	// Simple autoplay system
 	private autoplaySpinsRemaining: number = 0;
 	private autoplayTimer: Phaser.Time.TimerEvent | null = null;
@@ -93,6 +100,17 @@ export class SlotController {
 		
 		// Listen for autoplay state changes
 		this.setupAutoplayEventListeners();
+	}
+
+	private showOutOfBalancePopup(message?: string): void {
+		const scene = this.scene as Scene | null;
+		if (!scene) return;
+		import('./OutOfBalancePopup').then(module => {
+			const Popup = module.OutOfBalancePopup;
+			const popup = new Popup(scene);
+			if (message) popup.updateMessage(message);
+			popup.show();
+		}).catch(() => {});
 	}
 
 	/**
@@ -112,6 +130,17 @@ export class SlotController {
 		if (this.buyFeature) {
 			this.buyFeature.setSlotController(this);
 			console.log('[SlotController] BuyFeature reference set');
+		}
+	}
+	
+	/**
+	 * Set a global offset applied to all controller UI (buttons, labels, bet/balance/feature)
+	 */
+	public setControllerOffset(x: number, y: number): void {
+		this.uiGlobalOffsetX = x;
+		this.uiGlobalOffsetY = y;
+		if (this.controllerContainer) {
+			this.controllerContainer.setPosition(this.uiGlobalOffsetX, this.uiGlobalOffsetY);
 		}
 	}
 
@@ -136,6 +165,8 @@ export class SlotController {
 		this.controllerContainer = scene.add.container(0, 0);
 		// Ensure controller UI renders above coin animations (800) but below dialogs (1000)
 		this.controllerContainer.setDepth(900);
+		// Apply global offset to all controller UI
+		this.controllerContainer.setPosition(this.uiGlobalOffsetX, this.uiGlobalOffsetY);
 		
 		const screenConfig = this.screenModeManager.getScreenConfig();
 		const assetScale = this.networkManager.getAssetScale();
@@ -1510,6 +1541,8 @@ export class SlotController {
 	resize(scene: Scene): void {
 		if (this.controllerContainer) {
 			this.controllerContainer.setSize(scene.scale.width, scene.scale.height);
+			// Re-apply global offset on resize
+			this.controllerContainer.setPosition(this.uiGlobalOffsetX, this.uiGlobalOffsetY);
 		}
 	}
 
@@ -1533,8 +1566,8 @@ export class SlotController {
 			}
 		}
 		
-		// Keep the Buy Feature amount synced with current base bet
-		this.updateFeatureAmountFromCurrentBet();
+		// Keep the Buy Feature amount synced with current base bet by default
+		this.setBuyFeatureBetAmount(betAmount);
 		
 		// Update base bet amount when changed externally (not by amplify bet)
 		if (!this.isInternalBetChange) {
@@ -1551,14 +1584,8 @@ export class SlotController {
 		if (!this.featureAmountText || !this.featureDollarText) {
 			return;
 		}
-		// Prefer displayed bet (reflects amplify), fallback to base bet
-		let displayedBet = 0;
-		if (this.betAmountText) {
-			displayedBet = parseFloat(this.betAmountText.text) || 0;
-		}
-		if (displayedBet === 0) {
-			displayedBet = this.getBaseBetAmount() || 0;
-		}
+		// Always use the independent Buy Feature bet (decoupled from main BET and amplify)
+		const displayedBet = this.getBuyFeatureBetAmount() || 0;
 		const price = displayedBet * 100;
 		// Format with thousands separators and 2 decimals
 		this.featureAmountText.setText(price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
@@ -1577,6 +1604,18 @@ export class SlotController {
 	 */
 	getBaseBetAmount(): number {
 		return this.baseBetAmount;
+	}
+	
+	/** Get the independent Buy Feature bet amount */
+	getBuyFeatureBetAmount(): number {
+		return this.buyFeatureBetAmount;
+	}
+	
+	/** Set the independent Buy Feature bet amount and refresh HUD price */
+	setBuyFeatureBetAmount(amount: number): void {
+		const clamped = Math.max(0, amount);
+		this.buyFeatureBetAmount = clamped;
+		this.updateFeatureAmountFromCurrentBet();
 	}
 
 	updateBalanceAmount(balanceAmount: number): void {
@@ -2090,6 +2129,8 @@ export class SlotController {
 			this.hideEnhanceBetIdleLoop();
 			// Restore original bet amount (remove 25% increase)
 			this.restoreOriginalBetAmount();
+			// Re-enable Buy Feature button when amplify bet is turned off
+			this.enableFeatureButton();
 		} else {
 			// Amplify bet is not active, turn it on
 			console.log('[SlotController] Turning amplify bet ON via button click');
@@ -2099,6 +2140,8 @@ export class SlotController {
 			this.triggerAmplifyBetAnimation();
 			// Apply 25% bet increase
 			this.applyAmplifyBetIncrease();
+			// Disable Buy Feature button while amplify bet is ON
+			this.disableFeatureButton();
 		}
 		
 		// Control the amplify bet button pulsing based on state
@@ -2422,6 +2465,13 @@ export class SlotController {
 		// Control the animation based on initial state
 		this.controlAmplifyBetAnimation();
 		
+		// Mirror Hustle behavior: disable Buy Feature when amplify is ON
+		if (gameData.isEnhancedBet) {
+			this.disableFeatureButton();
+		} else {
+			this.enableFeatureButton();
+		}
+		
 		console.log(`[SlotController] Amplify button initialized with state: ${gameData.isEnhancedBet ? 'ON' : 'OFF'}`);
 	}
 
@@ -2684,6 +2734,8 @@ export class SlotController {
 		this.hideAmplifyBetAnimation();
 		this.hideEnhanceBetIdleLoop();
 		this.stopAmplifyBetBouncing();
+		// Re-enable Buy Feature when amplify is reset due to bet change
+		this.enableFeatureButton();
 		// Price still reflects base bet x100, so refresh it
 		this.updateFeatureAmountFromCurrentBet();
 		
@@ -3236,7 +3288,7 @@ public updateAutoplayButtonState(): void {
 				this.enableFeatureButton();
 				this.enableBetButtons();
 				this.enableAmplifyButton();
-				// TODO: Show insufficient balance message to user
+				this.showOutOfBalancePopup();
 				return;
 			}
 			

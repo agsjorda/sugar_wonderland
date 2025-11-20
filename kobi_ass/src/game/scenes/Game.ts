@@ -1,15 +1,3 @@
-/**
- * Game Scene - STABLE VERSION v1.0
- * 
- * This version includes:
- * - Complete asset management system with AssetConfig and AssetLoader
- * - NetworkManager and ScreenModeManager integration
- * - Background, Header, Symbols, Spinner, and SlotController components
- * - BonusBackground and BonusHeader components (commented out)
- * - Proper event handling and backend integration
- * 
- * Base stable version - revert to this if future changes break functionality
- */
 import { EventBus } from '../EventBus';
 import { Scene } from 'phaser';
 import { Background } from '../components/Background';
@@ -38,6 +26,26 @@ import { AudioManager, MusicType, SoundEffectType } from '../../managers/AudioMa
 import { Menu } from '../components/Menu';
 import { FullScreenManager } from '../../managers/FullScreenManager';
 import { ScatterAnticipation } from '../components/ScatterAnticipation';
+import { ClockDisplay } from '../components/ClockDisplay';
+import { WinTracker } from '../components/WinTracker';
+
+// Layer depths for consistent layering - higher values render on top
+const LAYERS = {
+    // Base background elements (furthest back)
+    BACKGROUND: 0,
+    // Reel frame/container (behind symbols but above background)
+    REEL_FRAME: 100,
+    // Actual reel symbols (on top of reel frame)
+    REEL_SYMBOLS: 500,
+    // Props and effects that should appear above reels but below header / coin effects
+    PROPS_AND_EFFECTS: 600,
+    // Header and other top-of-screen UI (above background/props, but below coin effects & dialogs)
+    UI: 700,
+    // Dialogs and popups (above regular UI)
+    DIALOGS: 2000,
+    // Transitions (topmost layer)
+    TRANSITIONS: 3000
+};
 
 export class Game extends Scene
 {
@@ -62,6 +70,8 @@ export class Game extends Scene
 	public audioManager: AudioManager;
 	private menu: Menu;
 	private scatterAnticipation: ScatterAnticipation;
+	private clockDisplay: ClockDisplay;
+	private winTracker: WinTracker;
 	
 	// Note: Payout data now calculated directly from paylines in WIN_STOP handler
 	// Track whether this spin has winlines to animate
@@ -82,6 +92,7 @@ export class Game extends Scene
 		this.symbols = new Symbols();
 		this.menu = new Menu();
 		this.scatterAnticipation = new ScatterAnticipation();
+		this.winTracker = new WinTracker();
 	}
 
 	init (data: any)
@@ -140,6 +151,8 @@ export class Game extends Scene
 		// Create background using the managers
 		this.background = new Background(this.networkManager, this.screenModeManager);
 		this.background.create(this);
+		// Ensure background container is behind reels and UI
+		this.background.getContainer().setDepth(LAYERS.BACKGROUND);
 		
 		// Create spinner using the managers
 		this.spinner = new Spinner(this.networkManager, this.screenModeManager);
@@ -148,24 +161,69 @@ export class Game extends Scene
 		// Create header using the managers
 		this.header = new Header(this.networkManager, this.screenModeManager);
 		this.header.create(this);
+		// Ensure header UI renders above props and reels
+		this.header.getContainer().setDepth(LAYERS.UI);
+
+		// Create persistent clock display (stays on screen above the game)
+		const clockY = this.scale.height * 0.009; // Slightly below top edge
+		this.clockDisplay = new ClockDisplay(this, {
+			offsetX: -155,
+			offsetY: clockY,
+			fontSize: 16,
+			color: '#FFFFFF',
+			alpha: 0.9,
+			depth: 30000, // Very high depth to stay above all overlays and transitions
+			scale: 0.7,
+			suffixText: ' | Kobo Ass',
+			additionalText: 'DiJoker',
+			additionalTextOffsetX: 185,
+			additionalTextOffsetY: 0,
+			additionalTextScale: 0.7,
+			additionalTextColor: '#FFFFFF',
+			additionalTextFontSize: 16
+		});
+		this.clockDisplay.create();
 
 		// Create bonus background using the managers (initially hidden)
 		console.log('[Game] Creating bonus background...');
 		this.bonusBackground = new BonusBackground(this.networkManager, this.screenModeManager);
 		this.bonusBackground.create(this);
-		this.bonusBackground.getContainer().setVisible(false);
+		// Bonus background shares the same base depth as normal background
+		this.bonusBackground.getContainer().setVisible(false).setDepth(LAYERS.BACKGROUND);
 		console.log('[Game] Bonus background created and hidden');
 
 		// Create bonus header using the managers (initially hidden)
 		console.log('[Game] Creating bonus header...');
 		this.bonusHeader = new BonusHeader(this.networkManager, this.screenModeManager);
 		this.bonusHeader.create(this);
-		this.bonusHeader.getContainer().setVisible(false);
+		// Bonus header uses the same UI layer depth
+		this.bonusHeader.getContainer().setVisible(false).setDepth(LAYERS.UI);
 		console.log('[Game] Bonus header created and hidden');
 
 		//Create symbols
 		console.log(`[Game] Creating symbols...`);
 		this.symbols.create(this);
+		// Ensure symbols container is above background but below UI
+		if (this.symbols.container) {
+			this.symbols.container.setDepth(LAYERS.REEL_SYMBOLS);
+		}
+		// Create win tracker bar below the reels in the base scene
+		this.winTracker.create(this);
+		// Apply an initial scale modifier for the symbol icon (smaller by default)
+		try {
+			const uiScale = this.networkManager.getAssetScale?.() ?? 1;
+			// Clamp between 0.12 and 0.5; default smaller to avoid huge icons
+			const iconScale = Math.max(0.12, Math.min(0.5, 0.22 * uiScale));
+			this.winTracker.setLayout({ iconScale });
+		} catch {}
+		try { (this as any).winTracker = this.winTracker; } catch {}
+		// Console helper to adjust scale at runtime: setWinTrackerScale(0.2)
+		try {
+			(window as any).setWinTrackerScale = (scale: number) => {
+				this.winTracker.setLayout({ iconScale: scale });
+				return scale;
+			};
+		} catch {}
 
 		// Initialize AudioManager
 		this.audioManager = new AudioManager(this);
@@ -413,6 +471,8 @@ export class Game extends Scene
 				const betAmount = parseFloat(spinData.bet);
 				
 				console.log(`[Game] WIN_STOP: Total win calculated: $${totalWin}, bet: $${betAmount}`);
+				// Schedule win tracker auto-hide shortly after win animations complete
+				try { this.winTracker.autoHideAfter(1500); } catch {}
 				
 				if (totalWin > 0) {
 					// Note: Win dialog threshold check moved to Symbols component for earlier detection
@@ -477,6 +537,8 @@ export class Game extends Scene
 		// Listen for any spin to start (manual or autoplay)
 		gameEventManager.on(GameEventType.SPIN, (eventData: any) => {
 			console.log('[Game] SPIN event received - clearing win queue for new spin');
+			// Clear win tracker display for the new spin so it only shows during active winlines
+			try { this.winTracker.clear(); } catch {}
 			// Reset winlines tracking for the new spin
 			this.hasWinlinesThisSpin = false;
 			// Allow win dialogs again on the next spin
@@ -918,15 +980,17 @@ export class Game extends Scene
 			console.log('[Game] Background exists:', !!this.background);
 			console.log('[Game] BonusBackground exists:', !!this.bonusBackground);
 			
-			// Hide normal background
+			// Hide normal background and props
 			if (this.background) {
 				this.background.getContainer().setVisible(false);
-				console.log('[Game] Normal background hidden');
+				this.background.hideProps();
+				console.log('[Game] Normal background and props hidden');
 			}
 			
-			// Show bonus background
+			// Show bonus background and its props
 			if (this.bonusBackground) {
 				this.bonusBackground.getContainer().setVisible(true);
+				this.bonusBackground.showProps();
 				console.log('[Game] Bonus background shown');
 				console.log('[Game] Bonus background container visible:', this.bonusBackground.getContainer().visible);
 			} else {
@@ -960,15 +1024,17 @@ export class Game extends Scene
 		this.events.on('hideBonusBackground', () => {
 			console.log('[Game] Hiding bonus background');
 			
-			// Show normal background
+			// Show normal background and props
 			if (this.background) {
 				this.background.getContainer().setVisible(true);
-				console.log('[Game] Normal background shown');
+				this.background.showProps();
+				console.log('[Game] Normal background and props shown');
 			}
 			
-			// Hide bonus background
+			// Hide bonus background and its props
 			if (this.bonusBackground) {
 				this.bonusBackground.getContainer().setVisible(false);
+				this.bonusBackground.hideProps();
 				console.log('[Game] Bonus background hidden');
 			}
 		});

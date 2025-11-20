@@ -3,6 +3,8 @@ import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
+import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 
 export class BonusHeader {
 	private bonusHeaderContainer: Phaser.GameObjects.Container;
@@ -21,6 +23,12 @@ export class BonusHeader {
 	// Tracks cumulative total during bonus mode by incrementing each spin's subtotal
 	private cumulativeBonusWin: number = 0;
 	private hasStartedBonusTracking: boolean = false;
+
+	// Logo spine config (mirrors base header)
+	private logoOffsetX: number = 0;
+	private logoOffsetY: number = 0;
+	private logoScaleMul: number = 0.1;
+	private logoSpine?: SpineGameObject;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -66,13 +74,8 @@ export class BonusHeader {
 	private createPortraitBonusHeader(scene: Scene, assetScale: number): void {
 		console.log("[BonusHeader] Creating portrait bonus header layout");
 		
-		// Add Kobi logo bonus
-		const kobiLogoBonus = scene.add.image(
-			scene.scale.width *  0.39,
-			scene.scale.height * 0.13,
-			'kobi-logo-bonus'
-		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(10);
-		this.bonusHeaderContainer.add(kobiLogoBonus);
+		// Add Kobo logo as Spine animation (logo_kobo), matching base header behaviour
+		this.createLogoSpine(scene, assetScale);
 
 		// Create Spine animated cat bonus
 		this.createCatBonusSpineAnimation(scene, assetScale);
@@ -111,13 +114,8 @@ export class BonusHeader {
 	private createLandscapeBonusHeader(scene: Scene, assetScale: number): void {
 		console.log("[BonusHeader] Creating landscape bonus header layout");
 		
-		// Add Kobi logo bonus
-		const kobiLogoBonus = scene.add.image(
-			scene.scale.width * 0.5,
-			scene.scale.height * 0.15,
-			'kobi-logo-bonus'
-		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(10);
-		this.bonusHeaderContainer.add(kobiLogoBonus);
+		// Add Kobo logo as Spine animation (logo_kobo), matching base header behaviour
+		this.createLogoSpine(scene, assetScale);
 
 		// Create Spine animated cat bonus
 		this.createCatBonusSpineAnimation(scene, assetScale);
@@ -151,6 +149,47 @@ export class BonusHeader {
 			minY: scene.scale.height * 0.1,
 			maxY: scene.scale.height * 0.6
 		};
+	}
+
+	// Create Spine logo (logo_kobo) with same positioning / scaling / animation as base header
+	private createLogoSpine(scene: Scene, assetScale: number): void {
+		try {
+			if (!ensureSpineFactory(scene, '[BonusHeader] createLogoSpine')) {
+				console.warn('[BonusHeader] Spine factory unavailable. Skipping bonus spine logo creation.');
+				return;
+			}
+
+			if (!(scene.cache.json as any).has('logo_kobo')) {
+				console.warn('[BonusHeader] Spine json for logo_kobo not loaded. Skipping bonus spine logo creation.');
+				return;
+			}
+
+			const logoSpine = scene.add.spine(
+				scene.scale.width * 0.39 + this.logoOffsetX,
+				scene.scale.height * 0.13 + this.logoOffsetY,
+				'logo_kobo',
+				'logo_kobo-atlas'
+			);
+
+			logoSpine.setOrigin(0.5, 0.5);
+			logoSpine.setScale(assetScale * this.logoScaleMul);
+			logoSpine.setDepth(1);
+
+			try {
+				const anySpine: any = logoSpine as any;
+				const animations = anySpine?.skeleton?.data?.animations;
+				if (animations && animations.length > 0) {
+					const names = animations.map((a: any) => a.name || a);
+					const idleName = names.includes('logo_idle_animation') ? 'logo_idle_animation' : names[0];
+					logoSpine.animationState.setAnimation(0, idleName, true);
+				}
+			} catch {}
+
+			this.bonusHeaderContainer.add(logoSpine);
+			this.logoSpine = logoSpine;
+		} catch (e) {
+			console.warn('[BonusHeader] Failed to create spine logo for bonus header:', e);
+		}
 	}
 
 	private createCatBonusSpineAnimation(scene: Scene, assetScale: number): void {
@@ -300,6 +339,9 @@ export class BonusHeader {
 			// Hide both texts
 			this.youWonText.setVisible(false);
 			this.amountText.setVisible(false);
+
+			// Revert logo to idle animation when hiding winnings (match base header behaviour)
+			this.playLogoIdle();
 			
 			console.log('[BonusHeader] Winnings display hidden');
 		} else {
@@ -321,6 +363,15 @@ export class BonusHeader {
 			// Show both texts
 			this.youWonText.setVisible(true);
 			this.amountText.setVisible(true);
+
+			// Trigger logo win animation only when there is an actual win amount
+			// Avoid playing win animation for 0 / non-positive totals (e.g. at bonus start)
+			if (winnings > 0) {
+				this.playLogoWin();
+			} else {
+				// Ensure we stay in idle state when there is no win yet
+				this.playLogoIdle();
+			}
 			
 			// Update amount text with winnings
 			this.amountText.setText(formattedWinnings);
@@ -571,6 +622,14 @@ export class BonusHeader {
 			this.bonusHeaderContainer.setSize(scene.scale.width, scene.scale.height);
 		}
 
+		// Reposition / rescale logo spine on resize (mirrors base header)
+		if (this.logoSpine) {
+			const s = this.networkManager.getAssetScale();
+			this.logoSpine.x = scene.scale.width * 0.39 + this.logoOffsetX;
+			this.logoSpine.y = scene.scale.height * 0.13 + this.logoOffsetY;
+			this.logoSpine.setScale(s * this.logoScaleMul);
+		}
+
 		// Update spotlight bounds on resize
 		if (this.spotlight && this.spotlightBounds) {
 			const screenConfig = this.screenModeManager.getScreenConfig();
@@ -595,6 +654,40 @@ export class BonusHeader {
 
 	getContainer(): Phaser.GameObjects.Container {
 		return this.bonusHeaderContainer;
+	}
+
+	// --- Logo animation helpers (mirrors base header) ---
+	private playLogoIdle(): void {
+		try {
+			if (!this.logoSpine) return;
+			const anySpine: any = this.logoSpine as any;
+			const animations = anySpine?.skeleton?.data?.animations;
+			if (!animations || animations.length === 0) return;
+			const names = animations.map((a: any) => a.name || a);
+			const idleName = names.includes('logo_idle_animation') ? 'logo_idle_animation' : null;
+			if (!idleName) return;
+			const current = this.logoSpine.animationState.getCurrent(0);
+			const currentName = current?.animation?.name;
+			// Do not restart if already playing idle
+			if (currentName === idleName) return;
+			this.logoSpine.animationState.setAnimation(0, idleName, true);
+		} catch {}
+	}
+
+	// Play logo win animation once, then queue back to idle
+	private playLogoWin(): void {
+		try {
+			if (!this.logoSpine) return;
+			const anySpine: any = this.logoSpine as any;
+			const animations = anySpine?.skeleton?.data?.animations;
+			if (!animations || animations.length === 0) return;
+			const names = animations.map((a: any) => a.name || a);
+			const winName = names.includes('logo_win_animation') ? 'logo_win_animation' : null;
+			if (winName) {
+				// Loop win animation during active winnings
+				this.logoSpine.animationState.setAnimation(0, winName, true);
+			}
+		} catch {}
 	}
 
 	destroy(): void {

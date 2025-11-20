@@ -33,6 +33,28 @@ export class Symbols {
   private overlayRect?: Phaser.GameObjects.Graphics;
   public currentSpinData: any = null; // Store current spin data for access by other components
   
+  // Idle "breathing" animation tweens per symbol (keyed by "col_row")
+  private idleTweens: Map<string, Phaser.Tweens.Tween> = new Map();
+
+  // Idle floating configuration (tweak these to adjust speed and height)
+  public idleFloatConfig: {
+    amplitudeYMin: number;       // minimum vertical float in pixels
+    amplitudeYMax: number;       // maximum vertical float in pixels
+    durationMinMs: number;       // minimum tween duration per half-cycle (ms)
+    durationMaxMs: number;       // maximum tween duration per half-cycle (ms)
+    startDelayMaxMs: number;     // maximum randomized start delay (ms)
+    repeatDelayMaxMs: number;    // maximum randomized delay between cycles (ms)
+    holdMaxMs: number;           // maximum hold/pause at peaks (ms)
+  } = {
+    amplitudeYMin: 4,
+    amplitudeYMax: 5,
+    durationMinMs: 500,
+    durationMaxMs: 700,
+    startDelayMaxMs: 450,
+    repeatDelayMaxMs: 120,
+    holdMaxMs: 90,
+  };
+  
   // Sticky wilds (persist across bonus free spins)
   public stickyWilds: Map<string, any> = new Map();
   public stickyWildsContainer?: Phaser.GameObjects.Container;
@@ -126,6 +148,234 @@ export class Symbols {
     }
   }
 
+  private gridKey(col: number, row: number): string {
+    return `${col}_${row}`;
+  }
+
+  /**
+   * Create a gentle floating tween on the given sprite.
+   * Stores/restores base position, rotation, and scale to avoid drift.
+   */
+  private createBreathingTweenFor(symbol: any): Phaser.Tweens.Tween | null {
+    if (!symbol || !symbol.active || typeof symbol.scaleX !== 'number' || typeof symbol.scaleY !== 'number') {
+      return null;
+    }
+
+    // Don't animate Spine objects (they have animationState)
+    if ((symbol as any).animationState) {
+      return null;
+    }
+
+    // Ensure base transforms are stored for later restoration
+    try {
+      if (typeof symbol.getData === 'function') {
+        if (symbol.getData('baseScaleX') === undefined) symbol.setData('baseScaleX', symbol.scaleX);
+        if (symbol.getData('baseScaleY') === undefined) symbol.setData('baseScaleY', symbol.scaleY);
+        if (symbol.getData('baseX') === undefined) symbol.setData('baseX', symbol.x);
+        if (symbol.getData('baseY') === undefined) symbol.setData('baseY', symbol.y);
+        if (symbol.getData('baseRotation') === undefined) symbol.setData('baseRotation', symbol.rotation || 0);
+      }
+    } catch {}
+
+    const baseY = symbol.y;
+
+    // Vertical-only floating (no x drift or rotation)
+    const cfg = this.idleFloatConfig;
+    const ampRange = Math.max(0, (cfg.amplitudeYMax - cfg.amplitudeYMin));
+    const yAmplitude = cfg.amplitudeYMin + Math.random() * ampRange;
+
+    const durRange = Math.max(0, (cfg.durationMaxMs - cfg.durationMinMs));
+    const duration = cfg.durationMinMs + Math.floor(Math.random() * (durRange || 1));
+    const delay = Math.floor(Math.random() * Math.max(0, cfg.startDelayMaxMs));
+    const repeatDelay = Math.floor(Math.random() * Math.max(0, cfg.repeatDelayMaxMs));
+    const hold = Math.floor(Math.random() * Math.max(0, cfg.holdMaxMs));
+
+    return this.scene.tweens.add({
+      targets: symbol,
+      y: baseY - yAmplitude,
+      duration: duration,
+      delay: delay,
+      repeatDelay: repeatDelay,
+      hold: hold,
+      ease: 'Sine.easeInOut',
+      yoyo: true,
+      repeat: -1
+    });
+  }
+
+  private stopBreathingTweenFor(symbol: any): void {
+    if (!symbol) return;
+    try {
+      this.scene.tweens.killTweensOf(symbol);
+      // Restore base transforms if present
+      if (typeof symbol.getData === 'function') {
+        const bx = symbol.getData('baseScaleX');
+        const by = symbol.getData('baseScaleY');
+        const br = symbol.getData('baseRotation');
+        if (typeof bx === 'number' && typeof by === 'number') {
+          symbol.setScale(bx, by);
+        }
+        if (typeof br === 'number' && typeof symbol.setRotation === 'function') {
+          symbol.setRotation(br);
+        }
+      }
+    } catch {}
+  }
+
+  public stopAllIdleTweens(): void {
+    if (!this.symbols) {
+      this.idleTweens.clear();
+      return;
+    }
+    try {
+      for (let col = 0; col < this.symbols.length; col++) {
+        for (let row = 0; row < this.symbols[col].length; row++) {
+          const sym = this.symbols[col][row];
+          this.stopBreathingTweenFor(sym);
+        }
+      }
+    } catch {}
+    // Also stop any tweens we may have tracked directly
+    for (const tween of this.idleTweens.values()) {
+      try { tween.stop(); } catch {}
+    }
+    this.idleTweens.clear();
+  }
+
+  /**
+   * Start idle breathing animation on all symbols that are NOT winning.
+   * Optionally exclude scatter symbols via provided scatter grids.
+   */
+  public startIdleAnimationForNonWinning(data: Data, scatterGrids?: Grid[]): void {
+    if (!this.symbols || !data) return;
+
+    // Build a set of winning positions "x_y"
+    const winningSet = new Set<string>();
+    try {
+      const wins = (data as any).wins;
+      if (wins && wins.allMatching && wins.allMatching.size > 0) {
+        for (const match of wins.allMatching.values()) {
+          for (const grid of match) {
+            winningSet.add(`${grid.x}_${grid.y}`);
+          }
+        }
+      }
+    } catch {}
+
+    // Include scatters in the "winning" exclusion set
+    if (Array.isArray(scatterGrids)) {
+      for (const g of scatterGrids) {
+        winningSet.add(`${g.x}_${g.y}`);
+      }
+    }
+
+    // Iterate symbols in [col][row] where col -> y, row -> x based on usage in this file
+    for (let col = 0; col < this.symbols.length; col++) {
+      for (let row = 0; row < this.symbols[col].length; row++) {
+        const key = `${row}_${col}`; // translate to x_y
+        const symbol = this.symbols[col][row];
+
+        // Skip if this position is part of a win
+        if (winningSet.has(key)) {
+          this.stopBreathingTweenFor(symbol);
+          continue;
+        }
+
+        // Skip sticky wild locations during bonus (they may have Spine overlays)
+        if (gameStateManager.isBonus && this.hasStickyWildAt(col, row)) {
+          this.stopBreathingTweenFor(symbol);
+          continue;
+        }
+
+        // Create breathing tween if not already present
+        if (symbol && symbol.active) {
+          // Ensure any previous tween is stopped
+          this.stopBreathingTweenFor(symbol);
+          const tween = this.createBreathingTweenFor(symbol);
+          if (tween) {
+            this.idleTweens.set(this.gridKey(col, row), tween);
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Start idle breathing animation for all PNG symbols (used after win-stop).
+   */
+  public startIdleAnimationForAll(): void {
+    if (!this.symbols) return;
+    for (let col = 0; col < this.symbols.length; col++) {
+      for (let row = 0; row < this.symbols[col].length; row++) {
+        // Skip sticky wilds during bonus
+        if (gameStateManager.isBonus && this.hasStickyWildAt(col, row)) {
+          continue;
+        }
+        const symbol = this.symbols[col][row];
+        if (!symbol || !symbol.active || (symbol as any).animationState) {
+          continue;
+        }
+        // Replace any previous tween
+        this.stopBreathingTweenFor(symbol);
+        const tween = this.createBreathingTweenFor(symbol);
+        if (tween) {
+          this.idleTweens.set(this.gridKey(col, row), tween);
+        }
+      }
+    }
+  }
+
+  /**
+   * Smoothly move all symbols to the center of their cells, avoiding snaps at spin start.
+   * Duration is per half-cycle tween toward center.
+   */
+  public smoothlyCenterAllSymbols(durationMs: number = 120): void {
+    if (!this.symbols || !this.symbols.length || !this.symbols[0].length) return;
+
+    const symbolTotalHeight = this.displayHeight + this.verticalSpacing;
+    const startY = this.slotY - this.totalGridHeight * 0.5;
+
+    for (let col = 0; col < this.symbols.length; col++) {
+      for (let row = 0; row < this.symbols[col].length; row++) {
+        // Skip sticky wild spines during bonus
+        if (gameStateManager.isBonus && this.hasStickyWildAt(col, row)) {
+          continue;
+        }
+        const symbol = this.symbols[col][row];
+        if (!symbol || !symbol.active || (symbol as any).animationState) continue;
+
+        // Center Y for this cell
+        const centerY = startY + col * symbolTotalHeight + symbolTotalHeight * 0.5;
+
+        // Kill any current tweens (including idle), then tween to center
+        this.scene.tweens.killTweensOf(symbol);
+        this.scene.tweens.add({
+          targets: symbol,
+          y: centerY,
+          duration: durationMs,
+          ease: 'Sine.easeOut'
+        });
+      }
+    }
+  }
+
+  /**
+   * Update idle floating configuration at runtime.
+   * Example:
+   *   symbols.setIdleFloatConfig({ amplitudeYMin: 10, amplitudeYMax: 20, durationMinMs: 400, durationMaxMs: 900 });
+   */
+  public setIdleFloatConfig(config: Partial<{
+    amplitudeYMin: number;
+    amplitudeYMax: number;
+    durationMinMs: number;
+    durationMaxMs: number;
+    startDelayMaxMs: number;
+    repeatDelayMaxMs: number;
+    holdMaxMs: number;
+  }>): void {
+    this.idleFloatConfig = { ...this.idleFloatConfig, ...config };
+  }
+
   private getStickyKey(col: number, row: number): string {
     return `${col}_${row}`;
   }
@@ -215,6 +465,9 @@ export class Symbols {
         return;
       }
       
+      // Stop any idle breathing before starting a new spin
+      this.stopAllIdleTweens();
+      
       this.ensureCleanSymbolState();
       
       // Only clear winlines if they're not still animating or if this is a manual spin
@@ -237,6 +490,8 @@ export class Symbols {
       this.resetSymbolDepths();
       // Restore symbol visibility for new spin
       this.restoreSymbolVisibility();
+      // Smoothly center symbols to avoid snap when reels start dropping
+      this.smoothlyCenterAllSymbols(140);
       // Keep sticky wilds visible during bonus
       if (gameStateManager.isBonus) {
         this.restoreStickyWildsVisibility();
@@ -260,6 +515,11 @@ export class Symbols {
       }
       
       resumeAutoplayAfterWinlines(this.scene.gameData);
+
+      // When wins finish and we're not auto-spinning, start idle on all symbols
+      if (!gameStateManager.isAutoPlaying && !this.freeSpinAutoplayActive) {
+        this.startIdleAnimationForAll();
+      }
 
       // If bonus finished and no win dialog will show, display congrats now
       if (gameStateManager.isBonus && gameStateManager.isBonusFinished && !gameStateManager.isShowingWinDialog) {
@@ -850,6 +1110,21 @@ export class Symbols {
             
             // Stop any active tweens on this symbol
             this.scene.tweens.killTweensOf(symbol);
+
+            // Restore base transforms if breathing data is present
+            try {
+              if (typeof symbol.getData === 'function') {
+                const bx = symbol.getData('baseScaleX');
+                const by = symbol.getData('baseScaleY');
+                const br = symbol.getData('baseRotation');
+                if (typeof bx === 'number' && typeof by === 'number' && typeof symbol.setScale === 'function') {
+                  symbol.setScale(bx, by);
+                }
+                if (typeof br === 'number' && typeof symbol.setRotation === 'function') {
+                  symbol.setRotation(br);
+                }
+              }
+            } catch {}
           }
         }
       }
@@ -1968,6 +2243,13 @@ function createInitialSymbols(self: Symbols) {
     self.symbols.push(rows);
   }
   console.log('[Symbols] Initial symbols created successfully');
+
+  // Start idle animation at game start so symbols breathe on first view
+  try {
+    self.startIdleAnimationForAll();
+  } catch (e) {
+    console.warn('[Symbols] Failed to start idle animation at start:', e);
+  }
 }
 
 /**
@@ -2218,6 +2500,13 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
     }
   } else {
     console.log(`[Symbols] No scatter detected (found ${scatterGrids.length} scatter symbols, need 3+)`);
+  }
+  
+  // Start idle animation on all non-winning symbols
+  try {
+    self.startIdleAnimationForNonWinning(mockData, scatterGrids);
+  } catch (e) {
+    console.warn('[Symbols] Failed to start idle animation for non-winning symbols:', e);
   }
   
   // Set spinning state to false

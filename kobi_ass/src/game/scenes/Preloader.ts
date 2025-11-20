@@ -9,6 +9,8 @@ import { GameData } from '../components/GameData';
 import { FullScreenManager } from '../../managers/FullScreenManager';
 import { ensureSpineLoader } from '../../utils/SpineGuard';
 import { StudioLoadingScreen } from '../components/StudioLoadingScreen';
+import { ClockDisplay } from '../components/ClockDisplay';
+import { SoundEffectType } from '../../managers/AudioManager';
 
 export class Preloader extends Scene
 {
@@ -33,6 +35,8 @@ export class Preloader extends Scene
 	private buttonBg?: Phaser.GameObjects.Image;
 	private pressToPlayText?: Phaser.GameObjects.Text;
 	private fullscreenBtn?: Phaser.GameObjects.Image;
+	private preloaderVerticalOffsetModifier: number = 10;
+	private clockDisplay?: ClockDisplay;
 
 	constructor ()
 	{
@@ -58,8 +62,8 @@ export class Preloader extends Scene
 		
 		console.log(`[Preloader] Applying asset scale: ${assetScale}x`);
 		
-		// Black background for studio loading
-		this.cameras.main.setBackgroundColor(0x000000);
+		// Background color for studio loading (#10161D)
+		this.cameras.main.setBackgroundColor(0x10161D);
 
 		// Always show background since we're forcing portrait mode
 		const background = this.add.image(
@@ -78,15 +82,158 @@ export class Preloader extends Scene
 		console.log(`[Preloader] Background original size: ${background.width}x${background.height}`);
 		console.log(`[Preloader] Canvas size: ${this.scale.width}x${this.scale.height}`);
 		console.log(`[Preloader] Calculated scale: ${scale} (scaleX: ${scaleX}, scaleY: ${scaleY})`);
-		
-		
 		console.log(`[Preloader] Background dimensions: ${background.width}x${background.height}, canvas: ${this.scale.width}x${this.scale.height}`);
 		console.log(`[Preloader] Background display size: ${this.scale.width}x${this.scale.height}`);
 		console.log(`[Preloader] Background position: (${this.scale.width * 0.5}, ${this.scale.height * 0.5})`);
 
+		// Create persistent clock display (stays visible during studio loading and preloader)
+		const clockY = this.scale.height * 0.009; // Slightly below top edge
+		this.clockDisplay = new ClockDisplay(this, {
+			offsetX: -155,
+			offsetY: clockY,
+			fontSize: 16,
+			color: '#FFFFFF',
+			alpha: 0.5,
+			depth: 30000, // Very high depth to stay above all overlays and transitions
+			scale: 0.7,
+			suffixText: ' | Kobo Ass',
+			additionalText: 'DiJoker',
+			additionalTextOffsetX: 185,
+			additionalTextOffsetY: 0,
+			additionalTextScale: 0.7,
+			additionalTextColor: '#FFFFFF',
+			additionalTextFontSize: 16
+		});
+		this.clockDisplay.create();
+
+		// Add loading frame, tagline, and website URL on top of background (mirroring Hustle Horse)
+		const loadingFrameY = 335 + this.preloaderVerticalOffsetModifier;
+		const loadingFrame = this.add.image(
+			this.scale.width * 0.5,
+			this.scale.height * 0.5 + loadingFrameY,
+			"loading_frame_2"
+		).setOrigin(0.5, 0.5).setScrollFactor(0);
+
+		// Scale loading frame using same modifier as studio loading screen (0.04)
+		const frameScale = (Math.max(this.scale.width / loadingFrame.width, this.scale.height / loadingFrame.height)) * 0.04;
+		loadingFrame.setScale(frameScale);
+
+		// "PLAY LOUD. WIN WILD. DIJOKER STYLE" tagline
+		const textY = 365 + this.preloaderVerticalOffsetModifier;
+		const tagline = this.add.text(
+			this.scale.width * 0.5 - 5,
+			this.scale.height * 0.5 + textY,
+			'PLAY LOUD. WIN WILD. DIJOKER STYLE',
+			{
+				fontFamily: 'Poppins-Regular',
+				fontSize: '14px',
+				color: '#FFFFFF',
+				fontStyle: 'normal',
+				align: 'center'
+			}
+		).setOrigin(0.5, 0.5)
+		.setScrollFactor(0)
+		.setAlpha(1);
+
+		// Set font weight to 500 for tagline
+		try {
+			const textObj = tagline as any;
+			const originalUpdateText = textObj.updateText?.bind(textObj);
+			if (originalUpdateText) {
+				textObj.updateText = function (this: any) {
+					originalUpdateText();
+					if (this.context) {
+						this.context.font = `500 14px Poppins-Regular`;
+					}
+				}.bind(textObj);
+				textObj.updateText();
+			}
+		} catch (e) {
+			console.warn('[Preloader] Could not set font weight for loading text', e);
+		}
+
+		// "www.dijoker.com" text below tagline
+		const websiteTextY = 395 + this.preloaderVerticalOffsetModifier;
+		const websiteText = this.add.text(
+			this.scale.width * 0.5,
+			this.scale.height * 0.5 + websiteTextY,
+			'www.dijoker.com',
+			{
+				fontFamily: 'Poppins-Regular',
+				fontSize: '14px',
+				color: '#FFFFFF',
+				fontStyle: 'normal',
+				align: 'center'
+			}
+		).setOrigin(0.5, 0.5)
+		.setScrollFactor(0)
+		.setAlpha(1);
+
+		// Set font weight to 500 for website text and add "Win up to 21,000x" breathing text
+		try {
+			const textObj = websiteText as any;
+			const originalUpdateText = textObj.updateText?.bind(textObj);
+			if (originalUpdateText) {
+				textObj.updateText = function (this: any) {
+					originalUpdateText();
+					if (this.context) {
+						this.context.font = `500 14px Poppins-Regular`;
+					}
+				}.bind(textObj);
+				textObj.updateText();
+			}
+
+			// "Win up to 21,000x" text with breathing animation
+			const winTextY = 140 + this.preloaderVerticalOffsetModifier;
+			const winText = this.add.text(
+				this.scale.width * 0.5,
+				this.scale.height * 0.5 + winTextY,
+				'Win up to 21,000x',
+				{
+					fontFamily: 'Poppins-SemiBold, Poppins-Regular, Arial, sans-serif',
+					fontSize: '35px',
+					color: '#FFFFFF',
+					align: 'center'
+				}
+			)
+			.setOrigin(0.5, 0.5)
+			.setScrollFactor(0)
+			.setAlpha(1);
+
+			this.tweens.add({
+				targets: winText,
+				scale: { from: 0.90, to: 1.15 },
+				duration: 1200,
+				ease: 'Sine.easeInOut',
+				yoyo: true,
+				repeat: -1,
+				hold: 0,
+				delay: 0
+			});
+
+			winText.setStroke('#379557', 4)
+				.setShadow(0, 2, '#000000', 4, true, true);
+		} catch (e) {
+			console.warn('[Preloader] Could not set font weight for website / win text', e);
+		}
+
 		if (screenConfig.isPortrait) {
-		// Display studio loading screen
-		const studio = new StudioLoadingScreen(this);
+		// Display studio loading screen with mirrored Hustle Horse text and offsets
+		const studio = new StudioLoadingScreen(this, {
+			loadingFrameOffsetX: 0,
+			loadingFrameOffsetY: 335,
+			loadingFrameScaleModifier: 0.04,
+			text: 'PLAY LOUD. WIN WILD. DIJOKER STYLE',
+			textOffsetX: -5,
+			textOffsetY: 365,
+			textScale: 1,
+			textColor: '#FFFFFF',
+			text2: 'www.dijoker.com',
+			text2OffsetX: 0,
+			text2OffsetY: 370,
+			text2Scale: 1,
+			text2Color: '#FFFFFF'
+		});
 		studio.show();
 		// Schedule fade-out after minimum 3s, then reveal preloader UI if needed
 		studio.fadeOutAndDestroy(3000, 500);
@@ -97,7 +244,8 @@ export class Preloader extends Scene
 			// For now, no-op; Preloader already shows its own progress bar
 		});
 
-			const buttonY = this.scale.height * 0.8;
+			// Match Hustle Horse button vertical offset
+			const buttonY = this.scale.height * 0.77;
 			
 			// Scale buttons based on quality (low quality assets need 2x scaling)
 			this.buttonBg = this.add.image(
@@ -128,6 +276,18 @@ export class Preloader extends Scene
 			
 			console.log(`[Preloader] Added kobi_logo_loading at scale: ${assetScale}x`);
 
+			// Breathing animation for the logo (mirroring Hustle Horse behavior)
+			this.tweens.add({
+				targets: kobi_logo,
+				scale: { from: assetScale * 0.95, to: assetScale * 1.15 },
+				duration: 1500,
+				ease: 'Sine.easeInOut',
+				yoyo: true,
+				repeat: -1,
+				hold: 0,
+				delay: 0
+			});
+
 			this.tweens.add({
 				targets: this.buttonSpin,
 				rotation: Math.PI * 2,
@@ -135,70 +295,12 @@ export class Preloader extends Scene
 				repeat: -1,
 			});
 
-			// Progress bar below the spinning button
-			const barWidth = this.scale.width * 0.5;
-			const barHeight = Math.max(18, 30 * assetScale);
-			const barX = this.scale.width * 0.5;
-			const barY = buttonY + (this.buttonBg.displayHeight * 0.5) + Math.max(20, 24 * assetScale) + 50;
-
-			this.progressBarBg = this.add.graphics();
-			this.progressBarBg.fillStyle(0x000000, 0.5);
-			this.progressBarBg.fillRoundedRect(barX - barWidth * 0.5, barY - barHeight * 0.5, barWidth, barHeight, barHeight * 0.5);
-
-			this.progressBarFill = this.add.graphics();
-			this.progressBarFill.fillStyle(0x66D449, 1);
-			this.progressBarFill.fillRoundedRect(barX - barWidth * 0.5 + this.progressBarPadding, barY - barHeight * 0.5 + this.progressBarPadding, 0, barHeight - this.progressBarPadding * 2, (barHeight - this.progressBarPadding * 2) * 0.5);
-
-			// Save geometry for updates
-			this.progressBarX = barX;
-			this.progressBarY = barY;
-			this.progressBarWidth = barWidth;
-			this.progressBarHeight = barHeight;
-
-			this.progressText = this.add.text(barX, barY, '0%', {
-				fontFamily: 'poppins-bold',
-				fontSize: `${Math.round(18 * assetScale)}px`,
-				color: '#FFFFFF',
-			})
-			.setOrigin(0.5, 0.5)
-			.setShadow(0, 3, '#000000', 6, true, true);
-
-			// "Press Play To Continue" text (initially hidden)
-			this.pressToPlayText = this.add.text(barX, barY - (barHeight * 1), 'Press Play To Continue', {
-				fontFamily: 'Poppins-Regular',
-				fontSize: `${Math.round(22 * assetScale)}px`,
-				color: '#FFFFFF',
-				align: 'center'
-			})
-			.setOrigin(0.5, 1)
-			.setAlpha(0)
-			.setShadow(0, 3, '#000000', 6, true, true);
+			// No additional text label below the button in this version
 
 		}
 
-		// Set up progress event listener
+		// Set up progress event listener (only forward to React overlay, no in-scene bar)
 		this.load.on('progress', (progress: number) => {
-			// Update in-scene progress bar
-			if (this.progressBarFill && this.progressBarX !== undefined && this.progressBarY !== undefined && this.progressBarWidth !== undefined && this.progressBarHeight !== undefined) {
-				const innerX = this.progressBarX - this.progressBarWidth * 0.5 + this.progressBarPadding;
-				const innerY = this.progressBarY - this.progressBarHeight * 0.5 + this.progressBarPadding;
-				const innerWidth = this.progressBarWidth - this.progressBarPadding * 2;
-				const innerHeight = this.progressBarHeight - this.progressBarPadding * 2;
-				this.progressBarFill.clear();
-				this.progressBarFill.fillStyle(0x66D449, 1);
-				this.progressBarFill.fillRoundedRect(
-					innerX,
-					innerY,
-					Math.max(0.0001, innerWidth * progress),
-					innerHeight,
-					innerHeight * 0.5
-				);
-			}
-			if (this.progressText) {
-				this.progressText.setText(`${Math.round(progress * 100)}%`);
-			}
-
-			// Keep emitting for React overlay listeners if any
 			EventBus.emit('progress', progress);
 		});
 		
@@ -230,6 +332,8 @@ export class Preloader extends Scene
 		this.assetLoader.loadBuyFeatureAssets(this);
 		this.assetLoader.loadMenuAssets(this);
 		this.assetLoader.loadHelpScreenAssets(this);
+		// Minimal SFX for preloader button click
+		try { this.load.audio('click_sw', 'assets/sounds/click_sw.ogg'); } catch {}
 		
 		console.log(`[Preloader] Loading assets for Preloader and Game scenes`);
 	}
@@ -267,17 +371,88 @@ export class Preloader extends Scene
             this.buttonBg.setAlpha(1);
         }
 
-        // Show call-to-action text
-        if (this.pressToPlayText) {
-            this.pressToPlayText.setAlpha(1);
-            this.tweens.add({
-                targets: this.pressToPlayText,
-                alpha: 0.3,
-                duration: 800,
-                yoyo: true,
-                repeat: -1
-            });
-        }
+		// Hover/click feedback and click SFX on the preloader button (mirror other project)
+		if (this.buttonSpin) {
+			const spin = this.buttonSpin;
+			const bg = this.buttonBg;
+			const baseScaleX = spin.scaleX;
+			const baseScaleY = spin.scaleY;
+			const baseBgScaleX = bg ? bg.scaleX : 1;
+			const baseBgScaleY = bg ? bg.scaleY : 1;
+			spin.on('pointerover', () => {
+				this.tweens.add({
+					targets: spin,
+					scaleX: baseScaleX * 1.05,
+					scaleY: baseScaleY * 1.05,
+					duration: 120,
+					ease: 'Power2'
+				});
+			});
+			spin.on('pointerout', () => {
+				this.tweens.add({
+					targets: [spin, bg].filter(Boolean) as any,
+					scaleX: (t: any) => (t === spin ? baseScaleX : baseBgScaleX),
+					scaleY: (t: any) => (t === spin ? baseScaleY : baseBgScaleY),
+					duration: 120,
+					ease: 'Power2'
+				});
+			});
+			spin.on('pointerdown', () => {
+				// Play click SFX (prefer AudioManager if available; fallback to raw sound)
+				try {
+					const audio = (window as any).audioManager;
+					if (audio && typeof audio.playSoundEffect === 'function') {
+						audio.playSoundEffect(SoundEffectType.MENU_CLICK);
+					} else {
+						try { this.sound.play('click_sw', { volume: 0.55 }); } catch {}
+					}
+				} catch {}
+				// Press visual
+				this.tweens.killTweensOf(spin);
+				if (bg) this.tweens.killTweensOf(bg);
+				this.tweens.add({
+					targets: [spin, bg].filter(Boolean) as any,
+					scaleX: (t: any) => (t === spin ? baseScaleX * 0.9 : baseBgScaleX * 0.96),
+					scaleY: (t: any) => (t === spin ? baseScaleY * 0.9 : baseBgScaleY * 0.96),
+					duration: 80,
+					ease: 'Power2'
+				});
+				if (bg) {
+					const startAlpha = bg.alpha;
+					this.tweens.add({ targets: bg, alpha: Math.min(0.5, startAlpha + 0.2), duration: 80, yoyo: true, ease: 'Linear' });
+				}
+			});
+			const bounceBack = () => {
+				this.tweens.add({
+					targets: spin,
+					scaleX: baseScaleX * 1.06,
+					scaleY: baseScaleY * 1.06,
+					duration: 90,
+					ease: 'Power2',
+					yoyo: true,
+					onYoyo: () => {
+						this.tweens.add({
+							targets: spin,
+							scaleX: baseScaleX,
+							scaleY: baseScaleY,
+							duration: 90,
+							ease: 'Power2'
+						});
+					}
+				});
+				if (bg) {
+					this.tweens.add({
+						targets: bg,
+						scaleX: baseBgScaleX,
+						scaleY: baseBgScaleY,
+						duration: 150,
+						ease: 'Power2'
+					});
+				}
+			};
+			spin.on('pointerup', bounceBack);
+			spin.on('pointerupoutside', bounceBack);
+		}
 
         // Prepare fade overlay
         const fadeOverlay = this.add.rectangle(
