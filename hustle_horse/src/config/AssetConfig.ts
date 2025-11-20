@@ -140,15 +140,15 @@ export class AssetConfig {
 			const isHigh = this.networkManager.getNetworkSpeed();
 			const quality = isHigh ? 'high' : 'low';
 			// HTBH PNGs are organized by quality only (no orientation)
-			const spritePath = `assets/symbols/${quality}/Symbol${i}_HTBH.png`;
+			const spritePath = `${prefix}/symbols/Symbol${i}_HTBH.png`;
 			symbolImages[spriteKey] = spritePath;
 			
 			// Spine animations for hit effects (HTBH set)
 			const spineKey = `symbol_${i}_spine`;
 			const symbolName = `Symbol${i}_HTBH`;
 			// HTBH symbol atlases are not organized by orientation/quality; use non-prefixed root
-			const atlasPath = `assets/Symbols_HTBH/${symbolName}.atlas`;
-			const jsonPath = `assets/Symbols_HTBH/${symbolName}.json`;
+			const atlasPath = `${prefix}/spine_symbols/${symbolName}.atlas`;
+			const jsonPath = `${prefix}/spine_symbols/${symbolName}.json`;
 			
 			symbolSpine[spineKey] = {
 				atlas: atlasPath,
@@ -170,6 +170,8 @@ export class AssetConfig {
 		const isHighSpeed = this.networkManager.getNetworkSpeed();
 		const quality = isHighSpeed ? 'high' : 'low';
 		const screenMode = screenConfig.isPortrait ? 'portrait' : 'landscape';
+		// Some controller spine packs are only present in portrait/high today – force those paths to avoid 404s
+		const forcedPortraitHigh = 'portrait/high';
 		
 		console.log(`[AssetConfig] Loading controller buttons with quality: ${quality}, screen mode: ${screenMode}`);
 		
@@ -193,12 +195,12 @@ export class AssetConfig {
 			},
 			spine: {
 				'spin_button_animation': {
-					atlas: `assets/controller/${screenMode}/${quality}/spin_button_anim/spin_button_anim.atlas`,
-					json: `assets/controller/${screenMode}/${quality}/spin_button_anim/spin_button_anim.json`
+					atlas: `assets/controller/${forcedPortraitHigh}/spin_button_anim/spin_button_anim.atlas`,
+					json: `assets/controller/${forcedPortraitHigh}/spin_button_anim/spin_button_anim.json`
 				},
 				'button_animation_idle': {
-					atlas: `assets/controller/${screenMode}/${quality}/button_animation_idle/button_animation_idle.atlas`,
-					json: `assets/controller/${screenMode}/${quality}/button_animation_idle/button_animation_idle.json`
+					atlas: `assets/controller/${forcedPortraitHigh}/button_animation_idle/button_animation_idle.atlas`,
+					json: `assets/controller/${forcedPortraitHigh}/button_animation_idle/button_animation_idle.json`
 				},
 				'amplify_bet': {
 					atlas: `assets/${screenMode}/${quality}/amplify_bet/Amplify Bet.atlas`,
@@ -210,8 +212,8 @@ export class AssetConfig {
 					json: `assets/controller/portrait/high/enhanceBet_idle_on/Amplify Bet.json`
 				},
 				'turbo_animation': {
-					atlas: `assets/controller/${screenMode}/${quality}/turbo_animation/Turbo_Spin.atlas`,
-					json: `assets/controller/${screenMode}/${quality}/turbo_animation/Turbo_Spin.json`
+					atlas: `assets/controller/${forcedPortraitHigh}/turbo_animation/Turbo_Spin.atlas`,
+					json: `assets/controller/${forcedPortraitHigh}/turbo_animation/Turbo_Spin.json`
 				}
 			}
 		};
@@ -345,16 +347,17 @@ export class AssetConfig {
 	 * We intentionally do not use getAssetPrefix() to avoid missing assets on low quality.
 	 */
 	getScatterAnticipationAssets(): AssetGroup {
-		const prefix = this.getAssetPrefix();
-		console.log('[AssetConfig] Loading Scatter Anticipation assets');
+		// Force portrait/high paths to ensure presence (these packs may be absent in low quality builds)
+		const forcedPortraitHighPrefix = `assets/portrait/high`;
+		console.log('[AssetConfig] Loading Scatter Anticipation assets (forced portrait/high)');
 		return {
 			images: {
-				'reel-background': `${prefix}/background/reel-background.png`
+				'reel-background': `${forcedPortraitHighPrefix}/background/reel-background.png`
 			},
 			spine: {
 				'Sparkler_Reel': {
-					atlas: `${prefix}/scatterAnticipation/Sparkler_Reel.atlas`,
-					json: `${prefix}/scatterAnticipation/Sparkler_Reel.json`
+					atlas: `${forcedPortraitHighPrefix}/scatterAnticipation/Sparkler_Reel.atlas`,
+					json: `${forcedPortraitHighPrefix}/scatterAnticipation/Sparkler_Reel.json`
 				}
 			}
 		};

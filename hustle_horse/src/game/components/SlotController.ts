@@ -166,6 +166,17 @@ export class SlotController {
 		this.setupAutoplayEventListeners();
 	}
 
+	private showOutOfBalancePopup(message?: string): void {
+		const scene = this.scene as Scene | null;
+		if (!scene) return;
+		import('./OutOfBalancePopup').then(module => {
+			const Popup = module.OutOfBalancePopup;
+			const popup = new Popup(scene);
+			if (message) popup.updateMessage(message);
+			popup.show();
+		}).catch(() => {});
+	}
+
 	/**
 	 * Set the symbols component reference
 	 * This allows the SlotController to access free spin data from the Symbols component
@@ -2036,12 +2047,12 @@ export class SlotController {
 		this.updateBetButtonStates();
 		
 		// Keep the Buy Feature amount synced with current base bet
-		this.updateFeatureAmountFromCurrentBet();
+		this.setBuyFeatureBetAmount(betAmount);
 		
-		// Update base bet amount when changed externally (not by amplify bet)
+		// Always update base bet amount to keep stepping consistent
+		this.baseBetAmount = betAmount;
+		// Reset amplify bet state only when bet amount is changed externally
 		if (!this.isInternalBetChange) {
-			this.baseBetAmount = betAmount;
-			// Reset amplify bet state when bet amount is changed externally
 			this.resetAmplifyBetOnBetChange();
 		}
 	}
@@ -2098,8 +2109,13 @@ export class SlotController {
 			// Set flag to indicate this is an internal bet change
 			this.isInternalBetChange = true;
 			
-			const currentBetText = this.getBetAmountText();
-			const currentBet = currentBetText ? parseFloat(currentBetText) : (this.baseBetAmount || 0.2);
+			// Step relative to base bet (not the amplified display)
+			let currentBet = this.baseBetAmount || 0.2;
+			if (isNaN(currentBet) || currentBet <= 0) {
+				const currentBetText = this.getBetAmountText();
+				const parsed = currentBetText ? parseFloat(currentBetText) : NaN;
+				if (!isNaN(parsed)) currentBet = parsed;
+			}
 			if (isNaN(currentBet)) {
 				this.isInternalBetChange = false; // Reset flag on error
 				return;
@@ -2115,6 +2131,13 @@ export class SlotController {
 			this.updateBetAmount(newBet);
 			// Notify systems of bet change
 			gameEventManager.emit(GameEventType.BET_UPDATE, { newBet, previousBet });
+			// If amplify is ON, re-apply the 25% visual increase to the updated base
+			try {
+				const gd = this.getGameData();
+				if (gd && gd.isEnhancedBet) {
+					this.applyAmplifyBetIncrease();
+				}
+			} catch {}
 			
 			// Reset the flag after bet update is complete
 			this.isInternalBetChange = false;
@@ -3786,6 +3809,27 @@ public updateAutoplayButtonState(): void {
 			return;
 		}
 
+		// Guard: ensure sufficient balance before proceeding
+		try {
+			const currentBalance = this.getBalanceAmount();
+			const currentBet = this.getBaseBetAmount() || 0;
+			const gd = this.getGameData();
+			const totalBetToCharge = gd && gd.isEnhancedBet ? currentBet * 1.25 : currentBet;
+			if (currentBalance < totalBetToCharge) {
+				console.error(`[SlotController] Insufficient balance for spin: $${currentBalance} < $${totalBetToCharge}`);
+				if (this.autoplaySpinsRemaining > 0 || this.gameData?.isAutoPlaying || gameStateManager.isAutoPlaying) {
+					this.stopAutoplay();
+				}
+				this.showOutOfBalancePopup();
+				this.enableSpinButton();
+				this.enableAutoplayButton();
+				this.enableBetButtons();
+				this.enableFeatureButton();
+				this.enableAmplifyButton();
+				return;
+			}
+		} catch {}
+
 		// Play spin sound effect
 		if ((window as any).audioManager) {
 			(window as any).audioManager.playSoundEffect(SoundEffectType.SPIN);
@@ -4035,7 +4079,7 @@ public updateAutoplayButtonState(): void {
 				this.enableFeatureButton();
 				this.enableBetButtons();
 				this.enableAmplifyButton();
-				// TODO: Show insufficient balance message to user
+				this.showOutOfBalancePopup();
 				return;
 			}
 			
@@ -4107,6 +4151,9 @@ public updateAutoplayButtonState(): void {
 			
 			// Update the balance display
 			this.updateBalanceAmount(newBalance);
+			if (newBalance <= 0) {
+				this.showOutOfBalancePopup();
+			}
 			
 			console.log('[SlotController] ✅ Balance updated from server successfully');
 			

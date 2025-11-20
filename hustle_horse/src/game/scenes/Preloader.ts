@@ -7,17 +7,17 @@ import { AssetLoader } from '../../utils/AssetLoader';
 import { GameAPI } from '../../backend/GameAPI';
 import { GameData } from '../components/GameData';
 import { FullScreenManager } from '../../managers/FullScreenManager';
-import { ensureSpineLoader } from '../../utils/SpineGuard';
-import { StudioLoadingScreen } from '../components/StudioLoadingScreen';
+import { StudioLoadingScreen, queueGameAssetLoading } from '../components/StudioLoadingScreen';
 import { ClockDisplay } from '../components/ClockDisplay';
 
 export class Preloader extends Scene
 {
-	private networkManager: NetworkManager;
-	private screenModeManager: ScreenModeManager;
-	private assetConfig: AssetConfig;
-	private assetLoader: AssetLoader;
-	private gameAPI: GameAPI;
+	private networkManager!: NetworkManager;
+	private screenModeManager!: ScreenModeManager;
+	private assetConfig!: AssetConfig;
+	private assetLoader!: AssetLoader;
+	private gameAPI!: GameAPI;
+	private studio?: StudioLoadingScreen;
 
 	// UI elements we need after load
 	private buttonSpin?: Phaser.GameObjects.Image;
@@ -187,7 +187,7 @@ export class Preloader extends Scene
 				this.scale.height * 0.5 + winTextY,
 				'Win up to 21,000x',
 				{
-					fontFamily: 'Poppins-SemiBold, Poppins-Regular, Arial, sans-serif',
+					fontFamily: 'Poppins-Bold, Poppins-Regular, Arial, sans-serif',
 					fontSize: '35px',
 					color: '#FFFFFF',
 					align: 'center'
@@ -217,75 +217,49 @@ export class Preloader extends Scene
 		}
 
 		if (screenConfig.isPortrait) {
-		// Display studio loading screen with loading frame and text options
-		// You can adjust these values: offsetX, offsetY, scaleModifier, text position, scale, and color
-		const studio = new StudioLoadingScreen(this, {
-			loadingFrameOffsetX: 0,
-			loadingFrameOffsetY: 335,
-			loadingFrameScaleModifier: 0.04,
-			text: 'PLAY LOUD. WIN WILD. DIJOKER STYLE',
-			textOffsetX: -5,
-			textOffsetY: 365,
-			textScale: 1,
-			textColor: '#FFFFFF',
-			text2: 'www.dijoker.com',
-			text2OffsetX: 0,
-			text2OffsetY: 370,
-			text2Scale: 1,
-			text2Color: '#FFFFFF'
-			
-		});
-		studio.show();
-		// Schedule fade-out after minimum 3s, then reveal preloader UI if needed
-		studio.fadeOutAndDestroy(3000, 500);
+			// Display studio loading screen with loading frame and text options
+			this.studio = new StudioLoadingScreen(this, {
+				loadingFrameOffsetX: 0,
+				loadingFrameOffsetY: 335,
+				loadingFrameScaleModifier: 0.04,
+				text: 'PLAY LOUD. WIN WILD. DIJOKER STYLE',
+				textOffsetX: -5,
+				textOffsetY: 365,
+				textScale: 1,
+				textColor: '#FFFFFF',
+				text2: 'www.dijoker.com',
+				text2OffsetX: 0,
+				text2OffsetY: 370,
+				text2Scale: 1,
+				text2Color: '#FFFFFF'
+			});
+			this.studio.show();
 
-		// Delay any post-fade actions
-		this.events.once('studio-fade-complete', () => {
-			// Any post-fade actions can go here
-		});
+			// Delay any post-fade actions
+			this.events.once('studio-fade-complete', () => {
+				// Any post-fade actions can go here
+			});
 
 			const buttonY = this.scale.height * 0.77;
-			
-			// Scale buttons based on quality (low quality assets need 2x scaling)
-			this.buttonBg = this.add.image(
-				this.scale.width * 0.5, 
-				buttonY, 
-				"button_bg"
-			).setOrigin(0.5, 0.5).setScale(assetScale);
-
-			this.buttonSpin = this.add.image(
-				this.scale.width * 0.5, 
-				buttonY, 
-				"button_spin"
-			).setOrigin(0.5, 0.5).setScale(assetScale);
-
-			// Grey out and disable the spin button and background until load completes
+			this.buttonBg = this.add.image(this.scale.width * 0.5, buttonY, "button_bg").setOrigin(0.5, 0.5).setScale(assetScale);
+			this.buttonSpin = this.add.image(this.scale.width * 0.5, buttonY, "button_spin").setOrigin(0.5, 0.5).setScale(assetScale);
 			this.buttonSpin.setTint(0x777777).setAlpha(0.9);
 			this.buttonBg.setTint(0x777777).setAlpha(0.9);
 			this.buttonSpin.disableInteractive();
-
 			console.log(`[Preloader] Button scaling: ${assetScale}x`);
 
-			// Add Hustle Horse logo
-			const hustle_horse_logo = this.add.image(
-				this.scale.width * 0.5, 
-				this.scale.height * 0.14, 
-				"hustle_horse_logo"
-			).setOrigin(0.5, 0.5).setScale(assetScale);
-            
-            console.log(`[Preloader] Added hustle_horse_logo at scale: ${assetScale}x`);
-
-            // Breathing animation for the logo (same as win text)
-            this.tweens.add({
-                targets: hustle_horse_logo,
-                scale: { from: 0.95, to: 1.15 },
-                duration: 1500,
-                ease: 'Sine.easeInOut',
-                yoyo: true,
-                repeat: -1,  // Infinite repeat
-                hold: 0,
-                delay: 0
-            });
+			const hustle_horse_logo = this.add.image(this.scale.width * 0.5, this.scale.height * 0.14, "hustle_horse_logo").setOrigin(0.5, 0.5).setScale(assetScale);
+			console.log(`[Preloader] Added hustle_horse_logo at scale: ${assetScale}x`);
+			this.tweens.add({
+				targets: hustle_horse_logo,
+				scale: { from: 0.95, to: 1.15 },
+				duration: 1500,
+				ease: 'Sine.easeInOut',
+				yoyo: true,
+				repeat: -1,
+				hold: 0,
+				delay: 0
+			});
 
 			this.tweens.add({
 				targets: this.buttonSpin,
@@ -293,8 +267,7 @@ export class Preloader extends Scene
 				duration: 5000,
 				repeat: -1,
 			});
-
-			}
+		}
 
 		// Keep emitting for React overlay listeners if any
 		this.load.on('progress', (progress: number) => {
@@ -305,43 +278,25 @@ export class Preloader extends Scene
 	}
 
 	preload () {
-		this.assetLoader.loadCoinAssets(this);
-		this.assetLoader.loadBuyFeatureAssets(this);
-		this.assetLoader.loadBackgroundAssets(this);
-		this.assetLoader.loadBonusBackgroundAssets(this);
-		this.assetLoader.loadBonusHeaderAssets(this);
-		this.assetLoader.loadScatterAnticipationAssets(this);
-		this.assetLoader.loadButtonAssets(this);
-		this.assetLoader.loadFontAssets(this);
-		this.assetLoader.loadHeaderAssets(this);
-		this.assetLoader.loadLoadingAssets(this);
-		this.assetLoader.loadMenuAssets(this);
-		this.assetLoader.loadHelpScreenAssets(this);
-		this.assetLoader.loadSymbolAssets(this);
-		this.assetLoader.loadMenuAssets(this);
-		this.assetLoader.loadHelpScreenAssets(this);
-		this.assetLoader.loadNumberAssets(this);
-		this.assetLoader.loadAudioAssets(this);
-		this.assetLoader.loadAllAssets(this);
-		this.assetLoader.loadSpinCardAssets(this);
-		
-		console.log(`[Preloader] Loading assets for Preloader and Game scenes`);
+		// Queue assets during Phaser's preload so the loader starts automatically afterwards
+		queueGameAssetLoading(this, this.assetLoader);
+		console.log(`[Preloader] Queued assets via queueGameAssetLoading()`);
 	}
 
-    async create ()
-    {
-        // Initialize GameAPI and get the game token
-        try {
-            console.log('[Preloader] Initializing GameAPI...');
-            const gameToken = await this.gameAPI.initializeGame();
-            console.log('[Preloader] Game URL Token:', gameToken);
-            console.log('[Preloader] GameAPI initialized successfully!');
-        } catch (error) {
-            console.error('[Preloader] Failed to initialize GameAPI:', error);
-        }
+	async create ()
+	{
+		// Initialize GameAPI and get the game token
+		try {
+			console.log('[Preloader] Initializing GameAPI...');
+			const gameToken = await this.gameAPI.initializeGame();
+			console.log('[Preloader] Game URL Token:', gameToken);
+			console.log('[Preloader] GameAPI initialized successfully!');
+		} catch (error) {
+			console.error('[Preloader] Failed to initialize GameAPI:', error);
+		}
 
-        // Create fullscreen toggle now that assets are loaded (using shared manager)
-        const assetScale = this.networkManager.getAssetScale();
+		// Create fullscreen toggle now that assets are loaded (using shared manager)
+		const assetScale = this.networkManager.getAssetScale();
         this.fullscreenBtn = FullScreenManager.addToggle(this, {
             margin: 16 * assetScale,
             iconScale: 1.5 * assetScale,
@@ -467,17 +422,17 @@ export class Preloader extends Scene
 		const fontsObj: any = (document as any).fonts;
 		if (fontsObj && typeof fontsObj.ready?.then === 'function') {
 			fontsObj.ready.then(() => {
-				this.progressText?.setFontFamily('Inter');
-				this.pressToPlayText?.setFontFamily('Inter');
+				this.progressText?.setFontFamily('Poppins-Regular, Arial, sans-serif');
+				this.pressToPlayText?.setFontFamily('Poppins-Regular, Arial, sans-serif');
 			}).catch(() => {
 				// Fallback: set families anyway
-				this.progressText?.setFontFamily('Inter');
-				this.pressToPlayText?.setFontFamily('Inter');
+				this.progressText?.setFontFamily('Poppins-Regular, Arial, sans-serif');
+				this.pressToPlayText?.setFontFamily('Poppins-Regular, Arial, sans-serif');
 			});
 		} else {
 			// Browser without document.fonts support
-			this.progressText?.setFontFamily('Inter');
-			this.pressToPlayText?.setFontFamily('Inter');
+			this.progressText?.setFontFamily('Poppins-Regular, Arial, sans-serif');
+			this.pressToPlayText?.setFontFamily('Poppins-Regular, Arial, sans-serif');
 		}
     }
 }

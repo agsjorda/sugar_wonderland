@@ -392,6 +392,7 @@ export class Symbols {
           if (parent === this.scatterForegroundContainer) continue;
           try { this.container?.remove(obj); } catch {}
           try { this.scatterForegroundContainer?.add(obj); } catch {}
+          try { this.scatterForegroundContainer?.sendToBack?.(obj as any); } catch {}
           this.liftedScatterSymbols.push({ obj, col, row: reelRowIndex });
         } catch {}
       }
@@ -2612,6 +2613,9 @@ export class Symbols {
         return;
       }
 
+      try { this.ensureScatterForegroundContainer(); } catch {}
+      const overlayParent: Phaser.GameObjects.Container | undefined = this.scatterForegroundContainer || this.container;
+
       const active: Array<{ col: number; row: number; sprite: Phaser.GameObjects.Sprite }> = [];
       for (const pos of this.stickyMultiplierPositions) {
         const { col, row, symbol } = pos;
@@ -2625,6 +2629,16 @@ export class Symbols {
         if (baseSprite) {
           // Ensure visibility of the base symbol
           try { baseSprite.setVisible(true); } catch {}
+          try {
+            const parent: any = (baseSprite as any).parentContainer;
+            if (overlayParent && parent !== overlayParent) {
+              try { parent?.remove?.(baseSprite); } catch {}
+              try { overlayParent.add(baseSprite); } catch {}
+            } else if (overlayParent) {
+              try { overlayParent.add(baseSprite); } catch {}
+            }
+            try { overlayParent?.bringToTop?.(baseSprite as any); } catch {}
+          } catch {}
           // If there is an existing overlay for this cell, it will be destroyed in the cleanup loop below
           continue;
         }
@@ -2642,11 +2656,13 @@ export class Symbols {
           sprite.displayHeight = this.displayHeight * 0.9;
           try { sprite.setAlpha(0.7); } catch {}
           try { sprite.setTint(0xffff99); } catch {}
-          try { this.container.add(sprite); } catch {}
+          try { overlayParent?.add(sprite); } catch {}
+          try { overlayParent?.bringToTop?.(sprite as any); } catch {}
           try { sprite.setDepth(3); } catch {}
           overlay = { col, row, sprite };
         } else {
           try { overlay.sprite.setVisible(true); } catch {}
+          try { overlayParent?.bringToTop?.(overlay.sprite as any); } catch {}
         }
         active.push(overlay);
       }
@@ -2660,6 +2676,7 @@ export class Symbols {
       }
 
       this.stickyMultiplierOverlays = active;
+      try { (this.scene as any)?.children?.bringToTop?.(this.scatterForegroundContainer); } catch {}
     } catch {}
   }
 
@@ -2738,7 +2755,7 @@ export class Symbols {
     if (!this.scatterForegroundContainer) {
       try {
         this.scatterForegroundContainer = this.scene.add.container(0, 0);
-        this.scatterForegroundContainer.setDepth(0);
+        this.scatterForegroundContainer.setDepth(995);
       } catch {}
     }
     try { if (this.gridMask) { this.scatterForegroundContainer?.setMask(this.gridMask); } } catch {}
@@ -2766,6 +2783,7 @@ export class Symbols {
               if (parent === this.scatterForegroundContainer) continue;
               try { this.container?.remove(obj); } catch {}
               try { this.scatterForegroundContainer?.add(obj); } catch {}
+              try { this.scatterForegroundContainer?.sendToBack?.(obj as any); } catch {}
               this.liftedScatterSymbols.push({ obj, col, row });
             }
           } catch {}
@@ -4713,11 +4731,17 @@ function createNewSymbols(self: Symbols, data: Data) {
             symbol.displayHeight = self.displayHeight;
           } catch {}
           try {
+            (self as any).ensureScatterForegroundContainer?.();
+            const overlayParent: Phaser.GameObjects.Container | undefined = (self as any).scatterForegroundContainer || self.container;
             const parent: any = (symbol as any).parentContainer;
-            if (parent !== self.container) {
+            if (overlayParent && parent !== overlayParent) {
               try { parent?.remove?.(symbol); } catch {}
-              try { self.container.add(symbol); } catch {}
+              try { overlayParent.add(symbol); } catch {}
+            } else if (overlayParent) {
+              try { overlayParent.add(symbol); } catch {}
             }
+            try { overlayParent?.bringToTop?.(symbol as any); } catch {}
+            try { (self.scene as any)?.children?.bringToTop?.((self as any).scatterForegroundContainer); } catch {}
           } catch {}
         } else {
           symbol = scene.add.sprite(x, y, 'symbol_' + symbols[col][row]);
@@ -4883,6 +4907,8 @@ function dropFillers(self: Symbols, index: number, extendDuration: boolean = fal
         const fg: Phaser.GameObjects.Container | undefined = (self as any).scatterForegroundContainer;
         if (fg && typeof fg.add === 'function') {
           fg.add(symbol);
+          try { fg.sendToBack?.(symbol as any); } catch {}
+          try { (self.scene as any)?.children?.bringToTop?.(fg); } catch {}
         } else {
           self.container.add(symbol);
         }
