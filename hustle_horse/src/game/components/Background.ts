@@ -98,12 +98,7 @@ export class Background {
 		// bg.setScale(bg.scaleX * 1.02, bg.scaleY * 1.02);
 
 		// Add reel frame (kept as-is, initially hidden alpha)
-		const reelFrame = scene.add.image(
-			scene.scale.width * 0.5,
-			scene.scale.height * 0.483,
-			'reel-frame'
-		).setOrigin(0.5, 0.5).setScale(0.39).setAlpha(0);
-		this.bgContainer.add(reelFrame);
+
 	}
 
 	private createParticleSystem(scene: Scene): void {

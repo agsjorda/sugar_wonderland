@@ -34,16 +34,17 @@ export class Boot extends Scene
 
 	preload ()
 	{
-		// Show debug info
 		this.assetConfig.getDebugInfo();
 		
 		console.log(`[Boot] Asset loading configuration:`);
 		console.log(`[Boot] - Asset scale: ${this.networkManager.getAssetScale()}x`);
 		console.log(`[Boot] - Asset prefix: ${this.assetConfig['getAssetPrefix']()}`);
 		
-		// Load loading assets using AssetLoader
+		this.load.on('progress', (p: number) => {
+			try { (window as any).setBootLoaderProgress?.(p * 0.25); } catch {}
+		});
+		
 		this.assetLoader.loadLoadingAssets(this);
-		// Preload font assets so web fonts are ready before Preloader creates text
 		this.assetLoader.loadFontAssets(this);
 		
 		console.log(`[Boot] Loading assets for Boot scene`);

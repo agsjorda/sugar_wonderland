@@ -4,6 +4,91 @@ import { GameData } from '../components/GameData';
 import { AudioManager, SoundEffectType } from '../../managers/AudioManager';
 import { GameAPI } from '../../backend/GameAPI';
 
+// Adjustable configuration driving the entire menu layout and visuals
+interface MenuOptions {
+  padding: number;
+  contentSidePadding: number;
+  layoutUnit: number;          // base vertical unit independent from symbol scale
+  symbolScale: number;         // visual scale for payout icons only
+  fonts: {
+    title: string;
+    header: string;
+    body: string;
+  };
+  colors: {
+    accent: number;            // green
+    bgPanel: number;           // panel bg
+    bgFrame: number;           // frame bg
+    text: string;              // primary text
+  };
+  table: {
+    cellWidth1: number;
+    cellWidth2: number;
+    cellHeight: number;
+    cellPadding: number;
+    inset: number;             // horizontal inset inside grey frames
+  };
+  offsets: {
+    payoutLabelOffsetX: [number, number, number];
+    payoutLabelOffsetY: [number, number, number];
+    payoutLabelPerSymbolOffsetX: { [key: number]: [number, number, number] };
+    payoutLabelPerSymbolOffsetY: { [key: number]: [number, number, number] };
+    scatterInfoOffset: { x: number; y: number };
+    // New: row-specific Y offsets for the 3 value labels (5/4/3), global and per-symbol
+    payoutValueRowOffsetY: [number, number, number];
+    payoutValueRowOffsetYPerSymbol: { [key: number]: [number, number, number] };
+  };
+}
+
+const defaultMenuOptions: MenuOptions = {
+  padding: 10,
+  contentSidePadding: 20,
+  layoutUnit: 153,
+  symbolScale: 1,
+  fonts: {
+    title: 'Poppins-Regular',
+    header: 'Poppins-Bold',
+    body: 'Poppins-Regular',
+  },
+  colors: {
+    accent: 0x379557,
+    bgPanel: 0x181818,
+    bgFrame: 0x333333,
+    text: '#FFFFFF',
+  },
+  table: {
+    cellWidth1: 60,
+    cellWidth2: 100,
+    cellHeight: 22.5,
+    cellPadding: 5,
+    inset: 20,
+  },
+  offsets: {
+    payoutLabelOffsetX: [20, 0, 0],
+    payoutLabelOffsetY: [0, 0, 0],
+    payoutLabelPerSymbolOffsetX: {},
+    payoutLabelPerSymbolOffsetY: {},
+    scatterInfoOffset: { x: 0, y: 0 },
+    payoutValueRowOffsetY: [0, 0, 0],
+    payoutValueRowOffsetYPerSymbol: {},
+  },
+};
+
+type PayoutMap = { [key: number]: [number, number, number] };
+const defaultPayoutMap: PayoutMap = {
+  1: [37.5, 7.5, 2.5],
+  2: [25.0, 5.0, 1.75],
+  3: [15.0, 3.0, 1.25],
+  4: [10.0, 2.0, 1.25],
+  5: [7.5, 1.25, 0.6],
+  6: [5.0, 1.0, 0.4],
+  7: [2.5, 0.5, 0.25],
+  8: [2.5, 0.5, 0.25],
+  9: [1.25, 0.25, 0.1],
+  10: [1.25, 0.25, 0.1],
+  11: [1.25, 0.25, 0.1],
+};
+
 interface ButtonBase {
     isButton: boolean;
 }
@@ -20,31 +105,37 @@ interface GameScene extends Scene {
 
 export class Menu {
     private menuContainer?: ButtonContainer;
-    private contentArea: GameObjects.Container;
+    private contentArea!: GameObjects.Container;
     private isMobile: boolean = true;
     private width: number = 0;
     private height: number = 0;
     private menuEventHandlers: Function[] = [];
     private isDraggingMusic: boolean = false;
     private isDraggingSFX: boolean = false;
-    private scene: GameScene;
+    private scene!: GameScene;
     public settingsOnly: boolean = false;
 
     private padding = 20;
     private contentWidth = 1200;
     private viewWidth = 1329;
     private yPosition = 0;
-    private scrollView: GameObjects.Container;
-    private contentContainer: GameObjects.Container;
-    private mask: Phaser.Display.Masks.GeometryMask;
+    private scrollView!: GameObjects.Container;
+    private contentContainer!: GameObjects.Container;
+    private mask!: Phaser.Display.Masks.GeometryMask;
     private isVisible: boolean = false;
-    private panel: GameObjects.Container;
+    private panel!: GameObjects.Container;
     private textHorizontalPadding?: number;
+    private payoutLabelOffsetX: [number, number, number] = [20, 0, 0];
+    private payoutLabelOffsetY: [number, number, number] = [0, 0, 0];
+    private payoutLabelPerSymbolOffsetX: { [key: number]: [number, number, number] } = {};
+    private payoutLabelPerSymbolOffsetY: { [key: number]: [number, number, number] } = {};
+    private scatterInfoOffset: { x: number, y: number } = { x: 0, y: 0 };
+    private options: MenuOptions = { ...defaultMenuOptions };
     
     // Tab content containers for proper tab switching
-    private rulesContent: GameObjects.Container;
-    private historyContent: GameObjects.Container;
-    private settingsContent: GameObjects.Container;
+    private rulesContent!: GameObjects.Container;
+    private historyContent!: GameObjects.Container;
+    private settingsContent!: GameObjects.Container;
     private activeTabIndex: number = 0;
 
     // History pagination state
@@ -93,7 +184,7 @@ export class Menu {
 
     protected textStyle = {
         fontSize: '20px',
-        color: '#FFFFFF',
+        color: '#ffffffff',
         fontFamily: 'Poppins-Regular',
         align: 'left',
         wordWrap: { width: this.contentWidth }
@@ -147,7 +238,7 @@ export class Menu {
 
         // Panel background - no border
         const panelBg = scene.add.graphics();
-        panelBg.fillStyle(0x181818, 0.95);
+        panelBg.fillStyle(this.options.colors.bgPanel, 0.95);
         panelBg.fillRect(0, 0, panelWidth, panelHeight);
         // Make panel capture input too
         panelBg.setInteractive(new Geom.Rectangle(0, 0, panelWidth, panelHeight), Geom.Rectangle.Contains);
@@ -1087,7 +1178,7 @@ export class Menu {
 
 
     private createHelpScreenContent(scene: GameScene, contentArea: GameObjects.Container): void {
-            this.padding = 10;
+            this.padding = this.options.padding;
             this.textHorizontalPadding = -2;
             this.contentWidth = scene.scale.width - this.padding * 6;
             this.yPosition = this.padding + 10;
@@ -1106,42 +1197,43 @@ export class Menu {
             this.yPosition += this.padding * 8;
     
             // Create 11 symbol grids with payouts (Symbols 1-11)
-            const symbolSize = 153;
-            const symbolScale = 0.5;
+            const symbolSize = this.options.layoutUnit;
+            const symbolScale = this.options.symbolScale;
+            const layoutUnit = this.options.layoutUnit;
             const scaledSymbolSize = symbolSize * symbolScale;
             for (let symbolIndex = 1; symbolIndex <= 11; symbolIndex++) {
                 const cellX = this.padding;
                 const cellY = this.yPosition;
-    
+
                 // Create symbol container with white border
                 const symbolContainer = scene.add.container(cellX, cellY);
-    
+
                 this.createBorder(scene, symbolContainer, 
                     -this.padding / 2, 
-                    -scaledSymbolSize, 
+                    -layoutUnit, 
                     this.contentWidth + this.padding * 3,
-                    scaledSymbolSize * 1.5
+                    layoutUnit * 1.5
                 );
-    
+
                 // Add symbol
                 const symbol = scene.add.image(0, 0, `symbol_${symbolIndex}`);
                 symbol.setScale(symbolScale);
                 symbol.setOrigin(-0.2, 0.7);
                 symbolContainer.add(symbol);
-    
+
                 // Add payout table next to symbol
                 this.createPayoutTable(scene,
-                    scaledSymbolSize + symbolSize/5,
+                    Math.max(layoutUnit, scaledSymbolSize) + symbolSize/5,
                     0,
                     symbolContainer,
                     symbolIndex
                 );
-    
+
                 this.contentContainer.add(symbolContainer);
                 symbolContainer.setPosition(0, symbolContainer.y);
-                this.yPosition += scaledSymbolSize + this.padding * 5;  // Move to next row
+                this.yPosition += layoutUnit + this.padding * 5;  // Move to next row
             }
-            this.yPosition -=  scaledSymbolSize;
+            this.yPosition -=  layoutUnit;
 
             // Increase top spacing before Scatter label
             this.yPosition += this.padding * 1.5;
@@ -1164,10 +1256,10 @@ export class Menu {
                 const extraScatterTopPad = this.padding / 1.5;
                 // Increase vertical size for Scatter payout only
                 const extraScatterBottomPad = this.padding * 16;
-                const scatterContainerHeight = scaledSymbolSize * 5.5 + extraScatterTopPad + extraScatterBottomPad;
+                const scatterContainerHeight = layoutUnit * 5.5 + extraScatterTopPad + extraScatterBottomPad;
                 this.createBorder(scene, symbolContainer, 
                     0, 
-                    -scaledSymbolSize - extraScatterTopPad, 
+                    -layoutUnit - extraScatterTopPad, 
                     this.contentWidth + this.padding * 3 ,
                     scatterContainerHeight
                 );
@@ -1204,7 +1296,7 @@ export class Menu {
                 this.padding,
                 0,
                 this.contentWidth + this.padding * 3,
-                scaledSymbolSize * 3.1
+                layoutUnit * 3.1
             );
             this.contentContainer.add(enhancedContainer);
 
@@ -1240,7 +1332,7 @@ export class Menu {
                 this.padding,
                 0,
                 this.contentWidth + this.padding * 3,
-                scaledSymbolSize * 2.8
+                layoutUnit * 2.8
             );
             this.contentContainer.add(buyFeatContainer);
 
@@ -1286,21 +1378,21 @@ export class Menu {
             // Removed Tumble Win section
             this.yPosition += this.padding * 7.5;
             this.addTextBlock(scene, 'header2', 'Free Spins Rules');
-            this.yPosition += scaledSymbolSize * 0.25;
+            this.yPosition += layoutUnit * 0.25;
             //this.yPosition -= scaledSymbolSize * 4.5;
-    
-            const freeSpinContainer = scene.add.container(-this.padding * 1.5, this.yPosition-scaledSymbolSize * 0.2);
+            
+            const freeSpinContainer = scene.add.container(-this.padding * 1.5, this.yPosition-layoutUnit * 0.2);
             this.yPosition += this.createBorder(scene, freeSpinContainer, 
                 this.padding, 
                 0, 
                 this.contentWidth + this.padding * 3, 
-                scaledSymbolSize * 43
+                layoutUnit * 43
                 
             );
             this.contentContainer.add(freeSpinContainer);
             this.contentContainer.sendToBack(freeSpinContainer);
-
-            this.yPosition -= scaledSymbolSize * 1.25;
+            
+            this.yPosition -= layoutUnit * 1.25;
 
             // Use a common template for Bonus Trigger and Free Spins Start
             const freeSpinsTitleOffset = this.padding * 15; // distance from image → title
@@ -1417,7 +1509,7 @@ export class Menu {
             scatterWinImage.setPosition(scatterSymbolImage.x - scatterSymbolImage.displayWidth/2 + this.padding * 9.1, scatterSymbolImage.y * 3/4 - scatterWinImage.height/ 4 + 20);
             freeSpinContainer.add(scatterWinImage);
             
-            this.yPosition -= scaledSymbolSize * 5.3;
+            this.yPosition -= layoutUnit * 5.3;
 
             
             // this.addDivider(scene, 0x379557);
@@ -1433,12 +1525,12 @@ export class Menu {
                 this.padding, 
                 0, 
                 this.contentWidth + this.padding * 3, 
-                scaledSymbolSize * 10.8
+                layoutUnit * 10.8
             );
             this.contentContainer.add(gamesettingsContainer);
-    
+
             //this.yPosition -= scaledSymbolSize * 9.75;
-            this.yPosition -= scaledSymbolSize * 10.3;
+            this.yPosition -= layoutUnit * 10.3;
             
     
             //this.yPosition += this.padding;
@@ -1449,10 +1541,10 @@ export class Menu {
 
             
             
-            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 1, gamesettingsContainer, '', 'Symbols can land anywhere on the screen.', true, this.contentWidth + this.padding * 3);
+            this.createHowToPlayEntry(scene, 20, layoutUnit * 1, gamesettingsContainer, '', 'Symbols can land anywhere on the screen.', true, this.contentWidth + this.padding * 3);
 
             // Place a 5x4 grid of winline thumbnails below the text
-            const gridTopY = scaledSymbolSize * 1 + this.padding * 4.8;
+            const gridTopY = layoutUnit * 1 + this.padding * 4.8;
             const gridBottom = this.drawWinlinesThumbnailsGrid(scene, gamesettingsContainer, gridTopY, 5, 4);
 
             // Add payline notes text below the grid (as shown in the reference)
@@ -1897,9 +1989,9 @@ export class Menu {
 
     private createBorder(scene: GameScene, _container: GameObjects.Container, _x: number, _y: number, _width: number, _height: number): number {
         const border = scene.add.graphics();
-        border.fillStyle(0x333333);
+        border.fillStyle(this.options.colors.bgFrame);
         border.fillRoundedRect(_x, _y, _width, _height, 8);
-        border.lineStyle(2, 0x333333);
+        border.lineStyle(2, this.options.colors.bgFrame);
         border.strokeRoundedRect(_x, _y, _width, _height, 8);
         border.setAlpha(0.7);
         _container.add(border);
@@ -1922,12 +2014,34 @@ export class Menu {
         return _height;
     }
 
+    public setOptions(opts: Partial<MenuOptions>): void {
+        const deepMerge = (t: any, s: any) => {
+            Object.keys(s).forEach(k => {
+                const sv = (s as any)[k];
+                const tv = (t as any)[k];
+                if (sv && typeof sv === 'object' && !Array.isArray(sv)) {
+                    (t as any)[k] = deepMerge(tv ? { ...tv } : {}, sv);
+                } else {
+                    (t as any)[k] = sv;
+                }
+            });
+            return t;
+        };
+        this.options = deepMerge({ ...this.options }, opts);
+        // keep legacy fields in sync for backward compatibility
+        this.payoutLabelOffsetX = this.options.offsets.payoutLabelOffsetX;
+        this.payoutLabelOffsetY = this.options.offsets.payoutLabelOffsetY;
+        this.payoutLabelPerSymbolOffsetX = this.options.offsets.payoutLabelPerSymbolOffsetX;
+        this.payoutLabelPerSymbolOffsetY = this.options.offsets.payoutLabelPerSymbolOffsetY;
+        this.scatterInfoOffset = this.options.offsets.scatterInfoOffset;
+    }
+
     private addDivider(scene: GameScene, _color: number = 0xFFFFFF): void {
         // Add centered divider across the visible content width
         const divider = scene.add.graphics();
         divider.lineStyle(1, _color);
-        const worldLeft = 20; // content area left padding
-        const worldRight = scene.scale.width - 20; // content area right padding
+        const worldLeft = this.options.contentSidePadding; // content area left padding
+        const worldRight = scene.scale.width - this.options.contentSidePadding; // content area right padding
         const parentOffsetX = this.contentArea ? this.contentArea.x : 0;
         const localLeft = worldLeft - parentOffsetX;
         const localRight = worldRight - parentOffsetX;
@@ -1937,10 +2051,23 @@ export class Menu {
     }
 
     private createPayoutTable(scene: GameScene, x: number, y: number, container: GameObjects.Container, symbolIndex: number): void {
-        const cellWidth1 = 60; 
-        const cellWidth2 = 100;
-        const cellHeight = 22.5;
-        const cellPadding = 5;
+        const cellWidth1 = this.options.table.cellWidth1; 
+        const cellWidth2 = this.options.table.cellWidth2;
+        const cellHeight = this.options.table.cellHeight;
+        const cellPadding = this.options.table.cellPadding;
+
+        // Frame metrics and clamped table left to prevent overflow
+        // @ts-ignore
+        const frameW = (container.getData && container.getData('frameW')) || (this.contentWidth + this.padding * 3);
+        // @ts-ignore
+        const frameX = (container.getData && container.getData('frameX')) || this.padding;
+        const inset = this.options.table.inset;
+        const tableWidth = cellWidth1 + cellPadding + cellWidth2 + cellPadding + (cellWidth2 * 2);
+        const xLeft = Math.min(Math.max(x, frameX + inset), frameX + frameW - inset - tableWidth);
+
+        const offX = this.payoutLabelPerSymbolOffsetX[symbolIndex] ?? this.payoutLabelOffsetX;
+        const offY = this.payoutLabelPerSymbolOffsetY[symbolIndex] ?? this.payoutLabelOffsetY;
+        const valueRowOffY = this.options.offsets.payoutValueRowOffsetYPerSymbol[symbolIndex] ?? this.options.offsets.payoutValueRowOffsetY;
 
         const tableHeight = (cellHeight + cellPadding) * 4;
         const matchNumRange : string[] = ['5', '4', '3'];
@@ -1971,7 +2098,7 @@ export class Menu {
                 } else {
                     cellWidth = cellWidth2 * 2;
                 }
-                const cellX = x + (col == 2 ? cellWidth1 + cellWidth2 + cellPadding * 2 : col * (cellWidth + cellPadding));
+                const cellX = xLeft + (col == 2 ? cellWidth1 + cellWidth2 + cellPadding * 2 : col * (cellWidth + cellPadding));
                 const cellY = tableY + row * (cellHeight + cellPadding);
 
                 // Draw cell border
@@ -1980,21 +2107,7 @@ export class Menu {
                 if(symbolIndex != 0) {
                     // For regular symbols
                     if(col < 2) {
-                        // Payout values per symbol (1-11) for rows ['12+', '10', '8']
-                        const payoutMap: { [key: number]: [number, number, number] } = {
-                            1: [37.50, 7.50, 2.50],
-                            2: [25.00, 5.00, 1.75],
-                            3: [15.00, 3.00, 1.25],
-                            4: [10.00, 2.00, 1.25],
-                            5: [7.50, 1.25, 0.60],
-                            6: [5.00, 1.00, 0.40],
-                            7: [2.50, 0.50, 0.25],
-                            8: [2.50, 0.50, 0.25],
-                            9: [1.25, 0.25, 0.10],
-                            10: [1.25, 0.25, 0.10],
-                            11: [1.25, 0.25, 0.10]
-                        };
-                        const payoutValue = (payoutMap[symbolIndex] && payoutMap[symbolIndex][row] !== undefined) ? payoutMap[symbolIndex][row] : 0;
+                        const payoutValue = (defaultPayoutMap[symbolIndex] && defaultPayoutMap[symbolIndex][row] !== undefined) ? defaultPayoutMap[symbolIndex][row] : 0;
                         const text2 = payoutValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         payoutAdjustments[row] = text2.length;
 
@@ -2012,22 +2125,28 @@ export class Menu {
 
                         let textElement : GameObjects.Text;
                         if(col == 0){
-                            textElement = scene.add.text(cellX + cellWidth + 25, cellY + cellHeight/2, text, {
+                            // Match count column (5/4/3) uses standard column Y offset
+                            textElement = scene.add.text(cellX + cellWidth - 4 + offX[0], cellY + cellHeight/2 + offY[0], text, {
                                 fontSize: '20px',
                                 color: '#FFFFFF',
                                 fontFamily: 'Poppins-Regular', 
                                 align: 'left',
                                 fontStyle: 'bold'
                             });
-                            textElement.setOrigin(0, 0.5);
+                            textElement.setOrigin(1, 0.5);
                         } else {
-                            // Right-align payout values to the cell's right edge (with 2px inset)
-                            textElement = scene.add.text(cellX + cellWidth + 50, cellY + cellHeight/2, text, {
+                            // Value column uses column Y offset plus row-specific value label Y offset
+                            textElement = scene.add.text(
+                                cellX + cellWidth - 2 + offX[1],
+                                cellY + cellHeight/2 + offY[1] + (valueRowOffY[row] ?? 0),
+                                text,
+                                {
                                 fontSize: '20px',
                                 color: '#FFFFFF',
                                 fontFamily: 'Poppins-Regular', 
                                 align: 'right'
-                            });
+                                }
+                            );
                             textElement.setOrigin(1, 0.5);
                         }
 
@@ -2051,21 +2170,26 @@ export class Menu {
                         }
 
                     if(col == 0) {
-                        const textElement = scene.add.text(cellX + cellWidth + this.padding, cellY + cellHeight/2, text, {
+                        const textElement = scene.add.text(cellX + cellWidth - 2 + offX[0], cellY + cellHeight/2 + offY[0], text, {
                             fontSize: '20px',
                             color: '#FFFFFF',
                             fontFamily: 'Poppins-Regular',
                             fontStyle: 'bold'
                         });
-                        textElement.setOrigin(col == 0 ? 0 : 0.5, 0.5);
+                        textElement.setOrigin(1, 0.5);
                         container.add(textElement);
                     } else if(col == 1) {
                         
-                        const textElement = scene.add.text(cellX + cellWidth , cellY + cellHeight/2, text, {
+                        const textElement = scene.add.text(
+                            cellX + cellWidth / 2 + offX[1],
+                            cellY + cellHeight/2 + offY[1] + (valueRowOffY[row] ?? 0),
+                            text,
+                            {
                             fontSize: '20px',
                             color: '#FFFFFF',
                             fontFamily: 'Poppins-Regular'
-                        });
+                            }
+                        );
                         textElement.setOrigin(0.5, 0.5);
                         container.add(textElement);
                     
@@ -2077,10 +2201,9 @@ export class Menu {
         }
         // For Scatter symbol, place the descriptive text as a centered block BELOW the table
         if (symbolIndex === 0) {
-            const tableWidth = cellWidth1 + cellPadding + cellWidth2 + cellPadding + (cellWidth2 * 2);
-            const tableLeft = x;
-            const tableCenterX = tableWidth / 2;
-            const tableBottomY = tableY + (3 * (cellHeight + cellPadding));
+            const tableLeft = xLeft;
+            const tableCenterX = tableLeft + tableWidth / 2 + this.scatterInfoOffset.x;
+            const tableBottomY = tableY + (3 * (cellHeight + cellPadding)) + this.scatterInfoOffset.y;
 
             const infoText = scatterText.join('\n');
             const scatterTextCell = scene.add.text(
@@ -2105,6 +2228,32 @@ export class Menu {
     public toggleMenu(scene: GameScene): void {
         
         this.showMenu(scene);
+    }
+
+    public setPayoutLabelOffsetsX(x0: number, x1: number, x2: number): void {
+        this.payoutLabelOffsetX = [x0, x1, x2];
+    }
+
+    public setPayoutLabelOffsetsY(y0: number, y1: number, y2: number): void {
+        this.payoutLabelOffsetY = [y0, y1, y2];
+    }
+
+    public setPayoutLabelOffsetsForSymbol(symbolIndex: number, offX: [number, number, number], offY: [number, number, number]): void {
+        this.payoutLabelPerSymbolOffsetX[symbolIndex] = offX;
+        this.payoutLabelPerSymbolOffsetY[symbolIndex] = offY;
+    }
+
+    public setScatterInfoOffset(x: number, y: number): void {
+        this.scatterInfoOffset = { x, y };
+    }
+
+    // New setters: row-specific Y offsets for the three value labels (rows 5/4/3)
+    public setPayoutValueRowOffsetY(y5: number, y4: number, y3: number): void {
+        this.options.offsets.payoutValueRowOffsetY = [y5, y4, y3];
+    }
+
+    public setPayoutValueRowOffsetYForSymbol(symbolIndex: number, offsets: [number, number, number]): void {
+        this.options.offsets.payoutValueRowOffsetYPerSymbol[symbolIndex] = offsets;
     }
 
     // addHeader1/addHeader2/addContent1 removed in favor of addTextBlock

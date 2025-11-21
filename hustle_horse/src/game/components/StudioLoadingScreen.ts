@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { ensureSpineLoader } from '../../utils/SpineGuard';
 import { getMilitaryTime } from '../../utils/TimeUtils';
+import { AssetLoader } from '../../utils/AssetLoader';
 
 export interface StudioLoadingScreenOptions {
     loadingFrameOffsetX?: number;
@@ -390,32 +391,33 @@ export class StudioLoadingScreen {
             this.progressBarFill.fillRoundedRect(innerX, innerY, 0, innerHeight, innerHeight * 0.5);
             this.container.add(this.progressBarFill);
 
-            // Time-driven progress fill over 3 seconds (independent of loader progress)
-            const counter = { p: 0 } as any;
-            this.scene.tweens.add({
-                targets: counter,
-                p: 1,
-                duration: 3000,
-                ease: 'Linear',
-                onUpdate: () => {
-                    if (this.progressBarFill && this.progressBarX !== undefined && this.progressBarY !== undefined && this.progressBarWidth !== undefined && this.progressBarHeight !== undefined) {
-                        // Use the stored bar coordinates
-                        const fillX = this.progressBarX - this.progressBarWidth * 0.5 + this.progressBarPadding;
-                        const fillY = this.progressBarY - this.progressBarHeight * 0.5 + this.progressBarPadding;
-                        const fillWidth = this.progressBarWidth - this.progressBarPadding * 2;
-                        const fillHeight = this.progressBarHeight - this.progressBarPadding * 2;
-                        const progress = Math.max(0, Math.min(1, counter.p));
-                        this.progressBarFill.clear();
-                        this.progressBarFill.fillStyle(0x37DB6E, 1);
-                        this.progressBarFill.fillRoundedRect(
-                            fillX,
-                            fillY,
-                            Math.max(0.0001, fillWidth * progress),
-                            fillHeight,
-                            fillHeight * 0.5
-                        );
-                    }
+            const updateFill = (progress: number) => {
+                if (!this.progressBarFill || this.progressBarX === undefined || this.progressBarY === undefined || this.progressBarWidth === undefined || this.progressBarHeight === undefined) {
+                    return;
                 }
+                const fillX = this.progressBarX - this.progressBarWidth * 0.5 + this.progressBarPadding;
+                const fillY = this.progressBarY - this.progressBarHeight * 0.5 + this.progressBarPadding;
+                const fillWidth = this.progressBarWidth - this.progressBarPadding * 2;
+                const fillHeight = this.progressBarHeight - this.progressBarPadding * 2;
+                const p = Math.max(0, Math.min(1, progress));
+                this.progressBarFill.clear();
+                this.progressBarFill.fillStyle(0x37DB6E, 1);
+                this.progressBarFill.fillRoundedRect(
+                    fillX,
+                    fillY,
+                    Math.max(0.0001, fillWidth * p),
+                    fillHeight,
+                    fillHeight * 0.5
+                );
+            };
+
+            updateFill(0);
+
+            this.onProgressHandler = (p: number) => updateFill(p);
+            this.scene.load.on('progress', this.onProgressHandler as any);
+
+            this.scene.load.once('complete', () => {
+                this.fadeOutAndDestroy(3000, 500);
             });
         } catch (e) {
             console.warn('[StudioLoadingScreen] Failed to display spine:', e);
@@ -519,6 +521,44 @@ export class StudioLoadingScreen {
         
         console.log(`[StudioLoadingScreen] Dot grid created: ${cols}x${rows} dots, spacing: ${dotSpacing}px, radius: ${dotRadius}px`);
     }
+
+    public beginLoading(assetLoader: AssetLoader): void {
+        assetLoader.loadCoinAssets(this.scene);
+        assetLoader.loadBuyFeatureAssets(this.scene);
+        assetLoader.loadBackgroundAssets(this.scene);
+        assetLoader.loadBonusBackgroundAssets(this.scene);
+        assetLoader.loadBonusHeaderAssets(this.scene);
+        assetLoader.loadScatterAnticipationAssets(this.scene);
+        assetLoader.loadButtonAssets(this.scene);
+        assetLoader.loadHeaderAssets(this.scene);
+        assetLoader.loadMenuAssets(this.scene);
+        assetLoader.loadHelpScreenAssets(this.scene);
+        assetLoader.loadSymbolAssets(this.scene);
+        assetLoader.loadNumberAssets(this.scene);
+        assetLoader.loadScatterWinOverlayAssets(this.scene);
+        assetLoader.loadDialogAssets(this.scene);
+        assetLoader.loadAudioAssets(this.scene);
+        assetLoader.loadSpinCardAssets(this.scene);
+        console.log('[StudioLoadingScreen] Queued game assets (optimized)');
+    }
 }
 
-
+export function queueGameAssetLoading(scene: Scene, assetLoader: AssetLoader): void {
+    assetLoader.loadCoinAssets(scene);
+    assetLoader.loadBuyFeatureAssets(scene);
+    assetLoader.loadBackgroundAssets(scene);
+    assetLoader.loadBonusBackgroundAssets(scene);
+    assetLoader.loadBonusHeaderAssets(scene);
+    assetLoader.loadScatterAnticipationAssets(scene);
+    assetLoader.loadButtonAssets(scene);
+    assetLoader.loadHeaderAssets(scene);
+    assetLoader.loadMenuAssets(scene);
+    assetLoader.loadHelpScreenAssets(scene);
+    assetLoader.loadSymbolAssets(scene);
+    assetLoader.loadNumberAssets(scene);
+    assetLoader.loadScatterWinOverlayAssets(scene);
+    assetLoader.loadDialogAssets(scene);
+    assetLoader.loadAudioAssets(scene);
+    assetLoader.loadSpinCardAssets(scene);
+    console.log('[StudioLoadingScreen] Queued game asset loading (optimized)');
+}

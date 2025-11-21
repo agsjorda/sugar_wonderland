@@ -239,8 +239,14 @@ export class WinLineDrawer {
           const isNormalAutoplay = gameStateManager.isAutoPlaying;
           const isFreeSpinAutoplay = this.symbolsReference && (this.symbolsReference as any).freeSpinAutoplayActive;
           const isAnyAutoplay = isNormalAutoplay || isFreeSpinAutoplay;
+          // Special case: last normal autoplay spin should preserve win tint/overlay
+          let isLastNormalAutoplaySpin = false;
+          try {
+            const slotController = (this.scene as any)?.slotController;
+            isLastNormalAutoplaySpin = !!(slotController && slotController.autoplaySpinsRemaining === 0 && !isFreeSpinAutoplay);
+          } catch {}
           
-          if (isAnyAutoplay) {
+          if (isAnyAutoplay && !isLastNormalAutoplaySpin) {
             // Add extra delay before clearing winlines to ensure they're visible
             this.scene.time.delayedCall(300, () => {
               this.clearLines();
@@ -251,7 +257,7 @@ export class WinLineDrawer {
               console.log('[WinLineDrawer] Cleared win lines and overlay (autoplay) after extra delay');
             });
           } else {
-            console.log('[WinLineDrawer] Preserving win lines and overlay (manual spin)');
+            console.log('[WinLineDrawer] Preserving win lines and overlay (manual or last autoplay spin)');
           }
           gameEventManager.emit(GameEventType.REELS_STOP);
           gameEventManager.emit(GameEventType.WIN_STOP);

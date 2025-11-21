@@ -30,7 +30,6 @@ import { BetOptions } from '../components/BetOptions';
 import { AutoplayOptions } from '../components/AutoplayOptions';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
-import { IrisTransition } from '../components/IrisTransition';
 import { CoinAnimation } from '../components/CoinAnimation';
 import { GameAPI } from '../../backend/GameAPI';
 import { SpinData } from '../../backend/SpinData';
@@ -49,6 +48,7 @@ import { ScatterAnimationManager } from '../../managers/ScatterAnimationManager'
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { TurboConfig } from '../../config/TurboConfig';
 import { WinTracker } from '../components/WinTracker';
+import { WinOverlayManager } from '../../managers/WinOverlayManager';
 
 // Extend the Phaser Scene type to include the spine plugin
 export class Game extends Scene {
@@ -69,7 +69,6 @@ export class Game extends Scene {
 	private dialogs!: Dialogs;
 	private betOptions!: BetOptions;
 	private autoplayOptions!: AutoplayOptions;
-	private irisTransition!: IrisTransition;
 	private coinAnimation!: CoinAnimation;
 	private winTracker!: WinTracker;
 	public gameAPI!: GameAPI;
@@ -96,9 +95,11 @@ export class Game extends Scene {
 	// Queue for wins that occur while a dialog is already showing
 	private winQueue: Array<{ payout: number; bet: number }> = [];
 	private suppressWinDialogsUntilNextSpin: boolean = false;
+	private winOverlayEnqueuedThisSpin: boolean = false;
 
 	public gameData: GameData;
 	private symbols: Symbols;
+	private winOverlayManager!: WinOverlayManager;
 
 	constructor ()
 	{
@@ -115,6 +116,13 @@ export class Game extends Scene {
         this.epicWinOverlay = new EpicWinOverlay();
         this.superWinOverlay = new SuperWinOverlay();
 		this.winTracker = new WinTracker();
+		// Create WinOverlayManager early so any early win routing can use it
+		try {
+			this.winOverlayManager = new WinOverlayManager(this);
+			try { (this as any).winOverlayManager = this.winOverlayManager; } catch {}
+		} catch (e) {
+			console.warn('[Game] Failed to construct WinOverlayManager in constructor:', e);
+		}
 	}
 
 	init (data: any)
@@ -230,7 +238,15 @@ export class Game extends Scene {
 				// Target position (inside screen) with offset modifiers
 				const targetX = (width * 0.18) + this.dragonOffsetX;
 				const targetY = (height * 0.70) + this.dragonOffsetY;
-				this.sound.play('roar_hh');
+				try {
+                    const audio = (window as any).audioManager;
+                    if (audio && typeof audio.playOneShot === 'function') {
+                        audio.playOneShot('roar_hh');
+                    } else {
+                        this.sound.play('roar_hh');
+                    }
+                } catch { this.sound.play('roar_hh'); }
+
 				// Spawn off-screen (upper side) then slide down
 				const dragon: any = (this.add as any).spine(targetX, -50, 'Big_Dragon', 'Big_Dragon-atlas');
 				if (dragon?.setOrigin) dragon.setOrigin(0.5, 0.5);
@@ -293,7 +309,7 @@ export class Game extends Scene {
 							const bh = this.scale.height;
 							this.dragon.setPosition((bw * 0.18) + this.dragonOffsetX, (bh * 0.70) + this.dragonOffsetY);
 							const bs = this.networkManager.getAssetScale?.() ?? 1;
-							this.dragon.setScale(bs * 0.35 * this.dragonScaleMultiplier);
+							this.dragon.setScale?.(bs * 0.35 * this.dragonScaleMultiplier);
 						}
 						return { x: this.dragon?.x, y: this.dragon?.y, scale: this.dragon?.scaleX };
 					} catch (err) {
@@ -378,12 +394,21 @@ export class Game extends Scene {
 		this.dialogs.create(this);
 		
         // Initialize scatter win overlay now that the scene is ready
-		this.scatterWinOverlay.initialize(this);
+        this.scatterWinOverlay.initialize(this, this.networkManager, this.screenModeManager);
         // Expose for quick console testing
         (window as any).scatterWinOverlay = this.scatterWinOverlay;
 
         // Initialize Big Win overlay (custom overlay that replaces Big Win dialog look)
         try {
+            // Ensure centralized WinOverlayManager exists (constructed early; guard here in case of constructor failure)
+			try {
+				if (!this.winOverlayManager) {
+					this.winOverlayManager = new WinOverlayManager(this);
+					try { (this as any).winOverlayManager = this.winOverlayManager; } catch {}
+				}
+			} catch (e) {
+				console.warn('[Game] Failed to initialize WinOverlayManager:', e);
+			}
             this.bigWinOverlay.initialize(this, this.networkManager, this.screenModeManager);
             (window as any).bigWinOverlay = this.bigWinOverlay;
         } catch (e) {
@@ -543,7 +568,10 @@ export class Game extends Scene {
 					// Update the bet display in the slot controller
 					this.slotController.updateBetAmount(betAmount);
 					// Update the bet amount in the backend
-					gameEventManager.emit(GameEventType.BET_UPDATE, { newBet: betAmount, previousBet: currentBet });
+					gameEventManager.emit(GameEventType.BET_UPDATE, {
+						newBet: betAmount,
+						previousBet: currentBet
+					});
 				}
 			});
 		});
@@ -574,7 +602,10 @@ export class Game extends Scene {
 					// If bet changed, update UI and backend
 					if (Math.abs(selectedBet - currentBet) > 0.0001) {
 						this.slotController.updateBetAmount(selectedBet);
-						gameEventManager.emit(GameEventType.BET_UPDATE, { newBet: selectedBet, previousBet: currentBet });
+						gameEventManager.emit(GameEventType.BET_UPDATE, {
+							newBet: selectedBet,
+							previousBet: currentBet
+						});
 					}
 					console.log(`[Game] Total cost: $${(selectedBet * autoplayCount).toFixed(2)}`);
 					
@@ -702,6 +733,8 @@ export class Game extends Scene {
 			this.hasWinlinesThisSpin = false;
 			// Allow win dialogs again on the next spin
 			this.suppressWinDialogsUntilNextSpin = false;
+			// Reset per-spin overlay enqueue guard
+			this.winOverlayEnqueuedThisSpin = false;
 			
 			// CRITICAL: Block autoplay spins if win dialog is showing, but allow manual spins
 			// This fixes the timing issue where manual spins were blocked
@@ -717,6 +750,7 @@ export class Game extends Scene {
 			
 			if (!isRetryingPausedSpin) {
 				this.clearWinQueue();
+				try { this.winOverlayManager?.clearQueue(); } catch {}
 				console.log('[Game] Cleared win queue for new spin');
 				
 				// Only clear win dialog state for completely new spins
@@ -817,435 +851,111 @@ export class Game extends Scene {
 		if (!paylines || paylines.length === 0) {
 			return 0;
 		}
-		
 		const totalWin = paylines.reduce((sum, payline) => {
 			const winAmount = payline.win || 0;
 			console.log(`[Game] Payline ${payline.lineKey}: ${winAmount} (symbol ${payline.symbol}, count ${payline.count})`);
 			return sum + winAmount;
 		}, 0);
-		
 		console.log(`[Game] Calculated total win: ${totalWin} from ${paylines.length} paylines`);
 		return totalWin;
 	}
 
 	/**
-	 * Check if payout reaches win dialog thresholds and show appropriate dialog
+	 * Threshold routing for win overlays via WinOverlayManager with safe fallback.
 	 */
 	private checkAndShowWinDialog(payout: number, bet: number): void {
-		// Suppress win dialogs if we're transitioning out of bonus back to base
-		if (this.suppressWinDialogsUntilNextSpin) {
-			console.log('[Game] Suppressing win dialog (transitioning from bonus to base)');
-			return;
-		}
-
-		// Prevent win dialogs if congrats is showing
-		if (this.dialogs.isCongratsShowing()) {
-			console.log('[Game] Congrats dialog is showing - preventing win dialog from showing/queueing');
-			return;
-		}
-
-		// Prevent win dialogs if bonus is finished (congrats should show instead)
-		if (gameStateManager.isBonus && gameStateManager.isBonusFinished) {
-			console.log('[Game] Bonus finished - preventing win dialog (congrats should show instead)');
-			return;
-		}
-
-		console.log(`[Game] checkAndShowWinDialog called with payout: $${payout}, bet: $${bet}`);
-		console.log(`[Game] Current win queue length: ${this.winQueue.length}`);
-		console.log(`[Game] Current isShowingWinDialog state: ${gameStateManager.isShowingWinDialog}`);
-		console.log(`[Game] Current dialog showing state: ${this.dialogs.isDialogShowing()}`);
-		
-		// Check if the win line animation was interrupted by a manual spin
-		if (this.symbols && this.symbols.winLineDrawer && this.symbols.winLineDrawer.wasInterruptedBySpin()) {
-			console.log('[Game] Win line animation was interrupted by manual spin - preventing win dialog from showing');
-			return;
-		}
-		
-		// Check if a dialog is already showing - prevent multiple dialogs
-		if (this.dialogs.isDialogShowing()) {
-			console.log('[Game] Dialog already showing, skipping win dialog for this payout');
-			// Only add to queue if it's not congrats (congrats should block all win dialogs)
-			if (!this.dialogs.isCongratsShowing()) {
-				this.winQueue.push({ payout: payout, bet: bet });
-				console.log(`[Game] Added to win queue. Queue length: ${this.winQueue.length}`);
-			} else {
-				console.log('[Game] Congrats showing - not adding to win queue');
-			}
-			return;
-		}
-		
+		if (this.suppressWinDialogsUntilNextSpin) return;
+		if (this.dialogs.isCongratsShowing()) return;
+		if (gameStateManager.isBonus && gameStateManager.isBonusFinished) return;
 		const multiplier = payout / bet;
-		console.log(`[Game] Win detected - Payout: $${payout}, Bet: $${bet}, Multiplier: ${multiplier}x`);
-		
-		// Only show dialogs for wins that are at least 20x the bet size
-		if (multiplier < 20) {
-			console.log(`[Game] Win below threshold - No dialog shown for ${multiplier.toFixed(2)}x multiplier`);
-			// Clear the win dialog state since no dialog was shown
-			gameStateManager.isShowingWinDialog = false;
+		if (multiplier < 20) { try { gameStateManager.isShowingWinDialog = false; } catch {}; return; }
+		// Guard: only allow a single overlay enqueue per spin
+		if (this.winOverlayEnqueuedThisSpin) { return; }
+		this.winOverlayEnqueuedThisSpin = true;
+		if (!this.winOverlayManager) {
+			try { this.winOverlayManager = new WinOverlayManager(this); (this as any).winOverlayManager = this.winOverlayManager; } catch {}
+		}
+		if (!this.winOverlayManager) {
+			try { gameStateManager.isShowingWinDialog = true; } catch {}
+			let overlay: any = multiplier >= 60 ? (this.superWinOverlay as any) : (multiplier >= 45 ? this.epicWinOverlay : this.bigWinOverlay) as any;
+			try { overlay?.show?.(payout); } catch {}
+			try {
+				if (typeof overlay?.waitUntilDismissed === 'function') {
+					overlay.waitUntilDismissed().then(() => {
+						try { gameStateManager.isShowingWinDialog = false; } catch {}
+						try {
+							if (this.gameStateManager?.isBonus && this.gameStateManager?.isBonusFinished) {
+								this.events.emit('setBonusMode', false);
+								const symbols = (this as any).symbols;
+								if (symbols?.showCongratsDialogAfterDelay) {
+									symbols.showCongratsDialogAfterDelay();
+									this.gameStateManager.isBonusFinished = false;
+								}
+							}
+						} catch {}
+					});
+				}
+			} catch {}
 			return;
 		}
-		
-		// Determine which win dialog to show based on multiplier thresholds
-		if (multiplier >= 60) {
-			console.log(`[Game] Large Win! Showing SuperWinOverlay for ${multiplier.toFixed(2)}x multiplier`);
-			try {
-				if (this.superWinOverlay) {
-					// Don't show if congrats is already showing or bonus is finished
-					if (this.dialogs.isCongratsShowing() || (gameStateManager.isBonus && gameStateManager.isBonusFinished)) {
-						console.log('[Game] Skipping SuperWinOverlay - congrats showing or bonus finished');
-						return;
-					}
-					// Mark dialog state and show overlay
-					gameStateManager.isShowingWinDialog = true;
-					this.superWinOverlay.show(payout);
-					// When user dismisses overlay, clear state and process any queued wins
-					this.superWinOverlay.waitUntilDismissed().then(() => {
-						try { gameStateManager.isShowingWinDialog = false; } catch {}
-						// Check if bonus finished and trigger congrats if needed
-						if (gameStateManager.isBonus && gameStateManager.isBonusFinished) {
-							console.log('[Game] Bonus finished after SuperWinOverlay dismissed - triggering congrats');
-							// Ensure bonus mode is ended (in case transition was blocked by overlay)
-							if (gameStateManager.isBonus) {
-								console.log('[Game] Ensuring bonus mode is ended after win overlay dismissal');
-								this.events.emit('setBonusMode', false);
-							}
-							const symbolsComponent = (this as any).symbols;
-							if (symbolsComponent && typeof symbolsComponent.showCongratsDialogAfterDelay === 'function') {
-								symbolsComponent.showCongratsDialogAfterDelay();
-								gameStateManager.isBonusFinished = false;
-							}
-							// Don't process win queue if congrats will show
-							return;
-						}
-						// Only process win queue if congrats is not showing
-						if (!this.dialogs.isCongratsShowing()) {
-							try { this.processWinQueue(); } catch {}
-						}
-					}).catch(() => {
-						try { gameStateManager.isShowingWinDialog = false; } catch {}
-						// Only process win queue if congrats is not showing
-						if (!this.dialogs.isCongratsShowing()) {
-							try { this.processWinQueue(); } catch {}
-						}
-					});
-				} else {
-					// Fallback to dialogs method
-					this.dialogs.showLargeWin(this, { winAmount: payout });
-				}
-			} catch (e) {
-				console.warn('[Game] Failed to show SuperWinOverlay, falling back to showLargeWin:', e);
-				this.dialogs.showLargeWin(this, { winAmount: payout });
-			}
-		} else if (multiplier >= 45) {
-			console.log(`[Game] Super Win! Showing EpicWinOverlay for ${multiplier.toFixed(2)}x multiplier`);
-			try {
-				if (this.epicWinOverlay) {
-					// Don't show if congrats is already showing or bonus is finished
-					if (this.dialogs.isCongratsShowing() || (gameStateManager.isBonus && gameStateManager.isBonusFinished)) {
-						console.log('[Game] Skipping EpicWinOverlay - congrats showing or bonus finished');
-						return;
-					}
-					// Mark dialog state and show overlay
-					gameStateManager.isShowingWinDialog = true;
-					this.epicWinOverlay.show(payout);
-					// When user dismisses overlay, clear state and process any queued wins
-					this.epicWinOverlay.waitUntilDismissed().then(() => {
-						try { gameStateManager.isShowingWinDialog = false; } catch {}
-						// Check if bonus finished and trigger congrats if needed
-						if (gameStateManager.isBonus && gameStateManager.isBonusFinished) {
-							console.log('[Game] Bonus finished after EpicWinOverlay dismissed - triggering congrats');
-							// Ensure bonus mode is ended (in case transition was blocked by overlay)
-							if (gameStateManager.isBonus) {
-								console.log('[Game] Ensuring bonus mode is ended after win overlay dismissal');
-								this.events.emit('setBonusMode', false);
-							}
-							const symbolsComponent = (this as any).symbols;
-							if (symbolsComponent && typeof symbolsComponent.showCongratsDialogAfterDelay === 'function') {
-								symbolsComponent.showCongratsDialogAfterDelay();
-								gameStateManager.isBonusFinished = false;
-							}
-							// Don't process win queue if congrats will show
-							return;
-						}
-						// Only process win queue if congrats is not showing
-						if (!this.dialogs.isCongratsShowing()) {
-							try { this.processWinQueue(); } catch {}
-						}
-					}).catch(() => {
-						try { gameStateManager.isShowingWinDialog = false; } catch {}
-						// Only process win queue if congrats is not showing
-						if (!this.dialogs.isCongratsShowing()) {
-							try { this.processWinQueue(); } catch {}
-						}
-					});
-				} else {
-					// Fallback to dialogs method
-					this.dialogs.showSuperWin(this, { winAmount: payout });
-				}
-			} catch (e) {
-				console.warn('[Game] Failed to show EpicWinOverlay, falling back to showSuperWin:', e);
-				this.dialogs.showSuperWin(this, { winAmount: payout });
-			}
-        } else if (multiplier >= 30) {
-            console.log(`[Game] Medium/Big Win! Showing BigWinOverlay for ${multiplier.toFixed(2)}x multiplier`);
-            try {
-                if (this.bigWinOverlay) {
-                    // Don't show if congrats is already showing or bonus is finished
-                    if (this.dialogs.isCongratsShowing() || (gameStateManager.isBonus && gameStateManager.isBonusFinished)) {
-                        console.log('[Game] Skipping BigWinOverlay - congrats showing or bonus finished');
-                        return;
-                    }
-                    // Mark dialog state and show overlay
-                    gameStateManager.isShowingWinDialog = true;
-                    this.bigWinOverlay.show(payout);
-                    // When user dismisses overlay, clear state and process any queued wins
-                    this.bigWinOverlay.waitUntilDismissed().then(() => {
-                        try { gameStateManager.isShowingWinDialog = false; } catch {}
-                        // Check if bonus finished and trigger congrats if needed
-                        if (gameStateManager.isBonus && gameStateManager.isBonusFinished) {
-                            console.log('[Game] Bonus finished after BigWinOverlay dismissed - triggering congrats');
-                            // Ensure bonus mode is ended (in case transition was blocked by overlay)
-                            if (gameStateManager.isBonus) {
-                                console.log('[Game] Ensuring bonus mode is ended after win overlay dismissal');
-                                this.events.emit('setBonusMode', false);
-                            }
-                            const symbolsComponent = (this as any).symbols;
-                            if (symbolsComponent && typeof symbolsComponent.showCongratsDialogAfterDelay === 'function') {
-                                symbolsComponent.showCongratsDialogAfterDelay();
-                                gameStateManager.isBonusFinished = false;
-                            }
-                            // Don't process win queue if congrats will show
-                            return;
-                        }
-                        // Only process win queue if congrats is not showing
-                        if (!this.dialogs.isCongratsShowing()) {
-                            try { this.processWinQueue(); } catch {}
-                        }
-                    }).catch(() => {
-                        try { gameStateManager.isShowingWinDialog = false; } catch {}
-                        // Only process win queue if congrats is not showing
-                        if (!this.dialogs.isCongratsShowing()) {
-                            try { this.processWinQueue(); } catch {}
-                        }
-                    });
-                } else {
-                    // Fallback to previous dialog behavior
-                    this.dialogs.showMediumWin(this, { winAmount: payout });
-                }
-            } catch (e) {
-                console.warn('[Game] Failed to show BigWinOverlay, falling back to MediumW_KA:', e);
-                this.dialogs.showMediumWin(this, { winAmount: payout });
-            }
-		} else if (multiplier >= 20) {
-			console.log(`[Game] Small Win! Showing BigWinOverlay for ${multiplier.toFixed(2)}x multiplier`);
-			try {
-				if (this.bigWinOverlay) {
-					// Don't show if congrats is already showing or bonus is finished
-					if (this.dialogs.isCongratsShowing() || (gameStateManager.isBonus && gameStateManager.isBonusFinished)) {
-						console.log('[Game] Skipping BigWinOverlay (small win) - congrats showing or bonus finished');
-						return;
-					}
-					// Mark dialog state and show overlay
-					gameStateManager.isShowingWinDialog = true;
-					this.bigWinOverlay.show(payout);
-					// When user dismisses overlay, clear state and process any queued wins
-					this.bigWinOverlay.waitUntilDismissed().then(() => {
-						try { gameStateManager.isShowingWinDialog = false; } catch {}
-						// Check if bonus finished and trigger congrats if needed
-						if (gameStateManager.isBonus && gameStateManager.isBonusFinished) {
-							console.log('[Game] Bonus finished after BigWinOverlay (small win) dismissed - triggering congrats');
-							// Ensure bonus mode is ended (in case transition was blocked by overlay)
-							if (gameStateManager.isBonus) {
-								console.log('[Game] Ensuring bonus mode is ended after win overlay dismissal');
-								this.events.emit('setBonusMode', false);
-							}
-							const symbolsComponent = (this as any).symbols;
-							if (symbolsComponent && typeof symbolsComponent.showCongratsDialogAfterDelay === 'function') {
-								symbolsComponent.showCongratsDialogAfterDelay();
-								gameStateManager.isBonusFinished = false;
-							}
-							// Don't process win queue if congrats will show
-							return;
-						}
-						// Only process win queue if congrats is not showing
-						if (!this.dialogs.isCongratsShowing()) {
-							try { this.processWinQueue(); } catch {}
-						}
-					}).catch(() => {
-						try { gameStateManager.isShowingWinDialog = false; } catch {}
-						// Only process win queue if congrats is not showing
-						if (!this.dialogs.isCongratsShowing()) {
-							try { this.processWinQueue(); } catch {}
-						}
-					});
-				} else {
-					// Fallback to dialogs method
-					this.dialogs.showSmallWin(this, { winAmount: payout });
-				}
-			} catch (e) {
-				console.warn('[Game] Failed to show BigWinOverlay for small win, falling back to showSmallWin:', e);
-				this.dialogs.showSmallWin(this, { winAmount: payout });
-			}
-		}
-		
-		console.log(`[Game] Win dialog should now be visible. isShowingWinDialog: ${gameStateManager.isShowingWinDialog}`);
+		if (multiplier >= 60) this.winOverlayManager.enqueueShow('super', payout);
+		else if (multiplier >= 45) this.winOverlayManager.enqueueShow('epic', payout);
+		else this.winOverlayManager.enqueueShow('big', payout);
 	}
 
-	/**
-	 * Process the win queue to show the next win dialog
-	 */
-	private processWinQueue(): void {
-		if (this.suppressWinDialogsUntilNextSpin) {
-			console.log('[Game] Suppressing processing of win queue (transitioning from bonus to base)');
-			return;
-		}
-
-		// Prevent processing win queue if congrats is showing
-		if (this.dialogs.isCongratsShowing()) {
-			console.log('[Game] Congrats dialog is showing - suppressing win queue processing');
-			return;
-		}
-
-		// Prevent processing win queue if bonus is finished (congrats should show instead)
-		if (gameStateManager.isBonus && gameStateManager.isBonusFinished) {
-			console.log('[Game] Bonus finished - suppressing win queue processing (congrats should show instead)');
-			return;
-		}
-
-		console.log(`[Game] processWinQueue called. Queue length: ${this.winQueue.length}`);
-		console.log(`[Game] Current isShowingWinDialog state: ${gameStateManager.isShowingWinDialog}`);
-		console.log(`[Game] Current dialog showing state: ${this.dialogs.isDialogShowing()}`);
-		
-		// Check dialog overlay visibility
-		const dialogContainer = this.dialogs.getContainer();
-		if (dialogContainer) {
-			console.log(`[Game] Dialog overlay visible: ${dialogContainer.visible}, alpha: ${dialogContainer.alpha}`);
-		}
-		
-		if (this.winQueue.length === 0) {
-			console.log('[Game] Win queue is empty, nothing to process');
-			return;
-		}
-		
-		if (this.dialogs.isDialogShowing()) {
-			console.log('[Game] Dialog still showing, cannot process win queue yet');
-			return;
-		}
-		
-		// Get the next win from the queue
-		const nextWin = this.winQueue.shift();
-		if (nextWin) {
-			console.log(`[Game] Processing next win from queue: $${nextWin.payout} on $${nextWin.bet} bet. Queue remaining: ${this.winQueue.length}`);
-			this.checkAndShowWinDialog(nextWin.payout, nextWin.bet);
-		}
-	}
-
-	/**
-	 * Clear the win queue (useful for resetting state)
-	 */
 	public clearWinQueue(): void {
-		const queueLength = this.winQueue.length;
+		const n = this.winQueue.length;
 		this.winQueue = [];
-		console.log(`[Game] Win queue cleared. Removed ${queueLength} pending wins`);
+		// Also clear manager queue and reset guard
+		try { this.winOverlayManager?.clearQueue(); } catch {}
+		this.winOverlayEnqueuedThisSpin = false;
+		console.log(`[Game] Win queue cleared. Removed ${n} pending wins`);
 	}
 
-	/**
-	 * Get current win queue status for debugging
-	 */
-	private getWinQueueStatus(): string {
-		return `Win Queue: ${this.winQueue.length} pending wins`;
-	}
+	private getWinQueueStatus(): string { return `Win Queue: ${this.winQueue.length} pending wins`; }
 
+	private processWinQueue(): void { return; }
 
-	/**
-	 * Spawn coins manually (for testing or special events)
-	 */
 	public spawnCoins(count: number = 3): void {
 		if (this.coinAnimation) {
 			this.coinAnimation.spawnCoins(count);
 		}
 	}
 
-	/**
-	 * Spawn coins based on win amount and multiplier
-	 */
 	public spawnCoinsForWin(totalWin: number, betAmount: number): void {
-		if (!this.coinAnimation) {
-			console.warn('[Game] Coin animation not available for win');
-			return;
-		}
-
+		if (!this.coinAnimation) { console.warn('[Game] Coin animation not available for win'); return; }
 		const multiplier = totalWin / betAmount;
 		let coinCount = 0;
-
-		// Determine coin count based on win multiplier thresholds
-		if (multiplier >= 60) {
-			// Large win: 30 coins
-			coinCount = 50;
-			console.log(`[Game] Large Win! Spawning ${coinCount} coins for ${multiplier.toFixed(2)}x multiplier`);
-		} else if (multiplier >= 45) {
-			// Super win: 20 coins
-			coinCount = 30;
-			console.log(`[Game] Super Win! Spawning ${coinCount} coins for ${multiplier.toFixed(2)}x multiplier`);
-		} else if (multiplier >= 30) {
-			// Medium win: 15 coins
-			coinCount = 20;
-			console.log(`[Game] Medium Win! Spawning ${coinCount} coins for ${multiplier.toFixed(2)}x multiplier`);
-		} else if (multiplier >= 20) {
-			// Small win: 10 coins
-			coinCount = 10;
-			console.log(`[Game] Small Win! Spawning ${coinCount} coins for ${multiplier.toFixed(2)}x multiplier`);
-		} else {
-			// Below threshold: 5 coins
-			coinCount = 5;
-			console.log(`[Game] Below threshold win! Spawning ${coinCount} coins for ${multiplier.toFixed(2)}x multiplier`);
-		}
-		// Delay 1 second before spawning coins and playing SFX
-		this.time.delayedCall(500, () => {
-			// Spawn coins over 1.5 seconds
-			this.spawnCoinsOverTime(coinCount, 1500);
-		});
+		if (multiplier >= 60) { coinCount = 50; }
+		else if (multiplier >= 45) { coinCount = 30; }
+		else if (multiplier >= 30) { coinCount = 20; }
+		else if (multiplier >= 20) { coinCount = 10; }
+		else { coinCount = 5; }
+		this.time.delayedCall(500, () => { this.spawnCoinsOverTime(coinCount, 1500); });
 	}
 
-	/**
-	 * Spawn coins over a specified time period using the manually set position
-	 */
 	private spawnCoinsOverTime(totalCoins: number, durationMs: number): void {
-		if (!this.coinAnimation) {
-			return;
-		}
-
-		// Use the same position as the manually set position in CoinAnimation
+		if (!this.coinAnimation) { return; }
 		const centerX = this.scale.width * 0.65;
 		const centerY = this.scale.height * 0.22;
-
-		const intervalMs = durationMs / totalCoins;
-		console.log(`[Game] Spawning ${totalCoins} coins over ${durationMs}ms (${intervalMs.toFixed(1)}ms per coin) at position (${centerX}, ${centerY})`);
-
-    for (let i = 0; i < totalCoins; i++) {
-        this.time.delayedCall(i * intervalMs, () => {
-            // In bonus: spawn from the sky with downward velocity and wide horizontal spread
-            if (this.gameStateManager?.isBonus) {
-                const skyY = Math.max(0, this.scale.height * 0.05);
-                const skyX = this.scale.width * (0.15 + Math.random() * 0.70); // between 15% and 85% width
-                const vx = (Math.random() - 0.5) * 200; // gentle horizontal drift
-                const vy = 350 + Math.random() * 500;   // fall down
-                this.coinAnimation.spawnSingleCoin(skyX, skyY, vx, vy);
-            } else {
-                // Base: keep existing behavior
-                this.coinAnimation.spawnSingleCoin(centerX, centerY);
-            }
-        });
-    }
+		const intervalMs = durationMs / Math.max(1, totalCoins);
+		for (let i = 0; i < totalCoins; i++) {
+			this.time.delayedCall(i * intervalMs, () => {
+				if (this.gameStateManager?.isBonus) {
+					const skyY = Math.max(0, this.scale.height * 0.05);
+					const skyX = this.scale.width * (0.15 + Math.random() * 0.70);
+					const vx = (Math.random() - 0.5) * 200;
+					const vy = 350 + Math.random() * 500;
+					this.coinAnimation.spawnSingleCoin(skyX, skyY, vx, vy);
+				} else {
+					this.coinAnimation.spawnSingleCoin(centerX, centerY);
+				}
+			});
+		}
 	}
 
-	/**
-	 * Spawn a single coin at specific position
-	 */
 	public spawnSingleCoin(x?: number, y?: number, velocityX?: number, velocityY?: number): void {
-		if (this.coinAnimation) {
-			this.coinAnimation.spawnSingleCoin(x, y, velocityX, velocityY);
-		}
+		if (this.coinAnimation) { this.coinAnimation.spawnSingleCoin(x, y, velocityX, velocityY); }
 	}
 
 	/**
@@ -1336,8 +1046,22 @@ export class Game extends Scene {
 				} catch (e) {
 					console.warn('[Game] Failed to hide winnings displays on bonus end:', e);
 				}
-				// Notify other systems autoplay is fully stopped
-				gameEventManager.emit(GameEventType.AUTO_STOP);
+				// If normal autoplay was paused for bonus, resume it instead of stopping
+				try {
+					const sc: any = this.slotController as any;
+					if (sc && typeof sc.hasPausedAutoplayToResume === 'function' && sc.hasPausedAutoplayToResume()) {
+						console.log('[Game] Detected paused normal autoplay – resuming after bonus end');
+						if (typeof sc.resumeAutoplayAfterBonusIfPaused === 'function') {
+							sc.resumeAutoplayAfterBonusIfPaused();
+						}
+					} else {
+						// Notify other systems autoplay is fully stopped
+						gameEventManager.emit(GameEventType.AUTO_STOP);
+					}
+				} catch (e) {
+					console.warn('[Game] Error while resuming/stopping autoplay at bonus end, defaulting to AUTO_STOP:', e);
+					gameEventManager.emit(GameEventType.AUTO_STOP);
+				}
 				// Switch back to main background music
 				if (this.audioManager) {
 					this.audioManager.setExclusiveBackground(MusicType.MAIN);
