@@ -1,4 +1,4 @@
-			import { Scene, Geom } from "phaser";
+import { Scene, Geom } from "phaser";
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { EventBus } from "../EventBus";
@@ -105,18 +105,9 @@ export class SlotController {
 	
 	// Autoplay stop icon overlay
 	private autoplayStopIcon: Phaser.GameObjects.Image | null = null;
-	// Guard to prevent re-entrant stop logic
-	private isStoppingAutoplay: boolean = false;
 
 	// Guard to ensure we decrement autoplay counter once per spin at REELS_START
 	private hasDecrementedAutoplayForCurrentSpin: boolean = false;
-	// Guard to ensure we only schedule the next autoplay spin once per spin
-	private hasScheduledNextAutoplayForCurrentSpin: boolean = false;
-	// Per-spin identity to avoid duplicate decrement/schedule across duplicate events
-	private spinSequence: number = 0;
-	private currentSpinId: number = 0;
-	private lastDecrementSpinId: number = -1;
-	private lastScheduleSpinId: number = -1;
 	
 	// Buy feature drawer component
 	private buyFeature: BuyFeature | null = null;
@@ -164,17 +155,6 @@ export class SlotController {
 		
 		// Listen for autoplay state changes
 		this.setupAutoplayEventListeners();
-	}
-
-	private showOutOfBalancePopup(message?: string): void {
-		const scene = this.scene as Scene | null;
-		if (!scene) return;
-		import('./OutOfBalancePopup').then(module => {
-			const Popup = module.OutOfBalancePopup;
-			const popup = new Popup(scene);
-			if (message) popup.updateMessage(message);
-			popup.show();
-		}).catch(() => {});
 	}
 
 	/**
@@ -2047,12 +2027,12 @@ export class SlotController {
 		this.updateBetButtonStates();
 		
 		// Keep the Buy Feature amount synced with current base bet
-		this.setBuyFeatureBetAmount(betAmount);
+		this.updateFeatureAmountFromCurrentBet();
 		
-		// Always update base bet amount to keep stepping consistent
-		this.baseBetAmount = betAmount;
-		// Reset amplify bet state only when bet amount is changed externally
+		// Update base bet amount when changed externally (not by amplify bet)
 		if (!this.isInternalBetChange) {
+			this.baseBetAmount = betAmount;
+			// Reset amplify bet state when bet amount is changed externally
 			this.resetAmplifyBetOnBetChange();
 		}
 	}
@@ -2109,13 +2089,8 @@ export class SlotController {
 			// Set flag to indicate this is an internal bet change
 			this.isInternalBetChange = true;
 			
-			// Step relative to base bet (not the amplified display)
-			let currentBet = this.baseBetAmount || 0.2;
-			if (isNaN(currentBet) || currentBet <= 0) {
-				const currentBetText = this.getBetAmountText();
-				const parsed = currentBetText ? parseFloat(currentBetText) : NaN;
-				if (!isNaN(parsed)) currentBet = parsed;
-			}
+			const currentBetText = this.getBetAmountText();
+			const currentBet = currentBetText ? parseFloat(currentBetText) : (this.baseBetAmount || 0.2);
 			if (isNaN(currentBet)) {
 				this.isInternalBetChange = false; // Reset flag on error
 				return;
@@ -2131,13 +2106,6 @@ export class SlotController {
 			this.updateBetAmount(newBet);
 			// Notify systems of bet change
 			gameEventManager.emit(GameEventType.BET_UPDATE, { newBet, previousBet });
-			// If amplify is ON, re-apply the 25% visual increase to the updated base
-			try {
-				const gd = this.getGameData();
-				if (gd && gd.isEnhancedBet) {
-					this.applyAmplifyBetIncrease();
-				}
-			} catch {}
 			
 			// Reset the flag after bet update is complete
 			this.isInternalBetChange = false;
@@ -2336,59 +2304,22 @@ setBuyFeatureBetAmount(amount: number): void {
 			console.log('[SlotController] Reels started - disabling amplify and bet UI');
 			this.disableAmplifyButton();
 			this.disableBetButtons();
-			// Reset per-spin guards at the start of each spin
-			this.hasDecrementedAutoplayForCurrentSpin = false;
-			this.hasScheduledNextAutoplayForCurrentSpin = false;
-			// Bump spin sequence and tag this spin
-			this.currentSpinId = ++this.spinSequence;
-			// During autoplay (base or bonus), flash all symbols at spin start and apply spin tint
-			try {
-				if (gameStateManager.isAutoPlaying) {
-					const symbolsComponent = (this.scene as any).symbols;
-					if (symbolsComponent) {
-						try { (this.scene as any)?.events?.emit?.('flashAllSymbolsNow'); } catch {}
-						// Ensure reel background is visible, then apply spin tint during autoplay (base or bonus)
-						try { symbolsComponent.showReelBackground?.(); } catch {}
-						try { symbolsComponent.tweenReelBackgroundToSpinTint?.(0); } catch {}
-						// Ensure symbols render above reel background at spin start (base & bonus)
-						try { symbolsComponent.restoreSymbolsAboveReelBg?.(); } catch {}
-						console.log('[SlotController] Emitted flashAllSymbolsNow for autoplay spin start');
-					}
+			// Decrement normal autoplay spins at start of reels
+			if (this.autoplaySpinsRemaining > 0 && gameStateManager.isAutoPlaying && !gameStateManager.isBonus) {
+				if (!this.hasDecrementedAutoplayForCurrentSpin) {
+					this.autoplaySpinsRemaining = Math.max(0, this.autoplaySpinsRemaining - 1);
+					this.updateAutoplaySpinsRemainingText(this.autoplaySpinsRemaining);
+					this.hasDecrementedAutoplayForCurrentSpin = true;
+					console.log(`[SlotController] Autoplay decremented on REELS_START. Remaining: ${this.autoplaySpinsRemaining}`);
 				}
-			} catch {}
+			}
 		});
 
 		gameEventManager.on(GameEventType.REELS_STOP, () => {
 			console.log('[SlotController] Reels stopped event received - updating spin button state');
-			// Single decrement per spinId at REELS_STOP
-			if (gameStateManager.isAutoPlaying && this.autoplaySpinsRemaining > 0 && !this.hasDecrementedAutoplayForCurrentSpin) {
-				if (this.lastDecrementSpinId !== this.currentSpinId) {
-					this.autoplaySpinsRemaining = Math.max(0, this.autoplaySpinsRemaining - 1);
-					this.updateAutoplaySpinsRemainingText(this.autoplaySpinsRemaining);
-					this.hasDecrementedAutoplayForCurrentSpin = true;
-					this.lastDecrementSpinId = this.currentSpinId;
-					console.log(`[SlotController] Decremented on REELS_STOP (spinId=${this.currentSpinId}). Remaining: ${this.autoplaySpinsRemaining}`);
-				}
-			}
-
-			// Schedule next autoplay spin only once per spinId and only if no win dialog is showing
-			if (gameStateManager.isAutoPlaying && this.autoplaySpinsRemaining > 0 && !gameStateManager.isShowingWinDialog && !this.hasScheduledNextAutoplayForCurrentSpin && this.lastScheduleSpinId !== this.currentSpinId) {
-				const baseDelay = 500;
-				const gameData = this.getGameData();
-				const isTurbo = gameData?.isTurbo || false;
-				const turboDelay = isTurbo ? baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER : baseDelay;
-				console.log(`[SlotController] Scheduling next autoplay spin after REELS_STOP in ${turboDelay}ms (spinId=${this.currentSpinId})`);
-				this.hasScheduledNextAutoplayForCurrentSpin = true;
-				this.lastScheduleSpinId = this.currentSpinId;
-				this.scheduleNextAutoplaySpin(turboDelay);
-			}
-
-			// If no spins remain after decrement, stop autoplay
-			if (gameStateManager.isAutoPlaying && this.autoplaySpinsRemaining === 0) {
-				console.log('[SlotController] No autoplay spins remaining - emitting AUTO_STOP at REELS_STOP');
-				gameEventManager.emit(GameEventType.AUTO_STOP);
-			}
-
+			// Reset decrement guard for next spin
+			this.hasDecrementedAutoplayForCurrentSpin = false;
+			
 			// Update balance from server every time reels stop (skip during scatter/bonus)
 			if (!gameStateManager.isScatter && !gameStateManager.isBonus) {
 				this.updateBalanceFromServer();
@@ -2476,8 +2407,9 @@ setBuyFeatureBetAmount(amount: number): void {
 				return;
 			}
 			
-			// Note: autoplaySpinsRemaining is decremented in REELS_STOP (single decrement per spin)
-			// Note: AUTO_STOP is emitted when spins reach 0
+			// Note: autoplaySpinsRemaining is decremented in WIN_STOP handler after win processing
+			
+			// Note: AUTO_STOP is now emitted in WIN_STOP handler after stopAutoplay() is called
 			
 			// For manual spins, re-enable spin button and hide autoplay counter immediately after REELS_STOP
 			// Check autoplay counter instead of state manager to avoid timing issues
@@ -2522,11 +2454,6 @@ setBuyFeatureBetAmount(amount: number): void {
 		// Listen for autoplay start
 		gameEventManager.on(GameEventType.AUTO_START, () => {
 			console.log('[SlotController] Autoplay started - changing button to ON state');
-			// Guard against accidental starts while already autoplaying or stopping
-			if (this.isStoppingAutoplay || this.gameData?.isAutoPlaying || gameStateManager.isAutoPlaying) {
-				console.log('[SlotController] Ignoring AUTO_START - already autoplaying or stopping');
-				return;
-			}
 			
 			// Update GameData autoplay state
 			if (this.gameData) {
@@ -2573,33 +2500,20 @@ setBuyFeatureBetAmount(amount: number): void {
 			console.log('[SlotController] Autoplay spin count hidden');
 			
 			// Re-enable spin button, autoplay button, bet buttons, and feature button
-			// If reels are spinning (e.g., autoplay canceled mid-spin), keep controls disabled
-			if (gameStateManager.isReelSpinning) {
-				console.log('[SlotController] AUTO_STOP during active spin - keeping controls disabled until REELS_STOP');
-				this.disableSpinButton();
-				this.disableAutoplayButton();
-				this.disableBetButtons();
-				this.disableFeatureButton();
-				this.disableAmplifyButton();
-			} else {
-				this.enableSpinButton();
-				this.enableAutoplayButton();
-				this.enableBetButtons();
-				this.enableFeatureButton();
-				this.enableAmplifyButton();
+			this.enableSpinButton();
+			this.enableAutoplayButton();
+			this.enableBetButtons();
+			this.enableFeatureButton();
+			this.enableAmplifyButton();
+		// Show and resume spin icon after autoplay stops, hide stop icon
+			if (this.spinIcon) {
+				this.spinIcon.setVisible(true);
 			}
-			// Update spin icons depending on whether controls are enabled
+			if (this.spinIconTween) {
+				this.spinIconTween.resume();
+			}
 			if (this.autoplayStopIcon) {
 				this.autoplayStopIcon.setVisible(false);
-			}
-			if (gameStateManager.isReelSpinning) {
-				// Keep disabled look
-				if (this.spinIcon) { this.spinIcon.setVisible(true); this.spinIcon.setAlpha(0.5); }
-				if (this.spinIconTween) { this.spinIconTween.pause(); }
-			} else {
-				// Controls enabled – restore normal look
-				if (this.spinIcon) { this.spinIcon.setVisible(true); this.spinIcon.setAlpha(1); }
-				if (this.spinIconTween) { this.spinIconTween.resume(); }
 			}
 			// Keep spins text above all
 			if (this.autoplaySpinsRemainingText && this.primaryControllers) {
@@ -2608,8 +2522,6 @@ setBuyFeatureBetAmount(amount: number): void {
 			console.log('[SlotController] Spin, autoplay, bet, feature, and amplify buttons enabled');
 			
 			console.log('[SlotController] Autoplay UI reset completed');
-			// Reset stopping guard at the end of AUTO_STOP handling
-			this.isStoppingAutoplay = false;
 		});
 
 
@@ -2638,11 +2550,30 @@ setBuyFeatureBetAmount(amount: number): void {
 				console.log('[SlotController] Autoplay spin completed, checking for next spin');
 				console.log(`[SlotController] Autoplay state: spinsRemaining=${this.autoplaySpinsRemaining}, isAutoPlaying=${gameStateManager.isAutoPlaying}`);
 				
-				// Note: Do not decrement here; handle decrement once at REELS_STOP only
+				// Decrement now handled at REELS_START for normal autoplay
 				
-				// Note: scheduling of the next autoplay spin is handled at REELS_STOP to ensure reels are fully stopped
-				if (this.autoplaySpinsRemaining === 0) {
+				// Check if a win dialog is showing - pause autoplay if so
+				if (gameStateManager.isShowingWinDialog) {
+					console.log('[SlotController] Win dialog is showing - pausing autoplay until dialog closes');
+					return;
+				}
+				
+				// Only schedule next spin if we have spins remaining
+				if (this.autoplaySpinsRemaining > 0 && !gameStateManager.isShowingWinDialog) {
+					console.log(`[SlotController] Scheduling next autoplay spin. ${this.autoplaySpinsRemaining} spins remaining`);
+					// WIN_STOP is emitted both for no wins (immediately) and after first win loop
+					// Apply turbo to the delay
+					const baseDelay = 500;
+					// FIXED: Use GameData.isTurbo instead of gameStateManager.isTurbo for consistency
+					const gameData = this.getGameData();
+					const isTurbo = gameData?.isTurbo || false;
+					const turboDelay = isTurbo ? 
+						baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER : baseDelay;
+					console.log(`[SlotController] Autoplay delay: ${baseDelay}ms -> ${turboDelay}ms (turbo: ${isTurbo})`);
+					this.scheduleNextAutoplaySpin(turboDelay);
+				} else {
 					console.log('[SlotController] No autoplay spins remaining - autoplay finished');
+					// Emit AUTO_STOP when autoplay is truly finished
 					gameEventManager.emit(GameEventType.AUTO_STOP);
 				}
 			} else {
@@ -2781,25 +2712,16 @@ setBuyFeatureBetAmount(amount: number): void {
 	 * Handle autoplay button click - either start autoplay or stop if already running
 	 */
 	private handleAutoplayButtonClick(): void {
-		// Prevent re-entrancy
-		if (this.isStoppingAutoplay) {
-			console.log('[SlotController] Autoplay stop already in progress; ignoring button click');
-			return;
-		}
-		// If autoplay is active, stop it
-		if (this.autoplaySpinsRemaining > 0 || this.gameData?.isAutoPlaying || gameStateManager.isAutoPlaying) {
+		// Check if autoplay is currently active
+		if (this.autoplaySpinsRemaining > 0) {
+			// Autoplay is active, stop it
 			console.log('[SlotController] Stopping autoplay via button click');
 			this.stopAutoplay();
-			return;
+		} else {
+			// Autoplay is not active, show options to start it
+			console.log('[SlotController] Showing autoplay options');
+			EventBus.emit('autoplay');
 		}
-		// If reels are spinning, do not open autoplay options mid-spin
-		if (gameStateManager.isReelSpinning) {
-			console.log('[SlotController] Reels are spinning; delaying autoplay options until REELS_STOP');
-			return;
-		}
-		// Autoplay is not active and reels are idle: show options
-		console.log('[SlotController] Showing autoplay options');
-		EventBus.emit('autoplay');
 	}
 
 	/**
@@ -2848,11 +2770,6 @@ setBuyFeatureBetAmount(amount: number): void {
 	public stopAutoplay(): void {
 		console.log('[SlotController] Stopping autoplay');
 		console.log('[SlotController] Before stopAutoplay - isAutoPlaying:', gameStateManager.isAutoPlaying, 'isReelSpinning:', gameStateManager.isReelSpinning);
-		if (this.isStoppingAutoplay) {
-			console.log('[SlotController] stopAutoplay called while already stopping; ignoring');
-			return;
-		}
-		this.isStoppingAutoplay = true;
 		
 		// Clear timer
 		if (this.autoplayTimer) {
@@ -2893,24 +2810,30 @@ setBuyFeatureBetAmount(amount: number): void {
 			return;
 		}
 		
-		// If reels are still spinning, immediately disable spin to prevent manual spin
-		if (gameStateManager.isReelSpinning) {
-			this.disableSpinButton();
-			this.disableBetButtons();
-			this.disableFeatureButton();
-			// Controls will be re-enabled on REELS_STOP
-			return;
+		// Re-enable spin button if not spinning
+		if (!gameStateManager.isReelSpinning) {
+			this.enableSpinButton();
 		}
-		// If not spinning anymore, it's safe to re-enable spin
-		this.enableSpinButton();
-		// Reset stopping guard once state has settled
-		this.isStoppingAutoplay = false;
 	}
 
 	/**
 	 * Perform a single autoplay spin
 	 */
 	private async performAutoplaySpin(): Promise<void> {
+		if (this.autoplaySpinsRemaining <= 0) {
+			console.log('[SlotController] No autoplay spins remaining');
+			return;
+		}
+
+		console.log(`[SlotController] Performing autoplay spin. ${this.autoplaySpinsRemaining} spins remaining`);
+		
+		// Flash all symbols at the start of each autoplay spin
+		try { this.scene?.events.emit('flashAllSymbolsNow'); } catch {}
+		
+		// During autoplay spins, keep spin button enabled to allow stopping autoplay
+		this.disableBetButtons();
+		this.disableFeatureButton();
+		
 		// Play spin button animations
 		this.playSpinButtonAnimation();
 		this.rotateSpinButton();
@@ -3809,27 +3732,6 @@ public updateAutoplayButtonState(): void {
 			return;
 		}
 
-		// Guard: ensure sufficient balance before proceeding
-		try {
-			const currentBalance = this.getBalanceAmount();
-			const currentBet = this.getBaseBetAmount() || 0;
-			const gd = this.getGameData();
-			const totalBetToCharge = gd && gd.isEnhancedBet ? currentBet * 1.25 : currentBet;
-			if (currentBalance < totalBetToCharge) {
-				console.error(`[SlotController] Insufficient balance for spin: $${currentBalance} < $${totalBetToCharge}`);
-				if (this.autoplaySpinsRemaining > 0 || this.gameData?.isAutoPlaying || gameStateManager.isAutoPlaying) {
-					this.stopAutoplay();
-				}
-				this.showOutOfBalancePopup();
-				this.enableSpinButton();
-				this.enableAutoplayButton();
-				this.enableBetButtons();
-				this.enableFeatureButton();
-				this.enableAmplifyButton();
-				return;
-			}
-		} catch {}
-
 		// Play spin sound effect
 		if ((window as any).audioManager) {
 			(window as any).audioManager.playSoundEffect(SoundEffectType.SPIN);
@@ -4079,7 +3981,7 @@ public updateAutoplayButtonState(): void {
 				this.enableFeatureButton();
 				this.enableBetButtons();
 				this.enableAmplifyButton();
-				this.showOutOfBalancePopup();
+				// TODO: Show insufficient balance message to user
 				return;
 			}
 			
@@ -4151,9 +4053,6 @@ public updateAutoplayButtonState(): void {
 			
 			// Update the balance display
 			this.updateBalanceAmount(newBalance);
-			if (newBalance <= 0) {
-				this.showOutOfBalancePopup();
-			}
 			
 			console.log('[SlotController] ✅ Balance updated from server successfully');
 			
@@ -4306,17 +4205,6 @@ public updateAutoplayButtonState(): void {
 			console.log('[SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation');
 			// Trigger same white overlay flash for bonus spins
 			try { this.scene?.events.emit('flashAllSymbolsNow'); } catch {}
-			// Apply reel background spin tint during free spin autoplay (bonus mode)
-			try {
-				const symbolsComponent = (this.scene as any)?.symbols;
-				if (symbolsComponent && typeof symbolsComponent.tweenReelBackgroundToSpinTint === 'function') {
-					// Ensure reel background is visible first, then tint to spin state
-					try { symbolsComponent.showReelBackground?.(); } catch {}
-					symbolsComponent.tweenReelBackgroundToSpinTint(0);
-				}
-				// Ensure symbols are above reel background at the immediate start of the free spin
-				try { symbolsComponent?.restoreSymbolsAboveReelBg?.(); } catch {}
-			} catch {}
 			
 			// Apply turbo mode to game data and winlines (same as normal autoplay)
 			this.forceApplyTurboToSceneGameData();

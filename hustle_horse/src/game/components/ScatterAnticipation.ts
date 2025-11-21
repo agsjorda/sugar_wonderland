@@ -29,7 +29,7 @@ interface ScatterAnticipationOptions {
 }
 
 export class ScatterAnticipation {
-  private scene!: Scene;
+  private scene: Scene;
   private container: Phaser.GameObjects.Container | null = null;
   private spineObject: any | null = null;
   private ownsContainer: boolean = false;
@@ -40,7 +40,6 @@ export class ScatterAnticipation {
   private isVisible: boolean = false;
   // Flag to control use of legacy anticipation black overlay graphics
   private useLegacyAnticipationOverlay: boolean = false;
-  private controlledScatterSpines: any[] = [];
 
   private playDefaultLoop(): void {
     if (!this.spineObject) return;
@@ -52,7 +51,7 @@ export class ScatterAnticipation {
       
       // Try default animation first, fallback to first available
       const animations = animationState.data.skeletonData.animations;
-      const defaultAnim = animations.some((a: any) => a.name === 'default') 
+      const defaultAnim = animations.some(a => a.name === 'default') 
         ? 'default' 
         : animations[0]?.name;
       
@@ -190,25 +189,15 @@ export class ScatterAnticipation {
       const symbols = (this.scene as any)?.symbols;
       if (!symbols) return;
 
-      try {
-        if (show) {
-          symbols.pushAllSymbolsBehindReelBg?.();
-          symbols.liftScatterSymbolsAboveReelBg?.();
-          this.loopScatterWinAnimations();
-        } else {
-          symbols.restoreLiftedScatterSymbols?.();
-          symbols.restoreSymbolsAboveReelBg?.();
-        }
-      } catch {}
+		  // Always ensure symbols container renders above reel background during anticipation
+		  try { symbols.restoreSymbolsAboveReelBg?.(); } catch {}
 
+      // If legacy anticipation overlay is disabled, only drive reel background tint
       if (!this.useLegacyAnticipationOverlay) {
         try {
           if (show) {
             symbols.tweenReelBackgroundToAnticipationTint?.(ANIMATION_CONFIG.OVERLAY.DURATION);
-            symbols.startReelBgAnticipationFlash(450);
           } else {
-            // Ensure any previous scatter-win flash is stopped and reset tint
-            symbols.stopReelBgAnticipationFlash?.();
             symbols.tweenReelBackgroundToDefaultTint?.(ANIMATION_CONFIG.OVERLAY.DURATION);
           }
         } catch {}
@@ -225,51 +214,6 @@ export class ScatterAnticipation {
       }
     } catch (error) {
       console.error(`[ScatterAnticipation] Error in ${show ? 'show' : 'hide'} overlay transition:`, error);
-    }
-  }
-
-  private loopScatterWinAnimations(): void {
-    try {
-      const symbolsComp = (this.scene as any)?.symbols;
-      const data = symbolsComp?.currentSymbolData;
-      const grid = symbolsComp?.symbols;
-      if (!symbolsComp || !data || !grid) return;
-      const changed: any[] = [];
-      for (let c = 0; c < grid.length; c++) {
-        const col = grid[c];
-        if (!Array.isArray(col)) continue;
-        for (let r = 0; r < col.length; r++) {
-          const val = data?.[c]?.[r];
-          if (val !== 0) continue;
-          const obj: any = col[r];
-          if (!obj || !obj.animationState) continue;
-          try {
-            const name = this.getScatterWinAnimName(obj);
-            if (name) {
-              const st = obj.animationState;
-              try { st.clearTrack?.(0); } catch {}
-              st.setAnimation(0, name, true);
-              changed.push(obj);
-            }
-          } catch {}
-        }
-      }
-      this.controlledScatterSpines = changed;
-    } catch {}
-  }
-
-  private getScatterWinAnimName(obj: any): string | null {
-    try {
-      const anims: any[] = obj?.skeleton?.data?.animations || [];
-      let name: string | null = null;
-      for (const a of anims) {
-        const n = a?.name || '';
-        if (typeof n === 'string' && (n.endsWith('_win') || n.includes('_win'))) { name = n; break; }
-      }
-      if (!name && anims[0]?.name) name = anims[0].name;
-      return name || null;
-    } catch {
-      return null;
     }
   }
 
@@ -373,14 +317,7 @@ export class ScatterAnticipation {
       const shakeMs = Math.max(50, Math.floor(DURATION * turboMul));
       
       this.scene.cameras.main.shake(shakeMs, INTENSITY);
-      try {
-        const audio = (window as any)?.audioManager;
-        if (audio && typeof audio.playOneShot === 'function') {
-          audio.playOneShot('rumble_hh');
-        } else {
-          this.scene.sound.play('rumble_hh');
-        }
-      } catch { this.scene.sound.play('rumble_hh'); }
+      this.scene.sound.play('rumble_hh');
     } catch (error) {
       console.error('[ScatterAnticipation] Error triggering camera shake:', error);
     }

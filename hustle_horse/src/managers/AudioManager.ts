@@ -16,6 +16,7 @@ export enum SoundEffectType {
 	MENU_CLICK = 'menu_click',
 	BUTTON_FX = 'button_fx',
 	HIT_WIN = 'hitwin',
+	WILD_MULTI = 'wildmulti',
 	SCATTER = 'scatter',
 	ANTICIPATION = 'anticipation',
 	WIN_LINE_1 = 'winline_1',
@@ -54,19 +55,6 @@ export class AudioManager {
 	private savedAmbientVolume: number | null = null;
 	private duckFadeTimer: any = null;
 	private restoreFadeTimer: any = null;
-	// Page visibility / focus handling
-	private visibilityHandlersInstalled: boolean = false;
-	private wasPlayingBeforeHide: MusicType | null = null;
-	private wasAmbientPlayingBeforeHide: boolean = false;
-	private isPageHidden: boolean = false;
-	private resumeDebounceTimer: any = null;
-    // Suppressed one-shot SFX while page is hidden (key -> count)
-    private suppressedOneShotCounts: Map<string, number> = new Map();
-    // One-shot rate limiting and overlap control
-    private lastOneShotAt: Map<string, number> = new Map();
-    private defaultOneShotMinIntervalMs: number = 100;
-    private oneShotMinIntervalOverrides: Record<string, number> = { 'fireworks_hh': 450 };
-    private oneShotSkipIfPlaying: Set<string> = new Set(['fireworks_hh']);
 	// Map music type to the underlying Phaser audio key so we can stop by key across scenes
 	private readonly musicKeyByType: Record<string, string> = {
 		[MusicType.MAIN]: 'mainbg_hh',
@@ -79,7 +67,6 @@ export class AudioManager {
 	constructor(scene: Phaser.Scene) {
 		this.scene = scene;
 		console.log('[AudioManager] AudioManager initialized');
-		this.installVisibilityHandlers();
 	}
 
 	/**
@@ -286,6 +273,15 @@ export class AudioManager {
 				console.warn('[AudioManager] Failed to create hitwin_hh SFX instance:', e);
 			}
 
+			// Create wild multi SFX instance
+			try {
+				const wildMulti = this.scene.sound.add('wildmulti_hh', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.WILD_MULTI, wildMulti);
+				console.log('[AudioManager] Wild multi SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create wildmulti_hh SFX instance:', e);
+			}
+
 			// Create scatter SFX instance
 			try {
 				const scatter = this.scene.sound.add('scatter_hh', { volume: this.sfxVolume, loop: false });
@@ -467,7 +463,7 @@ export class AudioManager {
 			this.playBackgroundMusic(nextType);
 		}
 	}
-		
+
 	/**
 	 * Play background music based on game state
 	 */
@@ -477,21 +473,11 @@ export class AudioManager {
 			return;
 		}
 
-		// If page is hidden, defer starting tracks to avoid resume bursts
-		if (this.isPageHidden) {
-			console.log(`[AudioManager] Page hidden; deferring music start for ${musicType}`);
-			// Do not change currentMusic here to avoid inconsistent state; it will be resumed based on game state
-			return;
-		}
-
 		// Respect music lock
 		if (this.lockedMusic && musicType !== this.lockedMusic) {
 			console.log(`[AudioManager] Music locked to ${this.lockedMusic}, ignoring request for ${musicType}`);
 			return;
 		}
-
-		// Defensive: stop any stray BGM instances that might be playing (across scenes)
-		this.stopAllMusicByKeys();
 
 		const music = this.musicInstances.get(musicType);
 		// If the requested music is already current and playing, do nothing to avoid a hard restart
@@ -530,10 +516,6 @@ export class AudioManager {
 	 */
 	setExclusiveBackground(musicType: MusicType): void {
 		if (this.isMuted) return;
-		if (this.isPageHidden) {
-			console.log(`[AudioManager] Page hidden; deferring exclusive background set to ${musicType}`);
-			return;
-		}
 		// Respect lock
 		if (this.lockedMusic && musicType !== this.lockedMusic) {
 			console.log(`[AudioManager] Music locked to ${this.lockedMusic}, ignoring exclusive set to ${musicType}`);
@@ -545,8 +527,6 @@ export class AudioManager {
 			console.log(`[AudioManager] ${musicType} already playing (exclusive); skipping restart`);
 			return;
 		}
-		// Defensive: stop any stray BGM instances before playing target
-		this.stopAllMusicByKeys();
 		// Stop only non-target tracks
 		try {
 			this.musicInstances.forEach((inst, type) => {
@@ -585,8 +565,6 @@ export class AudioManager {
 		});
 		this.currentMusic = null;
 		this.stopAmbientAudio();
-		// Also stop any stray BGM instances not tracked in the map
-		this.stopAllMusicByKeys();
 	}
 
 	/** Stop a specific background music instance by type. */
@@ -958,10 +936,6 @@ export class AudioManager {
 			console.log('[AudioManager] Audio is muted, skipping sound effect');
 			return;
 		}
-		if (this.isPageHidden) {
-			// Drop SFX while page is hidden to avoid burst upon resume
-			return;
-		}
 
 		console.log(`[AudioManager] Attempting to play ${sfxType} sound effect`);
 		console.log(`[AudioManager] Available SFX instances:`, Array.from(this.sfxInstances.keys()));
@@ -990,21 +964,15 @@ export class AudioManager {
 	/**
 	 * Play an arbitrary one-shot SFX by audio key with optional volume override.
 	 */
-    playOneShot(key: string, volume?: number): void {
-        if (this.isMuted) return;
-        // When page is hidden, suppress one-shots to avoid queued burst on resume
-        if (this.isPageHidden) {
-            const cur = this.suppressedOneShotCounts.get(key) || 0;
-            this.suppressedOneShotCounts.set(key, cur + 1);
-            return;
-        }
-        try {
-            const vol = Math.max(0, Math.min(1, volume != null ? volume : this.sfxVolume));
-            (this.scene.sound as any).play?.(key, { volume: vol, loop: false });
-        } catch (e) {
-            console.warn('[AudioManager] playOneShot failed for key:', key, e);
-        }
-    }
+	playOneShot(key: string, volume?: number): void {
+		if (this.isMuted) return;
+		try {
+			const vol = Math.max(0, Math.min(1, volume != null ? volume : this.sfxVolume));
+			(this.scene.sound as any).play?.(key, { volume: vol, loop: false });
+		} catch (e) {
+			console.warn('[AudioManager] playOneShot failed for key:', key, e);
+		}
+	}
 
 	/** Stop all currently playing sounds by audio key (SFX or music). */
 	stopByKey(key: string): void {
@@ -1147,144 +1115,36 @@ export class AudioManager {
 		console.log(`[AudioManager] Sound effect volume set to: ${this.sfxVolume}`);
 	}
 
-	/** Get sound effect volume. */
+	/**
+	 * Get sound effect volume
+	 */
 	getSfxVolume(): number {
 		return this.sfxVolume;
 	}
 
-	/** Clean up resources and event listeners. */
+	/**
+	 * Clean up resources
+	 */
 	destroy(): void {
 		console.log('[AudioManager] Destroying AudioManager...');
 		this.stopAllMusic();
 		this.musicInstances.clear();
 		this.sfxInstances.clear();
 		this.ambientInstance = null;
-		// Remove visibility handlers
-		try {
-			if (this.visibilityHandlersInstalled) {
-				document.removeEventListener('visibilitychange', this.handleVisibilityChange as any);
-				window.removeEventListener('blur', this.handlePageBlur as any);
-				window.removeEventListener('focus', this.handlePageFocus as any);
-				this.visibilityHandlersInstalled = false;
-			}
-		} catch {}
 		console.log('[AudioManager] AudioManager destroyed');
 	}
 
-	// ===== Visibility / Focus handling (in-class) =====
-	private installVisibilityHandlers(): void {
-		if (this.visibilityHandlersInstalled) return;
-		try { document.addEventListener('visibilitychange', this.handleVisibilityChange as any, { passive: true } as any); } catch {}
-		try { window.addEventListener('blur', this.handlePageBlur as any, { passive: true } as any); } catch {}
-		try { window.addEventListener('focus', this.handlePageFocus as any, { passive: true } as any); } catch {}
-		this.visibilityHandlersInstalled = true;
+	/**
+	 * Get current playing music type
+	 */
+	getCurrentMusicType(): MusicType | null {
+		return this.currentMusic;
 	}
 
-	private handleVisibilityChange = (): void => {
-		const hidden = !!(document as any).hidden;
-		if (hidden) {
-			this.onPageHidden();
-		} else {
-			this.onPageVisible();
-		}
+	/**
+	 * Check if any music is currently playing
+	 */
+	isMusicPlaying(): boolean {
+		return this.currentMusic !== null && !this.isMuted;
 	}
-
-	private handlePageBlur = (): void => {
-		this.onPageHidden();
-	}
-
-	private handlePageFocus = (): void => {
-		this.onPageVisible();
-	}
-
-    private onPageHidden(): void {
-        if (this.isPageHidden) return;
-        this.isPageHidden = true;
-        // Start fresh suppression window for one-shots
-        try { this.suppressedOneShotCounts.clear(); } catch {}
-        // Cancel any pending resume debounce
-        if (this.resumeDebounceTimer) { try { clearTimeout(this.resumeDebounceTimer); } catch {} this.resumeDebounceTimer = null; }
-        // Save current states
-        this.wasPlayingBeforeHide = this.currentMusic;
-        this.wasAmbientPlayingBeforeHide = !!(this.ambientInstance && this.ambientInstance.isPlaying);
-        // Stop fades
-        if (this.duckFadeTimer) { try { clearInterval(this.duckFadeTimer); } catch {} this.duckFadeTimer = null; }
-        if (this.restoreFadeTimer) { try { clearInterval(this.restoreFadeTimer); } catch {} this.restoreFadeTimer = null; }
-        // Pause bgm
-        try { this.musicInstances.forEach((m) => { try { if (m.isPlaying) (m as any).pause?.(); } catch {} }); } catch {}
-        // Pause ambient
-        try { if (this.ambientInstance && this.ambientInstance.isPlaying) (this.ambientInstance as any).pause?.(); } catch {}
-        // Stop SFX and any stray non-music sounds to avoid resume burst
-        this.stopAllNonMusic();
-    }
-
-    private onPageVisible(): void {
-        if (!this.isPageHidden) return;
-        this.isPageHidden = false;
-        if (this.isMuted) return;
-        if (this.resumeDebounceTimer) { try { clearTimeout(this.resumeDebounceTimer); } catch {} }
-        this.resumeDebounceTimer = setTimeout(() => {
-            this.resumeDebounceTimer = null;
-            try {
-                let resumed = false;
-                const target: MusicType | null = this.lockedMusic ?? this.wasPlayingBeforeHide ?? null;
-                if (target) {
-                    const inst = this.musicInstances.get(target);
-                    if (inst) {
-                        try {
-                            // Attempt to resume from paused position (no restart)
-                            (inst as any).resume?.();
-                            this.currentMusic = target;
-                            resumed = true;
-                            // Ensure volume is correct after resume
-                            if ('setVolume' in inst && typeof (inst as any).setVolume === 'function') {
-                                (inst as any).setVolume(this.musicVolume);
-                            }
-                        } catch {}
-                    }
-                }
-                if (!resumed) {
-                    // Fall back to normal logic if nothing to resume
-                    if (this.lockedMusic) {
-                        this.setExclusiveBackground(this.lockedMusic);
-                    } else if (this.wasPlayingBeforeHide) {
-                        this.setExclusiveBackground(this.wasPlayingBeforeHide);
-                    } else {
-                        this.resumeMusicBasedOnGameState();
-                    }
-                }
-            } catch {}
-            // Ambient: resume if it was playing before hide; otherwise start if appropriate
-            try {
-                if (this.wasAmbientPlayingBeforeHide && this.ambientInstance) {
-                    try { (this.ambientInstance as any).resume?.(); } catch {}
-                    try {
-                        if ('setVolume' in this.ambientInstance && typeof (this.ambientInstance as any).setVolume === 'function') {
-                            (this.ambientInstance as any).setVolume(this.ambientVolume);
-                        }
-                    } catch {}
-                } else {
-                    this.startAmbientAudio();
-                }
-            } catch {}
-            // Flush suppressed one-shots: play at most one per key to avoid burst
-            try {
-                if (this.suppressedOneShotCounts.size > 0) {
-                    const entries = Array.from(this.suppressedOneShotCounts.keys());
-                    this.suppressedOneShotCounts.clear();
-                    // Space them slightly to avoid concurrent spikes
-                    let delay = 0;
-                    for (const k of entries) {
-                        try { setTimeout(() => { try { this.playOneShot(k); } catch {} }, delay); } catch {}
-                        delay += 40; // 40ms between keys
-                    }
-                }
-            } catch {}
-        }, 60);
-    }
-
-    /** Returns true if background music is active and not muted. */
-    isMusicPlaying(): boolean {
-        return this.currentMusic !== null && !this.isMuted;
-    }
 }

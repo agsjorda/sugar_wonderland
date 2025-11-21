@@ -15,6 +15,13 @@ export const SCATTER_ANTICIPATION2_POS_X_MUL = 0.965;
 export const SCATTER_ANTICIPATION2_POS_Y_MUL = 0.49;
 export const SCATTER_ANTICIPATION2_DEFAULT_SCALE = 0.85;
 
+export function getSpinnerPosition(scene: Scene) {
+  return {
+    x: scene.scale.width * SPINNER_POS_X_MUL,
+    y: scene.scale.height * SPINNER_POS_Y_MUL,
+  };
+}
+
 export const AUTOPLAY_GRID_START_X_CENTER_MUL = 0.5;
 export const AUTOPLAY_GRID_START_X_OFFSET_PX = -180;
 export const AUTOPLAY_GRID_START_Y_DELTA = 240;

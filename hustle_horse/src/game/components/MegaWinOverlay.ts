@@ -474,8 +474,6 @@ export class MegaWinOverlay {
                         this.hasEmittedWinStop = true;
                     }
                 } catch {}
-                try { (this.scene as any).events?.emit('dialogAnimationsComplete'); } catch {}
-                try { gameEventManager.emit(GameEventType.WIN_DIALOG_CLOSED); } catch {}
                 if (onComplete) onComplete();
             }
         });
@@ -497,9 +495,8 @@ export class MegaWinOverlay {
                     return;
                 }
                 const loader = (this.scene as any).load;
-                const prefix = this.getAssetPrefix();
-                try { loader?.spineAtlas?.('fire_transition_atlas', resolveAssetUrl(`${prefix}/fire_animations/Fire_Transition.atlas`)); } catch {}
-                try { loader?.spineJson?.('fire_transition', resolveAssetUrl(`${prefix}/fire_animations/Fire_Transition.json`)); } catch {}
+                try { loader?.spineAtlas?.('fire_transition_atlas', resolveAssetUrl('/assets/animations/Fire/Fire_Transition.atlas')); } catch {}
+                try { loader?.spineJson?.('fire_transition', resolveAssetUrl('/assets/animations/Fire/Fire_Transition.json')); } catch {}
 
                 const onComplete = () => { this.fireTransitionLoadState = 'loaded'; resolve(true); };
                 const onError = () => { this.fireTransitionLoadState = 'failed'; resolve(false); };
@@ -707,9 +704,8 @@ export class MegaWinOverlay {
                     return;
                 }
                 const loader = (this.scene as any).load;
-                const prefix = this.getAssetPrefix();
-                try { loader?.spineAtlas?.('overlay_fire_atlas', resolveAssetUrl(`${prefix}/fire_animations/fireanimation01_HTBH.atlas`)); } catch {}
-                try { loader?.spineJson?.('overlay_fire', resolveAssetUrl(`${prefix}/fire_animations/fireanimation01_HTBH.json`)); } catch {}
+                try { loader?.spineAtlas?.('overlay_fire_atlas', resolveAssetUrl('/assets/animations/Fire/fireanimation01_HTBH.atlas')); } catch {}
+                try { loader?.spineJson?.('overlay_fire', resolveAssetUrl('/assets/animations/Fire/fireanimation01_HTBH.json')); } catch {}
 
                 const onComplete = () => { this.fireSpineLoadState = 'loaded'; resolve(true); };
                 const onError = () => { this.fireSpineLoadState = 'failed'; resolve(false); };
@@ -740,9 +736,8 @@ export class MegaWinOverlay {
                     return;
                 }
                 const loader = (this.scene as any).load;
-                const prefix = this.getAssetPrefix();
-                try { loader?.spineAtlas?.('main_fire_atlas', resolveAssetUrl(`${prefix}/fire_animations/Main_Fire.atlas`)); } catch {}
-                try { loader?.spineJson?.('main_fire', resolveAssetUrl(`${prefix}/fire_animations/Main_Fire.json`)); } catch {}
+                try { loader?.spineAtlas?.('main_fire_atlas', resolveAssetUrl('/assets/animations/Fire/Main_Fire.atlas')); } catch {}
+                try { loader?.spineJson?.('main_fire', resolveAssetUrl('/assets/animations/Fire/Main_Fire.json')); } catch {}
 
                 const onComplete = () => { this.mainFireLoadState = 'loaded'; resolve(true); };
                 const onError = () => { this.mainFireLoadState = 'failed'; resolve(false); };

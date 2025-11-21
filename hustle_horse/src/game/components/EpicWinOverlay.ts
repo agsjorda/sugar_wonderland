@@ -473,13 +473,6 @@ export class EpicWinOverlay {
                 this.isShowing = false;
                 this.clearAnimations();
                 if (this.dismissResolver) { const r = this.dismissResolver; this.dismissResolver = undefined; r(); }
-                
-                try {
-                    if (!this.hasEmittedWinStop) {
-                        gameEventManager.emit(GameEventType.WIN_STOP);
-                        this.hasEmittedWinStop = true;
-                    }
-                } catch {}
                 // Notify dialog completion for bonus/auto flows
                 try { (this.scene as any).events?.emit('dialogAnimationsComplete'); } catch {}
                 // Emit win dialog closed event for bonus/autoplay flows
@@ -514,9 +507,8 @@ export class EpicWinOverlay {
                     return;
                 }
                 const loader = (this.scene as any).load;
-                const prefix = this.getAssetPrefix();
-                try { loader?.spineAtlas?.('fire_transition_atlas', resolveAssetUrl(`${prefix}/fire_animations/Fire_Transition.atlas`)); } catch {}
-                try { loader?.spineJson?.('fire_transition', resolveAssetUrl(`${prefix}/fire_animations/Fire_Transition.json`)); } catch {}
+                try { loader?.spineAtlas?.('fire_transition_atlas', resolveAssetUrl('/assets/animations/Fire/Fire_Transition.atlas')); } catch {}
+                try { loader?.spineJson?.('fire_transition', resolveAssetUrl('/assets/animations/Fire/Fire_Transition.json')); } catch {}
 
                 const onComplete = () => { this.fireTransitionLoadState = 'loaded'; resolve(true); };
                 const onError = () => { this.fireTransitionLoadState = 'failed'; resolve(false); };
@@ -718,9 +710,8 @@ export class EpicWinOverlay {
                     return;
                 }
                 const loader = (this.scene as any).load;
-                const prefix = this.getAssetPrefix();
-                try { loader?.spineAtlas?.('overlay_fire_atlas', resolveAssetUrl(`${prefix}/fire_animations/fireanimation01_HTBH.atlas`)); } catch {}
-                try { loader?.spineJson?.('overlay_fire', resolveAssetUrl(`${prefix}/fire_animations/fireanimation01_HTBH.json`)); } catch {}
+                try { loader?.spineAtlas?.('overlay_fire_atlas', resolveAssetUrl('/assets/animations/Fire/fireanimation01_HTBH.atlas')); } catch {}
+                try { loader?.spineJson?.('overlay_fire', resolveAssetUrl('/assets/animations/Fire/fireanimation01_HTBH.json')); } catch {}
 
                 const onComplete = () => { this.fireSpineLoadState = 'loaded'; resolve(true); };
                 const onError = () => { this.fireSpineLoadState = 'failed'; resolve(false); };

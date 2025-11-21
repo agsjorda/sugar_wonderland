@@ -66,6 +66,9 @@ export class Dialogs {
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
 	private currentScene: Scene | null = null;
+	
+	// Iris transition for scatter animation
+	private irisTransition: IrisTransition | null = null;
 
 	// Congrats-specific extras
 	private congratsBgImage: Phaser.GameObjects.Image | null = null;
@@ -136,22 +139,12 @@ export class Dialogs {
 	private congratsCharScaleContainer: Phaser.GameObjects.Container | null = null; // scale/rotation
 
 	// Dialog configuration
-	private dialogScales: Record<string, number> = {};
+private dialogScales: Record<string, number> = {};
 
 	// Dialog positions (relative: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom)
-	private dialogPositions: Record<string, { x: number; y: number }> = {};
+private dialogPositions: Record<string, { x: number; y: number }> = {};
 
-	private dialogLoops: Record<string, boolean> = {};
-
-	private getAssetPrefix(): string {
-		try {
-			const isPortrait = !!this.screenModeManager?.getScreenConfig?.().isPortrait;
-			const isHigh = !!this.networkManager?.getNetworkSpeed?.();
-			const orientation = isPortrait ? 'portrait' : 'landscape';
-			const quality = isHigh ? 'high' : 'low';
-			return `assets/${orientation}/${quality}`;
-		} catch { return 'assets/portrait/high'; }
-	}
+private dialogLoops: Record<string, boolean> = {};
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -174,9 +167,8 @@ export class Dialogs {
 					return;
 				}
                 const loader = (this.currentScene as any).load;
-                const prefix = this.getAssetPrefix();
-				try { loader?.spineAtlas?.('fire_transition_atlas', resolveAssetUrl(`${prefix}/fire_animations/Fire_Transition.atlas`)); } catch {}
-				try { loader?.spineJson?.('fire_transition', resolveAssetUrl(`${prefix}/fire_animations/Fire_Transition.json`)); } catch {}
+                try { loader?.spineAtlas?.('fire_transition_atlas', resolveAssetUrl('/assets/animations/Fire/Fire_Transition.atlas')); } catch {}
+                try { loader?.spineJson?.('fire_transition', resolveAssetUrl('/assets/animations/Fire/Fire_Transition.json')); } catch {}
 				const onComplete = () => { this.endFireTransitionLoadState = 'loaded'; resolve(true); };
 				const onError = () => { this.endFireTransitionLoadState = 'failed'; resolve(false); };
 				try { (this.currentScene as any).load?.once('complete', onComplete); } catch {}
@@ -1331,6 +1323,75 @@ export class Dialogs {
     }
 	
 	/**
+	 * Start iris transition for free spin dialog
+	 */
+	private startIrisTransition(scene: Scene): void {
+		if (!this.irisTransition) {
+			console.warn('[Dialogs] Iris transition not available, falling back to normal transition');
+			this.startNormalTransition(scene);
+			return;
+		}
+		
+		console.log('[Dialogs] Starting iris transition for free spin dialog');
+		
+		// Store the dialog type before cleanup for bonus mode check
+		const dialogTypeBeforeCleanup = this.currentDialogType;
+		
+		// Stop all effect animations immediately
+		this.stopAllEffectAnimations();
+		
+		// Disable spinner immediately when iris transition starts
+		scene.events.emit('disableSpinner');
+		console.log('[Dialogs] Spinner disabled during iris transition');
+		
+		// Show iris transition overlay
+		this.irisTransition.show();
+		
+		// Start iris transition - zoom in to small radius (closing iris effect)
+		this.irisTransition.zoomInToRadius(28, 1500); // Fast transition to 28px radius
+		
+		// Hide dialog content quickly after iris starts closing (200ms delay)
+		scene.time.delayedCall(200, () => {
+			console.log('[Dialogs] Hiding dialog content quickly for better iris visibility');
+			// Fade out FreeSpin dialog SFX if playing
+			try {
+				const audioManager = (window as any).audioManager;
+				if (audioManager && typeof audioManager.fadeOutSfx === 'function') {
+					audioManager.fadeOutSfx('dialog_congrats', 400);
+				}
+			} catch {}
+			// Disable dialog elements before cleanup
+			this.disableAllWinDialogElements();
+			this.cleanupDialog();
+		});
+		
+		// Wait for iris transition to complete, then proceed
+		scene.time.delayedCall(1500, () => {
+			console.log('[Dialogs] Iris closed - triggering bonus mode');
+			
+			// Trigger bonus mode during closed iris
+			console.log('[Dialogs] Triggering bonus mode during closed iris');
+			this.triggerBonusMode(scene);
+			
+			// Wait 0.5 seconds, then open iris (zoom out) - faster for better flow
+			scene.time.delayedCall(500, () => {
+				console.log('[Dialogs] Opening iris transition');
+				this.irisTransition!.zoomInToRadius(1000, 1500); // Open iris to full size
+				
+				// Clean up after iris opens
+				scene.time.delayedCall(1500, () => {
+					console.log('[Dialogs] Iris transition complete');
+					// Hide the iris transition overlay
+					this.irisTransition!.hide();
+					
+					// Emit dialog animations complete event AFTER the full iris transition completes
+					scene.events.emit('dialogAnimationsComplete');
+					console.log('[Dialogs] Dialog animations complete event emitted after full iris transition');
+					// Restore background music volume after dialog completes
+					try {
+						const audioManager = (window as any).audioManager;
+						if (audioManager && typeof audioManager.restoreBackground === 'function') {
+							audioManager.restoreBackground();
 						}
 					} catch {}
 				});
@@ -2693,11 +2754,6 @@ showLargeWin(scene: Scene, config?: Partial<DialogConfig>): void {
 		try {
 			const amount = (config as any)?.winAmount ?? 0;
 			const overlay = (scene as any)?.superWinOverlay;
-			const mgr = (scene as any)?.winOverlayManager;
-			if (mgr && typeof mgr.enqueueShow === 'function') {
-				mgr.enqueueShow('super', amount);
-				return;
-			}
 			if (overlay && typeof overlay.show === 'function') {
 				overlay.show(amount);
 				return;
@@ -2711,11 +2767,6 @@ showMediumWin(scene: Scene, config?: Partial<DialogConfig>): void {
 		try {
 			const amount = (config as any)?.winAmount ?? 0;
 			const overlay = (scene as any)?.megaWinOverlay;
-			const mgr = (scene as any)?.winOverlayManager;
-			if (mgr && typeof mgr.enqueueShow === 'function') {
-				mgr.enqueueShow('mega', amount);
-				return;
-			}
 			if (overlay && typeof overlay.show === 'function') {
 				overlay.show(amount);
 				return;
@@ -2729,11 +2780,6 @@ showSmallWin(scene: Scene, config?: Partial<DialogConfig>): void {
 		try {
 			const amount = (config as any)?.winAmount ?? 0;
 			const overlay = (scene as any)?.bigWinOverlay;
-			const mgr = (scene as any)?.winOverlayManager;
-			if (mgr && typeof mgr.enqueueShow === 'function') {
-				mgr.enqueueShow('big', amount);
-				return;
-			}
 			if (overlay && typeof overlay.show === 'function') {
 				overlay.show(amount);
 				return;
@@ -2747,11 +2793,6 @@ showSuperWin(scene: Scene, config?: Partial<DialogConfig>): void {
 		try {
 			const amount = (config as any)?.winAmount ?? 0;
 			const overlay = (scene as any)?.epicWinOverlay;
-			const mgr = (scene as any)?.winOverlayManager;
-			if (mgr && typeof mgr.enqueueShow === 'function') {
-				mgr.enqueueShow('epic', amount);
-				return;
-			}
 			if (overlay && typeof overlay.show === 'function') {
 				overlay.show(amount);
 				return;

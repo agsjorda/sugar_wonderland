@@ -37,6 +37,7 @@ export class AssetConfig {
 		return {
 			images: {
 				'BG-Normal': `${prefix}/background/BG-Normal.png`,
+				'reel-frame': `${prefix}/background/reel-frame.png`,
 				// Mostly for landscape bg
 				// 'balloon-01': `${prefix}/background/balloon-01.png`,
 				// 'balloon-02': `${prefix}/background/balloon-02.png`,
@@ -52,6 +53,15 @@ export class AssetConfig {
 				'dragon_default': {
 					atlas: `${prefix}/background/dragon_default.atlas`,
 					json: `${prefix}/background/dragon_default.json`
+				},
+				// Bonus-only border spines
+				'Dragon_Top_Bonus': {
+					atlas: `${prefix}/background/Dragon_Top_Bonus.atlas`,
+					json: `${prefix}/background/Dragon_Top_Bonus.json`
+				},
+				'Dragon_Bottom_Bonus': {
+					atlas: `${prefix}/background/Dragon_Bottom_Bonus.atlas`,
+					json: `${prefix}/background/Dragon_Bottom_Bonus.json`
 				}
 			}
 		};
@@ -140,15 +150,15 @@ export class AssetConfig {
 			const isHigh = this.networkManager.getNetworkSpeed();
 			const quality = isHigh ? 'high' : 'low';
 			// HTBH PNGs are organized by quality only (no orientation)
-			const spritePath = `${prefix}/symbols/Symbol${i}_HTBH.png`;
+			const spritePath = `assets/symbols/${quality}/Symbol${i}_HTBH.png`;
 			symbolImages[spriteKey] = spritePath;
 			
 			// Spine animations for hit effects (HTBH set)
 			const spineKey = `symbol_${i}_spine`;
 			const symbolName = `Symbol${i}_HTBH`;
 			// HTBH symbol atlases are not organized by orientation/quality; use non-prefixed root
-			const atlasPath = `${prefix}/spine_symbols/${symbolName}.atlas`;
-			const jsonPath = `${prefix}/spine_symbols/${symbolName}.json`;
+			const atlasPath = `assets/Symbols_HTBH/${symbolName}.atlas`;
+			const jsonPath = `assets/Symbols_HTBH/${symbolName}.json`;
 			
 			symbolSpine[spineKey] = {
 				atlas: atlasPath,
@@ -170,8 +180,6 @@ export class AssetConfig {
 		const isHighSpeed = this.networkManager.getNetworkSpeed();
 		const quality = isHighSpeed ? 'high' : 'low';
 		const screenMode = screenConfig.isPortrait ? 'portrait' : 'landscape';
-		// Some controller spine packs are only present in portrait/high today – force those paths to avoid 404s
-		const forcedPortraitHigh = 'portrait/high';
 		
 		console.log(`[AssetConfig] Loading controller buttons with quality: ${quality}, screen mode: ${screenMode}`);
 		
@@ -195,12 +203,12 @@ export class AssetConfig {
 			},
 			spine: {
 				'spin_button_animation': {
-					atlas: `assets/controller/${forcedPortraitHigh}/spin_button_anim/spin_button_anim.atlas`,
-					json: `assets/controller/${forcedPortraitHigh}/spin_button_anim/spin_button_anim.json`
+					atlas: `assets/controller/${screenMode}/${quality}/spin_button_anim/spin_button_anim.atlas`,
+					json: `assets/controller/${screenMode}/${quality}/spin_button_anim/spin_button_anim.json`
 				},
 				'button_animation_idle': {
-					atlas: `assets/controller/${forcedPortraitHigh}/button_animation_idle/button_animation_idle.atlas`,
-					json: `assets/controller/${forcedPortraitHigh}/button_animation_idle/button_animation_idle.json`
+					atlas: `assets/controller/${screenMode}/${quality}/button_animation_idle/button_animation_idle.atlas`,
+					json: `assets/controller/${screenMode}/${quality}/button_animation_idle/button_animation_idle.json`
 				},
 				'amplify_bet': {
 					atlas: `assets/${screenMode}/${quality}/amplify_bet/Amplify Bet.atlas`,
@@ -212,8 +220,8 @@ export class AssetConfig {
 					json: `assets/controller/portrait/high/enhanceBet_idle_on/Amplify Bet.json`
 				},
 				'turbo_animation': {
-					atlas: `assets/controller/${forcedPortraitHigh}/turbo_animation/Turbo_Spin.atlas`,
-					json: `assets/controller/${forcedPortraitHigh}/turbo_animation/Turbo_Spin.json`
+					atlas: `assets/controller/${screenMode}/${quality}/turbo_animation/Turbo_Spin.atlas`,
+					json: `assets/controller/${screenMode}/${quality}/turbo_animation/Turbo_Spin.json`
 				}
 			}
 		};
@@ -227,6 +235,21 @@ export class AssetConfig {
 				'Poppins-Thin': 'assets/fonts/poppins/Poppins-Thin.ttf',
 				'Poppins-Bold': 'assets/fonts/poppins/Poppins-Bold.ttf',
 				'Poppins-Regular': 'assets/fonts/poppins/Poppins-Regular.ttf',
+			}
+		};
+	}
+
+	getSpinnerAssets(): AssetGroup {
+		const prefix = this.getAssetPrefix();
+		
+		console.log(`[AssetConfig] Loading spinner assets with prefix: ${prefix}`);
+		
+		return {
+			images: {
+				'spin_01': `${prefix}/spinner/spin_01.png`,
+				'spin_02': `${prefix}/spinner/spin_02.png`,
+				'spin_03': `${prefix}/spinner/spin_03.png`,
+				'spin_04': `${prefix}/spinner/spin_04.png`,
 			}
 		};
 	}
@@ -306,14 +329,21 @@ export class AssetConfig {
 		
 		return {
 			images: {
+				// Static background image for Congrats dialog
 				'congrats-bg': `${prefix}/dialogs/congrats-bg.png`,
+				// Congrats title image used on the congrats overlay
 				'congratulations-you-won': `${prefix}/dialogs/congratulations-you-won.png`
 			},
 			spine: {
+				// Fire background element for Congrats overlay (replaces 3rd_Fire)
 				'fireanimation01_HTBH': {
 					atlas: `${prefix}/fire_animations/fireanimation01_HTBH.atlas`,
 					json: `${prefix}/fire_animations/fireanimation01_HTBH.json`
 				},
+				// Removed unused dialog effect spines (confetti_KA, Paint_KA, Explosion_AK)
+				// Legacy Small/Medium/Large/Super win dialogs removed in favor of overlay components
+				// Removed FreeSpinDialog_KA (not used)
+				// Character spine used on top of the congrats background
 				'HustleForSpine': {
 					atlas: `assets/characters/HustleForSpine.atlas`,
 					json: `assets/characters/HustleForSpine.json`
@@ -347,17 +377,16 @@ export class AssetConfig {
 	 * We intentionally do not use getAssetPrefix() to avoid missing assets on low quality.
 	 */
 	getScatterAnticipationAssets(): AssetGroup {
-		// Force portrait/high paths to ensure presence (these packs may be absent in low quality builds)
-		const forcedPortraitHighPrefix = `assets/portrait/high`;
-		console.log('[AssetConfig] Loading Scatter Anticipation assets (forced portrait/high)');
+		const prefix = this.getAssetPrefix();
+		console.log('[AssetConfig] Loading Scatter Anticipation assets');
 		return {
 			images: {
-				'reel-background': `${forcedPortraitHighPrefix}/background/reel-background.png`
+				'reel-background': `${prefix}/background/reel-background.png`
 			},
 			spine: {
 				'Sparkler_Reel': {
-					atlas: `${forcedPortraitHighPrefix}/scatterAnticipation/Sparkler_Reel.atlas`,
-					json: `${forcedPortraitHighPrefix}/scatterAnticipation/Sparkler_Reel.json`
+					atlas: `${prefix}/scatterAnticipation/Sparkler_Reel.atlas`,
+					json: `${prefix}/scatterAnticipation/Sparkler_Reel.json`
 				}
 			}
 		};
@@ -427,7 +456,7 @@ export class AssetConfig {
 				'PickACard': `${prefix}/scatter_win/PickACard.png`,
 				'congrats': `${prefix}/scatter_win/congrats.png`,
 				// Fire animation will use sprite-based fallback to avoid multi-page atlas issues
-				'fireanimation01_HTBH_img': `${prefix}/fire_animations/fireanimation01_HTBH.png`
+				'fireanimation01_HTBH_img': `assets/animations/Fire/fireanimation01_HTBH.png`
 			}
 		};
 	}
@@ -461,6 +490,7 @@ export class AssetConfig {
 				// Hit win SFX
 				'hitwin_hh': 'assets/sounds/SFX/hitwin_hh.ogg',
 				// Wild multi SFX
+				'wildmulti_hh': 'assets/sounds/SFX/wildmulti_hh.ogg',
 				'scatter_hh': 'assets/sounds/SFX/scatter_hh.ogg',
 				'anticipation_hh': 'assets/sounds/SFX/anticipation_hh.ogg',
 				// Winline SFX
@@ -497,6 +527,7 @@ export class AssetConfig {
 			symbols: this.getSymbolAssets(),
 			buttons: this.getButtonAssets(),
 			fonts: this.getFontAssets(),
+			spinner: this.getSpinnerAssets(),
 			dialogs: this.getDialogAssets(),
 			numbers: this.getNumberAssets(),
 			coin: this.getCoinAssets(),

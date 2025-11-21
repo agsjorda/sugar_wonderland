@@ -1,0 +1,34 @@
+{
+    "section1": {
+        "files": [
+            {
+                "url": "dragon_default.json",
+                "type": "spineJson",
+                "key": "dragon_default"
+            },
+            {
+                "url": "dragon_default.atlas",
+                "type": "spineAtlas",
+                "key": "dragon_default-atlas"
+            },
+            {
+                "url": "Dragon_Top_Bonus.json",
+                "type": "spineJson",
+                "key": "Dragon_Top_Bonus"
+            },
+            {
+                "url": "Dragon_Top_Bonus.atlas",
+                "type": "spineAtlas",
+                "key": "Dragon_Top_Bonus-atlas"
+            }
+        ]
+    },
+    "meta": {
+        "app": "Phaser Editor 2D - Asset Pack Editor",
+        "contentType": "phasereditor2d.pack.core.AssetContentType",
+        "url": "https://phasereditor2d.com",
+        "version": 2,
+        "showAllFilesInBlocks": false,
+        "visible": true
+    }
+}

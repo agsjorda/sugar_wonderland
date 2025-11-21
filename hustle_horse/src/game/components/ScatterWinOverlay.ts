@@ -1,6 +1,4 @@
 import { Scene } from 'phaser';
-import { NetworkManager } from '../../managers/NetworkManager';
-import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { ensureSpineLoader, ensureSpineFactory } from '../../utils/SpineGuard';
 import { MusicType } from '../../managers/AudioManager';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
@@ -10,8 +8,6 @@ import type { SpinData } from '../../backend/SpinData';
 
 export class ScatterWinOverlay {
     private scene: Scene | null = null;
-    private networkManager: NetworkManager | null = null;
-    private screenModeManager: ScreenModeManager | null = null;
     private container: Phaser.GameObjects.Container | null = null;
     private background: Phaser.GameObjects.Rectangle | null = null;
     private winFont: any | null = null; // Spine for fire animation
@@ -172,33 +168,19 @@ export class ScatterWinOverlay {
         return Math.min(this.fsDigitsMaxScale, Math.max(this.fsDigitsMinScale, base));
     }
 
-    private getAssetPrefix(): string {
-        try {
-            const sm = this.screenModeManager as any;
-            const nm = this.networkManager as any;
-            const isPortrait = !!sm?.getScreenConfig?.().isPortrait;
-            const isHigh = !!nm?.getNetworkSpeed?.();
-            const orientation = isPortrait ? 'portrait' : 'landscape';
-            const quality = isHigh ? 'high' : 'low';
-            return `assets/${orientation}/${quality}`;
-        } catch { return 'assets/portrait/high'; }
-    }
-
-    constructor(scene?: Scene, networkManager?: NetworkManager, screenModeManager?: ScreenModeManager) {
+    constructor(scene?: Scene) {
         if (scene) {
-            this.initialize(scene, networkManager!, screenModeManager!);
+            this.initialize(scene);
         }
     }
 
-    public initialize(scene: Scene, networkManager?: NetworkManager, screenModeManager?: ScreenModeManager): void {
+    public initialize(scene: Scene): void {
         if (this.isInitialized) {
             return;
         }
 
         try {
             this.scene = scene;
-            this.networkManager = networkManager || null;
-            this.screenModeManager = screenModeManager || null;
             this.container = this.scene.add.container(0, 0);
             this.container.setDepth(10000); // Ensure always on top of all scene UI
             
@@ -562,9 +544,8 @@ export class ScatterWinOverlay {
                 }
                 // Queue files
                 const loader = (this.scene as any).load;
-                const prefix = this.getAssetPrefix();
-                try { loader?.spineAtlas?.('overlay_fire_atlas', resolveAssetUrl(`${prefix}/fire_animations/fireanimation01_HTBH.atlas`)); } catch {}
-                try { loader?.spineJson?.('overlay_fire', resolveAssetUrl(`${prefix}/fire_animations/fireanimation01_HTBH.json`)); } catch {}
+                try { loader?.spineAtlas?.('overlay_fire_atlas', resolveAssetUrl('/assets/animations/Fire/fireanimation01_HTBH.atlas')); } catch {}
+                try { loader?.spineJson?.('overlay_fire', resolveAssetUrl('/assets/animations/Fire/fireanimation01_HTBH.json')); } catch {}
 
                 const onComplete = () => {
                     this.fireSpineLoadState = 'loaded';
@@ -1603,9 +1584,8 @@ export class ScatterWinOverlay {
           return;
         }
         const loader = (this.scene as any).load;
-        const prefix = this.getAssetPrefix();
-        try { loader?.spineAtlas?.('fire_transition_atlas', resolveAssetUrl(`${prefix}/fire_animations/Fire_Transition.atlas`)); } catch {}
-        try { loader?.spineJson?.('fire_transition', resolveAssetUrl(`${prefix}/fire_animations/Fire_Transition.json`)); } catch {}
+        try { loader?.spineAtlas?.('fire_transition_atlas', resolveAssetUrl('/assets/animations/Fire/Fire_Transition.atlas')); } catch {}
+        try { loader?.spineJson?.('fire_transition', resolveAssetUrl('/assets/animations/Fire/Fire_Transition.json')); } catch {}
 
         const onComplete = () => { this.fireTransitionLoadState = 'loaded'; resolve(true); };
         const onError = () => { this.fireTransitionLoadState = 'failed'; resolve(false); };
@@ -1637,9 +1617,8 @@ export class ScatterWinOverlay {
           return;
         }
         const loader = (this.scene as any).load;
-        const prefix = this.getAssetPrefix();
-        try { loader?.spineAtlas?.('main_fire_atlas', resolveAssetUrl(`${prefix}/fire_animations/Main_Fire.atlas`)); } catch {}
-        try { loader?.spineJson?.('main_fire', resolveAssetUrl(`${prefix}/fire_animations/Main_Fire.json`)); } catch {}
+        try { loader?.spineAtlas?.('main_fire_atlas', resolveAssetUrl('/assets/animations/Fire/Main_Fire.atlas')); } catch {}
+        try { loader?.spineJson?.('main_fire', resolveAssetUrl('/assets/animations/Fire/Main_Fire.json')); } catch {}
 
         const onComplete = () => { this.mainFireLoadState = 'loaded'; resolve(true); };
         const onError = () => { this.mainFireLoadState = 'failed'; resolve(false); };

@@ -7,17 +7,11 @@ interface WinTrackerLayoutOptions {
   spacing?: number;
   iconScale?: number;
   innerGap?: number;
-  multiplierIconScale?: number;
-  multiplierIconGap?: number;
 }
 
 interface SymbolSummary {
   lines: number;
   totalWin: number;
-  multiplier: number;
-  baseValue: number;
-  multiplierIcons?: Array<{ symbol: number; count: number }>;
-  multiplierCount?: number;
 }
 
 export class WinTracker {
@@ -29,12 +23,10 @@ export class WinTracker {
   private baseY: number = 0;
   private offsetX: number = 0;
   private offsetY: number = -70;
-  private itemSpacing: number = 100;
+  private itemSpacing: number = 120;
   private iconScale: number = 0.5;
-  private innerGap: number = 15;
+  private innerGap: number = 20;
   private horizontalGap: number = 20;
-  private multiplierIconScale: number = 2.5;
-  private multiplierIconGap: number = 0.8;
   private autoHideTimer: Phaser.Time.TimerEvent | null = null;
 
   private readonly depth: number = 905;
@@ -105,19 +97,7 @@ export class WinTracker {
     this.container.setAlpha(1);
 
     const summary = new Map<number, SymbolSummary>();
-    // For a single payline preview, show the count of matching symbols on that line (payline.count)
-    // rather than the number of lines.
-    const stats = this.getPaylineMultiplierStats(payline);
-    const added = Math.max(1, Math.floor(stats.sum));
-    const baseValue = payline.win / added;
-    summary.set(payline.symbol, {
-      lines: payline.count,
-      totalWin: payline.win,
-      multiplier: stats.product,
-      baseValue,
-      multiplierIcons: stats.icons,
-      multiplierCount: added
-    });
+    summary.set(payline.symbol, { lines: 1, totalWin: payline.win });
     this.renderFromSummary(summary);
   }
 
@@ -158,22 +138,9 @@ export class WinTracker {
 
     const summary = new Map<number, SymbolSummary>();
     for (const payline of spinData.slot.paylines) {
-      const stats = this.getPaylineMultiplierStats(payline);
-      const existing = summary.get(payline.symbol) || { lines: 0, totalWin: 0, multiplier: 1, baseValue: 0, multiplierIcons: [], multiplierCount: 0 };
-      // Track the total count of matching symbols across winning lines for this symbol
-      existing.lines += (payline.count || 0);
+      const existing = summary.get(payline.symbol) || { lines: 0, totalWin: 0 };
+      existing.lines += 1;
       existing.totalWin += payline.win;
-      existing.multiplier = Math.max(existing.multiplier || 1, stats.product || 1);
-      const prevMap = new Map<number, number>();
-      for (const it of (existing.multiplierIcons || [])) {
-        prevMap.set(it.symbol, (prevMap.get(it.symbol) || 0) + (it.count || 0));
-      }
-      for (const it of stats.icons) {
-        prevMap.set(it.symbol, (prevMap.get(it.symbol) || 0) + (it.count || 0));
-      }
-      existing.multiplierIcons = Array.from(prevMap.entries()).map(([symbol, count]) => ({ symbol, count }));
-      existing.multiplierCount = (existing.multiplierCount || 0) + Math.max(1, Math.floor(stats.sum));
-      existing.baseValue = existing.totalWin / Math.max(1, existing.multiplierCount || 1);
       summary.set(payline.symbol, existing);
     }
     return summary;
@@ -195,7 +162,7 @@ export class WinTracker {
     const countLabel = this.scene.add.text(
       0,
       0,
-      `${data.lines}`,
+      `${data.lines}x`,
       {
         fontSize: `${this.labelFontSize}px`,
         color: '#ffffff',
@@ -207,87 +174,6 @@ export class WinTracker {
     );
     countLabel.setOrigin(0.5, 0.5);
     countLabel.setShadow(3, 3, '#000000', 4, true, true);
-
-    const pipeLabel = this.scene.add.text(
-      0,
-      0,
-      '|',
-      {
-        fontSize: `${this.labelFontSize}px`,
-        color: '#ffffff',
-        fontFamily: this.labelFontFamily,
-        stroke: '#000000',
-        strokeThickness: 4,
-        align: 'center'
-      }
-    );
-    pipeLabel.setOrigin(0.5, 0.5);
-    pipeLabel.setShadow(3, 3, '#000000', 4, true, true);
-
-    const baseValueLabel = this.scene.add.text(
-      0,
-      0,
-      `$${(data.baseValue ?? data.totalWin).toFixed(2)}`,
-      {
-        fontSize: `${this.labelFontSize}px`,
-        color: '#ffffff',
-        fontFamily: this.labelFontFamily,
-        stroke: '#000000',
-        strokeThickness: 4,
-        align: 'center'
-      }
-    );
-    baseValueLabel.setOrigin(0.5, 0.5);
-    baseValueLabel.setShadow(3, 3, '#000000', 4, true, true);
-
-    const mulXLabel = this.scene.add.text(
-      0,
-      0,
-      'x',
-      {
-        fontSize: `${this.labelFontSize}px`,
-        color: '#ffffff',
-        fontFamily: this.labelFontFamily,
-        stroke: '#000000',
-        strokeThickness: 4,
-        align: 'center'
-      }
-    );
-    mulXLabel.setOrigin(0.5, 0.5);
-    mulXLabel.setShadow(3, 3, '#000000', 4, true, true);
-
-    const addedMul = Math.max(1, Math.floor(data.multiplierCount || 0));
-    const mulCountLabel = this.scene.add.text(
-      0,
-      0,
-      `${addedMul}`,
-      {
-        fontSize: `${this.labelFontSize}px`,
-        color: '#ffffff',
-        fontFamily: this.labelFontFamily,
-        stroke: '#000000',
-        strokeThickness: 4,
-        align: 'center'
-      }
-    );
-    mulCountLabel.setOrigin(0.5, 0.5);
-    mulCountLabel.setShadow(3, 3, '#000000', 4, true, true);
-
-    const eqLabel = this.scene.add.text(
-      0,
-      0,
-      '=',
-      {
-        fontSize: `${this.labelFontSize}px`,
-        color: '#ffffff',
-        fontFamily: this.labelFontFamily,
-        stroke: '#000000',
-        strokeThickness: 4,
-        align: 'center'
-      }
-    );
-    eqLabel.setOrigin(0.5, 0.5);
-    eqLabel.setShadow(3, 3, '#000000', 4, true, true);
 
     const valueLabel = this.scene.add.text(
       0,
@@ -305,48 +191,11 @@ export class WinTracker {
     valueLabel.setOrigin(0.5, 0.5);
     valueLabel.setShadow(3, 3, '#000000', 4, true, true);
 
-    const baseGap = this.innerGap;
-    const gap = Math.max(6, Math.floor(baseGap * 0.6));
-    const pipeGap = Math.max(4, Math.floor(gap * 0.6));
-    const iconGapBase = Math.max(2, Math.floor(gap * 0.5));
-    const iconGap = Math.max(1, Math.floor(iconGapBase * (this.multiplierIconGap || 1)));
-
-    const mulIcons: Phaser.GameObjects.Image[] = [];
-    let mulIconsWidth = 0;
-    if (Array.isArray(data.multiplierIcons) && data.multiplierIcons.length > 0) {
-      const mulIconTargetH = Math.max(16, this.labelFontSize + 2);
-      for (const it of data.multiplierIcons) {
-        for (let i = 0; i < Math.max(0, Math.floor(it.count || 0)); i++) {
-          const mk = `symbol_${it.symbol}`;
-          const img = this.scene.add.image(0, 0, mk);
-          img.setOrigin(0.5, 0.5);
-          const srcH = (img as any).height || 0;
-          if (srcH > 0) {
-            const baseScale = mulIconTargetH / srcH;
-            img.setScale(baseScale * (this.multiplierIconScale || 1));
-          } else {
-            img.setScale(this.iconScale * 0.25 * (this.multiplierIconScale || 1));
-          }
-          mulIcons.push(img);
-        }
-      }
-      mulIconsWidth = mulIcons.reduce((acc, img) => acc + img.displayWidth, 0) + iconGap * Math.max(0, mulIcons.length - 1);
-    }
+    const gap = this.innerGap;
     const totalWidth =
       countLabel.displayWidth +
       gap +
       icon.displayWidth +
-      (mulIconsWidth > 0 ? (gap + mulIconsWidth) : 0) +
-      gap +
-      pipeLabel.displayWidth +
-      pipeGap +
-      baseValueLabel.displayWidth +
-      gap +
-      mulXLabel.displayWidth +
-      iconGap +
-      mulCountLabel.displayWidth +
-      gap +
-      eqLabel.displayWidth +
       gap +
       valueLabel.displayWidth;
 
@@ -357,95 +206,14 @@ export class WinTracker {
 
     icon.setPosition(cursor + icon.displayWidth * 0.5, 0);
     shadow.setPosition(icon.x + this.shadowOffsetX, icon.y + this.shadowOffsetY);
-    cursor += icon.displayWidth;
-
-    if (mulIcons.length > 0) {
-      cursor += gap;
-      for (let i = 0; i < mulIcons.length; i++) {
-        const img = mulIcons[i];
-        img.setPosition(cursor + img.displayWidth * 0.5, 0);
-        cursor += img.displayWidth + (i < mulIcons.length - 1 ? iconGap : 0);
-      }
-    }
-
-    cursor += gap;
-
-    pipeLabel.setPosition(cursor + pipeLabel.displayWidth * 0.5, 0);
-    cursor += pipeLabel.displayWidth + pipeGap;
-
-    baseValueLabel.setPosition(cursor + baseValueLabel.displayWidth * 0.5, 0);
-    cursor += baseValueLabel.displayWidth + gap;
-
-    mulXLabel.setPosition(cursor + mulXLabel.displayWidth * 0.5, 0);
-    cursor += mulXLabel.displayWidth + iconGap;
-
-    mulCountLabel.setPosition(cursor + mulCountLabel.displayWidth * 0.5, 0);
-    cursor += mulCountLabel.displayWidth + gap;
-
-    eqLabel.setPosition(cursor + eqLabel.displayWidth * 0.5, 0);
-    cursor += eqLabel.displayWidth + gap;
+    cursor += icon.displayWidth + gap;
 
     valueLabel.setPosition(cursor + valueLabel.displayWidth * 0.5, 0);
 
     this.container.add(shadow);
     this.container.add(icon);
     this.container.add(countLabel);
-    for (const img of mulIcons) { this.container.add(img); }
-    this.container.add(pipeLabel);
-    this.container.add(baseValueLabel);
-    this.container.add(mulXLabel);
-    this.container.add(mulCountLabel);
-    this.container.add(eqLabel);
     this.container.add(valueLabel);
-  }
-
-  private getPaylineMultiplier(payline: PaylineData): number {
-    try {
-      const arr = (payline && Array.isArray(payline.multipliers)) ? payline.multipliers : [];
-      let factor = 1;
-      for (const m of arr) {
-        const base = this.getMultiplierValueForSymbol(m?.symbol);
-        const count = Math.max(0, Math.floor(m?.count || 0));
-        if (base > 1 && count > 0) {
-          factor *= Math.pow(base, count);
-        }
-      }
-      return Math.max(1, Math.floor(factor));
-    } catch {
-      return 1;
-    }
-  }
-
-  private getPaylineMultiplierStats(payline: PaylineData): { product: number; sum: number; icons: Array<{ symbol: number; count: number }> } {
-    try {
-      const arr = (payline && Array.isArray(payline.multipliers)) ? payline.multipliers : [];
-      let product = 1;
-      let sum = 0;
-      const iconMap = new Map<number, number>();
-      for (const m of arr) {
-        const base = this.getMultiplierValueForSymbol(m?.symbol);
-        const count = Math.max(0, Math.floor(m?.count || 0));
-        if (base > 1 && count > 0) {
-          product *= Math.pow(base, count);
-          sum += base * count;
-          iconMap.set(m.symbol, (iconMap.get(m.symbol) || 0) + count);
-        }
-      }
-      if (sum === 0) sum = 1;
-      const icons = Array.from(iconMap.entries()).map(([symbol, count]) => ({ symbol, count }));
-      return { product: Math.max(1, Math.floor(product)), sum, icons };
-    } catch {
-      return { product: 1, sum: 1, icons: [] };
-    }
-  }
-
-  private getMultiplierValueForSymbol(symbolId: number | undefined): number {
-    switch (symbolId) {
-      case 12: return 2;
-      case 13: return 3;
-      case 14: return 4;
-      default: return 1;
-    }
   }
 
   public setLayout(options: WinTrackerLayoutOptions): void {
@@ -463,12 +231,6 @@ export class WinTracker {
     }
     if (typeof options.innerGap === 'number' && options.innerGap >= 0) {
       this.innerGap = options.innerGap;
-    }
-    if (typeof options.multiplierIconScale === 'number' && options.multiplierIconScale > 0) {
-      this.multiplierIconScale = options.multiplierIconScale;
-    }
-    if (typeof options.multiplierIconGap === 'number' && options.multiplierIconGap > 0) {
-      this.multiplierIconGap = options.multiplierIconGap;
     }
 
     if (this.container) {
