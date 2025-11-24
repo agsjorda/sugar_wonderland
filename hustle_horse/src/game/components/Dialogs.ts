@@ -79,6 +79,18 @@ export class Dialogs {
 	private congratsFireOffsetY: number = -35; // tuned for fireanimation01_HTBH
 	private congratsFireTimeScale: number = 1;
 	private congratsFireAnimName: string = 'animation';
+	private congratsFire2Spine: any | null = null;
+	private congratsFire2Scale: number = 0.60;
+	private congratsFire2OffsetX: number = -80;
+	private congratsFire2OffsetY: number = 380;
+	private congratsFire2TimeScale: number = 1;
+	private congratsFire2AnimName: string = 'animation';
+	private congratsFire3Spine: any | null = null;
+	private congratsFire3Scale: number = 0.60;
+	private congratsFire3OffsetX: number = 80;
+	private congratsFire3OffsetY: number = 380;
+	private congratsFire3TimeScale: number = 1;
+	private congratsFire3AnimName: string = 'animation';
 	// Congrats title image (PNG) with breathing animation
 	private congratsWinTitleImage: Phaser.GameObjects.Image | null = null;
 	private congratsWinTitleScale: number = 1.0;
@@ -441,9 +453,10 @@ export class Dialogs {
 		this.currentDialogType = config.type;
 
 	// Safety: ensure Congrats-only fire is gone when not in Congrats
-		if (this.currentDialogType !== 'Congrats' && this.congratsFireSpine) {
-			try { this.congratsFireSpine.destroy(); } catch {}
-			this.congratsFireSpine = null;
+		if (this.currentDialogType !== 'Congrats') {
+			if (this.congratsFireSpine) { try { this.congratsFireSpine.destroy(); } catch {} this.congratsFireSpine = null; }
+			if (this.congratsFire2Spine) { try { this.congratsFire2Spine.destroy(); } catch {} this.congratsFire2Spine = null; }
+			if (this.congratsFire3Spine) { try { this.congratsFire3Spine.destroy(); } catch {} this.congratsFire3Spine = null; }
 		}
 		
 		// Debug dialog type detection
@@ -566,6 +579,47 @@ export class Dialogs {
 					try { this.dialogContentContainer.add(fire); } catch {}
 					try { (this.dialogContentContainer as any).sendToBack?.(fire); } catch {}
 					this.congratsFireSpine = fire;
+					try {
+						const fire2 = (scene.add as any).spine(centerX + this.congratsFire2OffsetX, centerY + this.congratsFire2OffsetY, 'fireanimation01_HTBH', 'fireanimation01_HTBH-atlas');
+						try { fire2.setOrigin(0.5, 0.5); } catch {}
+						try { fire2.setScale(Math.max(0.05, this.congratsFire2Scale)); } catch {}
+						try {
+							const animName2 = this.congratsFire2AnimName || 'animation';
+							let played2 = false;
+							try { fire2.animationState.setAnimation(0, animName2, true); played2 = true; } catch {}
+							if (!played2) {
+								try {
+									const anims2 = (fire2 as any)?.skeleton?.data?.animations || [];
+									const first2 = anims2[0]?.name; if (first2) { fire2.animationState.setAnimation(0, first2, true); played2 = true; }
+								} catch {}
+							}
+						} catch {}
+						try { fire2.animationState.timeScale = Math.max(0.0001, this.congratsFire2TimeScale || 1.0); } catch {}
+						try { this.dialogContentContainer.add(fire2); } catch {}
+						try { (this.dialogContentContainer as any).sendToBack?.(fire2); } catch {}
+						this.congratsFire2Spine = fire2;
+						
+						try {
+							const fire3 = (scene.add as any).spine(centerX + this.congratsFire3OffsetX, centerY + this.congratsFire3OffsetY, 'fireanimation01_HTBH', 'fireanimation01_HTBH-atlas');
+							try { fire3.setOrigin(0.5, 0.5); } catch {}
+							try { fire3.setScale(Math.max(0.05, this.congratsFire3Scale)); } catch {}
+							try {
+								const animName3 = this.congratsFire3AnimName || 'animation';
+								let played3 = false;
+								try { fire3.animationState.setAnimation(0, animName3, true); played3 = true; } catch {}
+								if (!played3) {
+									try {
+										const anims3 = (fire3 as any)?.skeleton?.data?.animations || [];
+										const first3 = anims3[0]?.name; if (first3) { fire3.animationState.setAnimation(0, first3, true); played3 = true; }
+									} catch {}
+								}
+							} catch {}
+							try { fire3.animationState.timeScale = Math.max(0.0001, this.congratsFire3TimeScale || 1.0); } catch {}
+							try { this.dialogContentContainer.add(fire3); } catch {}
+							try { (this.dialogContentContainer as any).sendToBack?.(fire3); } catch {}
+							this.congratsFire3Spine = fire3;
+						} catch {}
+					} catch {}
 				}
 			} catch {}
 		}
@@ -575,6 +629,14 @@ export class Dialogs {
 			(window as any).setCongratsFire = function(opts: { offsetX?: number; offsetY?: number; scale?: number; timeScale?: number; anim?: string }) {
 				self.setCongratsFireOptions(opts || {});
 				return { offsetX: self.congratsFireOffsetX, offsetY: self.congratsFireOffsetY, scale: self.congratsFireScale, timeScale: self.congratsFireTimeScale, anim: self.congratsFireAnimName };
+			};
+			(window as any).setCongratsFire2 = function(opts: { offsetX?: number; offsetY?: number; scale?: number; timeScale?: number; anim?: string }) {
+				self.setCongratsFire2Options(opts || {});
+				return { offsetX: self.congratsFire2OffsetX, offsetY: self.congratsFire2OffsetY, scale: self.congratsFire2Scale, timeScale: self.congratsFire2TimeScale, anim: self.congratsFire2AnimName };
+			};
+			(window as any).setCongratsFire3 = function(opts: { offsetX?: number; offsetY?: number; scale?: number; timeScale?: number; anim?: string }) {
+				self.setCongratsFire3Options(opts || {});
+				return { offsetX: self.congratsFire3OffsetX, offsetY: self.congratsFire3OffsetY, scale: self.congratsFire3Scale, timeScale: self.congratsFire3TimeScale, anim: self.congratsFire3AnimName };
 			};
 		} catch {}
 		
@@ -672,6 +734,8 @@ export class Dialogs {
 		// Clear any congrats-specific background/character from previous dialog
 		if (this.congratsBgImage) { try { this.congratsBgImage.destroy(); } catch {} this.congratsBgImage = null; }
 		if (this.congratsFireSpine) { try { this.congratsFireSpine.destroy(); } catch {} this.congratsFireSpine = null; }
+		if (this.congratsFire2Spine) { try { this.congratsFire2Spine.destroy(); } catch {} this.congratsFire2Spine = null; }
+		if (this.congratsFire3Spine) { try { this.congratsFire3Spine.destroy(); } catch {} this.congratsFire3Spine = null; }
 		if (this.congratsCharSpine) { try { this.congratsCharSpine.destroy(); } catch {} this.congratsCharSpine = null; }
 		if (this.congratsWinTitleImage) { try { this.congratsWinTitleImage.destroy(); } catch {} this.congratsWinTitleImage = null; }
 		// Reset nested containers references
@@ -2571,6 +2635,36 @@ private updateEmbers(scene: Scene, delta: number): void {
 			try { this.congratsFireSpine.setScale(Math.max(0.05, this.congratsFireScale)); } catch {}
 			try { this.congratsFireSpine.animationState.timeScale = Math.max(0.0001, this.congratsFireTimeScale); } catch {}
 			try { if (opts.anim) this.congratsFireSpine.animationState.setAnimation(0, this.congratsFireAnimName, true); } catch {}
+		}
+	}
+
+	public setCongratsFire2Options(opts: { offsetX?: number; offsetY?: number; scale?: number; timeScale?: number; anim?: string }): void {
+		if (opts.offsetX !== undefined) this.congratsFire2OffsetX = opts.offsetX;
+		if (opts.offsetY !== undefined) this.congratsFire2OffsetY = opts.offsetY;
+		if (opts.scale !== undefined) this.congratsFire2Scale = Math.max(0.05, opts.scale);
+		if (opts.timeScale !== undefined) this.congratsFire2TimeScale = Math.max(0.0001, opts.timeScale);
+		if (opts.anim !== undefined) this.congratsFire2AnimName = opts.anim || 'animation';
+		if (this.currentScene && this.congratsFire2Spine) {
+			try { this.congratsFire2Spine.x = this.currentScene.scale.width * 0.5 + this.congratsFire2OffsetX; } catch {}
+			try { this.congratsFire2Spine.y = this.currentScene.scale.height * 0.5 + this.congratsFire2OffsetY; } catch {}
+			try { this.congratsFire2Spine.setScale(Math.max(0.05, this.congratsFire2Scale)); } catch {}
+			try { this.congratsFire2Spine.animationState.timeScale = Math.max(0.0001, this.congratsFire2TimeScale); } catch {}
+			try { if (opts.anim) this.congratsFire2Spine.animationState.setAnimation(0, this.congratsFire2AnimName, true); } catch {}
+		}
+	}
+
+	public setCongratsFire3Options(opts: { offsetX?: number; offsetY?: number; scale?: number; timeScale?: number; anim?: string }): void {
+		if (opts.offsetX !== undefined) this.congratsFire3OffsetX = opts.offsetX;
+		if (opts.offsetY !== undefined) this.congratsFire3OffsetY = opts.offsetY;
+		if (opts.scale !== undefined) this.congratsFire3Scale = Math.max(0.05, opts.scale);
+		if (opts.timeScale !== undefined) this.congratsFire3TimeScale = Math.max(0.0001, opts.timeScale);
+		if (opts.anim !== undefined) this.congratsFire3AnimName = opts.anim || 'animation';
+		if (this.currentScene && this.congratsFire3Spine) {
+			try { this.congratsFire3Spine.x = this.currentScene.scale.width * 0.5 + this.congratsFire3OffsetX; } catch {}
+			try { this.congratsFire3Spine.y = this.currentScene.scale.height * 0.5 + this.congratsFire3OffsetY; } catch {}
+			try { this.congratsFire3Spine.setScale(Math.max(0.05, this.congratsFire3Scale)); } catch {}
+			try { this.congratsFire3Spine.animationState.timeScale = Math.max(0.0001, this.congratsFire3TimeScale); } catch {}
+			try { if (opts.anim) this.congratsFire3Spine.animationState.setAnimation(0, this.congratsFire3AnimName, true); } catch {}
 		}
 	}
 

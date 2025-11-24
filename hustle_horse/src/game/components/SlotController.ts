@@ -2665,9 +2665,8 @@ setBuyFeatureBetAmount(amount: number): void {
 			
 			// If autoplay is active and win dialog was closed, wait for winlines to complete
 			// Note: autoplaySpinsRemaining was already decremented in WIN_STOP handler
-			if (this.autoplaySpinsRemaining > 0) {
+			if (this.autoplaySpinsRemaining > 0 && !this.hasScheduledNextAutoplayForCurrentSpin && this.lastScheduleSpinId !== this.currentSpinId) {
 				console.log('[SlotController] Scheduling next autoplay spin after closing Win Dialog');
-				
 				const baseDelay = 500;
 					// FIXED: Use GameData.isTurbo instead of gameStateManager.isTurbo for consistency
 					const gameData = this.getGameData();
@@ -2675,7 +2674,9 @@ setBuyFeatureBetAmount(amount: number): void {
 					const turboDelay = isTurbo ? 
 						baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER : baseDelay;
 					console.log(`[SlotController] Autoplay delay: ${baseDelay}ms -> ${turboDelay}ms (turbo: ${isTurbo})`);
-					this.scheduleNextAutoplaySpin(turboDelay);
+				this.hasScheduledNextAutoplayForCurrentSpin = true;
+				this.lastScheduleSpinId = this.currentSpinId;
+				this.scheduleNextAutoplaySpin(turboDelay);
 			} else {
 				// Only show this log if we're not in bonus mode (free spin autoplay)
 				if (!gameStateManager.isBonus) {
@@ -2986,6 +2987,44 @@ setBuyFeatureBetAmount(amount: number): void {
 	 * Perform a single autoplay spin
 	 */
 	private async performAutoplaySpin(): Promise<void> {
+		// Safety gate: only spin when the game is fully idle and safe
+		try {
+			const gsm = gameStateManager;
+			const sceneAny: any = this.scene as any;
+			const scatterMgrBusy = !!(sceneAny?.symbols?.scatterAnimationManager && typeof sceneAny.symbols.scatterAnimationManager.isAnimationInProgress === 'function' && sceneAny.symbols.scatterAnimationManager.isAnimationInProgress());
+			const anticipationActive = !!sceneAny?.__isScatterAnticipationActive;
+			if (
+				!gsm || !gsm.isAutoPlaying ||
+				this.autoplaySpinsRemaining <= 0 ||
+				gsm.isReelSpinning ||
+				gsm.isShowingWinDialog ||
+				gsm.isShowingWinlines ||
+				gsm.isScatter ||
+				scatterMgrBusy ||
+				anticipationActive
+			) {
+				// Re-check soon; don't overlap spins
+				const fallbackDelay = 250;
+				console.log('[SlotController] Autoplay gated - rescheduling performAutoplaySpin in', fallbackDelay, 'ms', {
+					isAutoPlaying: gsm?.isAutoPlaying,
+					spinsRemaining: this.autoplaySpinsRemaining,
+					isReelSpinning: gsm?.isReelSpinning,
+					isShowingWinDialog: gsm?.isShowingWinDialog,
+					isShowingWinlines: gsm?.isShowingWinlines,
+					isScatter: gsm?.isScatter,
+					scatterMgrBusy,
+					anticipationActive
+				});
+				this.scheduleNextAutoplaySpin(fallbackDelay);
+				return;
+			}
+			// Force-hide any leftover anticipation effects before starting a new spin
+			try { sceneAny?.scatterAnticipation?.hide?.(); } catch {}
+			try { sceneAny?.scatterAnticipation2?.hide?.(); } catch {}
+			try { sceneAny?.symbols?.stopReelBgAnticipationFlash?.(); } catch {}
+			try { sceneAny?.symbols?.tweenReelBackgroundToSpinTint?.(0); } catch {}
+			try { sceneAny?.symbols?.restoreSymbolsAboveReelBg?.(); } catch {}
+		} catch {}
 		// Play spin button animations
 		this.playSpinButtonAnimation();
 		this.rotateSpinButton();
@@ -2993,13 +3032,10 @@ setBuyFeatureBetAmount(amount: number): void {
 		// Play autoplay button animation once per spin
 		this.playAutoplayAnimation();
 		
-		// Removed pulsing of autoplay spins remaining text during autoplay
-		
 		// Use the centralized spin handler
 		await this.handleSpin();
 		
 		// Note: autoplaySpinsRemaining is decremented in REELS_STOP handler
-		// This ensures the counter is decremented after the spin is fully processed
 		console.log(`[SlotController] Autoplay spin initiated, spins remaining: ${this.autoplaySpinsRemaining}`);
 	}
 
@@ -4375,6 +4411,13 @@ public updateAutoplayButtonState(): void {
 					this.forceApplyTurboToSceneGameData();
 					this.applyTurboToWinlineAnimations();
 					console.log('[SlotController] Re-enabled controls after scatter completion');
+					// Safety: resume any paused normal autoplay now that bonus/scatter is complete
+					try {
+						if (this.hasPausedAutoplayToResume && this.hasPausedAutoplayToResume()) {
+							console.log('[SlotController] Attempting to resume autoplay after bonus/scatter completion');
+							this.tryResumeAutoplayAfterBonus();
+						}
+					} catch {}
 				} else {
 					console.log('[SlotController] Bonus active after scatter completion - keeping controls hidden');
 				}
