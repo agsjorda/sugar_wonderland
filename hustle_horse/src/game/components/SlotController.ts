@@ -978,7 +978,12 @@ export class SlotController {
 				return;
 			}
 			if (gameStateManager.isReelSpinning) {
-				console.log('[SlotController] Spin blocked - already spinning');
+				if (!gameStateManager.isTurbo) {
+					console.log('[SlotController] Spin pressed during active spin - requesting skip of reel drops');
+					try { (this.symbols as any)?.requestSkipReelDrops?.(); } catch {}
+				} else {
+					console.log('[SlotController] Skip disabled while turbo is ON');
+				}
 				return;
 			}
 			
@@ -1853,7 +1858,12 @@ export class SlotController {
 				return;
 			}
 			if (gameStateManager.isReelSpinning) {
-				console.log('[SlotController] Spin blocked - already spinning');
+				if (!gameStateManager.isTurbo) {
+					console.log('[SlotController] Spin pressed during active spin - requesting skip of reel drops');
+					try { (this.symbols as any)?.requestSkipReelDrops?.(); } catch {}
+				} else {
+					console.log('[SlotController] Skip disabled while turbo is ON');
+				}
 				return;
 			}
 			
@@ -2424,20 +2434,6 @@ setBuyFeatureBetAmount(amount: number): void {
 			// If we're in bonus mode, check if free spins are finishing now
 			if (gameStateManager.isBonus) {
 				try {
-					// Frontend-only: increment balance by the current free spin subtotal win
-					if (this.gameAPI) {
-						const currentSpin = this.gameAPI.getCurrentSpinData();
-						if (currentSpin && currentSpin.slot && Array.isArray(currentSpin.slot.paylines)) {
-							const spinSubtotalWin = SpinDataUtils.getTotalWin(currentSpin);
-							if (spinSubtotalWin && spinSubtotalWin > 0) {
-								const oldBalanceVal = this.getBalanceAmount();
-								const newBalanceVal = oldBalanceVal + spinSubtotalWin;
-								this.updateBalanceAmount(newBalanceVal);
-								console.log(`[SlotController] Bonus mode: incremented balance by subtotalWin ${spinSubtotalWin}. ${oldBalanceVal} -> ${newBalanceVal}`);
-							}
-						}
-					}
-					
 					const gameScene: any = this.scene as any;
 					const symbolsComponent = gameScene?.symbols;
 					// Prefer Symbols' remaining counter if available
@@ -4299,6 +4295,9 @@ public updateAutoplayButtonState(): void {
 				try {
 					gameStateManager.isScatter = false;
 					gameStateManager.isReelSpinning = false;
+					// Also ensure winlines/dialog flags are cleared so autoplay gating won't block
+					gameStateManager.isShowingWinlines = false;
+					gameStateManager.isShowingWinDialog = false;
 				} catch {}
 				// Clear any pending free spins data when bonus mode ends
 				if (this.pendingFreeSpinsData) {
@@ -4411,6 +4410,9 @@ public updateAutoplayButtonState(): void {
 					this.forceApplyTurboToSceneGameData();
 					this.applyTurboToWinlineAnimations();
 					console.log('[SlotController] Re-enabled controls after scatter completion');
+					// Clear any lingering gating flags before resuming
+					try { gameStateManager.isShowingWinlines = false; } catch {}
+					try { gameStateManager.isShowingWinDialog = false; } catch {}
 					// Safety: resume any paused normal autoplay now that bonus/scatter is complete
 					try {
 						if (this.hasPausedAutoplayToResume && this.hasPausedAutoplayToResume()) {
