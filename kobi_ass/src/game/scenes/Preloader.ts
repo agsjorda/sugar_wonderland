@@ -7,8 +7,7 @@ import { AssetLoader } from '../../utils/AssetLoader';
 import { GameAPI } from '../../backend/GameAPI';
 import { GameData } from '../components/GameData';
 import { FullScreenManager } from '../../managers/FullScreenManager';
-import { ensureSpineLoader } from '../../utils/SpineGuard';
-import { StudioLoadingScreen } from '../components/StudioLoadingScreen';
+import { StudioLoadingScreen, queueGameAssetLoading } from '../components/StudioLoadingScreen';
 import { ClockDisplay } from '../components/ClockDisplay';
 import { SoundEffectType } from '../../managers/AudioManager';
 
@@ -65,26 +64,31 @@ export class Preloader extends Scene
 		// Background color for studio loading (#10161D)
 		this.cameras.main.setBackgroundColor(0x10161D);
 
-		// Always show background since we're forcing portrait mode
-		const background = this.add.image(
-			this.scale.width * 0.5, 
-			this.scale.height * 0.5, 
+		// Layered loading backgrounds (default first, then loading overlay), both scaled to cover
+		const bgDefault = this.add.image(
+			this.scale.width * 0.5,
+			this.scale.height * 0.5,
+			"loading_background_default"
+		).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(-2);
+
+		const defScaleX = this.scale.width / bgDefault.width;
+		const defScaleY = this.scale.height / bgDefault.height;
+		const defScale = Math.max(defScaleX, defScaleY);
+		bgDefault.setScale(defScale);
+
+		const bgLoading = this.add.image(
+			this.scale.width * 0.5,
+			this.scale.height * 0.5,
 			"loading_background"
-		).setOrigin(0.5, 0.5).setScrollFactor(0);
-		
-		// Calculate scale to cover the entire screen
-		const scaleX = this.scale.width / background.width;
-		const scaleY = this.scale.height / background.height;
-		const scale = Math.max(scaleX, scaleY);
-		
-		background.setScale(scale);
-		
-		console.log(`[Preloader] Background original size: ${background.width}x${background.height}`);
-		console.log(`[Preloader] Canvas size: ${this.scale.width}x${this.scale.height}`);
-		console.log(`[Preloader] Calculated scale: ${scale} (scaleX: ${scaleX}, scaleY: ${scaleY})`);
-		console.log(`[Preloader] Background dimensions: ${background.width}x${background.height}, canvas: ${this.scale.width}x${this.scale.height}`);
-		console.log(`[Preloader] Background display size: ${this.scale.width}x${this.scale.height}`);
-		console.log(`[Preloader] Background position: (${this.scale.width * 0.5}, ${this.scale.height * 0.5})`);
+		).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(-1);
+
+		const loadScaleX = this.scale.width / bgLoading.width;
+		const loadScaleY = this.scale.height / bgLoading.height;
+		const loadScale = Math.max(loadScaleX, loadScaleY);
+		bgLoading.setScale(loadScale);
+
+		console.log(`[Preloader] BG-default size: ${bgDefault.width}x${bgDefault.height} scale=${defScale}`);
+		console.log(`[Preloader] BG-loading size: ${bgLoading.width}x${bgLoading.height} scale=${loadScale}`);
 
 		// Create persistent clock display (stays visible during studio loading and preloader)
 		const clockY = this.scale.height * 0.009; // Slightly below top edge
@@ -106,7 +110,7 @@ export class Preloader extends Scene
 		});
 		this.clockDisplay.create();
 
-		// Add loading frame, tagline, and website URL on top of background (mirroring Hustle Horse)
+		// Add loading frame, tagline, and website URL on top of background
 		const loadingFrameY = 335 + this.preloaderVerticalOffsetModifier;
 		const loadingFrame = this.add.image(
 			this.scale.width * 0.5,
@@ -218,36 +222,10 @@ export class Preloader extends Scene
 		}
 
 		if (screenConfig.isPortrait) {
-		// Display studio loading screen with mirrored Hustle Horse text and offsets
-		const studio = new StudioLoadingScreen(this, {
-			loadingFrameOffsetX: 0,
-			loadingFrameOffsetY: 335,
-			loadingFrameScaleModifier: 0.04,
-			text: 'PLAY LOUD. WIN WILD. DIJOKER STYLE',
-			textOffsetX: -5,
-			textOffsetY: 365,
-			textScale: 1,
-			textColor: '#FFFFFF',
-			text2: 'www.dijoker.com',
-			text2OffsetX: 0,
-			text2OffsetY: 370,
-			text2Scale: 1,
-			text2Color: '#FFFFFF'
-		});
-		studio.show();
-		// Schedule fade-out after minimum 3s, then reveal preloader UI if needed
-		studio.fadeOutAndDestroy(3000, 500);
-
-		// Delay revealing Preloader's own progress UI until studio fade completes
-		this.events.once('studio-fade-complete', () => {
-			// Optionally, we could reveal or update UI elements here if they were hidden
-			// For now, no-op; Preloader already shows its own progress bar
-		});
-
-			// Match Hustle Horse button vertical offset
+			// Match button vertical offset
 			const buttonY = this.scale.height * 0.77;
 			
-			// Scale buttons based on quality (low quality assets need 2x scaling)
+			// Scale buttons based on quality
 			this.buttonBg = this.add.image(
 				this.scale.width * 0.5, 
 				buttonY, 
@@ -276,7 +254,7 @@ export class Preloader extends Scene
 			
 			console.log(`[Preloader] Added kobi_logo_loading at scale: ${assetScale}x`);
 
-			// Breathing animation for the logo (mirroring Hustle Horse behavior)
+			// Breathing animation for the logo
 			this.tweens.add({
 				targets: kobi_logo,
 				scale: { from: assetScale * 0.95, to: assetScale * 1.15 },
@@ -299,43 +277,17 @@ export class Preloader extends Scene
 
 		}
 
-		// Set up progress event listener (only forward to React overlay, no in-scene bar)
-		this.load.on('progress', (progress: number) => {
-			EventBus.emit('progress', progress);
-		});
+		// Ensure HTML boot-loader overlay is gone
+		try { (window as any).hideBootLoader?.(); } catch {}
 		
 		EventBus.emit('current-scene-ready', this);	
 	}
 
 	preload ()
 	{
-		// Prefer more parallel requests on modern networks
-		this.load.maxParallelDownloads = Math.max(this.load.maxParallelDownloads, 8);
-		// Show debug info
+		// No heavy loading here; assets are loaded during Boot's studio loading
 		this.assetConfig.getDebugInfo();
-
-		
-		// Load background and header assets (will be used in Game scene)
-		this.assetLoader.loadBackgroundAssets(this);
-		this.assetLoader.loadHeaderAssets(this);
-		this.assetLoader.loadBonusHeaderAssets(this);
-		this.assetLoader.loadSymbolAssets(this);
-		this.assetLoader.loadButtonAssets(this);
-		this.assetLoader.loadFontAssets(this);
-		this.assetLoader.loadSpinnerAssets(this);
-		this.assetLoader.loadDialogAssets(this);
-		// Load Scatter Anticipation spine (portrait/high only asset paths)
-		this.assetLoader.loadScatterAnticipationAssets(this);
-		this.assetLoader.loadBonusBackgroundAssets(this);
-		this.assetLoader.loadNumberAssets(this);
-		this.assetLoader.loadCoinAssets(this);
-		this.assetLoader.loadBuyFeatureAssets(this);
-		this.assetLoader.loadMenuAssets(this);
-		this.assetLoader.loadHelpScreenAssets(this);
-		// Minimal SFX for preloader button click
-		try { this.load.audio('click_sw', 'assets/sounds/click_sw.ogg'); } catch {}
-		
-		console.log(`[Preloader] Loading assets for Preloader and Game scenes`);
+		console.log(`[Preloader] Assets already loaded during Boot studio loading`);
 	}
 
     async create ()

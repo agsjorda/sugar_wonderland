@@ -26,16 +26,17 @@ export class WinTracker {
   private container!: Phaser.GameObjects.Container;
   private scene!: Scene;
   private lastSpinData: SpinData | null = null;
+  private lastSummary: Map<number, SymbolSummary> | null = null;
 
   private baseX: number = 0;
   private baseY: number = 0;
   private offsetX: number = 0;
   private offsetY: number = -70;
   private itemSpacing: number = 100;
-  private iconScale: number = 0.5;
+  private iconScale: number = 0.2;
   private innerGap: number = 15;
   private horizontalGap: number = 20;
-  private multiplierIconScale: number = 2.5;
+  private multiplierIconScale: number = 1.8;
   private multiplierIconGap: number = 0.8;
   private countIconGap: number = 4;
   private paragraphGap: number = 30;
@@ -74,6 +75,7 @@ export class WinTracker {
     this.container.setVisible(false);
     this.container.setAlpha(1);
     this.lastSpinData = null;
+    this.lastSummary = null;
   }
 
   updateFromSpinData(spinData: SpinData | null): void {
@@ -131,6 +133,7 @@ export class WinTracker {
   }
 
   private renderFromSummary(summary: Map<number, SymbolSummary> | null): void {
+    this.lastSummary = summary;
     this.container.removeAll(true);
     if (!summary) {
       this.container.setVisible(false);
@@ -204,13 +207,13 @@ export class WinTracker {
         fontSize: `${this.labelFontSize}px`,
         color: '#ffffff',
         fontFamily: this.labelFontFamily,
-        stroke: '#000000',
+        stroke: '#350400',
         strokeThickness: 4,
-        align: 'center'
+        align: 'outside'
       }
     );
     countLabel.setOrigin(0.5, 0.5);
-    countLabel.setShadow(3, 3, '#000000', 4, true, true);
+    countLabel.setShadow(1, .5, '#FFFE48', 1, true, true);
 
     const baseValueLabel = this.scene.add.text(
       0,
@@ -220,13 +223,13 @@ export class WinTracker {
         fontSize: `${this.labelFontSize}px`,
         color: '#ffffff',
         fontFamily: this.labelFontFamily,
-        stroke: '#000000',
+        stroke: '#350400',
         strokeThickness: 4,
-        align: 'center'
+        align: 'outside'
       }
     );
     baseValueLabel.setOrigin(0.5, 0.5);
-    baseValueLabel.setShadow(3, 3, '#000000', 4, true, true);
+    baseValueLabel.setShadow(1, .5, '#FFFE48', 1, true, true);
 
     const mulXLabel = this.scene.add.text(
       0,
@@ -236,13 +239,13 @@ export class WinTracker {
         fontSize: `${this.labelFontSize}px`,
         color: '#ffffff',
         fontFamily: this.labelFontFamily,
-        stroke: '#000000',
+        stroke: '#350400',
         strokeThickness: 4,
-        align: 'center'
+        align: 'outside'
       }
     );
     mulXLabel.setOrigin(0.5, 0.5);
-    mulXLabel.setShadow(3, 3, '#000000', 4, true, true);
+    mulXLabel.setShadow(1, .5, '#FFFE48', 1, true, true);
 
     const addedMul = Math.max(1, Math.floor(data.multiplierCount || 0));
     const mulCountLabel = this.scene.add.text(
@@ -253,13 +256,13 @@ export class WinTracker {
         fontSize: `${this.labelFontSize}px`,
         color: '#ffffff',
         fontFamily: this.labelFontFamily,
-        stroke: '#000000',
+        stroke: '#350400',
         strokeThickness: 4,
-        align: 'center'
+        align: 'outside'
       }
     );
     mulCountLabel.setOrigin(0.5, 0.5);
-    mulCountLabel.setShadow(3, 3, '#000000', 4, true, true);
+    mulCountLabel.setShadow(1, .5, '#FFFE48', 1, true, true);
 
     const eqLabel = this.scene.add.text(
       0,
@@ -269,13 +272,13 @@ export class WinTracker {
         fontSize: `${this.labelFontSize}px`,
         color: '#ffffff',
         fontFamily: this.labelFontFamily,
-        stroke: '#000000',
+        stroke: '#350400',
         strokeThickness: 4,
-        align: 'center'
+        align: 'outside'
       }
     );
     eqLabel.setOrigin(0.5, 0.5);
-    eqLabel.setShadow(3, 3, '#000000', 4, true, true);
+    eqLabel.setShadow(1, .5, '#FFFE48', 1, true, true);
 
     const valueLabel = this.scene.add.text(
       0,
@@ -285,13 +288,13 @@ export class WinTracker {
         fontSize: `${this.labelFontSize}px`,
         color: '#ffffff',
         fontFamily: this.labelFontFamily,
-        stroke: '#000000',
+        stroke: '#350400',
         strokeThickness: 4,
-        align: 'center'
+        align: 'outside'
       }
     );
     valueLabel.setOrigin(0.5, 0.5);
-    valueLabel.setShadow(3, 3, '#000000', 4, true, true);
+    valueLabel.setShadow(1, .5, '#FFFE48', 1, true, true);
 
     const baseGap = this.innerGap;
     const gap = Math.max(6, Math.floor(baseGap * 0.6));
@@ -474,6 +477,12 @@ export class WinTracker {
         this.baseX + this.offsetX,
         this.baseY + this.offsetY
       );
+      // Re-render with the latest layout so scale/spacing changes apply immediately
+      if (this.lastSummary) {
+        this.renderFromSummary(this.lastSummary);
+      } else if (this.lastSpinData) {
+        this.renderFromSpinData(this.lastSpinData);
+      }
     }
   }
 

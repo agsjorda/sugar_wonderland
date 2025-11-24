@@ -90,6 +90,16 @@ export class SlotController {
 	// Simple autoplay system
 	private autoplaySpinsRemaining: number = 0;
 	private autoplayTimer: Phaser.Time.TimerEvent | null = null;
+	// Backup normal autoplay spins to resume after bonus ends
+	private autoplaySpinsBackupBeforeBonus: number = 0;
+	private resumeAutoplayAfterBonusPending: boolean = false;
+	
+	// Bet UI elements references for enable/disable
+	private betBg: Phaser.GameObjects.Graphics | null = null;
+	private betAreaX: number = 0;
+	private betAreaY: number = 0;
+	private betAreaWidth: number = 0;
+	private betAreaHeight: number = 0;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -466,6 +476,41 @@ export class SlotController {
 			increaseBetButton.setAlpha(1.0); // Restore full opacity
 			increaseBetButton.setInteractive(); // Re-enable clicking
 			console.log('[SlotController] Increase bet button enabled');
+		}
+	}
+	
+	/**
+	 * Disable the entire bet UI (buttons and background tap area)
+	 */
+	public disableBetUI(): void {
+		this.disableBetButtons();
+		if (this.betBg) {
+			this.betBg.setAlpha(0.3);
+			try { this.betBg.disableInteractive(); } catch {}
+			console.log('[SlotController] Bet background disabled');
+		}
+	}
+
+	/**
+	 * Enable the entire bet UI (only when back to base mode)
+	 */
+	public enableBetUI(): void {
+		// Do not enable while scatter animation or bonus is active
+		if (gameStateManager.isBonus || gameStateManager.isScatter || gameStateManager.isWheelSpinning) {
+			console.log('[SlotController] Skipping bet UI enable (scatter/bonus/wheel active)');
+			return;
+		}
+		this.enableBetButtons();
+		if (this.betBg) {
+			this.betBg.setAlpha(1.0);
+			try {
+				// Restore rectangular hit area
+				this.betBg.setInteractive(
+					new Phaser.Geom.Rectangle(this.betAreaX, this.betAreaY, this.betAreaWidth, this.betAreaHeight),
+					Phaser.Geom.Rectangle.Contains
+				);
+				console.log('[SlotController] Bet background enabled');
+			} catch {}
 		}
 	}
 
@@ -1071,14 +1116,20 @@ export class SlotController {
 		);
 		betBg.setDepth(8);
 		this.controllerContainer.add(betBg);
+		// Store reference and hit area dims for re-enabling
+		this.betBg = betBg;
+		this.betAreaX = betX - containerWidth / 2;
+		this.betAreaY = betY - containerHeight / 2;
+		this.betAreaWidth = containerWidth;
+		this.betAreaHeight = containerHeight;
 
 		// Open Bet Options when the bet background is clicked
 		betBg.setInteractive(
 			new Phaser.Geom.Rectangle(
-				betX - containerWidth / 2,
-				betY - containerHeight / 2,
-				containerWidth,
-				containerHeight
+				this.betAreaX,
+				this.betAreaY,
+				this.betAreaWidth,
+				this.betAreaHeight
 			),
 			Phaser.Geom.Rectangle.Contains
 		);
@@ -2262,6 +2313,42 @@ export class SlotController {
 	}
 
 	/**
+	 * Pause normal autoplay because bonus is starting.
+	 * Saves remaining spins to resume after bonus finishes, then stops current autoplay UI/state.
+	 */
+	public pauseAutoplayForBonus(): void {
+		// Only capture once per bonus session
+		if (!this.resumeAutoplayAfterBonusPending) {
+			this.autoplaySpinsBackupBeforeBonus = Math.max(0, this.autoplaySpinsRemaining);
+			this.resumeAutoplayAfterBonusPending = this.autoplaySpinsBackupBeforeBonus > 0;
+			console.log(`[SlotController] Pausing autoplay for bonus. Saved spins: ${this.autoplaySpinsBackupBeforeBonus}, will resume: ${this.resumeAutoplayAfterBonusPending}`);
+		} else {
+			console.log('[SlotController] Autoplay already marked to resume after bonus - skipping re-capture');
+		}
+		// Stop current normal autoplay visuals/state
+		this.stopAutoplay();
+	}
+
+	/**
+	 * Resume normal autoplay if it was paused for bonus and spins remain.
+	 */
+	private resumeAutoplayIfPending(): void {
+		if (this.resumeAutoplayAfterBonusPending && this.autoplaySpinsBackupBeforeBonus > 0) {
+			const spinsToResume = this.autoplaySpinsBackupBeforeBonus;
+			// Clear resume flags before starting to avoid re-entry issues
+			this.autoplaySpinsBackupBeforeBonus = 0;
+			this.resumeAutoplayAfterBonusPending = false;
+			console.log(`[SlotController] Resuming autoplay after bonus with ${spinsToResume} spins`);
+			this.startAutoplay(spinsToResume);
+		} else {
+			// Clear any stale flags
+			this.autoplaySpinsBackupBeforeBonus = 0;
+			this.resumeAutoplayAfterBonusPending = false;
+			console.log('[SlotController] No pending autoplay to resume after bonus');
+		}
+	}
+
+	/**
 	 * Perform a single autoplay spin
 	 */
 	private async performAutoplaySpin(): Promise<void> {
@@ -3416,6 +3503,8 @@ public updateAutoplayButtonState(): void {
 				// Always keep the buy feature disabled during bonus mode
 				this.canEnableFeatureButton = false;
 				this.disableFeatureButton();
+				// Disable bet UI during bonus mode
+				this.disableBetUI();
 			} else {
 				console.log('[SlotController] Bonus mode deactivated - showing primary controller');
 				this.showPrimaryController();
@@ -3428,6 +3517,16 @@ public updateAutoplayButtonState(): void {
 				this.canEnableFeatureButton = true;
 				// Re-enable buy feature only after bonus is fully deactivated
 				this.enableFeatureButton();
+				// Re-enable bet UI when back to base
+				this.enableBetUI();
+
+				// Attempt to resume normal autoplay if it was paused for bonus
+				// Delay slightly to allow UI/state resets to complete
+				if (this.scene && this.scene.time) {
+					this.scene.time.delayedCall(200, () => this.resumeAutoplayIfPending());
+				} else {
+					this.resumeAutoplayIfPending();
+				}
 			}
 		});
 
@@ -3438,19 +3537,29 @@ public updateAutoplayButtonState(): void {
 			
 			// Stop normal autoplay when scatter is hit
 			if (this.autoplaySpinsRemaining > 0) {
-				console.log(`[SlotController] Scatter hit during autoplay - stopping normal autoplay (${this.autoplaySpinsRemaining} spins remaining)`);
-				this.stopAutoplay();
+				console.log(`[SlotController] Scatter hit during autoplay - pausing normal autoplay (${this.autoplaySpinsRemaining} spins remaining)`);
+				this.pauseAutoplayForBonus();
 			}
 			
 			// Keep controls disabled/greyed out while scatter/bonus sequence proceeds
 			this.disableSpinButton();
 			this.disableAutoplayButton();
 			this.disableAmplifyButton();
+			this.disableBetUI();
 			
 			console.log(`[SlotController] Scatter bonus activated with index ${data.scatterIndex} and ${data.actualFreeSpins} free spins - hiding primary controller, free spin display will appear after dialog closes`);
 			this.hidePrimaryControllerWithScatter(data.scatterIndex);
 			// Store the free spins data for later display after dialog closes
 			this.pendingFreeSpinsData = data;
+		});
+
+		// When scatter animation fully completes (and if not in bonus), re-enable bet UI
+		this.scene.events.on('scatterBonusCompleted', () => {
+			console.log('[SlotController] scatterBonusCompleted received');
+			if (!gameStateManager.isBonus) {
+				this.enableBetUI();
+				this.showPrimaryController();
+			}
 		});
 
 		// Listen for dialog animations completion to show free spin display
@@ -3578,8 +3687,32 @@ public updateAutoplayButtonState(): void {
 			return;
 		}
 
-		// No more polling - we'll manage button state purely through events
-		console.log('[SlotController] Spin state listener setup complete - no polling');
+		// Manage bet UI via global events instead of polling
+		console.log('[SlotController] Spin state listener setup - subscribing to REELS/AUTO/WIN events');
+
+		// Disable bet UI when reels start spinning; enable when they stop (if allowed)
+		gameEventManager.on(GameEventType.REELS_START, () => {
+			this.disableBetUI();
+		});
+		gameEventManager.on(GameEventType.REELS_STOP, () => {
+			this.enableBetUI();
+		});
+
+		// Also react to autoplay start/stop
+		gameEventManager.on(GameEventType.AUTO_START, () => {
+			this.disableBetUI();
+		});
+		gameEventManager.on(GameEventType.AUTO_STOP, () => {
+			this.enableBetUI();
+		});
+
+		// Disable during winline animations; re-enable when done (guarded by enableBetUI checks)
+		gameEventManager.on(GameEventType.WIN_START, () => {
+			this.disableBetUI();
+		});
+		gameEventManager.on(GameEventType.WIN_STOP, () => {
+			this.enableBetUI();
+		});
 	}
 
 	/**

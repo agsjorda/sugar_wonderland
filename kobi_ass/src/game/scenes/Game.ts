@@ -209,18 +209,16 @@ export class Game extends Scene
 		}
 		// Create win tracker bar below the reels in the base scene
 		this.winTracker.create(this);
-		// Apply an initial scale modifier for the symbol icon (smaller by default)
-		try {
-			const uiScale = this.networkManager.getAssetScale?.() ?? 1;
-			// Clamp between 0.12 and 0.5; default smaller to avoid huge icons
-			const iconScale = Math.max(0.12, Math.min(0.5, 0.22 * uiScale));
-			this.winTracker.setLayout({ iconScale });
-		} catch {}
 		try { (this as any).winTracker = this.winTracker; } catch {}
 		// Console helper to adjust scale at runtime: setWinTrackerScale(0.2)
 		try {
 			(window as any).setWinTrackerScale = (scale: number) => {
 				this.winTracker.setLayout({ iconScale: scale });
+				return scale;
+			};
+			// Console helper to adjust modifier icon scale: setWinTrackerModifierScale(2)
+			(window as any).setWinTrackerModifierScale = (scale: number) => {
+				this.winTracker.setLayout({ multiplierIconScale: scale });
 				return scale;
 			};
 		} catch {}
@@ -381,6 +379,14 @@ export class Game extends Scene
 
 		EventBus.on('show-bet-options', () => {
 			console.log('[Game] Showing bet options with fade-in effect');
+			
+			// Block bet options during scatter animation or bonus mode
+			if (this.gameStateManager.isScatter || this.gameStateManager.isBonus ||
+				this.gameStateManager.isReelSpinning || this.gameStateManager.isAutoPlaying ||
+				this.gameStateManager.isShowingWinlines || this.gameStateManager.isWheelSpinning) {
+				console.log('[Game] Bet options blocked (busy state active)');
+				return;
+			}
 			
 			// Get the current bet from the slot controller display
 			const currentBetText = this.slotController.getBetAmountText();
@@ -909,6 +915,13 @@ export class Game extends Scene
 			
 			// Disable winningsDisplay when bonus mode starts
 			if (isBonus) {
+				// Ensure bet options panel is closed during bonus
+				try {
+					if (this.betOptions && this.betOptions.isVisible()) {
+						this.betOptions.hide();
+						console.log('[Game] Closed BetOptions panel on bonus start');
+					}
+				} catch {}
 				// Reset bonus-finished flag at the start of bonus mode
 				//this.gameStateManager.isBonusFinished = false;
 				console.log('[Game] Bonus mode started - disabling winningsDisplay');

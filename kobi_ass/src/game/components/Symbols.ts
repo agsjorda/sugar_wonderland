@@ -2457,9 +2457,13 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
       console.log('[Symbols] Scatter detected during autoplay - stopping normal autoplay immediately');
       // Access SlotController to stop autoplay
       const slotController = (self.scene as any).slotController;
-      if (slotController && typeof slotController.stopAutoplay === 'function') {
+      if (slotController && typeof slotController.pauseAutoplayForBonus === 'function') {
+        slotController.pauseAutoplayForBonus();
+        console.log('[Symbols] Normal autoplay paused for bonus (will resume after bonus)');
+      } else if (slotController && typeof slotController.stopAutoplay === 'function') {
+        // Fallback for safety
         slotController.stopAutoplay();
-        console.log('[Symbols] Normal autoplay stopped due to scatter detection');
+        console.log('[Symbols] Normal autoplay stopped due to scatter detection (no pause method)');
       } else {
         console.warn('[Symbols] SlotController not available to stop autoplay');
       }

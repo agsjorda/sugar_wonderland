@@ -134,6 +134,8 @@ export class AssetConfig {
 		
 		return {
 			images: {
+				// Default background shown instantly (orientation-agnostic fallback)
+				'loading_background_default': `assets/index/BG-Default.png`,
 				'loading_background': `${prefix}/loading/image.png`,
 				'button_bg': `${prefix}/loading/button_bg.png`,
 				'button_spin': `${prefix}/loading/button_spin.png`,
@@ -453,8 +455,8 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				'buy_feature_logo': `${prefix}/buy_feature/buy_feature_logo.png`,
-				'buy_feature_bg': `${prefix}/buy_feature/buy_feature_bg.png`
+				// Background PNG used behind the scatter spine logo
+				'scatter_logo_background': `assets/portrait/high/buy_feature/scatter_logo_background.png`,
 			}
 		};
 	}

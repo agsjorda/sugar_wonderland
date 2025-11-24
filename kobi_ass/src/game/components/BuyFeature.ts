@@ -39,9 +39,14 @@ export class BuyFeature {
 	private readonly CONTINUOUS_INTERVAL: number = 200; // 150ms interval for continuous press
 	private priceDisplay: Phaser.GameObjects.Text;
 	private featureLogo: Phaser.GameObjects.Image;
+	private featureLogoBackground?: Phaser.GameObjects.Image;
+	private featureLogoSpine?: any;
+	private featureLogoScale: number = 0.3;
+	private featureLogoBackgroundScale: number = 0.89;
 	private backgroundImage: Phaser.GameObjects.Image;
 	private onCloseCallback?: () => void;
 	private onConfirmCallback?: () => void;
+	private sceneRef?: Scene;
 
 	constructor() {
 		// Constructor for BuyFeature component
@@ -104,6 +109,7 @@ export class BuyFeature {
 
 	create(scene: Scene): void {
 		console.log("[BuyFeature] Creating buy feature component");
+		this.sceneRef = scene;
 		
 		// Create main container
 		this.container = scene.add.container(0, 0);
@@ -151,26 +157,58 @@ export class BuyFeature {
 		
 		this.container.add(this.background);
 		
-		// Create background image to fill the background area
-		const backgroundTop = screenHeight - 736;
-		this.backgroundImage = scene.add.image(screenWidth / 2, backgroundTop + 368, 'buy_feature_bg');
-		
-		// Scale the image to fill the background area (736px height)
-		const scaleY = 736 / this.backgroundImage.height;
-		const scaleX = screenWidth / this.backgroundImage.width;
-		const scale = Math.max(scaleX, scaleY); // Use the larger scale to ensure full coverage
-		this.backgroundImage.setScale(scale);
-		
-		this.container.add(this.backgroundImage);
+
 	}
 
 	private createFeatureLogo(scene: Scene): void {
 		const screenWidth = scene.cameras.main.width;
 		const screenHeight = scene.cameras.main.height;
 		const backgroundTop = screenHeight - 736;
-		
-		this.featureLogo = scene.add.image(screenWidth / 2, backgroundTop + 210, 'buy_feature_logo');
-		this.featureLogo.setScale(0.9); // Default scale
+		const centerX = screenWidth / 2;
+		const centerY = backgroundTop + 210;
+
+		// Background PNG behind the scatter logo/spine
+		if ((scene.textures as any)?.exists?.('scatter_logo_background')) {
+			this.featureLogoBackground = scene.add.image(centerX, centerY, 'scatter_logo_background');
+			this.featureLogoBackground.setScale(this.featureLogoBackgroundScale);
+			this.featureLogoBackground.setDepth(101);
+			this.container.add(this.featureLogoBackground);
+		}
+
+		// Try creating the scatter symbol as a Spine animation (Symbol 0)
+		try {
+			const spineKey = 'symbol_0_spine';
+			const atlasKey = `${spineKey}-atlas`;
+			// Ensure spine data is present before attempting to add
+			const hasSpineJson = (scene.cache.json as any)?.has?.(spineKey);
+			if (hasSpineJson) {
+				const s: any = (scene.add as any).spine(centerX, centerY, spineKey, atlasKey);
+				s.setOrigin(0.5, 0.5);
+				this.container.add(s);
+				try { s.setDepth(120); this.container.bringToTop(s); } catch {}
+				this.featureLogoSpine = s;
+
+				// Choose a sensible animation: prefer *_win, then *_hit, otherwise first available
+				let chosen: string | null = null;
+				try {
+					const json: any = (scene.cache.json as any).get(spineKey);
+					const animNames: string[] = json?.animations ? Object.keys(json.animations) : [];
+					for (const name of animNames) { if (/_win$/.test(name) || name.includes('_win')) { chosen = name; break; } }
+					if (!chosen) { for (const name of animNames) { if (/_hit$/.test(name) || name.includes('_hit')) { chosen = name; break; } } }
+					if (!chosen && animNames.length > 0) { chosen = animNames[0]; }
+				} catch {}
+
+				try { s.skeleton.setToSetupPose(); s.update(0); } catch {}
+				s.setScale(this.featureLogoScale);
+				if (chosen) {
+					try { s.animationState.setAnimation(0, chosen, true); } catch {}
+				}
+				return; // Spine created successfully; keep PNG background behind it
+			}
+		} catch {}
+
+		// Fallback: PNG logo if Spine is unavailable
+		this.featureLogo.setScale(0.9);
 		this.container.add(this.featureLogo);
 	}
 

@@ -296,7 +296,7 @@ export class StudioLoadingScreen {
                 }
             }
 
-            // Progress bar (similar to Preloader) – positioned just below the spine
+            // Progress bar (similar to reference) – positioned just below the spine
             const assetScale = 1;
             const barWidth = this.scene.scale.width * 0.5;
             const barHeight = Math.max(13, 13 * assetScale);
@@ -333,30 +333,33 @@ export class StudioLoadingScreen {
             this.progressBarFill.fillRoundedRect(innerX, innerY, 0, innerHeight, innerHeight * 0.5);
             this.container.add(this.progressBarFill);
 
-            const counter = { p: 0 } as any;
-            this.scene.tweens.add({
-                targets: counter,
-                p: 1,
-                duration: 3000,
-                ease: 'Linear',
-                onUpdate: () => {
-                    if (this.progressBarFill && this.progressBarX !== undefined && this.progressBarY !== undefined && this.progressBarWidth !== undefined && this.progressBarHeight !== undefined) {
-                        const fillX = this.progressBarX - this.progressBarWidth * 0.5 + this.progressBarPadding;
-                        const fillY = this.progressBarY - this.progressBarHeight * 0.5 + this.progressBarPadding;
-                        const fillWidth = this.progressBarWidth - this.progressBarPadding * 2;
-                        const fillHeight = this.progressBarHeight - this.progressBarPadding * 2;
-                        const progress = Math.max(0, Math.min(1, counter.p));
-                        this.progressBarFill.clear();
-                        this.progressBarFill.fillStyle(0x37DB6E, 1);
-                        this.progressBarFill.fillRoundedRect(
-                            fillX,
-                            fillY,
-                            Math.max(0.0001, fillWidth * progress),
-                            fillHeight,
-                            fillHeight * 0.5
-                        );
-                    }
+            const updateFill = (progress: number) => {
+                if (!this.progressBarFill || this.progressBarX === undefined || this.progressBarY === undefined || this.progressBarWidth === undefined || this.progressBarHeight === undefined) {
+                    return;
                 }
+                const fillX = this.progressBarX - this.progressBarWidth * 0.5 + this.progressBarPadding;
+                const fillY = this.progressBarY - this.progressBarHeight * 0.5 + this.progressBarPadding;
+                const fillWidth = this.progressBarWidth - this.progressBarPadding * 2;
+                const fillHeight = this.progressBarHeight - this.progressBarPadding * 2;
+                const p = Math.max(0, Math.min(1, progress));
+                this.progressBarFill.clear();
+                this.progressBarFill.fillStyle(0x37DB6E, 1);
+                this.progressBarFill.fillRoundedRect(
+                    fillX,
+                    fillY,
+                    Math.max(0.0001, fillWidth * p),
+                    fillHeight,
+                    fillHeight * 0.5
+                );
+            };
+
+            updateFill(0);
+
+            this.onProgressHandler = (p: number) => updateFill(p);
+            this.scene.load.on('progress', this.onProgressHandler as any);
+
+            this.scene.load.once('complete', () => {
+                this.fadeOutAndDestroy(3000, 500);
             });
         } catch (e) {
             console.warn('[StudioLoadingScreen] Failed to display spine:', e);
@@ -442,5 +445,27 @@ export class StudioLoadingScreen {
         
         console.log(`[StudioLoadingScreen] Dot grid created: ${cols}x${rows} dots, spacing: ${dotSpacing}px, radius: ${dotRadius}px`);
     }
+}
+
+// Centralized asset queue helpers (mirrors reference game's pattern)
+// These allow the Preloader to enqueue all required assets consistently.
+export function queueGameAssetLoading(scene: Phaser.Scene, assetLoader: import('../../utils/AssetLoader').AssetLoader): void {
+	// Order chosen to prioritize frequently-visible assets
+	assetLoader.loadCoinAssets(scene);
+	assetLoader.loadBuyFeatureAssets(scene);
+	assetLoader.loadBackgroundAssets(scene);
+	assetLoader.loadBonusBackgroundAssets(scene);
+	assetLoader.loadBonusHeaderAssets(scene);
+	assetLoader.loadScatterAnticipationAssets(scene);
+	assetLoader.loadButtonAssets(scene);
+	assetLoader.loadHeaderAssets(scene);
+	assetLoader.loadMenuAssets(scene);
+	assetLoader.loadHelpScreenAssets(scene);
+	assetLoader.loadSymbolAssets(scene);
+	assetLoader.loadNumberAssets(scene);
+	assetLoader.loadDialogAssets(scene);
+	assetLoader.loadAudioAssets(scene);
+	assetLoader.loadSpinnerAssets(scene);
+	console.log('[StudioLoadingScreen] Queued game asset loading (optimized)');
 }
 
