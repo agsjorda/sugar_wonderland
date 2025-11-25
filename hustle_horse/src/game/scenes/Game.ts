@@ -554,23 +554,30 @@ export class Game extends Scene {
 		EventBus.on('show-bet-options', () => {
 			console.log('[Game] Showing bet options with fade-in effect');
 			
-			// Get the current bet from the slot controller display
+			// Get both the displayed bet (may include Amplify) and the base bet (used for API/stepper)
 			const currentBetText = this.slotController.getBetAmountText();
-			const currentBet = currentBetText ? parseFloat(currentBetText) : 0.20;
+			const displayedBet = currentBetText ? parseFloat(currentBetText) : 0.20;
+			const baseBet = this.slotController.getBaseBetAmount();
+			const normalizedBaseBet = !isNaN(baseBet) && baseBet > 0 ? baseBet : displayedBet;
 			
 			this.betOptions.show({
-				currentBet: currentBet,
+				currentBet: normalizedBaseBet,
 				onClose: () => {
 					console.log('[Game] Bet options closed');
 				},
 				onConfirm: (betAmount: number) => {
+					if (Math.abs(betAmount - normalizedBaseBet) <= 0.0001) {
+						console.log('[Game] Bet unchanged in options; skipping update');
+						return;
+					}
+					
 					console.log(`[Game] Bet confirmed: £${betAmount}`);
 					// Update the bet display in the slot controller
 					this.slotController.updateBetAmount(betAmount);
 					// Update the bet amount in the backend
 					gameEventManager.emit(GameEventType.BET_UPDATE, {
 						newBet: betAmount,
-						previousBet: currentBet
+						previousBet: normalizedBaseBet
 					});
 				}
 			});
@@ -581,7 +588,9 @@ export class Game extends Scene {
 			console.log('[Game] Autoplay button clicked - showing options');
 			
 			const currentBetText = this.slotController.getBetAmountText();
-			const currentBet = currentBetText ? parseFloat(currentBetText) : 0.20;
+			const displayedBet = currentBetText ? parseFloat(currentBetText) : 0.20;
+			const baseBet = this.slotController.getBaseBetAmount();
+			const normalizedBaseBet = !isNaN(baseBet) && baseBet > 0 ? baseBet : displayedBet;
 			
 			// Get the most current balance as a numeric value from the SlotController
 			const currentBalance = this.slotController.getBalanceAmount();
@@ -590,7 +599,7 @@ export class Game extends Scene {
 			
 			this.autoplayOptions.show({
 				currentAutoplayCount: 10,
-				currentBet: currentBet,
+				currentBet: normalizedBaseBet,
 				currentBalance: currentBalance,
 				onClose: () => {
 					console.log('[Game] Autoplay options closed');
@@ -600,12 +609,14 @@ export class Game extends Scene {
 					// Read the bet selected within the autoplay panel
 					const selectedBet = this.autoplayOptions.getCurrentBet();
 					// If bet changed, update UI and backend
-					if (Math.abs(selectedBet - currentBet) > 0.0001) {
+					if (Math.abs(selectedBet - normalizedBaseBet) > 0.0001) {
 						this.slotController.updateBetAmount(selectedBet);
 						gameEventManager.emit(GameEventType.BET_UPDATE, {
 							newBet: selectedBet,
-							previousBet: currentBet
+							previousBet: normalizedBaseBet
 						});
+					} else {
+						console.log('[Game] Autoplay bet unchanged; retaining existing base bet');
 					}
 					console.log(`[Game] Total cost: $${(selectedBet * autoplayCount).toFixed(2)}`);
 					

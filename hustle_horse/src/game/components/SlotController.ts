@@ -3900,6 +3900,29 @@ public updateAutoplayButtonState(): void {
 	 * Handle spin logic - either normal API call or free spin simulation
 	 */
 	private async handleSpin(): Promise<void> {
+		let spinStateMarked = false;
+		let spinDataEmitted = false;
+
+		const markReelSpinning = (): void => {
+			if (spinStateMarked) {
+				return;
+			}
+			gameStateManager.isReelSpinning = true;
+			try {
+				const gd = this.getGameData();
+				if (gd) {
+					gd.isReelSpinning = true;
+				}
+			} catch {}
+			spinStateMarked = true;
+			console.log('[SlotController] Reels flagged as spinning (request in flight)');
+		};
+
+		const emitSpinDataResponse = (spinPayload: SpinData | any): void => {
+			spinDataEmitted = true;
+			gameEventManager.emit(GameEventType.SPIN_DATA_RESPONSE, { spinData: spinPayload });
+		};
+
 		// Ensure game token exists; if missing, initialize before spinning
 		try {
 			if (typeof localStorage !== 'undefined' && !localStorage.getItem('token') && this.gameAPI?.initializeGame) {
@@ -3942,6 +3965,9 @@ public updateAutoplayButtonState(): void {
 			(window as any).audioManager.playSoundEffect(SoundEffectType.SPIN);
 			console.log('[SlotController] Playing spin sound effect');
 		}
+
+		// Mark reels as spinning before deducting balance so UI cannot trigger overlap spins
+		markReelSpinning();
 
 		// Decrement balance by bet amount (frontend only)
 		this.decrementBalanceByBet();
@@ -4054,9 +4080,7 @@ public updateAutoplayButtonState(): void {
 			console.log('[SlotController] 🎰 ===== END SPIN DATA =====');
 			
 			// Emit the spin data response event
-			gameEventManager.emit(GameEventType.SPIN_DATA_RESPONSE, {
-				spinData: spinData
-			});
+			emitSpinDataResponse(spinData);
 
 		} catch (error) {
 			console.error('[SlotController] ❌ Spin failed:', error);
@@ -4070,7 +4094,7 @@ public updateAutoplayButtonState(): void {
 				const gameData = this.getGameData();
 				const isEnhancedBet = gameData ? gameData.isEnhancedBet : false;
 				const fallbackSpinData = await this.gameAPI.doSpin(currentBet, false, isEnhancedBet);
-				gameEventManager.emit(GameEventType.SPIN_DATA_RESPONSE, { spinData: fallbackSpinData });
+				emitSpinDataResponse(fallbackSpinData);
 				return;
 			} catch (fallbackError) {
 				console.error('[SlotController] ❌ Fallback normal spin failed:', fallbackError);
@@ -4099,7 +4123,7 @@ public updateAutoplayButtonState(): void {
 						}
 					};
 					console.warn('[SlotController] Using local fallback spin data');
-					gameEventManager.emit(GameEventType.SPIN_DATA_RESPONSE, { spinData: localSpinData });
+				emitSpinDataResponse(localSpinData);
 					return;
 				} catch (localError) {
 					console.error('[SlotController] Local fallback spin generation failed:', localError);
@@ -4109,7 +4133,18 @@ public updateAutoplayButtonState(): void {
 					this.enableBetButtons();
 					this.enableAmplifyButton();
 				}
+		} finally {
+			if (spinStateMarked && !spinDataEmitted) {
+				console.log('[SlotController] Spin aborted before data response - clearing spinning flag');
+				gameStateManager.isReelSpinning = false;
+				try {
+					const gd = this.getGameData();
+					if (gd) {
+						gd.isReelSpinning = false;
+					}
+				} catch {}
 			}
+		}
 		}
 	}
 

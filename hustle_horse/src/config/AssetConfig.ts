@@ -43,7 +43,7 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				'BG-Normal': `${prefix}/background/BG-Normal.png`,
+				'BG-Normal': `${prefix}/background/BG-Normal.webp`,
 				// Mostly for landscape bg
 				// 'balloon-01': `${prefix}/background/balloon-01.png`,
 				// 'balloon-02': `${prefix}/background/balloon-02.png`,
@@ -431,8 +431,8 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				'PickACard': `${prefix}/scatter_win/PickACard.png`,
-				'congrats': `${prefix}/scatter_win/congrats.png`,
+				'PickACard': `${prefix}/scatter_win/PickACard.webp`,
+				'congrats': `${prefix}/scatter_win/congrats.webp`,
 				// Fire animation will use sprite-based fallback to avoid multi-page atlas issues
 				'fireanimation01_HTBH_img': `${prefix}/fire_animations/fireanimation01_HTBH.png`
 			}
