@@ -27,6 +27,7 @@ export class Preloader extends Scene
 	private fullscreenBtn?: Phaser.GameObjects.Image;
 	private clockDisplay?: ClockDisplay;
 	private preloaderVerticalOffsetModifier: number = 10; // Vertical offset for Preloader elements only
+	private lazyBonusLoadStarted: boolean = false;
 
 	constructor ()
 	{
@@ -215,6 +216,8 @@ export class Preloader extends Scene
 		} catch (e) {
 			console.warn('Could not set font weight for website text');
 		}
+
+		this.startLazyBonusAssetLoad();
 
 		if (screenConfig.isPortrait) {
 			// Display studio loading screen with loading frame and text options
@@ -440,4 +443,31 @@ export class Preloader extends Scene
 			this.pressToPlayText?.setFontFamily('Poppins-Regular, Arial, sans-serif');
 		}
     }
+
+	private startLazyBonusAssetLoad(): void {
+		if (this.lazyBonusLoadStarted) return;
+		this.lazyBonusLoadStarted = true;
+
+		const queueBonusAssets = () => {
+			console.log('[Preloader] Starting background bonus asset load');
+			this.assetLoader.loadBonusBackgroundAssets(this);
+			this.assetLoader.loadBonusHeaderAssets(this);
+			const onBonusComplete = () => {
+				console.log('[Preloader] Background bonus assets loaded');
+			};
+			this.load.once('complete', onBonusComplete, this);
+			this.load.start();
+		};
+
+		const loaderAny = this.load as any;
+		const isBusy = !!(loaderAny?.isLoading || loaderAny?.isRunning);
+		if (isBusy) {
+			const onInitialComplete = () => {
+				this.time.delayedCall(0, queueBonusAssets);
+			};
+			this.load.once('complete', onInitialComplete);
+		} else {
+			this.time.delayedCall(0, queueBonusAssets);
+		}
+	}
 }

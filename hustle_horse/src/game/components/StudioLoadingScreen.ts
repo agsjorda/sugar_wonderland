@@ -526,8 +526,6 @@ export class StudioLoadingScreen {
         assetLoader.loadCoinAssets(this.scene);
         assetLoader.loadBuyFeatureAssets(this.scene);
         assetLoader.loadBackgroundAssets(this.scene);
-        assetLoader.loadBonusBackgroundAssets(this.scene);
-        assetLoader.loadBonusHeaderAssets(this.scene);
         assetLoader.loadScatterAnticipationAssets(this.scene);
         assetLoader.loadButtonAssets(this.scene);
         assetLoader.loadHeaderAssets(this.scene);
@@ -536,6 +534,7 @@ export class StudioLoadingScreen {
         assetLoader.loadSymbolAssets(this.scene);
         assetLoader.loadNumberAssets(this.scene);
         assetLoader.loadScatterWinOverlayAssets(this.scene);
+        assetLoader.loadScatterWinOverlaySpineAssets(this.scene);
         assetLoader.loadDialogAssets(this.scene);
         assetLoader.loadAudioAssets(this.scene);
         assetLoader.loadSpinCardAssets(this.scene);
@@ -547,8 +546,6 @@ export function queueGameAssetLoading(scene: Scene, assetLoader: AssetLoader): v
     assetLoader.loadCoinAssets(scene);
     assetLoader.loadBuyFeatureAssets(scene);
     assetLoader.loadBackgroundAssets(scene);
-    assetLoader.loadBonusBackgroundAssets(scene);
-    assetLoader.loadBonusHeaderAssets(scene);
     assetLoader.loadScatterAnticipationAssets(scene);
     assetLoader.loadButtonAssets(scene);
     assetLoader.loadHeaderAssets(scene);
@@ -557,6 +554,7 @@ export function queueGameAssetLoading(scene: Scene, assetLoader: AssetLoader): v
     assetLoader.loadSymbolAssets(scene);
     assetLoader.loadNumberAssets(scene);
     assetLoader.loadScatterWinOverlayAssets(scene);
+    assetLoader.loadScatterWinOverlaySpineAssets(scene);
     assetLoader.loadDialogAssets(scene);
     assetLoader.loadAudioAssets(scene);
     assetLoader.loadSpinCardAssets(scene);

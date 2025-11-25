@@ -1,5 +1,5 @@
 import { Scene } from "phaser";
-import { AssetConfig, AssetGroup } from "../config/AssetConfig";
+import { AssetConfig, AssetGroup, SpineAssetDefinition } from "../config/AssetConfig";
 import { ensureSpineLoader, ensureSpineFactory } from "./SpineGuard";
 
 export function resolveAssetUrl(path: string): string {
@@ -185,6 +185,29 @@ export class AssetLoader {
         console.log('[AssetLoader] Loading scatter win overlay assets...');
         this.loadAssetGroup(scene, this.assetConfig.getScatterWinOverlayAssets());
         console.log('[AssetLoader] Scatter win overlay assets loaded');
+    }
+
+    loadScatterWinOverlaySpineAssets(scene: Scene): void {
+        console.log('[AssetLoader] Loading scatter win overlay spine assets...');
+        const definitions: SpineAssetDefinition[] = this.assetConfig.getScatterWinOverlaySpines();
+        if (!definitions || !definitions.length) {
+            console.log('[AssetLoader] No scatter win overlay spine assets defined');
+            return;
+        }
+        if (!ensureSpineLoader(scene, '[AssetLoader] loadScatterWinOverlaySpineAssets')) {
+            console.warn('[AssetLoader] Spine loader unavailable; skipping scatter win overlay spine assets');
+            return;
+        }
+        const loader = scene.load as any;
+        definitions.forEach((def) => {
+            try {
+                loader.spineAtlas(def.atlasKey, resolveAssetUrl(def.atlasPath));
+                loader.spineJson(def.key, resolveAssetUrl(def.jsonPath));
+                console.log(`[AssetLoader] Queued spine ${def.key} (${def.atlasKey})`);
+            } catch (error) {
+                console.warn(`[AssetLoader] Failed to queue spine asset ${def.key}:`, error);
+            }
+        });
     }
 
     loadAudioAssets(scene: Scene): void {

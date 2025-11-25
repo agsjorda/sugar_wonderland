@@ -1,6 +1,6 @@
 import { Scene } from 'phaser';
 import { MusicType, SoundEffectType } from '../../managers/AudioManager';
-import { ensureSpineLoader, ensureSpineFactory } from '../../utils/SpineGuard';
+import { ensureSpineLoader, ensureSpineFactory, isSpineAssetCached } from '../../utils/SpineGuard';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { NumberDisplay, NumberDisplayConfig } from './NumberDisplay';
@@ -382,6 +382,7 @@ export class Dialogs {
 	create(scene: Scene): void {
 		// Store scene reference for later use
 		this.currentScene = scene
+		this.markPreloadedSpines();
 		
 		// Create main dialog overlay container
 		this.dialogOverlay = scene.add.container(0, 0);
@@ -2526,6 +2527,13 @@ private updateEmbers(scene: Scene, delta: number): void {
 		this.hideDialog();
 		if (this.dialogOverlay) {
 			this.dialogOverlay.destroy();
+		}
+	}
+
+	private markPreloadedSpines(): void {
+		if (!this.currentScene) return;
+		if (isSpineAssetCached(this.currentScene, 'fire_transition', 'fire_transition_atlas')) {
+			this.endFireTransitionLoadState = 'loaded';
 		}
 	}
 

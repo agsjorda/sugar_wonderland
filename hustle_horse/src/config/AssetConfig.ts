@@ -8,6 +8,13 @@ export interface AssetGroup {
 	fonts?: { [key: string]: string };
 }
 
+export interface SpineAssetDefinition {
+	key: string;
+	atlasKey: string;
+	atlasPath: string;
+	jsonPath: string;
+}
+
 export class AssetConfig {
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
@@ -430,6 +437,30 @@ export class AssetConfig {
 				'fireanimation01_HTBH_img': `${prefix}/fire_animations/fireanimation01_HTBH.png`
 			}
 		};
+	}
+
+	getScatterWinOverlaySpines(): SpineAssetDefinition[] {
+		const prefix = this.getAssetPrefix();
+		return [
+			{
+				key: 'overlay_fire',
+				atlasKey: 'overlay_fire_atlas',
+				atlasPath: `${prefix}/fire_animations/fireanimation01_HTBH.atlas`,
+				jsonPath: `${prefix}/fire_animations/fireanimation01_HTBH.json`
+			},
+			{
+				key: 'main_fire',
+				atlasKey: 'main_fire_atlas',
+				atlasPath: `${prefix}/fire_animations/Main_Fire.atlas`,
+				jsonPath: `${prefix}/fire_animations/Main_Fire.json`
+			},
+			{
+				key: 'fire_transition',
+				atlasKey: 'fire_transition_atlas',
+				atlasPath: `${prefix}/fire_animations/Fire_Transition.atlas`,
+				jsonPath: `${prefix}/fire_animations/Fire_Transition.json`
+			}
+		];
 	}
 
 	getAudioAssets(): AssetGroup {

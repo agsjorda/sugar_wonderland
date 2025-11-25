@@ -1,5 +1,5 @@
 import { Scene } from 'phaser';
-import { ensureSpineLoader, ensureSpineFactory } from '../../utils/SpineGuard';
+import { ensureSpineLoader, ensureSpineFactory, isSpineAssetCached } from '../../utils/SpineGuard';
 import { NumberDisplay, NumberDisplayConfig } from './NumberDisplay';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
@@ -173,6 +173,7 @@ export class BigWinOverlay {
             this.hide();
         });
 
+        this.markPreloadedSpines();
         this.isInitialized = true;
     }
 
@@ -239,12 +240,12 @@ export class BigWinOverlay {
         // Load assets, then build visuals (store timer so we can cancel on hide)
         if (this.showBuildTimer) { try { this.showBuildTimer.remove(false); } catch {} this.showBuildTimer = null; }
         this.showBuildTimer = this.scene.time.delayedCall(120, async () => {
-            if (!this.scene) return;
+            if (!this.scene || !this.isShowing) return;
             const [fireReady, titleReady] = await Promise.all([
                 this.loadFireSpineIfNeeded(),
                 this.loadTitleIfNeeded()
             ]);
-            if (!this.scene) return;
+            if (!this.scene || !this.isShowing) return;
 
             // Fire spine (preferred), with PNG fallback to match ScatterWinOverlay behavior
             let overlayFireCreated = false;
@@ -450,9 +451,8 @@ export class BigWinOverlay {
             const isTurbo = !!(((window as any)?.gameStateManager?.isTurbo) || ((this.scene as any)?.gameData?.isTurbo));
             if (isTurbo) {
                 this.scene.time.delayedCall(3000, () => {
-                    if (this.isShowing) {
-                        try { this.hide(150); } catch {}
-                    }
+                    if (!this.scene || !this.isShowing) return;
+                    try { this.hide(150); } catch {}
                 });
             }
         } catch {}
@@ -895,6 +895,7 @@ export class BigWinOverlay {
             // Fit each to half screen width, apply height and side multipliers
             this.bottomFireContainer.setAlpha(0);
             this.scene.time.delayedCall(0, () => {
+                if (!this.scene || !this.isShowing) return;
                 const fitHalf = (sp: any, mul: number) => {
                     try {
                         const getBounds = sp?.getBounds?.bind(sp);
@@ -933,6 +934,19 @@ export class BigWinOverlay {
             try { if (t && !t.isDestroyed()) t.remove(); } catch {}
         }
         this.animations = [];
+    }
+
+    private markPreloadedSpines(): void {
+        if (!this.scene) return;
+        if (isSpineAssetCached(this.scene, 'overlay_fire', 'overlay_fire_atlas')) {
+            this.fireSpineLoadState = 'loaded';
+        }
+        if (isSpineAssetCached(this.scene, 'main_fire', 'main_fire_atlas')) {
+            this.mainFireLoadState = 'loaded';
+        }
+        if (isSpineAssetCached(this.scene, 'fire_transition', 'fire_transition_atlas')) {
+            this.fireTransitionLoadState = 'loaded';
+        }
     }
 
     /** Attempt to create the overlay fire as a Spine object. Returns true on success. */

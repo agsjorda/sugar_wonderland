@@ -48,4 +48,71 @@ export function ensureSpineLoader(scene: Scene, context: string): boolean {
 	return hasLoader;
 }
 
+export function isSpineAssetCached(scene: Scene | null | undefined, jsonKey: string, atlasKey?: string): boolean {
+	if (!scene || (!jsonKey && !atlasKey)) return false;
+	const cacheAny = (scene as any)?.cache;
+	if (!cacheAny) return false;
 
+	const spineCustom = getCustomCacheSection(cacheAny, 'spine');
+	const sections = [spineCustom, cacheAny.spine, cacheAny.json, cacheAny.text].filter(Boolean);
+
+	const jsonLoaded = jsonKey ? sections.some((section) => hasCacheEntry(section, jsonKey)) : true;
+	const atlasLoaded = atlasKey ? sections.some((section) => hasCacheEntry(section, atlasKey)) : true;
+	return jsonLoaded && atlasLoaded;
+}
+
+function getCustomCacheSection(cacheAny: any, sectionKey: string): any {
+	if (!cacheAny || !cacheAny.custom) return null;
+	const custom = cacheAny.custom;
+	try {
+		if (typeof custom.get === 'function') {
+			const section = custom.get(sectionKey);
+			if (section) return section;
+		}
+	} catch {}
+	try {
+		if (custom.entries && typeof custom.entries.get === 'function') {
+			const section = custom.entries.get(sectionKey);
+			if (section) return section;
+		}
+	} catch {}
+	if (custom[sectionKey]) {
+		return custom[sectionKey];
+	}
+	try {
+		if (typeof custom.has === 'function' && custom.has(sectionKey) && typeof custom.get === 'function') {
+			return custom.get(sectionKey);
+		}
+	} catch {}
+	return null;
+}
+
+function hasCacheEntry(cacheSection: any, key: string): boolean {
+	if (!cacheSection || !key) return false;
+	try {
+		if (typeof cacheSection.has === 'function' && cacheSection.has(key)) {
+			return true;
+		}
+		if (typeof cacheSection.exists === 'function' && cacheSection.exists(key)) {
+			return true;
+		}
+		if (typeof cacheSection.get === 'function') {
+			const entry = cacheSection.get(key);
+			if (entry !== undefined && entry !== null) {
+				return true;
+			}
+		}
+		if (cacheSection.entries) {
+			if (typeof cacheSection.entries.has === 'function' && cacheSection.entries.has(key)) {
+				return true;
+			}
+			if (typeof cacheSection.entries.get === 'function') {
+				const entry = cacheSection.entries.get(key);
+				if (entry !== undefined && entry !== null) {
+					return true;
+				}
+			}
+		}
+	} catch {}
+	return false;
+}

@@ -78,6 +78,15 @@ export class AudioManager {
 
 	constructor(scene: Phaser.Scene) {
 		this.scene = scene;
+		// Disable Phaser's default pause/mute-on-blur so we control lifecycle ourselves
+		const soundMgr = this.scene.sound as any;
+		if (soundMgr) {
+			try { soundMgr.pauseOnBlur = false; } catch {}
+			try { soundMgr.resumeOnFocus = false; } catch {}
+			try { soundMgr.muteOnPause = false; } catch {}
+		}
+		this.patchPhaserVisibilityAudioHandling();
+		this.ensureAudioContext();
 		console.log('[AudioManager] AudioManager initialized');
 		this.installVisibilityHandlers();
 	}
@@ -643,6 +652,117 @@ export class AudioManager {
 		}
 	}
 
+	/** Stop every currently playing sound except tracks we intend to resume (music + ambient). */
+	private stopAllNonMusic(): void {
+		try {
+			const musicKeys = new Set(Object.values(this.musicKeyByType));
+			const ambientKey = this.ambientInstance ? (this.ambientInstance as any).key : null;
+			try {
+				this.sfxInstances.forEach((sfx) => {
+					if (sfx && sfx.isPlaying) {
+						sfx.stop();
+					}
+				});
+			} catch {}
+			const sounds: Phaser.Sound.BaseSound[] = (this.scene.sound as any).sounds || [];
+			for (const sound of sounds) {
+				const key = (sound as any).key;
+				const isMusic = key && musicKeys.has(key);
+				const isAmbient = ambientKey && key === ambientKey;
+				if (!isMusic && !isAmbient && sound.isPlaying) {
+					try { sound.stop(); } catch {}
+				}
+			}
+		} catch (e) {
+			console.warn('[AudioManager] stopAllNonMusic failed:', e);
+		}
+	}
+
+	/** Ensure there is a usable AudioContext and recreate it if the browser closed it. */
+	private ensureAudioContext(): AudioContext | null {
+		try {
+			const soundMgr: any = this.scene.sound;
+			if (!soundMgr) return null;
+			const current: AudioContext | undefined = soundMgr.context;
+			if (current && current.state !== 'closed') {
+				return current;
+			}
+			const AudioCtor = (window as any).AudioContext || (window as any).webkitAudioContext;
+			if (!AudioCtor) {
+				console.warn('[AudioManager] Web Audio API unavailable, cannot recreate AudioContext');
+				return null;
+			}
+			const newContext: AudioContext = new AudioCtor();
+			if (typeof soundMgr.setAudioContext === 'function') {
+				soundMgr.setAudioContext(newContext);
+			} else {
+				soundMgr.context = newContext;
+			}
+			if (typeof soundMgr.unlock === 'function') {
+				try {
+					soundMgr.locked = newContext.state === 'suspended';
+					soundMgr.unlock();
+				} catch {}
+			}
+			console.log('[AudioManager] AudioContext recreated after closure');
+			return newContext;
+		} catch (err) {
+			console.warn('[AudioManager] ensureAudioContext failed:', err);
+			return null;
+		}
+	}
+
+	/** Patch Phaser's visibility handler to guard against closed AudioContext errors. */
+	private patchPhaserVisibilityAudioHandling(): void {
+		try {
+			const soundMgr: any = this.scene.sound;
+			if (!soundMgr || soundMgr.__hhPatchedVisibilityAudio) {
+				return;
+			}
+			soundMgr.__hhPatchedVisibilityAudio = true;
+
+			const safeResume = () => {
+				const latest = this.ensureAudioContext();
+				if (!latest || latest.state === 'closed') {
+					return;
+				}
+				try {
+					const resumeResult = latest.resume?.();
+					if (resumeResult && typeof resumeResult.catch === 'function') {
+						resumeResult.catch((err: any) => console.warn('[AudioManager] AudioContext.resume rejected:', err));
+					}
+				} catch (err) {
+					console.warn('[AudioManager] AudioContext.resume threw:', err);
+				}
+			};
+
+			soundMgr.onGameVisible = () => {
+				window.setTimeout(() => {
+					const ctx = this.ensureAudioContext();
+					if (!ctx || ctx.state === 'closed') {
+						return;
+					}
+					let suspendResult: any = null;
+					try {
+						suspendResult = ctx.suspend?.();
+						if (suspendResult && typeof suspendResult.catch === 'function') {
+							suspendResult.catch((err: any) => console.warn('[AudioManager] AudioContext.suspend rejected:', err));
+						}
+					} catch (err) {
+						console.warn('[AudioManager] AudioContext.suspend threw:', err);
+					}
+					if (suspendResult && typeof suspendResult.then === 'function') {
+						suspendResult.then(safeResume).catch(safeResume);
+					} else {
+						safeResume();
+					}
+				}, 120);
+			};
+		} catch (err) {
+			console.warn('[AudioManager] Failed to patch Phaser visibility audio handler:', err);
+		}
+	}
+
 	/** Returns true if any background music instance is currently playing. */
 	isAnyMusicPlaying(): boolean {
 		try {
@@ -998,6 +1118,23 @@ export class AudioManager {
             this.suppressedOneShotCounts.set(key, cur + 1);
             return;
         }
+        const now = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+        const minInterval = this.oneShotMinIntervalOverrides[key] ?? this.defaultOneShotMinIntervalMs;
+        const lastAt = this.lastOneShotAt.get(key) || 0;
+        if (now - lastAt < minInterval) {
+            return;
+        }
+        this.lastOneShotAt.set(key, now);
+        if (this.oneShotSkipIfPlaying.has(key)) {
+            try {
+                const sounds: Phaser.Sound.BaseSound[] = (this.scene.sound as any).sounds || [];
+                for (const s of sounds) {
+                    if ((s as any).key === key && s.isPlaying) {
+                        return;
+                    }
+                }
+            } catch {}
+        }
         try {
             const vol = Math.max(0, Math.min(1, volume != null ? volume : this.sfxVolume));
             (this.scene.sound as any).play?.(key, { volume: vol, loop: false });
@@ -1221,6 +1358,7 @@ export class AudioManager {
     private onPageVisible(): void {
         if (!this.isPageHidden) return;
         this.isPageHidden = false;
+        this.ensureAudioContext();
         if (this.isMuted) return;
         if (this.resumeDebounceTimer) { try { clearTimeout(this.resumeDebounceTimer); } catch {} }
         this.resumeDebounceTimer = setTimeout(() => {

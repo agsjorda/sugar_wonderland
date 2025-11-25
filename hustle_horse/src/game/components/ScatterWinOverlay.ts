@@ -1,7 +1,7 @@
 import { Scene } from 'phaser';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
-import { ensureSpineLoader, ensureSpineFactory } from '../../utils/SpineGuard';
+import { ensureSpineLoader, ensureSpineFactory, isSpineAssetCached } from '../../utils/SpineGuard';
 import { MusicType } from '../../managers/AudioManager';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
@@ -285,6 +285,8 @@ export class ScatterWinOverlay {
             
             this.container.setVisible(false);
 
+            this.markPreloadedSpines();
+
       // Create separate container for the final transition overlay above everything
       this.transitionContainer = this.scene.add.container(0, 0);
       this.transitionContainer.setDepth(20000);
@@ -422,8 +424,9 @@ export class ScatterWinOverlay {
         if (!this.scene) return;
 
         this.scene.time.delayedCall(300, async () => {
-            if (!this.scene) return;
+            if (!this.scene || !this.isShowing) return;
             const loaded = await this.loadFireSpineIfNeeded();
+            if (!this.scene || !this.isShowing) return;
             if (loaded && ensureSpineFactory(this.scene!, '[ScatterWinOverlay] create overlay fire')) {
                 // Create the spine version
                 try {
@@ -460,7 +463,7 @@ export class ScatterWinOverlay {
                 this.winFont = img;
             }
 
-            if (!this.winFont) return;
+            if (!this.winFont || !this.isShowing) return;
 
             // Pop-up like PickACard: fade in + scale to 1.1x base then bounce to base
             const winFontTween = this.scene.tweens.add({
@@ -492,11 +495,11 @@ export class ScatterWinOverlay {
             } catch {}
             this.animations.push(winFontTween);
 
-// Show pick a card after win font appears
-            if (!this.scene) return;
+            // Show pick a card after win font appears
+            if (!this.scene || !this.isShowing) return;
             
             this.scene.time.delayedCall(300, () => {
-                if (!this.scene || !this.pickACard) return;
+                if (!this.scene || !this.isShowing || !this.pickACard) return;
                 
                 const pickACardTween = this.scene.tweens.add({
                     targets: this.pickACard,
@@ -541,7 +544,10 @@ export class ScatterWinOverlay {
         });
 
         // Schedule throwing in three cards from bottom after an initial delay
-        this.scene.time.delayedCall(this.cardIntroInitialDelayMs, () => this.throwInCards());
+        this.scene.time.delayedCall(this.cardIntroInitialDelayMs, () => {
+            if (!this.scene || !this.isShowing) return;
+            this.throwInCards();
+        });
     }
 
     /** Dynamically load fire spine (atlas+json) without blocking preloader. */
@@ -744,7 +750,7 @@ export class ScatterWinOverlay {
 
     /** Create and animate three cards that fly up from bottom into positions. */
     private throwInCards(): void {
-        if (!this.scene || !this.cardsContainer) return;
+        if (!this.scene || !this.cardsContainer || !this.isShowing) return;
         // Ensure assets loaded
         const w = this.scene.cameras.main.width;
         const h = this.scene.cameras.main.height;
@@ -1061,7 +1067,10 @@ export class ScatterWinOverlay {
                                             onComplete: () => { this.canDismiss = true; }
                                         });
                                         // Show congrats image with breathing animation AFTER card reached upper center with delay
-                                        this.scene!.time.delayedCall(this.congratsShowDelayMs, () => this.showCongratsBreathing(chosen));
+                                        this.scene!.time.delayedCall(this.congratsShowDelayMs, () => {
+                                            if (!this.scene || !this.isShowing) return;
+                                            this.showCongratsBreathing(chosen);
+                                        });
                                     }
                                 });
                             }
@@ -1423,7 +1432,7 @@ export class ScatterWinOverlay {
 
     /** Show a 'congrats' image with gentle breathing animation above the flipped card. */
     private showCongratsBreathing(chosen: any): void {
-        if (!this.scene) return;
+        if (!this.scene || !this.isShowing) return;
         try {
             // Stop bonus visual effects (fireworks and embers) and related SFX when congrats appears
             try { this.scene?.events.emit('stopBonusEffects'); } catch {}
@@ -1461,8 +1470,9 @@ export class ScatterWinOverlay {
 
             // Load and create fire animation behind congrats
             this.scene.time.delayedCall(0, async () => {
-                if (!this.scene) return;
+                if (!this.scene || !this.isShowing) return;
                 const loaded = await this.loadFireSpineIfNeeded();
+                if (!this.scene || !this.isShowing) return;
                 if (loaded && ensureSpineFactory(this.scene, '[ScatterWinOverlay] create congrats fire')) {
                     try {
                         const fireX = baseX + this.congratsFireOffsetX;
@@ -1480,6 +1490,10 @@ export class ScatterWinOverlay {
                         try { spineObj.setAlpha(0); } catch {} // Start hidden
                         // Start animating
                         try { (spineObj as any).animationState?.setAnimation(0, 'animation', true); } catch {}
+                        if (!this.isShowing) {
+                            try { spineObj.destroy(); } catch {}
+                            return;
+                        }
                         this.congratsFireContainer?.add(spineObj);
 
                         // Fade in the fire with the congrats
@@ -1524,7 +1538,10 @@ export class ScatterWinOverlay {
                     });
 
                     // Schedule press-anywhere hint after congrats appears
-                    this.scene!.time.delayedCall(this.pressAnyShowDelayMs, () => this.showPressAnyHint(chosen));
+                    this.scene!.time.delayedCall(this.pressAnyShowDelayMs, () => {
+                        if (!this.scene || !this.isShowing) return;
+                        this.showPressAnyHint(chosen);
+                    });
                 }
             });
         } catch {}
@@ -1532,7 +1549,7 @@ export class ScatterWinOverlay {
 
     /** Show a text hint below the flipped card prompting to continue. */
     private showPressAnyHint(chosen: any): void {
-        if (!this.scene) return;
+        if (!this.scene || !this.isShowing) return;
         try {
             if (this.pressAnyText) { try { this.pressAnyText.destroy(); } catch {}; this.pressAnyText = null; }
             const w = this.scene.cameras.main.width;
@@ -1572,7 +1589,7 @@ export class ScatterWinOverlay {
 
     /** Enable one-shot click anywhere to continue into bonus autoplay. */
     private enableContinueClick(): void {
-        if (!this.scene || !this.background) return;
+        if (!this.scene || !this.background || !this.isShowing) return;
         try {
             // Ensure the background is interactive and on top to catch the click
             this.background.setInteractive();
@@ -1712,6 +1729,7 @@ export class ScatterWinOverlay {
       // Fit each to half screen width without distorting aspect ratio, then apply per-corner scale/rotation
       this.bottomFireContainer.setAlpha(0);
       this.scene.time.delayedCall(0, () => {
+        if (!this.scene || !this.isShowing) return;
         const fitHalf = (sp: any, mul: number) => {
           try {
             const getBounds = sp?.getBounds?.bind(sp);
@@ -2205,5 +2223,18 @@ export class ScatterWinOverlay {
         if (options.offsetX !== undefined) this.pressAnyOffsetX = options.offsetX;
         if (options.offsetY !== undefined) this.pressAnyOffsetY = options.offsetY;
         if (options.scale !== undefined) this.pressAnyScale = Math.max(0.1, options.scale);
+    }
+
+    private markPreloadedSpines(): void {
+        if (!this.scene) return;
+        if (isSpineAssetCached(this.scene, 'overlay_fire', 'overlay_fire_atlas')) {
+            this.fireSpineLoadState = 'loaded';
+        }
+        if (isSpineAssetCached(this.scene, 'main_fire', 'main_fire_atlas')) {
+            this.mainFireLoadState = 'loaded';
+        }
+        if (isSpineAssetCached(this.scene, 'fire_transition', 'fire_transition_atlas')) {
+            this.fireTransitionLoadState = 'loaded';
+        }
     }
 }

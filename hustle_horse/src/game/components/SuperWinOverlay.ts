@@ -219,12 +219,12 @@ export class SuperWinOverlay {
 
         if (this.showBuildTimer) { try { this.showBuildTimer.remove(false); } catch {} this.showBuildTimer = null; }
         this.showBuildTimer = this.scene.time.delayedCall(120, async () => {
-            if (!this.scene) return;
+            if (!this.scene || !this.isShowing) return;
             const [fireReady, titleReady] = await Promise.all([
                 this.loadFireSpineIfNeeded(),
                 this.loadTitleIfNeeded()
             ]);
-            if (!this.scene) return;
+            if (!this.scene || !this.isShowing) return;
 
             let overlayFireCreated = false;
             if (fireReady) { overlayFireCreated = this.tryCreateOverlayFireSpine(); }
@@ -351,9 +351,8 @@ export class SuperWinOverlay {
             const isTurbo = !!(((window as any)?.gameStateManager?.isTurbo) || ((this.scene as any)?.gameData?.isTurbo));
             if (isTurbo) {
                 this.scene.time.delayedCall(3000, () => {
-                    if (this.isShowing) {
-                        try { this.hide(150); } catch {}
-                    }
+                    if (!this.scene || !this.isShowing) return;
+                    try { this.hide(150); } catch {}
                 });
             }
         } catch {}
@@ -519,6 +518,7 @@ export class SuperWinOverlay {
             playLoop(left); playLoop(right);
             this.bottomFireContainer.setAlpha(0);
             this.scene.time.delayedCall(0, () => {
+                if (!this.scene || !this.isShowing) return;
                 const fitHalf = (sp: any, mul: number) => { try { const getBounds = sp?.getBounds?.bind(sp); let width = 0; if (typeof getBounds === 'function') { const b = getBounds(); width = (b && b.size && b.size.x) ? b.size.x : (b && b.width) ? b.width : 0; } if (!width || width <= 0) width = sp.displayWidth || 0; if (width && width > 0) { const currentScaleX = sp.scaleX || 1; const scaledWidth = width * currentScaleX; const desiredScale = scaledWidth > 0 ? ((w * 0.5) / scaledWidth) * currentScaleX : currentScaleX; const uniform = desiredScale * Math.max(0.1, mul || 1); const yScale = uniform * Math.max(0.1, this.mainFireHeightScale || 1); sp.setScale(uniform, yScale); } } catch {} };
                 fitHalf(left, this.bottomLeftFireScaleMul || 1); fitHalf(right, this.bottomRightFireScaleMul || 1);
                 this.scene?.tweens.add({ targets: left, x: leftTargetX, y: leftTargetY, duration: 450, ease: 'Cubic.easeOut' });
@@ -529,6 +529,19 @@ export class SuperWinOverlay {
     }
 
     private clearAnimations(): void { if (!this.animations) return; for (const t of this.animations) { try { if (t && !t.isDestroyed()) t.remove(); } catch {} } this.animations = []; }
+
+    private markPreloadedSpines(): void {
+        if (!this.scene) return;
+        if (isSpineAssetCached(this.scene, 'overlay_fire', 'overlay_fire_atlas')) {
+            this.fireSpineLoadState = 'loaded';
+        }
+        if (isSpineAssetCached(this.scene, 'main_fire', 'main_fire_atlas')) {
+            this.mainFireLoadState = 'loaded';
+        }
+        if (isSpineAssetCached(this.scene, 'fire_transition', 'fire_transition_atlas')) {
+            this.fireTransitionLoadState = 'loaded';
+        }
+    }
 
     private tryCreateOverlayFireSpine(): boolean {
         if (!this.scene) return false;
