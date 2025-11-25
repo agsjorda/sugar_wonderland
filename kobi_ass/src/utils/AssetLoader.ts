@@ -1,6 +1,17 @@
 import { Scene } from "phaser";
 import { AssetConfig, AssetGroup } from "../config/AssetConfig";
-import { ensureSpineLoader } from "./SpineGuard";
+import { ensureSpineLoader, ensureSpineFactory } from "./SpineGuard";
+
+export function resolveAssetUrl(path: string): string {
+	if (!path) return path;
+	if (/^(?:https?:|data:|blob:)/i.test(path)) {
+		return path;
+	}
+	const base = (import.meta as any).env?.BASE_URL ?? '/';
+	const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+	const normalizedPath = path.replace(/^\.\//, '').replace(/^\//, '');
+	return `${normalizedBase}${normalizedPath}`;
+}
 
 export class AssetLoader {
 	private assetConfig: AssetConfig;
@@ -12,29 +23,28 @@ export class AssetLoader {
 	loadAssetGroup(scene: Scene, assetGroup: AssetGroup): void {
 		// Load images
 		if (assetGroup.images) {
-		Object.entries(assetGroup.images).forEach(([key, path]) => {
+			Object.entries(assetGroup.images).forEach(([key, path]) => {
 				console.log(`[AssetLoader] Loading image: ${key} from ${path}`);
-			scene.load.image(key, path);
-		});
+				scene.load.image(key, resolveAssetUrl(path));
+			});
 		}
 
 		// Load Spine animations
 		if (assetGroup.spine) {
-			const hasLoader = ensureSpineLoader(scene, '[AssetLoader] loadAssetGroup');
-			if (!hasLoader) {
+			let loaderReady = ensureSpineLoader(scene, '[AssetLoader] loadAssetGroup.pre');
+			if (!loaderReady) {
+				ensureSpineFactory(scene, '[AssetLoader] loadAssetGroup.install');
+				loaderReady = ensureSpineLoader(scene, '[AssetLoader] loadAssetGroup.post');
+			}
+			if (!loaderReady) {
 				console.warn('[AssetLoader] Spine loader not available. Skipping spine asset group.');
 			} else {
+				const loader: any = scene.load as any;
 				Object.entries(assetGroup.spine).forEach(([key, spineData]) => {
 					try {
-						const anyLoad: any = scene.load as any;
-						if (typeof anyLoad.spine === 'function') {
-							console.log(`[AssetLoader] Loading spine (combined): ${key}`);
-							anyLoad.spine(key, spineData.json, spineData.atlas);
-						} else {
-							console.log(`[AssetLoader] Loading spine (separate): ${key} from ${spineData.json}`);
-							scene.load.spineAtlas(`${key}-atlas`, spineData.atlas);
-							scene.load.spineJson(key, spineData.json);
-						}
+						console.log(`[AssetLoader] Loading spine (separate): ${key} from ${spineData.json}`);
+						loader.spineAtlas(`${key}-atlas`, resolveAssetUrl(spineData.atlas));
+						loader.spineJson(key, resolveAssetUrl(spineData.json));
 					} catch (e) {
 						console.warn(`[AssetLoader] Failed loading spine ${key}:`, e);
 					}
@@ -46,7 +56,7 @@ export class AssetLoader {
 		if (assetGroup.audio) {
 			Object.entries(assetGroup.audio).forEach(([key, path]) => {
 				console.log(`[AssetLoader] Loading audio: ${key} from ${path}`);
-				scene.load.audio(key, path);
+				scene.load.audio(key, resolveAssetUrl(path));
 			});
 		}
 
@@ -147,7 +157,7 @@ export class AssetLoader {
 		// Load coin as a sprite sheet with frame configuration
 		const coinAssets = this.assetConfig.getCoinAssets();
 		if (coinAssets.images && coinAssets.images.coin) {
-			const coinPath = coinAssets.images.coin;
+			const coinPath = resolveAssetUrl(coinAssets.images.coin);
 			console.log(`[AssetLoader] Loading coin sprite sheet: ${coinPath}`);
 			
 			// Load as sprite sheet with frame configuration
@@ -186,29 +196,38 @@ export class AssetLoader {
 	}
 
 	private preloadFont(fontFamily: string, fontPath: string): void {
-		// Create a link element to preload the font
-		const link = document.createElement('link');
-		link.rel = 'preload';
-		link.as = 'font';
-		link.type = 'font/ttf';
-		link.href = fontPath;
-		link.crossOrigin = 'anonymous';
-		
-		// Add to document head
-		document.head.appendChild(link);
-		
-		// Also create a style element to ensure the font is available
+		const resolvedPath = resolveAssetUrl(fontPath);
+
+		// Register @font-face for CSS usage
 		const style = document.createElement('style');
 		style.textContent = `
 			@font-face {
 				font-family: '${fontFamily}';
-				src: url('${fontPath}') format('truetype');
+				src: url('${resolvedPath}') format('truetype');
 				font-display: swap;
+				font-style: normal;
+				font-weight: 400;
 			}
 		`;
 		document.head.appendChild(style);
-		
-		console.log(`[AssetLoader] Font ${fontFamily} preloaded from ${fontPath}`);
+
+		// Proactively trigger a load via FontFace API when available
+		try {
+			if (typeof FontFace !== 'undefined') {
+				const face = new FontFace(fontFamily, `url('${resolvedPath}') format('truetype')`, { style: 'normal', weight: '400', display: 'swap' as any });
+				face.load().then((loaded) => {
+					try { (document as any).fonts?.add?.(loaded); } catch {}
+					try { (document as any).fonts?.load?.(`1em ${fontFamily}`); } catch {}
+					console.log(`[AssetLoader] Font ${fontFamily} loaded via FontFace API`);
+				}).catch((err) => {
+					console.warn(`[AssetLoader] FontFace load failed for ${fontFamily}:`, err);
+				});
+			} else {
+				try { (document as any).fonts?.load?.(`1em ${fontFamily}`); } catch {}
+			}
+		} catch (err) {
+			console.warn(`[AssetLoader] Font preload encountered an error for ${fontFamily}:`, err);
+		}
 	}
 
 	private ensureFontsLoaded(): void {

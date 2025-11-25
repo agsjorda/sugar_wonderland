@@ -94,6 +94,9 @@ export class SlotController {
 	private autoplaySpinsBackupBeforeBonus: number = 0;
 	private resumeAutoplayAfterBonusPending: boolean = false;
 	
+	// Prevent overlapping spin requests when awaiting backend responses
+	private isSpinRequestInFlight: boolean = false;
+	
 	// Bet UI elements references for enable/disable
 	private betBg: Phaser.GameObjects.Graphics | null = null;
 	private betAreaX: number = 0;
@@ -559,6 +562,48 @@ export class SlotController {
 	}
 
 	/**
+	 * Determine if any game flow is currently blocking a new spin request.
+	 * @param options Optional overrides to skip specific guards (used for special cases like skip-drop handling).
+	 */
+	private getSpinBlockReason(options?: { ignoreReelSpinning?: boolean; ignoreInFlight?: boolean }): string | null {
+		const ignoreReelSpinning = options?.ignoreReelSpinning ?? false;
+		const ignoreInFlight = options?.ignoreInFlight ?? false;
+		const sceneAny: any = this.scene as any;
+		const scatterManager = sceneAny?.symbols?.scatterAnimationManager;
+		const scatterAnimationBusy = !!(scatterManager && typeof scatterManager.isAnimationInProgress === 'function' && scatterManager.isAnimationInProgress());
+		const anticipationActive = !!sceneAny?.__isScatterAnticipationActive;
+
+		if (!ignoreInFlight && this.isSpinRequestInFlight) {
+			return 'spin request is still awaiting backend response';
+		}
+		if (!ignoreReelSpinning && gameStateManager.isReelSpinning) {
+			return 'reels are still resolving';
+		}
+		if (gameStateManager.isScatter) {
+			return 'scatter sequence is running';
+		}
+		if (gameStateManager.isWheelSpinning) {
+			return 'wheel animation is active';
+		}
+		if (gameStateManager.isBonus && !gameStateManager.isBonusFinished) {
+			return 'bonus flow is active';
+		}
+		if (gameStateManager.isShowingWinDialog) {
+			return 'win dialog is visible';
+		}
+		if (gameStateManager.isShowingWinlines) {
+			return 'winlines are still animating';
+		}
+		if (scatterAnimationBusy) {
+			return 'scatter animation manager is busy';
+		}
+		if (anticipationActive) {
+			return 'scatter anticipation effect is active';
+		}
+		return null;
+	}
+
+	/**
 	 * Bounce the autoplay spins remaining text
 	 */
 	private bounceAutoplaySpinsRemainingText(): void {
@@ -804,6 +849,12 @@ export class SlotController {
 			if (gameStateManager.isAutoPlaying) {
 				console.log('[SlotController] Stopping autoplay via spin button click');
 				this.stopAutoplay();
+				return;
+			}
+			const blockReason = this.getSpinBlockReason({ ignoreReelSpinning: true });
+			if (blockReason) {
+				console.log(`[SlotController] Spin click ignored - ${blockReason}`);
+				this.disableSpinButton();
 				return;
 			}
 			if (gameStateManager.isReelSpinning) {
@@ -1463,6 +1514,12 @@ export class SlotController {
 				this.stopAutoplay();
 				return;
 			}
+			const blockReason = this.getSpinBlockReason({ ignoreReelSpinning: true });
+			if (blockReason) {
+				console.log(`[SlotController] Spin click ignored - ${blockReason}`);
+				this.disableSpinButton();
+				return;
+			}
 			if (gameStateManager.isReelSpinning) {
 				console.log('[SlotController] Spin blocked - already spinning');
 				return;
@@ -1605,9 +1662,14 @@ export class SlotController {
 		return this.buttons.get(buttonName);
 	}
 
-	updateBetAmount(betAmount: number): void {
+	updateBetAmount(betAmount: number, options?: { preserveAmplify?: boolean }): void {
+		const preserveAmplify = options?.preserveAmplify ?? false;
+		const gameData = this.getGameData();
+		const shouldPreserveAmplify = preserveAmplify && !!gameData?.isEnhancedBet;
+		const displayBetAmount = shouldPreserveAmplify ? betAmount * 1.25 : betAmount;
+		
 		if (this.betAmountText) {
-			this.betAmountText.setText(betAmount.toFixed(2));
+			this.betAmountText.setText(displayBetAmount.toFixed(2));
 			
 			// Update dollar sign position based on new bet amount width
 			if (this.betDollarText) {
@@ -1623,8 +1685,14 @@ export class SlotController {
 		// Update base bet amount when changed externally (not by amplify bet)
 		if (!this.isInternalBetChange) {
 			this.baseBetAmount = betAmount;
-			// Reset amplify bet state when bet amount is changed externally
-			this.resetAmplifyBetOnBetChange();
+			
+			if (!shouldPreserveAmplify) {
+				// Reset amplify bet state when bet amount is changed externally
+				this.resetAmplifyBetOnBetChange();
+			} else {
+				// Amplify is still active, ensure Buy Feature price reflects the new base bet
+				this.updateFeatureAmountFromCurrentBet();
+			}
 		}
 	}
 
@@ -2306,6 +2374,12 @@ export class SlotController {
 			return;
 		}
 		
+		if (this.isSpinRequestInFlight) {
+			console.log('[SlotController] Spin request still pending - keeping spin button disabled until response completes');
+			this.disableSpinButton();
+			return;
+		}
+		
 		// Re-enable spin button if not spinning
 		if (!gameStateManager.isReelSpinning) {
 			this.enableSpinButton();
@@ -2354,6 +2428,18 @@ export class SlotController {
 	private async performAutoplaySpin(): Promise<void> {
 		if (this.autoplaySpinsRemaining <= 0) {
 			console.log('[SlotController] No autoplay spins remaining');
+			return;
+		}
+		const stillAutoPlaying = gameStateManager.isAutoPlaying || this.gameData?.isAutoPlaying;
+		if (!stillAutoPlaying) {
+			console.log('[SlotController] Autoplay spin aborted - autoplay flags already cleared');
+			return;
+		}
+		const blockReason = this.getSpinBlockReason();
+		if (blockReason) {
+			const retryDelay = 250;
+			console.log(`[SlotController] Autoplay spin gated - ${blockReason}. Retrying in ${retryDelay}ms`);
+			this.scheduleNextAutoplaySpin(retryDelay);
 			return;
 		}
 
@@ -3196,9 +3282,16 @@ public updateAutoplayButtonState(): void {
 	 * Handle spin logic - either normal API call or free spin simulation
 	 */
 	private async handleSpin(): Promise<void> {
+		if (this.isSpinRequestInFlight) {
+			console.warn('[SlotController] handleSpin invoked while a spin request is already in flight');
+			return;
+		}
+		this.isSpinRequestInFlight = true;
+
 		if (!this.gameAPI) {
 			console.warn('[SlotController] GameAPI not available, falling back to EventBus');
 			EventBus.emit('spin');
+			this.isSpinRequestInFlight = false;
 			return;
 		}
 
@@ -3310,6 +3403,8 @@ public updateAutoplayButtonState(): void {
 		} catch (error) {
 			console.error('[SlotController] ❌ Spin failed:', error);
 			// Don't emit the spin event if the API call failed
+		} finally {
+			this.isSpinRequestInFlight = false;
 		}
 	}
 
@@ -3762,6 +3857,12 @@ public updateAutoplayButtonState(): void {
 	public enableSpinButton(): void {
 		const spinButton = this.buttons.get('spin');
 		if (spinButton) {
+			const blockReason = this.getSpinBlockReason();
+			if (blockReason) {
+				console.log(`[SlotController] Spin button enable skipped - ${blockReason}`);
+				spinButton.disableInteractive();
+				return;
+			}
 			spinButton.clearTint(); // Remove gray tint
 			spinButton.setInteractive();
 			console.log('[SlotController] Spin button enabled');

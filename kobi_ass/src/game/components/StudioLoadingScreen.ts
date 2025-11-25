@@ -449,13 +449,26 @@ export class StudioLoadingScreen {
 
 // Centralized asset queue helpers (mirrors reference game's pattern)
 // These allow the Preloader to enqueue all required assets consistently.
-export function queueGameAssetLoading(scene: Phaser.Scene, assetLoader: import('../../utils/AssetLoader').AssetLoader): void {
+export interface AssetQueueOptions {
+	includeBonusAssets?: boolean;
+}
+
+export function queueGameAssetLoading(
+	scene: Phaser.Scene,
+	assetLoader: import('../../utils/AssetLoader').AssetLoader,
+	options?: AssetQueueOptions
+): void {
+	const includeBonusAssets = options?.includeBonusAssets ?? true;
 	// Order chosen to prioritize frequently-visible assets
 	assetLoader.loadCoinAssets(scene);
 	assetLoader.loadBuyFeatureAssets(scene);
 	assetLoader.loadBackgroundAssets(scene);
-	assetLoader.loadBonusBackgroundAssets(scene);
-	assetLoader.loadBonusHeaderAssets(scene);
+	if (includeBonusAssets) {
+		assetLoader.loadBonusBackgroundAssets(scene);
+		assetLoader.loadBonusHeaderAssets(scene);
+	} else {
+		console.log('[StudioLoadingScreen] Skipping bonus assets for initial load');
+	}
 	assetLoader.loadScatterAnticipationAssets(scene);
 	assetLoader.loadButtonAssets(scene);
 	assetLoader.loadHeaderAssets(scene);
