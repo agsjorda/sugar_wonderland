@@ -154,8 +154,8 @@ export class SlotController {
 	// Simple autoplay system
 	private autoplaySpinsRemaining: number = 0;
 	private autoplayTimer: Phaser.Time.TimerEvent | null = null;
-	private pausedAutoplaySpinsRemaining: number = 0;
-	private autoplayPausedForBonus: boolean = false;
+	private autoplaySpinsBackupBeforeBonus: number = 0;
+	private resumeAutoplayAfterBonusPending: boolean = false;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -2807,10 +2807,12 @@ setBuyFeatureBetAmount(amount: number): void {
 	public startAutoplay(spins: number): void {
 		console.log(`[SlotController] Starting autoplay with ${spins} spins`);
 		
+		// Clear any stale resume flags whenever autoplay starts (manual or resumed)
+		this.resumeAutoplayAfterBonusPending = false;
+		this.autoplaySpinsBackupBeforeBonus = 0;
+		
 		// Update state
 		this.autoplaySpinsRemaining = spins;
-		this.pausedAutoplaySpinsRemaining = 0;
-		this.autoplayPausedForBonus = false;
 		
 		// Update GameData and GameStateManager
 		if (this.gameData) {
@@ -2910,69 +2912,57 @@ setBuyFeatureBetAmount(amount: number): void {
 
 	public pauseAutoplayForBonus(): void {
 		console.log('[SlotController] Pausing autoplay for bonus');
-		// Clear any pending autoplay timer
-		if (this.autoplayTimer) {
-			try { this.autoplayTimer.destroy(); } catch {}
-			this.autoplayTimer = null;
+		
+		const spinsToSave = Math.max(0, this.autoplaySpinsRemaining);
+		if (!this.resumeAutoplayAfterBonusPending && spinsToSave > 0) {
+			this.autoplaySpinsBackupBeforeBonus = spinsToSave;
+			this.resumeAutoplayAfterBonusPending = true;
+			console.log(`[SlotController] Saved ${spinsToSave} autoplay spins to resume after bonus`);
+		} else if (this.resumeAutoplayAfterBonusPending) {
+			console.log('[SlotController] Autoplay already marked to resume after bonus - skipping new capture');
+		} else {
+			console.log('[SlotController] No autoplay spins remaining when bonus started - nothing to resume');
 		}
-		// Preserve remaining spins
-		if (this.autoplaySpinsRemaining > 0) {
-			this.pausedAutoplaySpinsRemaining = this.autoplaySpinsRemaining;
-		}
-		// Reset current counter while paused
-		this.autoplaySpinsRemaining = 0;
-		// Update global/local autoplay flags
-		if (this.gameData) {
-			this.gameData.isAutoPlaying = false;
-		}
-		gameStateManager.isAutoPlaying = false;
-		this.autoplayPausedForBonus = true;
-		// UI adjustments
-		this.hideAutoplaySpinsRemainingText();
-		this.setAutoplayButtonState(false);
-		console.log('[SlotController] Autoplay paused with spins preserved:', this.pausedAutoplaySpinsRemaining);
+
+		// Stop current autoplay UI/state (preserving backup if pending)
+		this.stopAutoplay();
 	}
 
 	private tryResumeAutoplayAfterBonus(): void {
-		if (!this.autoplayPausedForBonus || this.pausedAutoplaySpinsRemaining <= 0) {
+		if (!this.resumeAutoplayAfterBonusPending || this.autoplaySpinsBackupBeforeBonus <= 0) {
+			this.resumeAutoplayAfterBonusPending = false;
+			this.autoplaySpinsBackupBeforeBonus = 0;
 			return;
 		}
+
+		const spinsToResume = this.autoplaySpinsBackupBeforeBonus;
+		this.resumeAutoplayAfterBonusPending = false;
+		this.autoplaySpinsBackupBeforeBonus = 0;
+
+		let resumeTriggered = false;
 		const resume = () => {
-			if (!this.autoplayPausedForBonus || this.pausedAutoplaySpinsRemaining <= 0) {
+			if (resumeTriggered) {
 				return;
 			}
-			console.log('[SlotController] Resuming autoplay after bonus');
-			this.autoplaySpinsRemaining = this.pausedAutoplaySpinsRemaining;
-			this.pausedAutoplaySpinsRemaining = 0;
-			this.autoplayPausedForBonus = false;
-			if (this.gameData) {
-				this.gameData.isAutoPlaying = true;
-			}
-			gameStateManager.isAutoPlaying = true;
-			// UI
-			this.setAutoplayButtonState(true);
-			this.showAutoplaySpinsRemainingText();
-			this.updateAutoplaySpinsRemainingText(this.autoplaySpinsRemaining);
-			// Schedule next spin with turbo consideration
-			const baseDelay = 500;
-			const gd = this.getGameData();
-			const isTurbo = gd?.isTurbo || false;
-			const delay = isTurbo ? baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER : baseDelay;
-			this.scheduleNextAutoplaySpin(delay);
+			resumeTriggered = true;
+			console.log(`[SlotController] Resuming autoplay after bonus with ${spinsToResume} spins`);
+			this.startAutoplay(spinsToResume);
 		};
 
 		if (gameStateManager.isShowingWinDialog) {
 			console.log('[SlotController] Win dialog active - deferring autoplay resume');
-			gameEventManager.once(GameEventType.WIN_DIALOG_CLOSED, () => { resume(); });
-			try { this.scene?.events?.once('dialogAnimationsComplete', () => { resume(); }); } catch {}
-			try { this.scene?.time?.delayedCall(1800, () => { resume(); }); } catch {}
+			gameEventManager.once(GameEventType.WIN_DIALOG_CLOSED, resume);
+			try { this.scene?.events?.once('dialogAnimationsComplete', resume); } catch {}
+			try { this.scene?.time?.delayedCall(1800, resume); } catch {}
+		} else if (this.scene && this.scene.time) {
+			this.scene.time.delayedCall(200, resume);
 		} else {
 			resume();
 		}
 	}
 
 	public hasPausedAutoplayToResume(): boolean {
-		return this.autoplayPausedForBonus && this.pausedAutoplaySpinsRemaining > 0;
+		return this.resumeAutoplayAfterBonusPending && this.autoplaySpinsBackupBeforeBonus > 0;
 	}
 
 	public resumeAutoplayAfterBonusIfPaused(): void {
