@@ -2,6 +2,7 @@ import { Boot } from './scenes/Boot';
 import { Game as MainGame } from './scenes/Game';
 import { AUTO, Game } from 'phaser';
 import { Preloader } from './scenes/Preloader';
+import { TemporaryScene } from './scenes/TemporaryScene';
 // Import Spine runtime and plugin
 import * as Spine from '@esotericsoftware/spine-phaser-v3';
 
@@ -30,6 +31,7 @@ const config: Phaser.Types.Core.GameConfig = {
     scene: [
         Boot,
         Preloader,
+        TemporaryScene,
         MainGame,
     ],
     plugins: {

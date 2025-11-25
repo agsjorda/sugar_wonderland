@@ -406,8 +406,8 @@ export class Preloader extends Scene
         this.buttonSpin?.once('pointerdown', () => {
             // Fade out the Preloader camera, then start Game when complete
             this.cameras.main.once('camerafadeoutcomplete', () => {
-                console.log('[Preloader] Starting Game scene after camera fade out');
-                this.scene.start('Game', {
+                console.log('[Preloader] Starting TemporaryScene scene after camera fade out');
+                this.scene.start('TemporaryScene', {
                     networkManager: this.networkManager,
                     screenModeManager: this.screenModeManager
                 });
