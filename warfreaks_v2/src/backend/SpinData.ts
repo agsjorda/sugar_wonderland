@@ -109,6 +109,54 @@ export class SpinDataUtils {
       : [];
     return paylines.reduce((total, payline) => total + (payline?.win || 0), 0);
   }
+
+  /**
+   * Get the effective total win for a spin.
+   *
+   * Priority:
+   * 1) If a `totalWin` field exists (on the spin, slot, or freespin), use it.
+   * 2) Otherwise, if free spins exist, sum all wins from their items.
+   * 3) Fallback to summing base-game paylines.
+   */
+  static getAggregateTotalWin(spinData: SpinData): number {
+    if (!spinData || !spinData.slot) {
+      return 0;
+    }
+
+    const slotAny = spinData.slot as any;
+
+    // 1) Direct totalWin fields (handle different API shapes defensively)
+    const directTotalWin =
+      (typeof (spinData as any).totalWin === 'number' ? (spinData as any).totalWin : undefined) ??
+      (typeof slotAny.totalWin === 'number' ? slotAny.totalWin : undefined) ??
+      (typeof slotAny.freespin?.totalWin === 'number' ? slotAny.freespin.totalWin : undefined) ??
+      (typeof slotAny.freeSpin?.totalWin === 'number' ? slotAny.freeSpin.totalWin : undefined);
+
+    if (typeof directTotalWin === 'number') {
+      return directTotalWin;
+    }
+
+    // 2) Sum all free spin items if available
+    const freespin = slotAny.freespin || slotAny.freeSpin;
+    if (freespin && Array.isArray(freespin.items) && freespin.items.length > 0) {
+      const sumFs = freespin.items.reduce((sum: number, item: any) => {
+        const itemWin =
+          typeof item?.totalWin === 'number'
+            ? item.totalWin
+            : typeof item?.subTotalWin === 'number'
+            ? item.subTotalWin
+            : 0;
+        return sum + itemWin;
+      }, 0);
+
+      if (sumFs > 0) {
+        return sumFs;
+      }
+    }
+
+    // 3) Fallback: base-game paylines
+    return this.getTotalWin(spinData);
+  }
   
   /**
    * Get all unique symbols that have wins

@@ -5,6 +5,9 @@ import { gameEventManager, GameEventType } from '../event/EventManager';
 import { gameStateManager } from './GameStateManager';
 import { TurboConfig } from '../config/TurboConfig';
 import { SCATTER_MULTIPLIERS } from '../config/GameConfig';
+import { getFullScreenSpineScale, playSpineAnimationSequence } from '../game/components/SpineBehaviorHelper';
+import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
+import { FlashTransition } from '../game/components/FlashTransition';
 
 export interface ScatterAnimationConfig {
   scatterRevealDelay: number;
@@ -24,11 +27,11 @@ export class ScatterAnimationManager {
   private isAnimating: boolean = false;
   public delayedScatterData: any = null;
   private scatterSymbols: any[] = []; // Store references to scatter symbols
-  
+
   // Event listener references for cleanup
   private wheelSpinStartListener: ((data?: any) => void) | null = null;
   private wheelSpinDoneListener: ((data?: any) => void) | null = null;
-  
+
   private config: ScatterAnimationConfig = {
     scatterRevealDelay: 500,
     slideInDuration: 1200,
@@ -36,6 +39,7 @@ export class ScatterAnimationManager {
     slideDistance: 200,
     dialogDelay: 300
   };
+  private flashTransition: FlashTransition;
 
   // Apply turbo mode to delays for consistent timing
   // Note: Scatter animations always use normal speed for better visual experience
@@ -44,7 +48,7 @@ export class ScatterAnimationManager {
     return baseDelay;
   }
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(): ScatterAnimationManager {
     if (!ScatterAnimationManager.instance) {
@@ -59,10 +63,12 @@ export class ScatterAnimationManager {
     this.spinnerContainer = spinnerContainer;
     this.spinnerComponent = spinnerComponent;
     this.dialogsComponent = dialogsComponent;
-    
+
+    this.flashTransition = new FlashTransition(scene);
+
     // Set up event listeners for wheel events
     this.setupWheelEventListeners();
-    
+
     console.log('[ScatterAnimationManager] Initialized with containers, spinner and dialogs components');
   }
 
@@ -121,25 +127,28 @@ export class ScatterAnimationManager {
       // Step 1: Wait for player to see scatter symbols
       console.log('[ScatterAnimationManager] Waiting for player to see scatter symbols...');
       await this.delay(this.getTurboAdjustedDelay(this.config.scatterRevealDelay));
-      
+
       // Step 2: Disable symbols
-      await this.disableSymbols();
-      
+      // await this.disableSymbols();
+
       // Step 3: Slide spinner down
-      await this.slideSpinnerIn();
-      
+      // await this.slideSpinnerIn();
+
       // Step 4: Wait for delay then trigger spinner rotation
-      await this.delay(this.config.spinDelay);
-      
+      // await this.delay(this.config.spinDelay);
+
       // Step 5: Trigger the spinner rotation
-      this.triggerSpinnerRotation(data);
-      
+      // this.triggerSpinnerRotation(data);
+
       // Step 6: Wait for spinner to complete and show free spins dialog
-      await this.waitForSpinnerAndShowDialog(data);
-      
+      await this.waitForFreeSpinDialogInput(data);
+
+      // Call nuclear transition here
+      await this.startNuclearTransition(this.scene, 0.6, 800);
+ 
       // Note: Symbol reset will happen after dialog animations complete
       console.log('[ScatterAnimationManager] Scatter bonus sequence completed, waiting for dialog animations to finish');
-      
+
     } catch (error) {
       console.error('[ScatterAnimationManager] Error during scatter animation:', error);
     } finally {
@@ -151,16 +160,16 @@ export class ScatterAnimationManager {
     if (!this.symbolsContainer) return;
 
     console.log('[ScatterAnimationManager] Disabling symbols...');
-    
+
     // Immediately disable symbols by setting alpha to 0
     this.symbolsContainer.setAlpha(0);
-    
+
     // Also hide scatter symbols that are added directly to the scene
     this.hideScatterSymbols();
-    
+
     // Add a small delay to ensure the disable is visible
     await this.delay(50);
-    
+
     console.log('[ScatterAnimationManager] Symbols disabled');
   }
 
@@ -168,16 +177,16 @@ export class ScatterAnimationManager {
     if (!this.spinnerContainer) return;
 
     console.log('[ScatterAnimationManager] Sliding spinner in...');
-    
+
     // Store original position
     const originalY = this.spinnerContainer.y;
     const targetY = originalY;
     const startY = originalY - this.config.slideDistance;
-    
+
     // Set initial position above and make visible
     this.spinnerContainer.setPosition(this.spinnerContainer.x, startY);
     this.spinnerContainer.setVisible(true);
-    
+
     return new Promise<void>((resolve) => {
       this.scene!.tweens.add({
         targets: this.spinnerContainer,
@@ -204,7 +213,7 @@ export class ScatterAnimationManager {
     }
 
     console.log('[ScatterAnimationManager] Starting spin_03 pulse animation...');
-    
+
     // Create a single pulse animation at 10% bigger scale
     this.scene!.tweens.add({
       targets: spin03,
@@ -230,16 +239,16 @@ export class ScatterAnimationManager {
 
   private triggerSpinnerRotation(data: Data): void {
     console.log('[ScatterAnimationManager] Triggering spinner rotation after 0.5s delay when spinner is in place');
-    
+
     // First try to get the index from SpinData
     let scatterIndex = this.getFreeSpinIndexFromSpinData();
-    
+
     if (scatterIndex >= 0) {
       // Use the index from SpinData
       console.log(`[ScatterAnimationManager] Using SpinData-based index: ${scatterIndex}`);
       const freeSpins = SCATTER_MULTIPLIERS[scatterIndex];
       console.log(`[ScatterAnimationManager] SpinData free spins: ${freeSpins}`);
-      
+
       // Update the backend data with the SpinData values
       data.freeSpins = freeSpins;
       data.scatterIndex = scatterIndex;
@@ -249,33 +258,33 @@ export class ScatterAnimationManager {
       console.log('[ScatterAnimationManager] SpinData not available, calculating scatter index from symbols');
       const scatterGrids = this.getScatterGridsFromData(data);
       const scatterCount = scatterGrids.length;
-      
+
       // Scatter index is based on number of scatter symbols (3+ = index 0, 4+ = index 1, etc.)
       // But we need to ensure it doesn't exceed the array bounds
       const maxScatterIndex = SCATTER_MULTIPLIERS.length - 1;
       scatterIndex = Math.min(Math.max(0, scatterCount - 3), maxScatterIndex);
-      
+
       console.log(`[ScatterAnimationManager] Scatter calculation: ${scatterCount} symbols found, using index ${scatterIndex}`);
-      
+
       // Get the free spins count from the calculated scatter index
       const freeSpins = SCATTER_MULTIPLIERS[scatterIndex];
       console.log(`[ScatterAnimationManager] Wheel will determine free spins: index ${scatterIndex} = ${freeSpins} free spins`);
-      
+
       // Update the backend data with the calculated free spins value
       data.freeSpins = freeSpins;
       data.scatterIndex = scatterIndex;
       console.log(`[ScatterAnimationManager] Updated backend data with calculated values: freeSpins=${freeSpins}, scatterIndex=${scatterIndex}`);
     }
-    
+
     // Update the game state to reflect scatter mode
     gameStateManager.isScatter = true;
     gameStateManager.scatterIndex = scatterIndex;
-    
+
     // Try to use SpinData-based spinner first, then fallback to index-based
     if (scatterIndex >= 0 && this.scene) {
       const gameScene = this.scene as any;
-      if (gameScene.symbols && gameScene.symbols.currentSpinData && 
-          this.spinnerComponent && typeof this.spinnerComponent.startScatterSpinnerFromSpinData === 'function') {
+      if (gameScene.symbols && gameScene.symbols.currentSpinData &&
+        this.spinnerComponent && typeof this.spinnerComponent.startScatterSpinnerFromSpinData === 'function') {
         // Use SpinData-based spinner
         this.spinnerComponent.startScatterSpinnerFromSpinData(gameScene.symbols.currentSpinData);
         console.log(`[ScatterAnimationManager] Spinner rotation triggered from SpinData with index ${scatterIndex}`);
@@ -298,6 +307,88 @@ export class ScatterAnimationManager {
     }
   }
 
+  private async startNuclearTransition(scene: Scene, delayModifier?: number, flashDuration?: number): Promise<void> {
+    const spine = scene.add.spine(0, 0, 'nuclear', 'nuclear-atlas');
+    const scale = getFullScreenSpineScale(scene, spine, true);
+    const offset = { x: 0, y: 50 };
+    const anchor = { x: 0.5, y: 0.5 };
+    const origin = { x: 0.5, y: 0.5 };
+
+    const onComplete = () => {
+      try { spine.off('complete', onComplete); } catch { }
+      try { spine.destroy(); } catch { }
+    };
+
+    const animationDuration = playSpineAnimationSequence(scene, spine, [0], { x: scale.x * 1.1, y: scale.y * 1.2 }, anchor, origin, offset, 999, false, onComplete);
+    const delay = delayModifier ? animationDuration * delayModifier : animationDuration;
+
+    // use FlashTransition component for the flash instead of manual tween
+    const totalDuration = flashDuration || 500;
+
+    return new Promise<void>((resolve) => {
+      scene.time.delayedCall(delay, () => {
+        this.flashTransition.show();
+        this.flashTransition.setAlphaImmediate(0);
+        this.flashTransition.flashOverlay(1, totalDuration / 2, 'In');
+
+        // fade back down after reaching full white
+        scene.time.delayedCall(totalDuration * 2, () => {
+          this.flashTransition.flashOverlay(0, totalDuration / 2, 'Out');
+          // Emit scatter bonus completion BEFORE triggering bonus mode so listeners can
+          // register for dialogAnimationsComplete in time
+          scene.events.emit('scatterBonusCompleted');
+          this.triggerBonusMode(scene);
+        });
+
+        // hide overlay shortly after the flash completes
+        scene.time.delayedCall(totalDuration * 3, () => {
+          this.flashTransition.hide();
+
+          // Emit dialog animations complete event AFTER the full iris transition completes
+          console.log('[Dialogs] Dialog animations complete event emitted after full iris transition');
+
+          // Restore background music volume after dialog completes
+          try {
+            const audioManager = (window as any).audioManager;
+            if (audioManager && typeof audioManager.restoreBackground === 'function') {
+              audioManager.restoreBackground();
+            }
+          } catch { }
+
+          resolve();
+        });
+      });
+    });
+  }
+
+  private triggerBonusMode(scene: Scene): void {
+    console.log('[Dialogs] ===== TRIGGERING BONUS MODE TRANSITION =====');
+    console.log('[Dialogs] Scene exists:', !!scene);
+    console.log('[Dialogs] Scene events exists:', !!scene.events);
+
+    // Set bonus mode in backend data
+    scene.events.emit('setBonusMode', true);
+    console.log('[Dialogs] Emitted setBonusMode event');
+
+    // Switch to bonus background
+    scene.events.emit('showBonusBackground');
+    console.log('[Dialogs] Emitted showBonusBackground event');
+
+    // Switch to bonus header
+    scene.events.emit('showBonusHeader');
+    console.log('[Dialogs] Emitted showBonusHeader event');
+
+    // Re-enable symbols after bonus mode setup
+    scene.events.emit('enableSymbols');
+    console.log('[Dialogs] Emitted enableSymbols event');
+
+    // Emit dialog animations complete event for scatter bonus reset
+    scene.events.emit('dialogAnimationsComplete');
+    console.log('[Dialogs] Dialog animations complete event emitted for bonus mode');
+
+    console.log('[Dialogs] ===== BONUS MODE ACTIVATED - BACKGROUND AND HEADER SWITCHED =====');
+  }
+
   /**
    * Get freeSpin value from SpinData and find its index in SCATTER_MULTIPLIERS
    */
@@ -307,27 +398,63 @@ export class ScatterAnimationManager {
       const gameScene = this.scene as any; // Cast to access symbols property
       if (gameScene.symbols && gameScene.symbols.currentSpinData) {
         const currentSpinData = gameScene.symbols.currentSpinData;
-        if (currentSpinData.slot && currentSpinData.slot.freespin) {
-          const freeSpinsCount = currentSpinData.slot.freespin.count || 0;
-          console.log(`[ScatterAnimationManager] Found freeSpins count in SpinData: ${freeSpinsCount}`);
-          
-          // Find the index in SCATTER_MULTIPLIERS array
-          const index = SCATTER_MULTIPLIERS.indexOf(freeSpinsCount);
-          console.log(`[ScatterAnimationManager] Looking for ${freeSpinsCount} in SCATTER_MULTIPLIERS:`, SCATTER_MULTIPLIERS);
-          console.log(`[ScatterAnimationManager] Found index: ${index}`);
-          
-          if (index >= 0) {
-            return index;
-          } else {
-            console.warn(`[ScatterAnimationManager] Free spins count ${freeSpinsCount} not found in SCATTER_MULTIPLIERS, using fallback`);
-          }
+        const freeSpinsCount = this.deriveFreeSpinsFromSpinData(currentSpinData);
+        console.log(`[ScatterAnimationManager] Free spins derived for index lookup: ${freeSpinsCount}`);
+
+        // Find the index in SCATTER_MULTIPLIERS array
+        const index = SCATTER_MULTIPLIERS.indexOf(freeSpinsCount);
+        console.log(`[ScatterAnimationManager] Looking for ${freeSpinsCount} in SCATTER_MULTIPLIERS:`, SCATTER_MULTIPLIERS);
+        console.log(`[ScatterAnimationManager] Found index: ${index}`);
+
+        if (index >= 0) {
+          return index;
+        } else {
+          console.warn(`[ScatterAnimationManager] Free spins count ${freeSpinsCount} not found in SCATTER_MULTIPLIERS, using fallback`);
         }
       }
     }
-    
+
     // SpinData not available - return -1 to indicate no scatter found
     console.log('[ScatterAnimationManager] SpinData not available, no scatter index found');
     return -1;
+  }
+
+  /**
+   * Robustly derive number of free spins from SpinData supporting several formats.
+   */
+  private deriveFreeSpinsFromSpinData(currentSpinData: any): number {
+    if (!currentSpinData || !currentSpinData.slot) {
+      return 0;
+    }
+
+    // Accept both legacy 'freespin' and 'freeSpin' shapes
+    const freespin = currentSpinData.slot.freespin;
+    const freeSpin = currentSpinData.slot.freeSpin;
+
+    // 1) Prefer explicit count if provided
+    const count = (freespin && typeof freespin.count === 'number' && freespin.count) ||
+                  (freeSpin && typeof freeSpin.count === 'number' && freeSpin.count) ||
+                  0;
+    if (count > 0) {
+      return count;
+    }
+
+    // 2) Prefer items[0].spinsLeft if present (newer format)
+    const items = (freeSpin && Array.isArray(freeSpin.items) && freeSpin.items) ||
+                  (freespin && Array.isArray(freespin.items) && freespin.items) ||
+                  [];
+    const firstItem = items.length > 0 ? items[0] : null;
+    const spinsLeft = firstItem && typeof firstItem.spinsLeft === 'number' ? firstItem.spinsLeft : 0;
+    if (spinsLeft > 0) {
+      return spinsLeft;
+    }
+
+    // 3) Fallback to items length if available
+    if (items.length > 0) {
+      return items.length;
+    }
+
+    return 0;
   }
 
   /**
@@ -345,30 +472,37 @@ export class ScatterAnimationManager {
     return scatterGrids;
   }
 
-  private async waitForSpinnerAndShowDialog(data: Data): Promise<void> {
-    console.log('[ScatterAnimationManager] ===== WAIT FOR SPINNER AND SHOW DIALOG CALLED =====');
-    console.log('[ScatterAnimationManager] Waiting for spinner to complete and then showing dialog effects...');
-    
-    // Wait for the spinner animation duration (2000ms) plus our dialog delay
-    const spinnerDuration = 9500; // Duration of the spinner tween
-    const totalWaitTime = spinnerDuration + this.config.dialogDelay;
-    
-    console.log(`[ScatterAnimationManager] Waiting ${totalWaitTime}ms for spinner animation + dialog delay`);
-    
+  private async waitForFreeSpinDialogInput(data: Data): Promise<void> {
+    console.log('[ScatterAnimationManager] Showing FreeSpin dialog via showFreeSpinsDialog');
+    this.showFreeSpinsDialog(data);
+
+    // Wait until the Free Spin dialog is clicked before proceeding
     return new Promise<void>((resolve) => {
-      setTimeout(() => {
-        console.log('[ScatterAnimationManager] ===== TIMEOUT COMPLETED - SHOWING DIALOG =====');
-        console.log('[ScatterAnimationManager] Spinner animation completed, showing dialog effects');
-        this.showFreeSpinsDialog(data);
+      if (!this.scene) {
         resolve();
-      }, totalWaitTime);
+        return;
+      }
+
+      let resolved = false;
+
+      const resolveOnce = () => {
+        if (resolved) return;
+        resolved = true;
+        resolve();
+      };
+
+      // Resolve when the Free Spin dialog is clicked
+      this.scene.events.once('freeSpinDialogClicked', () => {
+        console.log('[ScatterAnimationManager] freeSpinDialogClicked received - proceeding to nuclear transition');
+        resolveOnce();
+      });
     });
   }
 
   private showFreeSpinsDialog(data: Data): void {
     console.log('[ScatterAnimationManager] ===== SHOW FREE SPINS DIALOG CALLED =====');
     console.log('[ScatterAnimationManager] Dialogs component available:', !!this.dialogsComponent);
-    
+
     if (!this.dialogsComponent) {
       console.warn('[ScatterAnimationManager] Dialogs component not available');
       return;
@@ -376,42 +510,34 @@ export class ScatterAnimationManager {
 
     // Get free spins count from the current spinData
     let freeSpins = 0; // Default to 0, will be set from spinData
-    
+
     // Get free spins from the current spinData directly from symbols
     if (this.scene) {
       const gameScene = this.scene as any; // Cast to access symbols property
       if (gameScene.symbols && gameScene.symbols.currentSpinData) {
         const currentSpinData = gameScene.symbols.currentSpinData;
-        if (currentSpinData.slot) {
-          // Handle both freespin and freeSpin property names
-          const freespinData = currentSpinData.slot.freespin || currentSpinData.slot.freeSpin;
-          if (freespinData && freespinData.count !== undefined) {
-            freeSpins = freespinData.count;
-            console.log(`[ScatterAnimationManager] Using current spinData freespin count: ${freeSpins}`);
-            
-            // Verify the freeSpins value exists in SCATTER_MULTIPLIERS
-            const index = SCATTER_MULTIPLIERS.indexOf(freeSpins);
-            if (index >= 0) {
-              console.log(`[ScatterAnimationManager] Current spinData freeSpins ${freeSpins} found at index ${index} in SCATTER_MULTIPLIERS`);
-            } else {
-              console.warn(`[ScatterAnimationManager] Current spinData freeSpins ${freeSpins} not found in SCATTER_MULTIPLIERS`);
-            }
+        freeSpins = this.deriveFreeSpinsFromSpinData(currentSpinData);
+        if (freeSpins > 0) {
+          // Verify the freeSpins value exists in SCATTER_MULTIPLIERS
+          const index = SCATTER_MULTIPLIERS.indexOf(freeSpins);
+          if (index >= 0) {
+            console.log(`[ScatterAnimationManager] Current spinData freeSpins ${freeSpins} found at index ${index} in SCATTER_MULTIPLIERS`);
           } else {
-            console.warn(`[ScatterAnimationManager] No freespin count in current spinData`);
+            console.warn(`[ScatterAnimationManager] Current spinData freeSpins ${freeSpins} not found in SCATTER_MULTIPLIERS`);
           }
         } else {
-          console.warn(`[ScatterAnimationManager] No slot data in current spinData`);
+          console.warn(`[ScatterAnimationManager] Could not derive freeSpins from current SpinData`);
         }
       } else {
         console.warn(`[ScatterAnimationManager] Symbols or currentSpinData not available`);
       }
     }
-    
+
     // If we couldn't get freeSpins from spinData, log error and use 0
     if (freeSpins === 0) {
       console.error(`[ScatterAnimationManager] Could not get freeSpins from current spinData - dialog will show 0`);
     }
-    
+
     console.log(`[ScatterAnimationManager] Showing free spins dialog for ${freeSpins} free spins`);
     console.log(`[ScatterAnimationManager] Backend data state: freeSpins=${data.freeSpins}, scatterIndex=${data.scatterIndex}`);
 
@@ -424,18 +550,18 @@ export class ScatterAnimationManager {
     try {
       console.log('[ScatterAnimationManager] Calling dialogsComponent.showDialog with type: FreeSpinDialog_KA, freeSpins:', freeSpins);
       this.dialogsComponent.showDialog(this.scene, {
-        type: 'FreeSpinDialog_KA',
+        type: 'FreeSpinDialog',
         freeSpins: freeSpins
       });
-      
+
       console.log('[ScatterAnimationManager] Free spins dialog displayed successfully');
-      
+
       // Emit IS_BONUS event through the EventManager
       gameEventManager.emit(GameEventType.IS_BONUS, {
         scatterCount: data.scatterIndex,
         bonusType: 'freeSpins'
       });
-      
+
       // Emit scatter bonus activated event with scatter index and actual free spins for UI updates
       if (this.scene) {
         const eventData = {
@@ -443,14 +569,14 @@ export class ScatterAnimationManager {
           actualFreeSpins: freeSpins
         };
         console.log(`[ScatterAnimationManager] Emitting scatterBonusActivated event with data:`, eventData);
-        
+
         this.scene.events.emit('scatterBonusActivated', eventData);
         console.log(`[ScatterAnimationManager] Emitted scatterBonusActivated event with index ${data.scatterIndex} and ${freeSpins} free spins`);
       }
-      
+
       // Set up listener for when dialog animations complete
       this.setupDialogCompletionListener();
-      
+
     } catch (error) {
       console.error('[ScatterAnimationManager] Error showing dialog effects:', error);
     }
@@ -483,15 +609,15 @@ export class ScatterAnimationManager {
    */
   private setupDialogCompletionListener(): void {
     if (!this.scene) return;
-    
+
     console.log('[ScatterAnimationManager] Setting up dialog completion listener...');
-    
+
     // Listen for dialog completion event
     this.scene.events.once('dialogAnimationsComplete', () => {
       console.log('[ScatterAnimationManager] Dialog animations completed, resetting all symbols and animations');
       this.resetAllSymbolsAndAnimations();
     });
-    
+
     // Also set up a fallback timer in case the event doesn't fire
     setTimeout(() => {
       console.log('[ScatterAnimationManager] Fallback timer triggered for symbol reset');
@@ -507,9 +633,9 @@ export class ScatterAnimationManager {
     // Use SpinData freespin count
     const hasFreeSpins = this.getCurrentFreeSpinsCount() > 0;
     const isBonusMode = gameStateManager.isBonus;
-    
+
     console.log(`[ScatterAnimationManager] Checking bonus mode: hasFreeSpins=${hasFreeSpins}, isBonus=${isBonusMode}`);
-    
+
     return hasFreeSpins || isBonusMode;
   }
 
@@ -522,12 +648,12 @@ export class ScatterAnimationManager {
       const gameScene = this.scene as any; // Cast to access symbols property
       if (gameScene.symbols) {
         const currentSpinData = gameScene.symbols.currentSpinData;
-        if (currentSpinData && currentSpinData.slot && currentSpinData.slot.freespin) {
-          return currentSpinData.slot.freespin.count || 0;
+        if (currentSpinData) {
+          return this.deriveFreeSpinsFromSpinData(currentSpinData);
         }
       }
     }
-    
+
     // No SpinData available - return 0
     return 0;
   }
@@ -541,12 +667,12 @@ export class ScatterAnimationManager {
     if (currentCount > 0) {
       const newCount = currentCount - 1;
       console.log(`[ScatterAnimationManager] Consuming free spin: ${currentCount} -> ${newCount}`);
-      
+
       // Note: We should NOT modify freespin.count as it represents the original total won
       // The remaining spins should be tracked separately for display purposes
-      
+
       // Free spins count updated in SpinData
-      
+
       // If no more free spins, end bonus mode
       if (newCount === 0) {
         this.endBonusMode();
@@ -560,7 +686,7 @@ export class ScatterAnimationManager {
   public endBonusMode(): void {
     console.log('[ScatterAnimationManager] Ending bonus mode');
     gameStateManager.isBonus = false;
-    
+
     // Note: We should NOT modify freespin.count as it represents the original total won
     // Only clear the items array and totalWin for cleanup
     if (this.scene) {
@@ -573,9 +699,9 @@ export class ScatterAnimationManager {
         }
       }
     }
-    
+
     // Free spins data cleared from SpinData (except original count)
-    
+
     // Emit events to switch back to normal mode
     if (this.scene) {
       this.scene.events.emit('hideBonusBackground');
@@ -588,7 +714,7 @@ export class ScatterAnimationManager {
    */
   private async resetAllSymbolsAndAnimations(): Promise<void> {
     console.log('[ScatterAnimationManager] Resetting all symbols and animations...');
-    
+
     try {
       // If free spin music is playing, stop it and switch to bonus music when entering bonus mode
       try {
@@ -609,11 +735,11 @@ export class ScatterAnimationManager {
             }
           }
         }
-      } catch {}
+      } catch { }
 
       // Reset game state - but don't reset isBonus if we're in an active bonus mode
       gameStateManager.isScatter = false;
-      
+
       // Only reset isBonus if we're not in an active bonus mode (free spins)
       // The bonus mode should persist throughout the free spins
       if (!this.isInActiveBonusMode()) {
@@ -622,45 +748,45 @@ export class ScatterAnimationManager {
       } else {
         console.log('[ScatterAnimationManager] In active bonus mode, keeping isBonus as true');
       }
-      
+
       gameStateManager.scatterIndex = 0;
-      
+
       // Reset symbols container visibility
       if (this.symbolsContainer) {
         this.symbolsContainer.setAlpha(1);
         this.symbolsContainer.setVisible(true);
         console.log('[ScatterAnimationManager] Symbols container reset to visible with alpha 1');
       }
-      
+
       // Re-enable scatter symbols
       this.showScatterSymbols();
-      
+
       // Hide spinner container
       if (this.spinnerContainer) {
         this.spinnerContainer.setVisible(false);
         console.log('[ScatterAnimationManager] Spinner container hidden');
       }
-      
+
       // Reset any active tweens on the spinner
       if (this.spinnerContainer) {
         this.scene?.tweens.killTweensOf(this.spinnerContainer);
         console.log('[ScatterAnimationManager] Spinner tweens killed');
       }
-      
+
       // Kill any active tweens on the symbols container
       if (this.symbolsContainer) {
         this.scene?.tweens.killTweensOf(this.symbolsContainer);
         console.log('[ScatterAnimationManager] Symbols container tweens killed');
       }
-      
+
       // Emit event to notify Symbols component to restore symbol visibility
       if (this.scene) {
         this.scene.events.emit('scatterBonusCompleted');
         console.log('[ScatterAnimationManager] Emitted scatterBonusCompleted event');
       }
-      
+
       console.log('[ScatterAnimationManager] All symbols and animations reset successfully');
-      
+
     } catch (error) {
       console.error('[ScatterAnimationManager] Error resetting symbols and animations:', error);
     }
@@ -676,7 +802,7 @@ export class ScatterAnimationManager {
     if (!this.scene) return;
 
     console.log('[ScatterAnimationManager] Hiding scatter symbols...');
-    
+
     // Hide all registered scatter symbols
     this.scatterSymbols.forEach(symbol => {
       if (symbol && !symbol.destroyed) {
@@ -684,7 +810,7 @@ export class ScatterAnimationManager {
         console.log('[ScatterAnimationManager] Hidden scatter symbol');
       }
     });
-    
+
     console.log(`[ScatterAnimationManager] Hidden ${this.scatterSymbols.length} scatter symbols`);
   }
 
@@ -692,7 +818,7 @@ export class ScatterAnimationManager {
     if (!this.scene) return;
 
     console.log('[ScatterAnimationManager] Showing scatter symbols...');
-    
+
     // Show all registered scatter symbols
     this.scatterSymbols.forEach(symbol => {
       if (symbol && !symbol.destroyed) {
@@ -700,7 +826,7 @@ export class ScatterAnimationManager {
         console.log('[ScatterAnimationManager] Shown scatter symbol');
       }
     });
-    
+
     console.log(`[ScatterAnimationManager] Shown ${this.scatterSymbols.length} scatter symbols`);
   }
 
@@ -741,7 +867,7 @@ export class ScatterAnimationManager {
     if (this.wheelSpinDoneListener) {
       gameEventManager.off(GameEventType.WHEEL_SPIN_DONE, this.wheelSpinDoneListener);
     }
-    
+
     this.scene = null;
     this.symbolsContainer = null;
     this.spinnerContainer = null;

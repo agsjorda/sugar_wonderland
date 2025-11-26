@@ -6,6 +6,7 @@ import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { SpineGameObject } from "@esotericsoftware/spine-phaser-v3";
 import { playSpineAnimationSequence } from "./SpineBehaviorHelper";
 import { gameEventManager, GameEventType } from '../../event/EventManager';
+import { SoundEffectType } from "../../managers/AudioManager";
 
 export class Background {
 	private bgContainer: Phaser.GameObjects.Container;
@@ -14,6 +15,8 @@ export class Background {
 	private reelFrame?: Phaser.GameObjects.Image;
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
+
+	private reelFrameDepth: number = 550;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -58,11 +61,10 @@ export class Background {
 				scene.scale.width * 0.495,
 				scene.scale.height * 0.61,
 				'reel-frame'
-			).setOrigin(0.5, 0.95).setScale(assetScale * 0.323, assetScale * 0.291).setDepth(5);
+			).setOrigin(0.5, 0.95)
+			.setScale(assetScale * 0.323, assetScale * 0.291)
+			.setDepth(this.reelFrameDepth);
 		this.bgContainer.add(this.reelFrame);
-
-		// Replaced rifle image with spine animation
-		//this.createRifleImage(scene, assetScale);
 
 		// Add rifle spine
 		this.createRifleSpine(scene);

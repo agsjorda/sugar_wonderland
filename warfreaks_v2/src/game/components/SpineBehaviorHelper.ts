@@ -1,6 +1,18 @@
 import { SpineGameObject } from "@esotericsoftware/spine-phaser-v3";
 import { Scene } from "phaser";
 
+interface SpineConfig {
+    scalePair?: {x: number, y: number };
+    scale?: number;
+    anchor?: {x: number, y: number };
+    origin?: {x: number, y: number };
+    offset?: {x: number, y: number };
+    depth?: number;
+    loopLastAnimation?: boolean;
+    timeScale?: number; // not yet implemented
+    onComplete?: () => void;
+}
+
 export function hideSpineAttachmentsByKeywords(spine: SpineGameObject, keywords: string[]) {
 	try {
         const skeleton = (spine as any)?.skeleton;
@@ -19,7 +31,18 @@ export function hideSpineAttachmentsByKeywords(spine: SpineGameObject, keywords:
     } catch {}
 }
 
-export function playSpineAnimationSequence(scene: Scene, spine: SpineGameObject, animationSequence: number[], scale?: { x: number, y: number }, anchor?: { x: number, y: number }, origin?: { x: number, y: number }, offset?: { x: number, y: number }, depth?: number, normalizedTime?: number) {
+export function playSpineAnimationSequence(
+    scene: Scene, spine: 
+    SpineGameObject, 
+    animationSequence: number[], 
+    scale?: { x: number, y: number }, 
+    anchor?: { x: number, y: number }, 
+    origin?: { x: number, y: number }, 
+    offset?: { x: number, y: number }, 
+    depth?: number, 
+    loopLastAnimation?: boolean,
+    onComplete?: () => void) : number
+    {
     const centerX = scene.scale.width * (anchor?.x ?? 0.5) + (offset?.x || 0);
     const centerY = scene.scale.height * (anchor?.y ?? 0.5) + (offset?.y || 0);
 
@@ -29,17 +52,29 @@ export function playSpineAnimationSequence(scene: Scene, spine: SpineGameObject,
     spine.setVisible(true);
     spine.setScale(scale?.x ?? 1, scale?.y ?? 1);
 
+    // Compute total duration (ms) of the animations to be played (one iteration each), factoring in timeScale
+    let totalDurationMs = 0;
+
     try {
         const animations = (spine as any)?.skeleton?.data?.animations as Array<{ name: string }> | undefined;
 
         if (!animations)
-            return;
+            return 0;
 
         const animationNames: string[] = animationSequence.map(index => animations && animations.length > 0 && index < animations.length ? animations[index].name : null).filter(name => name !== null) as string[];
 
+        // Sum durations (convert seconds to ms) and apply current timeScale if any
+        try {
+            const timeScale = Math.max(0, (spine as any)?.animationState?.timeScale ?? 1);
+            for (const name of animationNames) {
+                const durSec = (spine as any)?.skeleton?.data?.findAnimation?.(name)?.duration;
+                const durMs = (typeof durSec === 'number' && durSec > 0 ? durSec : 0) * 1000 * (timeScale || 1);
+                totalDurationMs += durMs;
+            }
+        } catch {}
+
         if (animationNames.length === 1) {
-            spine.animationState.setAnimation(0, animationNames[0], true);
-            
+            spine.animationState.setAnimation(0, animationNames[0], loopLastAnimation ?? true);
         }
         else {
             for (let i = 0; i < animationNames.length - 1; i++) {
@@ -50,11 +85,54 @@ export function playSpineAnimationSequence(scene: Scene, spine: SpineGameObject,
             spine.animationState.setAnimation(0, animationNames[0], false);
             
             for (let i = 0; i < animationNames.length - 1; i++) {
-                spine.animationState.addAnimation(0, animationNames[i + 1], i == animationNames.length - 1 ? false : true, 0);
+                spine.animationState.addAnimation(0, animationNames[i + 1], i == animationNames.length - 1 ? false : loopLastAnimation ?? true, 0);
             }
         }
+        
     } catch { }
+    
+    // Attach onComplete listener for the last non-looping animation in the sequence
+    try {
+        if (onComplete) {
+            const state = (spine as any)?.animationState;
+            const animations = (spine as any)?.skeleton?.data?.animations as Array<{ name: string }> | undefined;
+            if (state && animations) {
+                const validNames: string[] = animationSequence
+                    .map(index => animations && animations.length > 0 && index < animations.length ? animations[index].name : null)
+                    .filter(name => name !== null) as string[];
+                if (validNames.length > 0) {
+                    const lastAnimationName = validNames[validNames.length - 1];
+
+                    const listener = {
+                        complete: (entry: any) => {
+                            try {
+                                const isTrack0 = entry?.trackIndex === 0;
+                                const animName = entry?.animation?.name ?? "";
+                                const isLast = animName === lastAnimationName;
+                                const isNonLooping = entry?.loop === false;
+                                if (isTrack0 && isLast && isNonLooping) {
+                                    state.removeListener(listener as any);
+                                    onComplete();
+                                }
+                            } catch {}
+                        }
+                    };
+
+                    state.addListener(listener as any);
+                }
+            }
+        }
+    } catch {}
+
+    return totalDurationMs;
 }
+
+// export function playSpineAnimationSequence(scene: Scene, spine: 
+//     SpineGameObject, 
+//     animationSequence: number[], config?: SpineConfig) : number
+// {
+//     return 0;
+// }
 
 export function getFullScreenSpineScale(scene: Scene, spine: SpineGameObject, maintainAspectRatio: boolean = false): { x: number, y: number } {
     const skeletonData = (spine as any)?.skeleton?.data;

@@ -2,13 +2,14 @@ import { Scene } from "phaser";
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { Data } from "../../tmp_backend/Data";
-import { gameEventManager, GameEventType } from '../../event/EventManager';
+import { GameEventData, gameEventManager, GameEventType, UpdateMultiplierValueEventData } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { PaylineData } from '../../backend/SpinData';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { hideSpineAttachmentsByKeywords, playSpineAnimationSequence } from "./SpineBehaviorHelper";
-
+import { Game } from "../scenes/Game";
+import { NumberDisplay, NumberDisplayConfig } from "./NumberDisplay";
 
 export class Header {
 	private headerContainer: Phaser.GameObjects.Container;
@@ -18,6 +19,9 @@ export class Header {
 	private youWonText: Phaser.GameObjects.Text;
 	private currentWinnings: number = 0;
 	private pendingWinnings: number = 0;
+	private multiplierDisplay: NumberDisplay | null = null;
+	private scene: Game;
+	private currentMultiplier: number = 0;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -30,6 +34,7 @@ export class Header {
 	}
 
 	create(scene: Scene): void {
+		this.scene = scene as Game;
 		console.log("[Header] Creating header elements");
 		
 		// Create main container for all header elements
@@ -44,22 +49,67 @@ export class Header {
 		this.createHeaderElements(scene, assetScale);
 		
 		// Set up event listeners for winnings updates
-		this.setupWinningsEventListener();
+		this.setupWinningsEventListener();	
+		this.resetMultiplierValue();
 	}
 
 	private createHeaderElements(scene: Scene, assetScale: number): void {
-		
-		const winBarBonusWidthMultiplier = 0.51;
-		const winBarBonusHeightMultiplier = 0.2;
-
 		// Add logo spine
 		this.createLogoSpine(scene);
 
 		// Add win bar last to ensure it appears on top
+		const winBarBonusWidthMultiplier = 0.51;
+		const winBarBonusHeightMultiplier = 0.205;
 		const winBarX = scene.scale.width * winBarBonusWidthMultiplier;
 		const winBarY = scene.scale.height * winBarBonusHeightMultiplier;
 		this.createWinBar(scene, winBarX, winBarY, assetScale);
 		this.createWinBarText(scene, winBarX, winBarY);
+
+		// Add multiplier bar
+		const multiplierBarWidthMultiplier = 0.74;
+		const multiplierBarHeightMultiplier = 0.155;
+		const multiplierBarX = scene.scale.width * multiplierBarWidthMultiplier;
+		const multiplierBarY = scene.scale.height * multiplierBarHeightMultiplier;
+		this.createMultiplierBar(scene, multiplierBarX, multiplierBarY, assetScale);
+		this.createMultiplierDisplay(scene, multiplierBarX, multiplierBarY);
+	}
+
+	private createMultiplierBar(scene: Scene, x: number, y: number, assetScale: number): void {
+		const multiplierBar = scene.add.image(x, y, 'multiplier-bar')
+		.setOrigin(0.5, 0.5)
+		.setScale(assetScale * 1.2)
+		.setDepth(10);
+		this.headerContainer.add(multiplierBar);
+	}
+
+	private createMultiplierDisplay(scene: Scene, x: number, y: number): void {
+		const multiplierConfig: NumberDisplayConfig = {
+			x,
+			y,
+			scale: 0.055,
+			prefixScale: 0.04,
+			prefixYOffset: 1.5,
+			spacing: 2,
+			alignment: 'center',
+			decimalPlaces: 0,
+			showCommas: false,
+			prefix: 'x',
+		};
+
+		this.multiplierDisplay = new NumberDisplay(multiplierConfig, this.networkManager, this.screenModeManager);
+		this.multiplierDisplay.create(scene);
+		this.multiplierDisplay.toggleBorder(false);
+		// change drop shadow to a dark green color
+		this.multiplierDisplay.setDropShadow(true, 2, 2, 0.5, 0x008000);
+
+		const container = this.multiplierDisplay.getContainer();
+		if (container) {
+			container.setDepth(11);
+			this.headerContainer.add(container);
+		}
+
+		this.multiplierDisplay.displayValue(1);
+		this.hideMultiplierText();
 	}
 
 	private createWinBar(scene: Scene, winBarX: number, winBarY: number, assetScale: number): void {
@@ -75,7 +125,7 @@ export class Header {
 		const spine = scene.add.spine(0, 0, 'warfreaks-logo-spine', 'warfreaks-logo-spine-atlas') as SpineGameObject;
 		const scale = 0.7;
 		const offset = {x: 0, y: 12.5};
-		const anchor = {x: 0.5, y: 0.0025};
+		const anchor = {x: 0.5, y: 0};
 		const origin = {x: 0.5, y: 0};
 
 		hideSpineAttachmentsByKeywords(spine, ['bonus_base']);
@@ -95,19 +145,19 @@ export class Header {
 
 	private createWinBarText(scene: Scene, x: number, y: number): void {
 		// Line 1: "YOU WON"
-		this.youWonText = scene.add.text(x, y, 'YOU WON ', {
-			fontSize: '18px',
+		this.youWonText = scene.add.text(x, y - 8, 'YOU WON', {
+			fontSize: '14px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
-		}).setOrigin(1, 0.5).setDepth(11); // Higher depth than win bar
+		}).setOrigin(0.5, 0.5).setDepth(11); // Higher depth than win bar
 		this.headerContainer.add(this.youWonText);
 
 		// Line 2: "$ 160.00" with bold formatting
-		this.amountText = scene.add.text(x, y, '$ 0.00', {
-			fontSize: '20px',
+		this.amountText = scene.add.text(x, y + 7, '$ 0.00', {
+			fontSize: '18px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
-		}).setOrigin(0, 0.5).setDepth(11); // Higher depth than win bar
+		}).setOrigin(0.5, 0.5).setDepth(11); // Higher depth than win bar
 		this.headerContainer.add(this.amountText);
 	}
 
@@ -125,7 +175,26 @@ export class Header {
 	 * Set up event listener for winnings updates from backend
 	 */
 	private setupWinningsEventListener(): void {
-		
+		gameEventManager.on(GameEventType.UPDATE_MULTIPLIER_VALUE, (data: GameEventData) => {
+			// Ensure `data` is of the expected type before processing
+			if (!data || typeof (data as UpdateMultiplierValueEventData).multiplier !== "number") {
+				console.warn('[Header] UPDATE_MULTIPLIER_VALUE received with invalid data:', data);
+				return;
+			}
+
+			if(gameStateManager.isBonus) {
+				this.currentMultiplier = 0;
+				this.updateMultiplierValue(this.currentMultiplier);
+				
+				return;
+			}
+
+			const multiplier = (data as UpdateMultiplierValueEventData).multiplier;
+			console.log('[Header] UPDATE_MULTIPLIER_VALUE received - updating multiplier value', data);
+			
+			this.currentMultiplier = this.currentMultiplier > 0 ? this.currentMultiplier + multiplier : multiplier;
+			this.updateMultiplierValue(this.currentMultiplier);
+		});
 
 		// Note: SPIN_RESPONSE event listener removed - now using SPIN_DATA_RESPONSE
 
@@ -156,6 +225,28 @@ export class Header {
 		gameEventManager.on(GameEventType.REELS_START, () => {
 			console.log('[Header] Reels started - hiding winnings display');
 			this.hideWinningsDisplay();
+			this.currentWinnings = 0;
+			this.resetMultiplierValue();
+		});
+
+		gameEventManager.on(GameEventType.WIN_START, () => {
+			console.log('[Header] WIN_START received - showing winnings display');
+
+			const symbolsComponent = (this.headerContainer.scene as any).symbols;
+			if(symbolsComponent && symbolsComponent.currentSpinData) {
+				const spinData = symbolsComponent.currentSpinData;
+				const winnings = spinData?.slot?.tumbles?.items[this.scene.gameAPI.getCurrentTumbleIndex()]?.win || 0;
+
+				console.log(`[Header] Current winnings: ${winnings} ${this.scene.gameAPI.getCurrentTumbleIndex()}`);
+
+				if(this.currentWinnings > 0) {
+					this.currentWinnings += winnings;
+					this.updateWinningsDisplay(this.currentWinnings);
+				} else {
+					this.currentWinnings += winnings;
+					this.showWinningsDisplay(this.currentWinnings);
+				}
+			}
 		});
 
 		// Listen for reel done events to show winnings display
@@ -168,15 +259,12 @@ export class Header {
 				const spinData = symbolsComponent.currentSpinData;
 				console.log(`[Header] Found current spin data:`, spinData);
 				
-				if (spinData.slot && spinData.slot.paylines && spinData.slot.paylines.length > 0) {
-					const totalWin = this.calculateTotalWinningsFromPaylines(spinData.slot.paylines);
+				const totalWin = gameStateManager.isBonus ? -1 : spinData.slot?.totalWin || 0;
+
+				if (totalWin > 0) {
 					console.log(`[Header] Total winnings calculated from paylines: ${totalWin}`);
 					
-					if (totalWin > 0) {
-						this.showWinningsDisplay(totalWin);
-					} else {
-						this.hideWinningsDisplay();
-					}
+					this.updateWinningsDisplay(totalWin);
 				} else {
 					console.log('[Header] No paylines in current spin data - hiding winnings display');
 					this.hideWinningsDisplay();
@@ -188,6 +276,22 @@ export class Header {
 		});
 	}
 
+	resetMultiplierValue() {
+		this.currentMultiplier = 0;
+		this.updateMultiplierValue(this.currentMultiplier);
+	}
+	
+	updateMultiplierValue(multiplier: number) {
+		if(multiplier > 0) {
+			this.showMultiplierText();
+		} else {
+			this.hideMultiplierText();
+		}
+		
+		const displayValue = multiplier > 0 ? multiplier : 1;
+		this.multiplierDisplay?.displayValue(displayValue);
+	}
+
 	/**
 	 * Update the winnings display in the header
 	 */
@@ -197,6 +301,8 @@ export class Header {
 			const formattedWinnings = this.formatCurrency(winnings);
 			this.amountText.setText(formattedWinnings);
 			console.log(`[Header] Winnings updated to: ${formattedWinnings} (raw: ${winnings})`);
+
+			this.animateWinningsDisplay();
 		}
 	}
 
@@ -232,7 +338,6 @@ export class Header {
 			
 			// Update amount text with winnings
 			this.amountText.setText(formattedWinnings);
-			
 			console.log(`[Header] Winnings display shown: ${formattedWinnings} (raw: ${winnings})`);
 		} else {
 			console.warn('[Header] Cannot show winnings display - text objects not available', {
@@ -242,7 +347,24 @@ export class Header {
 		}
 	}
 
+	public animateWinningsDisplay(): void {
+		this.scene.tweens.add({
+			targets: this.amountText,
+			scaleX: 1.25,
+			scaleY: 1.25,
+			duration: 250,
+			ease: 'Sine.easeInOut',
+			yoyo: true,
+		});
+	}
 
+	private hideMultiplierText(): void {
+		this.multiplierDisplay?.setVisible(false);
+	}
+
+	private showMultiplierText(): void {
+		this.multiplierDisplay?.setVisible(true);
+	}
 
 	/**
 	 * Calculate total winnings from paylines array

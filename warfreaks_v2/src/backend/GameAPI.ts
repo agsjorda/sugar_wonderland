@@ -47,6 +47,7 @@ export class GameAPI {
     private currentSpinData: SpinData | null = null;
     private isFirstSpin: boolean = false; // Flag to track first spin
     private currentFreeSpinIndex: number = 0; // Track current free spin item index
+    private currentTumbleIndex: number = 0; // Track current tumble index
     
     constructor(gameData: GameData) {
         this.gameData = gameData;
@@ -385,6 +386,14 @@ export class GameAPI {
     }
 
     /**
+     * Get the current free spin index
+     * Returns the current free spin index
+     */
+    public getCurrentFreeSpinIndex(): number {
+        return this.currentFreeSpinIndex;
+    }
+
+    /**
      * Clear the current spin data
      * Useful for resetting state between spins
      */
@@ -400,6 +409,30 @@ export class GameAPI {
         console.log('[GameAPI] Setting free spin data for simulation:', spinData);
         this.currentSpinData = spinData;
         this.resetFreeSpinIndex(); // Reset the index when setting new data
+    }
+    
+    /**
+     * Get the current tumble index
+     * Returns the current tumble index
+     */
+    public getCurrentTumbleIndex(): number {
+        return this.currentTumbleIndex;
+    }
+
+    /**
+     * Set the current tumble index
+     * This method should be called when tumbles are triggered to provide the data for simulation
+     */
+    public incrementCurrentTumbleIndex(): void {
+        this.currentTumbleIndex++;
+    }
+
+    /**
+     * Reset the current tumble index
+     * This method should be called when tumbles are finished to reset the index
+     */
+    public resetCurrentTumbleIndex(): void {
+        this.currentTumbleIndex = 0;
     }
 
     /**

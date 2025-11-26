@@ -227,9 +227,8 @@ export class Spinner {
   public startScatterSpinnerFromSpinData(spinData: SpinData): void {
     console.log('[Spinner] Starting scatter spinner from SpinData');
     
-    // Get the freespin count from SpinData (handle both freespin and freeSpin property names)
-    const freespinData = spinData.slot?.freespin || spinData.slot?.freeSpin;
-    const freeSpinsCount = freespinData?.count || 0;
+    // Derive the number of free spins from SpinData robustly
+    const freeSpinsCount = this.deriveFreeSpinsFromSpinData(spinData);
     console.log(`[Spinner] Free spins count from SpinData: ${freeSpinsCount}`);
     
     // Find the index in SCATTER_MULTIPLIERS that matches the free spins count
@@ -256,6 +255,44 @@ export class Spinner {
     console.log(`[Spinner] Looking for ${freeSpinsCount} in SCATTER_MULTIPLIERS:`, SCATTER_MULTIPLIERS);
     console.log(`[Spinner] Found index: ${index}`);
     return index;
+  }
+
+  /**
+   * Robust extraction of free spins count from SpinData supporting multiple shapes.
+   */
+  private deriveFreeSpinsFromSpinData(spinData: any): number {
+    if (!spinData || !spinData.slot) {
+      return 0;
+    }
+
+    // Accept both legacy 'freespin' and 'freeSpin' shapes
+    const freespin = spinData.slot.freespin;
+    const freeSpin = spinData.slot.freeSpin;
+
+    // 1) Prefer explicit count if provided
+    const count = (freespin && typeof freespin.count === 'number' && freespin.count) ||
+                  (freeSpin && typeof freeSpin.count === 'number' && freeSpin.count) ||
+                  0;
+    if (count > 0) {
+      return count;
+    }
+
+    // 2) Prefer items[0].spinsLeft if present (newer format)
+    const items = (freeSpin && Array.isArray(freeSpin.items) && freeSpin.items) ||
+                  (freespin && Array.isArray(freespin.items) && freespin.items) ||
+                  [];
+    const firstItem = items.length > 0 ? items[0] : null;
+    const spinsLeft = firstItem && typeof firstItem.spinsLeft === 'number' ? firstItem.spinsLeft : 0;
+    if (spinsLeft > 0) {
+      return spinsLeft;
+    }
+
+    // 3) Fallback to items length if available
+    if (items.length > 0) {
+      return items.length;
+    }
+
+    return 0;
   }
     
   private getShortestAngleDifference(current: number, target: number): number {

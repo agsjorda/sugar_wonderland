@@ -44,6 +44,7 @@ export class StudioLoadingScreen {
     private onProgressHandler?: (progress: number) => void;
     private options: StudioLoadingScreenOptions;
     private dotGrid?: Phaser.GameObjects.Graphics;
+    private dijokerLogo?: Phaser.GameObjects.Image;
 
     constructor(scene: Scene, options?: StudioLoadingScreenOptions) {
         this.scene = scene;
@@ -328,7 +329,7 @@ export class StudioLoadingScreen {
                 
                 // Add DiJoker logo next to the spine
                 if (this.scene.textures.exists('dijoker_logo')) {
-                    const logo = this.scene.add.image(
+                    this.dijokerLogo = this.scene.add.image(
                         cx + this.scene.scale.width * 0.27, // Position to the right of the spine
                         cy,
                         'dijoker_logo'
@@ -336,13 +337,13 @@ export class StudioLoadingScreen {
                     
                     // Scale the logo appropriately (adjust scale factor as needed)
                     const logoScale = 1; // Adjust this value to make the logo larger or smaller
-                    logo.setScale(logoScale);
+                    this.dijokerLogo.setScale(logoScale);
                     
                     // Center the logo vertically with the spine
-                    logo.setOrigin(0.5, 0.5);
+                    this.dijokerLogo.setOrigin(0.5, 0.5);
                     
                     // Add to the same container as the spine for proper layering
-                    this.container.add(logo);
+                    this.container.add(this.dijokerLogo);
                 } else {
                     console.warn('DiJoker logo texture not found');
                 }
@@ -422,49 +423,111 @@ export class StudioLoadingScreen {
         }
     }
 
-    public fadeOutAndDestroy(minVisibleMs: number = 3000, fadeMs: number = 500, onComplete?: () => void): void {
+    public bedazzle(minVisibleMs: number = 3000, fadeMs: number = 500, onComplete?: () => void): void {
         const elapsed = this.scene.time.now - this.shownAtMs;
         const wait = Math.max(0, minVisibleMs - elapsed);
         this.scene.time.delayedCall(wait, () => {
-			// Detach progress listener and hide progress bar before fade
-			try {
-				if (this.onProgressHandler) {
-					this.scene.load.off('progress', this.onProgressHandler as any);
-					this.onProgressHandler = undefined;
-				}
-				this.progressBarFill?.setVisible(false);
-				this.progressBarBg?.setVisible(false);
-			} catch {}
-
-            // Stop time update timer
+            // Detach progress listener if it was registered
             try {
-                if (this.timeUpdateTimer) {
-                    this.timeUpdateTimer.destroy();
-                    this.timeUpdateTimer = undefined;
+                if (this.onProgressHandler) {
+                    this.scene.load.off('progress', this.onProgressHandler as any);
+                    this.onProgressHandler = undefined;
                 }
             } catch {}
 
-            // First disable/stop spine animations
+            // Swap loading frame texture to the "loading_frame_2" variant if available.
             try {
-                if (this.spine) {
-                    this.spine.animationState?.clearTracks();
-                    this.spine.setVisible(false);
+                if (this.loadingFrame && this.scene.textures.exists('loading_frame_2')) {
+                    this.loadingFrame.setTexture('loading_frame_2');
                 }
             } catch {}
 
-            // Fade out the entire container (including background, loading frame, and all children)
-            // This ensures everything (including the loading frame) fades together smoothly
+            // Only fade out and destroy the background, dotted grid, logo and progress bar.
+            const fadeTargets: Phaser.GameObjects.GameObject[] = [];
+            if (this.bg) fadeTargets.push(this.bg);
+            if (this.dotGrid) fadeTargets.push(this.dotGrid);
+
+            // Tween the bottom texts (tagline and URL) down by 200px during fade-out.
+            const bottomTextTargets: Phaser.GameObjects.GameObject[] = [];
+            if (this.text) bottomTextTargets.push(this.text);
+            if (this.text2) bottomTextTargets.push(this.text2);
+            if (this.loadingFrame) bottomTextTargets.push(this.loadingFrame);
+
+            // If there is nothing to fade, just signal completion.
+            if (fadeTargets.length === 0) {
+                try { this.scene.events.emit('studio-fade-complete'); } catch {}
+                if (onComplete) onComplete();
+                return;
+            }
+
+            if (bottomTextTargets.length > 0) {
+                this.scene.tweens.add({
+                    targets: bottomTextTargets,
+                    y: '+=50',
+                    duration: fadeMs,
+                    ease: 'Power2',
+                });
+            }
+
+            if(this.dijokerLogo) this.dijokerLogo.setVisible(false);
+            if(this.spine) this.spine.setVisible(false);
+            if(this.progressBarBg) this.progressBarBg.setVisible(false);
+            if(this.progressBarFill) this.progressBarFill.setVisible(false);
+
             this.scene.tweens.add({
-                targets: this.container,
+                targets: fadeTargets,
                 alpha: 0,
                 duration: fadeMs,
                 ease: 'Power2',
                 onComplete: () => {
-                    this.hide();
+                    try {
+                        this.bg?.destroy();
+                        this.bg = undefined;
+                    } catch {}
+                    try {
+                        this.dotGrid?.destroy();
+                        this.dotGrid = undefined;
+                    } catch {}
+                    try {
+                        this.spine?.destroy();
+                        this.spine = undefined;
+                    } catch {}
+                    try {
+                        this.progressBarBg?.destroy();
+                        this.progressBarBg = undefined;
+                    } catch {}
+                    try {
+                        this.progressBarFill?.destroy();
+                        this.progressBarFill = undefined;
+                    } catch {}
+                    try {
+                        this.dijokerLogo?.destroy();
+                        this.dijokerLogo = undefined;
+                    } catch {}
+
                     try { this.scene.events.emit('studio-fade-complete'); } catch {}
                     if (onComplete) onComplete();
                 }
             });
+
+            this.scene.tweens.add({
+                targets: bottomTextTargets,
+                alpha: 1,
+                duration: fadeMs,
+                ease: 'Power2',
+            });
+        });
+    }
+
+    public fadeOutRemainingElements(fadeMs: number = 500, onComplete?: () => void): void {
+        this.scene.tweens.add({
+            targets: this.container,
+            alpha: 0,
+            duration: fadeMs,
+            ease: 'Power2',
+            onComplete: () => {
+                if (onComplete) onComplete();
+            }
         });
     }
 

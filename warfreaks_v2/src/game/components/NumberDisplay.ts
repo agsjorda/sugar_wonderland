@@ -6,6 +6,16 @@ export interface NumberDisplayConfig {
 	x: number;
 	y: number;
 	scale?: number;
+	/**
+	 * Optional scale to use for prefix characters only.
+	 * Defaults to the main `scale` when not provided.
+	 */
+	prefixScale?: number;
+	/**
+	 * Optional vertical offset to apply to prefix characters.
+	 * Defaults to 0.
+	 */
+	prefixYOffset?: number;
 	spacing?: number;
 	alignment?: 'left' | 'center' | 'right';
 	decimalPlaces?: number;
@@ -19,6 +29,17 @@ export interface NumberDisplayConfig {
 	 * 0 starts at zero, 0.5 starts at half the target, 1 starts at the target.
 	 */
 	startAtPercent?: number;
+	/**
+	 * The threshold at which the animation will start.
+	 * If the value is less than the threshold, the number will simply be displayed and not animate.
+	 * Default is 0.0.
+	 */
+	animateThreshold?: number;
+	/**
+	 * The delay in milliseconds before the animation will start.
+	 * Default is 0.0.
+	 */
+	animationDelayMs?: number;
 	/**
 	 * Whether to use an easing curve for the tick-up animation.
 	 * Default is true (fast-to-slow).
@@ -39,17 +60,23 @@ export interface NumberDisplayConfig {
 
 export class NumberDisplay {
 	private scene: Scene | null = null;
-	private networkManager: NetworkManager;
-	private screenModeManager: ScreenModeManager;
+	private networkManager?: NetworkManager;
+	private screenModeManager?: ScreenModeManager;
 	private container: Phaser.GameObjects.Container;
 	private numberSprites: Phaser.GameObjects.Image[] = [];
+	private shadowSprites: Phaser.GameObjects.Image[] = [];
 	private config: NumberDisplayConfig;
 	private currentValue: number = 0;
 	private isInitialized: boolean = false;
 	private numberBorder: Phaser.GameObjects.Graphics;
 	private tickEvent: Phaser.Time.TimerEvent | null = null;
+	private dropShadowEnabled: boolean = false;
+	private dropShadowOffsetX: number = 2;
+	private dropShadowOffsetY: number = 2;
+	private dropShadowAlpha: number = 0.5;
+	private dropShadowColor: number = 0x000000;
 
-	private borderPadding = 10;
+	private borderPadding = 8;
 	private borderAlpha = 0.4;
 	private borderLineColor = 0xFFFF00;
 	private borderFillColor = 0x000000;
@@ -67,10 +94,12 @@ export class NumberDisplay {
 		'8': 'number_8',
 		'9': 'number_9',
 		',': 'number_comma',
-		'.': 'number_dot'
+		'.': 'number_dot',
+		'x': 'number_x',
+		'X': 'number_x'
 	};
 
-	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager, config: NumberDisplayConfig) {
+	constructor(config: NumberDisplayConfig, networkManager?: NetworkManager, screenModeManager?: ScreenModeManager) {
 		this.networkManager = networkManager;
 		this.screenModeManager = screenModeManager;
 		this.config = {
@@ -80,13 +109,16 @@ export class NumberDisplay {
 			decimalPlaces: 2,
 			showCommas: true,
 			prefix: '',
+			prefixYOffset: 0,
 			suffix: '',
 			commaYOffset: 0,
 			dotYOffset: 0,
-			startAtPercent: 0.5,
+			startAtPercent: 0.0,
+			animateThreshold: 100.0,
+			animationDelayMs: 500,
 			useCurve: true,
-			tickDurationMs: 1500,
-			tickEasing: 'easeOut',
+			tickDurationMs: 2000,
+			tickEasing: 'easeInOut',
 			...config
 		};
 	}
@@ -114,11 +146,32 @@ export class NumberDisplay {
 			console.warn('[NumberDisplay] Not initialized yet');
 			return;
 		}
+		
+		const animateThreshold = this.config.animateThreshold ?? 0;
+		const animationDelayMs = this.config.animationDelayMs ?? 0;
+		const willAnimate = value >= animateThreshold;
 
-		this.currentValue = value;
+		this.currentValue = willAnimate ? 0 : value;
 		this.updateDisplay();
-		this.animateNumberTickUp(value);
+
+		if(willAnimate) {
+			this.scene!.time.delayedCall(animationDelayMs, () => {
+				this.currentValue = value;
+				this.animateNumberTickUp(value);
+			});
+		}
 	}
+
+	toggleBorder(visible: boolean): void {
+		if (!this.numberBorder) 
+		{
+			this.numberBorder = this.scene!.add.graphics();
+			this.container.add(this.numberBorder);
+		}
+
+		this.numberBorder.setVisible(visible);
+	}
+
 
 	/**
 	 * Update the display with current value
@@ -126,17 +179,40 @@ export class NumberDisplay {
 	private updateDisplay(): void {
 		if (!this.scene) return;
 
+		// Reset container scale to avoid compounding from previous frames
+		if (this.container) {
+			this.container.setScale(1);
+		}
+
 		// Clear existing sprites
 		this.clearSprites();
 
 		// Format the number
 		const formattedNumber = this.formatNumber(this.currentValue);
+		const prefixLength = this.config.prefix?.length ?? 0;
+		const baseScale = this.config.scale ?? 1;
+		const prefixScale = this.config.prefixScale ?? baseScale;
+		const prefixYOffset = this.config.prefixYOffset ?? 0;
 		console.log(`[NumberDisplay] Displaying: ${formattedNumber}`);
 
 		// Create sprites for each character
 		let currentX = 0;
-		const totalWidth = this.calculateTotalWidth(formattedNumber);
+		const totalWidth = this.calculateTotalWidth(formattedNumber, prefixLength, baseScale, prefixScale);
+
+		// Compute container scale to ensure border width fits within screen
+		const screenWidth = this.scene!.scale?.width ?? this.scene!.cameras?.main?.width ?? this.scene!.sys.game.canvas.width;
+		const projectedBorderWidth = totalWidth + this.borderPadding * 2 + this.borderPadding * 2;
+		let containerScale = 1;
+		if (projectedBorderWidth > screenWidth && projectedBorderWidth > 0) {
+			// Slightly under screen width to avoid edge rounding issues
+			containerScale = Math.max(0.1, (screenWidth - 1) / projectedBorderWidth);
+		}
+
 		this.updateNumberBorder(totalWidth);
+		// Apply the container scale after drawing the border and before laying out children
+		if (this.container && containerScale !== 1) {
+			this.container.setScale(containerScale);
+		}
 		
 		// Adjust starting position based on alignment
 		if (this.config.alignment === 'center') {
@@ -149,24 +225,58 @@ export class NumberDisplay {
 		for (let i = 0; i < formattedNumber.length; i++) {
 			const char = formattedNumber[i];
 			const key = this.numberKeys[char];
+			const isPrefixChar = i < prefixLength;
+			const charScale = isPrefixChar ? prefixScale : baseScale;
+			const charYOffset = isPrefixChar ? prefixYOffset : 0;
 			
 			if (key && this.scene!.textures.exists(key)) {
+				// Create shadow sprite if drop shadow is enabled
+				if (this.dropShadowEnabled) {
+					const shadowSprite = this.scene!.add.image(
+						currentX + this.dropShadowOffsetX,
+						this.dropShadowOffsetY,
+						key
+					);
+					shadowSprite.setScale(charScale);
+					shadowSprite.setOrigin(0, 0.5);
+					shadowSprite.setTint(this.dropShadowColor);
+					shadowSprite.setAlpha(this.dropShadowAlpha);
+					
+					// Apply y-offset for commas and decimal points
+					let shadowY = this.dropShadowOffsetY + charYOffset;
+					if (char === ',') {
+						shadowY += this.config.commaYOffset!;
+					} else if (char === '.') {
+						shadowY += this.config.dotYOffset!;
+					}
+					shadowSprite.setY(shadowY);
+					
+					// Add shadow to container first (behind the main sprite)
+					this.container.addAt(shadowSprite, 0);
+					this.shadowSprites.push(shadowSprite);
+				}
+				
+				// Create main sprite
 				const sprite = this.scene!.add.image(currentX, 0, key);
-				sprite.setScale(this.config.scale!);
+				sprite.setScale(charScale);
 				sprite.setOrigin(0, 0.5);
 				
 				// Apply y-offset for commas and decimal points
+				let spriteY = charYOffset;
 				if (char === ',') {
-					sprite.setY(this.config.commaYOffset!);
+					spriteY += this.config.commaYOffset!;
 				} else if (char === '.') {
-					sprite.setY(this.config.dotYOffset!);
+					spriteY += this.config.dotYOffset!;
+				}
+				if (spriteY !== 0) {
+					sprite.setY(spriteY);
 				}
 				
 				this.container.add(sprite);
 				this.numberSprites.push(sprite);
 				
 				// Move to next position
-				currentX += sprite.width * this.config.scale! + this.config.spacing!;
+				currentX += sprite.width * charScale + this.config.spacing!;
 			} else {
 				console.warn(`[NumberDisplay] Missing texture for character: ${char}`);
 			}
@@ -209,8 +319,8 @@ export class NumberDisplay {
 		const remaining = targetNumber - startValue;
 
 		if (useCurve) {
-			const duration = Math.max(16, this.config.tickDurationMs ?? 1000);
-			const tickMs = 16;
+			const duration = Math.max(50, this.config.tickDurationMs ?? 1000);
+			const tickMs = 50;
 			const steps = Math.max(1, Math.round(duration / tickMs));
 			let stepIndex = 0;
 			const easingFn = this.resolveEasing(this.config.tickEasing);
@@ -384,16 +494,22 @@ export class NumberDisplay {
 	/**
 	 * Calculate total width of the formatted number
 	 */
-	private calculateTotalWidth(formattedNumber: string): number {
+	private calculateTotalWidth(
+		formattedNumber: string,
+		prefixLength: number,
+		baseScale: number,
+		prefixScale: number
+	): number {
 		let totalWidth = 0;
 		
 		for (let i = 0; i < formattedNumber.length; i++) {
 			const char = formattedNumber[i];
 			const key = this.numberKeys[char];
+			const charScale = i < prefixLength ? prefixScale : baseScale;
 			
 			if (key && this.scene!.textures.exists(key)) {
 				const texture = this.scene!.textures.get(key);
-				totalWidth += texture.source[0].width * this.config.scale! + this.config.spacing!;
+				totalWidth += texture.source[0].width * charScale + this.config.spacing!;
 			}
 		}
 		
@@ -406,7 +522,35 @@ export class NumberDisplay {
 	}
 
 	private getHeight(): number {
-		return this.scene!.textures.get(this.numberKeys['0']).source[0].height * this.config.scale!;
+		if (!this.scene) {
+			return 0;
+		}
+
+		const baseScale = this.config.scale ?? 1;
+		const prefixScale = this.config.prefixScale ?? baseScale;
+		let maxHeight = 0;
+
+		const applyHeight = (key?: string, scale: number = baseScale) => {
+			if (!key || !this.scene!.textures.exists(key)) {
+				return;
+			}
+			const texture = this.scene!.textures.get(key);
+			const height = texture.source[0].height * scale;
+			if (height > maxHeight) {
+				maxHeight = height;
+			}
+		};
+
+		applyHeight(this.numberKeys['0'], baseScale);
+
+		const prefixChars = this.config.prefix ?? '';
+		for (const char of prefixChars) {
+			const key = this.numberKeys[char];
+			applyHeight(key, prefixScale);
+		}
+
+		const prefixYOffset = Math.abs(this.config.prefixYOffset ?? 0);
+		return maxHeight + prefixYOffset;
 	}
 
 	/**
@@ -417,6 +561,11 @@ export class NumberDisplay {
 			sprite.destroy();
 		}
 		this.numberSprites = [];
+		
+		for (const shadowSprite of this.shadowSprites) {
+			shadowSprite.destroy();
+		}
+		this.shadowSprites = [];
 	}
 
 	/**
@@ -479,6 +628,33 @@ export class NumberDisplay {
 	setAlpha(alpha: number): void {
 		if (this.container) {
 			this.container.setAlpha(alpha);
+		}
+	}
+
+	/**
+	 * Enable or disable drop shadow for the displayed numbers
+	 * @param enabled Whether to enable the drop shadow
+	 * @param offsetX Horizontal offset of the shadow (default: 2)
+	 * @param offsetY Vertical offset of the shadow (default: 2)
+	 * @param alpha Alpha value of the shadow (0-1, default: 0.5)
+	 * @param color Tint color of the shadow (default: 0x000000 - black)
+	 */
+	setDropShadow(
+		enabled: boolean,
+		offsetX: number = 2,
+		offsetY: number = 2,
+		alpha: number = 0.5,
+		color: number = 0x000000
+	): void {
+		this.dropShadowEnabled = enabled;
+		this.dropShadowOffsetX = offsetX;
+		this.dropShadowOffsetY = offsetY;
+		this.dropShadowAlpha = Math.max(0, Math.min(1, alpha));
+		this.dropShadowColor = color;
+		
+		// Update display if already initialized to apply changes
+		if (this.isInitialized) {
+			this.updateDisplay();
 		}
 	}
 

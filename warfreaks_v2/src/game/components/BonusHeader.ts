@@ -1,12 +1,17 @@
 import { Scene } from "phaser";
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
-import { gameEventManager, GameEventType } from '../../event/EventManager';
+import { SpinData, SpinDataUtils } from "../../backend/SpinData";
+import { GameEventData, gameEventManager, GameEventType, UpdateMultiplierValueEventData } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { hideSpineAttachmentsByKeywords, playSpineAnimationSequence } from "./SpineBehaviorHelper";
 import { SpineGameObject } from "@esotericsoftware/spine-phaser-v3";
+import { Game } from "../scenes/Game";
+import { TurboConfig } from "../../config/TurboConfig";
+import { NumberDisplay, NumberDisplayConfig } from "./NumberDisplay";
 
 export class BonusHeader {
+	private scene: Game;
 	private bonusHeaderContainer: Phaser.GameObjects.Container;
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
@@ -21,9 +26,10 @@ export class BonusHeader {
 	private amountText: Phaser.GameObjects.Text;
 	private youWonText: Phaser.GameObjects.Text;
 	private currentWinnings: number = 0;
-	// Tracks cumulative total during bonus mode by incrementing each spin's subtotal
-	private cumulativeBonusWin: number = 0;
-	private hasStartedBonusTracking: boolean = false;
+	private multiplierDisplay: NumberDisplay | null = null;
+	private currentMultiplier: number = 0;
+	private currentBaseWinnings: number = 0;
+	private isFirstWinThisSpin: boolean = true;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -36,6 +42,7 @@ export class BonusHeader {
 	}
 
 	create(scene: Scene): void {
+		this.scene = scene as Game;
 		console.log("[BonusHeader] Creating bonus header elements");
 		
 		// Create main container for all bonus header elements
@@ -52,8 +59,8 @@ export class BonusHeader {
 		// Set up event listeners for winnings updates (like regular header)
 		this.setupWinningsEventListener();
 		
-		// Start spotlight animation
-		this.startSpotlightAnimation(scene);
+		// Reset multiplier value
+		this.resetMultiplierValue();
 	}
 
 	private createBonusHeaderElements(scene: Scene, assetScale: number): void {
@@ -64,23 +71,63 @@ export class BonusHeader {
 
 	private createPortraitBonusHeader(scene: Scene, assetScale: number): void {
 		console.log("[BonusHeader] Creating portrait bonus header layout");
-
-		const winBarBonusWidthMultiplier = 0.51;
-		const winBarBonusHeightMultiplier = 0.2;
 		
         // Add Kobi logo bonus (top-anchored, width-ratio scaling)
 		this.createLogoSpine(scene);
 
-		// Add win bar bonus last to ensure it appears on top
-		const winBarBonus = scene.add.image(
-			scene.scale.width * winBarBonusWidthMultiplier,
-			scene.scale.height * winBarBonusHeightMultiplier, // Positioned above the tent
-			'win-bar-bonus'
-		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(10); // Higher depth to appear above tent and kobi-ass
-		this.bonusHeaderContainer.add(winBarBonus);
-
 		// Add text inside the win bar bonus
-		this.createWinBarText(scene, scene.scale.width * winBarBonusWidthMultiplier, scene.scale.height * winBarBonusHeightMultiplier);
+		const winBarBonusWidthMultiplier = 0.51;
+		const winBarBonusHeightMultiplier = 0.205;
+		const winBarX = scene.scale.width * winBarBonusWidthMultiplier;
+		const winBarY = scene.scale.height * winBarBonusHeightMultiplier;
+		this.createWinBar(scene, winBarX, winBarY, assetScale);
+		this.createWinBarText(scene, winBarX, winBarY);
+
+		// Add multiplier bar
+		const multiplierBarWidthMultiplier = 0.74;
+		const multiplierBarHeightMultiplier = 0.155;
+		const multiplierBarX = scene.scale.width * multiplierBarWidthMultiplier;
+		const multiplierBarY = scene.scale.height * multiplierBarHeightMultiplier;
+		this.createMultiplierBar(scene, multiplierBarX, multiplierBarY, assetScale);
+		this.createMultiplierDisplay(scene, multiplierBarX, multiplierBarY);
+	}
+	
+	private createMultiplierBar(scene: Scene, x: number, y: number, assetScale: number): void {
+		const multiplierBar = scene.add.image(x, y, 'multiplier-bar-bonus')
+		.setOrigin(0.5, 0.5)
+		.setScale(assetScale * 1.2)
+		.setDepth(10);
+		this.bonusHeaderContainer.add(multiplierBar);
+	}
+
+	private createMultiplierDisplay(scene: Scene, x: number, y: number): void {
+		const multiplierConfig: NumberDisplayConfig = {
+			x,
+			y,
+			scale: 0.055,
+			prefixScale: 0.04,
+			prefixYOffset: 1.5,
+			spacing: 2,
+			alignment: 'center',
+			decimalPlaces: 0,
+			showCommas: false,
+			prefix: 'x',
+		};
+
+		this.multiplierDisplay = new NumberDisplay(multiplierConfig, this.networkManager, this.screenModeManager);
+		this.multiplierDisplay.create(scene);
+		this.multiplierDisplay.toggleBorder(false);
+		// change drop shadow to a dark green color
+		this.multiplierDisplay.setDropShadow(true, 2, 2, 0.5, 0x008000);
+
+		const container = this.multiplierDisplay.getContainer();
+		if (container) {
+			container.setDepth(11);
+			this.bonusHeaderContainer.add(container);
+		}
+
+		this.multiplierDisplay.displayValue(1);
+		this.hideMultiplierText();
 	}
 
 	private createLogoImage(scene: Scene): void {
@@ -97,7 +144,7 @@ export class BonusHeader {
 		const spine = scene.add.spine(0, 0, 'warfreaks-logo-spine', 'warfreaks-logo-spine-atlas') as SpineGameObject;
 		const scale = 0.7;
 		const offset = {x: 0, y: 12.5};
-		const anchor = {x: 0.5, y: 0.0025};
+		const anchor = {x: 0.5, y: 0};
 		const origin = {x: 0.5, y: 0};
 
 		playSpineAnimationSequence(scene, spine, [0], {x: scale, y: scale}, anchor, origin, offset);
@@ -105,60 +152,30 @@ export class BonusHeader {
 		this.bonusHeaderContainer.add(spine);
 	}
 
-	private startSpotlightAnimation(scene: Scene): void {
-		if (!this.spotlight) {
-			console.warn('[BonusHeader] Spotlight not found, cannot start animation');
-			return;
-		}
-
-		console.log('[BonusHeader] Starting continuous spotlight animation');
-		
-		// Start continuous movement
-		this.moveSpotlightContinuously(scene);
+	private createWinBar(scene: Scene, x: number, y: number, assetScale: number): void {
+		const winBarBonus = scene.add.image(
+			x,
+			y,
+			'win-bar-bonus'
+		).setOrigin(0.5, 0.5)
+		.setScale(assetScale)
+		.setDepth(10);
+		this.bonusHeaderContainer.add(winBarBonus);
 	}
 
-	private moveSpotlightContinuously(scene: Scene): void {
-		if (!this.spotlight || !this.spotlightBounds) {
-			return;
-		}
-
-		// Generate random position within bounds
-		const randomX = Phaser.Math.Between(this.spotlightBounds.minX, this.spotlightBounds.maxX);
-		const randomY = Phaser.Math.Between(this.spotlightBounds.minY, this.spotlightBounds.maxY);
-
-		// Create smooth tween animation with continuous loop
-		scene.tweens.add({
-			targets: this.spotlight,
-			x: randomX,
-			y: randomY,
-			duration: 1200, // 1.2 seconds for smooth movement
-			ease: 'Sine.easeInOut',
-			onComplete: () => {
-				// Immediately start next movement for continuous flow
-				this.moveSpotlightContinuously(scene);
-			}
-		});
-	}
-
-	private stopSpotlightAnimation(): void {
-		if (this.spotlight) {
-			// Stop all tweens on the spotlight
-			this.spotlight.scene.tweens.killTweensOf(this.spotlight);
-		}
-	}
 
 	private createWinBarText(scene: Scene, x: number, y: number): void {
 		// Line 1: "YOU WON"
-		this.youWonText = scene.add.text(x, y - 7, 'YOU WON', {
-			fontSize: '16px',
+		this.youWonText = scene.add.text(x, y - 8, 'YOU WON', {
+			fontSize: '14px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
 		}).setOrigin(0.5, 0.5).setDepth(11); // Higher depth than win bar
 		this.bonusHeaderContainer.add(this.youWonText);
 
 		// Line 2: "$ 0.00" with bold formatting
-		this.amountText = scene.add.text(x, y + 14, '$ 0.00', {
-			fontSize: '20px',
+		this.amountText = scene.add.text(x, y + 7, '$ 999,999,999,999.00', {
+			fontSize: '18px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
 		}).setOrigin(0.5, 0.5).setDepth(11); // Higher depth than win bar
@@ -278,118 +295,108 @@ export class BonusHeader {
 	 * Set up event listener for winnings updates from backend (like regular header)
 	 */
 	private setupWinningsEventListener(): void {
-		// Listen for spin events to hide winnings display at start of manual spin
-		gameEventManager.on(GameEventType.SPIN, () => {
-			console.log('[BonusHeader] Manual spin started - hiding winnings display');
-			this.hideWinningsDisplay();
-		});
-
-		// Listen for autoplay start to hide winnings display
-		gameEventManager.on(GameEventType.AUTO_START, () => {
-			console.log('[BonusHeader] Auto play started - hiding winnings display');
-			this.hideWinningsDisplay();
-		});
-
-		// Listen for reels start to hide winnings display
-		gameEventManager.on(GameEventType.REELS_START, () => {
-			console.log('[BonusHeader] Reels started');
-			// During bonus mode, display TOTAL WIN accumulated so far at the start of the spin
-			if (gameStateManager.isBonus) {
-				// Initialize tracking on first spin in bonus mode
-				if (!this.hasStartedBonusTracking) {
-					this.cumulativeBonusWin = 0;
-					this.hasStartedBonusTracking = true;
-				}
-				const totalWinSoFar = this.cumulativeBonusWin;
-				console.log(`[BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $${totalWinSoFar}`);
-				
-				if (this.youWonText) {
-					this.youWonText.setText('TOTAL WIN');
-				}
-				this.showWinningsDisplay(totalWinSoFar);
-			} else {
-				// Normal mode behavior: hide winnings at the start of the spin
-				this.hasStartedBonusTracking = false;
-				this.cumulativeBonusWin = 0;
-				this.hideWinningsDisplay();
-			}
-		});
-
-		// Listen for reel done events to show winnings display (like regular header)
-		gameEventManager.on(GameEventType.REELS_STOP, (data: any) => {
-			console.log(`[BonusHeader] REELS_STOP received - checking for wins`);
-
-			// In bonus mode, per-spin display is handled on WIN_STOP; skip here to avoid label mismatch
-			if (gameStateManager.isBonus) {
-				console.log('[BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)');
+		gameEventManager.on(GameEventType.UPDATE_MULTIPLIER_VALUE, (data: GameEventData) => {
+			// Ensure `data` is of the expected type before processing
+			if (!data || typeof (data as UpdateMultiplierValueEventData).multiplier !== "number") {
+				console.warn('[BonusHeader] UPDATE_MULTIPLIER_VALUE received with invalid data:', data);
 				return;
 			}
-			
-			// Get the current spin data from the Symbols component
-			const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
-			if (symbolsComponent && symbolsComponent.currentSpinData) {
-				const spinData = symbolsComponent.currentSpinData;
-				console.log(`[BonusHeader] Found current spin data:`, spinData);
+
+			if(!gameStateManager.isBonus) {
+				this.currentMultiplier = 0;
+				this.updateMultiplierValue(this.currentMultiplier);
 				
-				// Use the same logic as regular header - calculate from paylines
-				if (spinData.slot && spinData.slot.paylines && spinData.slot.paylines.length > 0) {
-					const totalWin = this.calculateTotalWinFromPaylines(spinData.slot.paylines);
-					console.log(`[BonusHeader] Total winnings calculated from paylines: ${totalWin}`);
-					
-					if (totalWin > 0) {
-						this.showWinningsDisplay(totalWin);
-					} else {
-						this.hideWinningsDisplay();
-					}
-				} else {
-					console.log('[BonusHeader] No paylines in current spin data - hiding winnings display');
-					this.hideWinningsDisplay();
-				}
-			} else {
-				console.log('[BonusHeader] No current spin data available - hiding winnings display');
-				this.hideWinningsDisplay();
+				return;
 			}
+
+			const multiplier = (data as UpdateMultiplierValueEventData).multiplier;
+			console.log('[BonusHeader] UPDATE_MULTIPLIER_VALUE received - updating multiplier value', data);
+
+			this.currentMultiplier = this.currentMultiplier > 0 ? this.currentMultiplier + multiplier : multiplier;
+			this.updateMultiplierValue(this.currentMultiplier);
+			
+			this.scene.time.delayedCall(50 * (gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1), () => {
+				console.log('[BonusHeader] UPDATE_MULTIPLIER_VALUE delayed call - updating winnings display');
+				this.currentWinnings = this.currentWinnings + this.currentBaseWinnings * (Math.max(0, this.currentMultiplier - 1));
+				this.updateWinningsDisplay(this.currentWinnings);
+				this.currentBaseWinnings = 0;
+			});
 		});
 
-		// On WIN_START during bonus, show per-spin win with "YOU WON"
+		gameEventManager.on(GameEventType.REELS_START, () => {
+			console.log('[BonusHeader] REELS_START received');
+			
+			this.isFirstWinThisSpin = false;
+		});
+
+		// Listen for win dialog close
+		// NOTE: During bonus, we must NOT reset currentWinnings here – it should
+		// only be cleared once the bonus round has actually ended.
+		gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, () => {
+			console.log('[BonusHeader] WIN_DIALOG_CLOSED received');
+
+			// Outside of bonus, it's safe to reset like the regular header does
+			console.log('[BonusHeader] Not in bonus – resetting winnings display');
+			this.currentWinnings = 0;
+			this.hideWinningsDisplay();
+			this.resetMultiplierValue();
+		});
+
+		// On WIN_START during bonus, show the win amount immediately (instead of waiting until REELS_STOP)
 		gameEventManager.on(GameEventType.WIN_START, () => {
 			if (!gameStateManager.isBonus) {
 				return;
 			}
+
 			const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
 			const spinData = symbolsComponent?.currentSpinData;
-			let spinWin = 0;
-			if (spinData?.slot?.paylines && spinData.slot.paylines.length > 0) {
-				spinWin = this.calculateTotalWinFromPaylines(spinData.slot.paylines);
-			}
-			if (this.youWonText) {
-				this.youWonText.setText('YOU WIN');
-			}
-			if (spinWin > 0) {
-				this.showWinningsDisplay(spinWin);
-			} else {
-				this.hideWinningsDisplay();
-			}
-		});
 
-		// On WIN_STOP during bonus, only accumulate subtotal for next REELS_START display
-		gameEventManager.on(GameEventType.WIN_STOP, () => {
-			if (!gameStateManager.isBonus) {
+			if (!symbolsComponent || !spinData) {
 				return;
 			}
-			const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
-			const spinData = symbolsComponent?.currentSpinData;
-			let spinWin = 0;
-			if (spinData?.slot?.paylines && spinData.slot.paylines.length > 0) {
-				spinWin = this.calculateTotalWinFromPaylines(spinData.slot.paylines);
+
+			if(!this.isFirstWinThisSpin && this.currentBaseWinnings > 0) {
+				this.isFirstWinThisSpin = true;
+				this.currentWinnings = this.currentWinnings + this.currentBaseWinnings * (Math.max(0, this.currentMultiplier - 1));
+				this.updateWinningsDisplay(this.currentWinnings);
+				this.currentBaseWinnings = 0;
 			}
-			if (!this.hasStartedBonusTracking) {
-				this.cumulativeBonusWin = 0;
-				this.hasStartedBonusTracking = true;
-			}
-			this.cumulativeBonusWin += (spinWin || 0);
-			console.log(`[BonusHeader] WIN_STOP (bonus): accumulated spinWin=$${spinWin}, cumulativeBonusWin=$${this.cumulativeBonusWin}`);
+
+			const fsIndex = this.scene.gameAPI.getCurrentFreeSpinIndex() - 1;
+			const freespinItem = spinData?.slot?.freespin?.items?.[fsIndex];
+
+			// Sum all win amounts per tumble for this free spin (base winnings before multiplier)
+			const baseWinnings = freespinItem?.tumble?.items[this.scene.gameAPI.getCurrentTumbleIndex()].win ?? 0;
+			this.currentBaseWinnings += baseWinnings;
+
+			const updateDelay = 700 * (gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1);
+			this.scene.time.delayedCall(updateDelay, () => {
+				if (this.currentWinnings > 0) {
+					this.updateWinningsDisplay(this.currentWinnings + baseWinnings);
+				} else {
+					this.youWonText.setText('YOU WIN');
+					this.showWinningsDisplay(this.currentWinnings + baseWinnings);
+				}
+			});
 		});
+
+		// WIN_STOP no longer needs to accumulate totals; TOTAL WIN comes from freespin.totalWin
+	}
+
+	resetMultiplierValue() {
+		this.currentMultiplier = 0;
+		this.updateMultiplierValue(this.currentMultiplier);
+	}
+
+	updateMultiplierValue(multiplier: number) {
+		if(multiplier > 0) {
+			this.showMultiplierText();
+		} else {
+			this.hideMultiplierText();
+		}
+		
+		const displayValue = multiplier > 0 ? multiplier : 1;
+		this.multiplierDisplay?.displayValue(displayValue);
 	}
 
 	/**
@@ -424,36 +431,37 @@ export class BonusHeader {
 			}
 		}
 
-		// Fallback: calculate from paylines if no subTotalWin available
-		if (spinData.slot?.paylines && spinData.slot.paylines.length > 0) {
-			const totalWin = this.calculateTotalWinFromPaylines(spinData.slot.paylines);
-			console.log(`[BonusHeader] Calculated from paylines: $${totalWin}`);
-			
-			// Only show display if totalWin > 0, otherwise hide it
-			if (totalWin > 0) {
-				console.log(`[BonusHeader] Showing winnings display with payline calculation: $${totalWin}`);
-				this.updateWinningsDisplay(totalWin);
-			} else {
-				console.log(`[BonusHeader] No wins from paylines, hiding winnings display`);
-				this.hideWinningsDisplay();
-			}
+		// Fallback: calculate from aggregate SpinData if no subTotalWin available
+		const totalWin = this.calculateTotalWinFromPaylines(spinData as SpinData);
+		console.log(`[BonusHeader] Calculated aggregate total win from SpinData: $${totalWin}`);
+
+		// Only show display if totalWin > 0, otherwise hide it
+		if (totalWin > 0) {
+			console.log(`[BonusHeader] Showing winnings display with aggregate calculation: $${totalWin}`);
+			this.updateWinningsDisplay(totalWin);
 		} else {
-			console.log('[BonusHeader] No win data available in spin data, hiding display');
+			console.log(`[BonusHeader] No wins found in SpinData, hiding winnings display`);
 			this.hideWinningsDisplay();
 		}
 	}
 
 	/**
-	 * Calculate total win from paylines (fallback method)
+	 * Calculate total win using SpinData (base paylines or all free spins)
 	 */
-	private calculateTotalWinFromPaylines(paylines: any[]): number {
-		let totalWin = 0;
-		for (const payline of paylines) {
-			if (payline.win && payline.win > 0) {
-				totalWin += payline.win;
-			}
+	private calculateTotalWinFromPaylines(spinData: SpinData): number {
+		if (!spinData) {
+			return 0;
 		}
-		return totalWin;
+
+		return SpinDataUtils.getAggregateTotalWin(spinData);
+	}
+
+	private hideMultiplierText(): void {
+		this.multiplierDisplay?.setVisible(false);
+	}
+
+	private showMultiplierText(): void {
+		this.multiplierDisplay?.setVisible(true);
 	}
 
 	resize(scene: Scene): void {
@@ -510,9 +518,6 @@ export class BonusHeader {
 	}
 
 	destroy(): void {
-		// Stop spotlight animation
-		this.stopSpotlightAnimation();
-		
 		if (this.bonusHeaderContainer) {
 			this.bonusHeaderContainer.destroy();
 		}

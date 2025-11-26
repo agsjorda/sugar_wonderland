@@ -1065,6 +1065,11 @@ export class SlotController {
 			Phaser.Geom.Rectangle.Contains
 		);
 		betBg.on('pointerdown', () => {
+			if(gameStateManager.isBonus) {
+				console.log('[SlotController] Bet background clicked in bonus mode - ignoring');
+				return;
+			}
+			
 			console.log('[SlotController] Bet background clicked');
 			EventBus.emit('show-bet-options');
 		});
@@ -2908,7 +2913,9 @@ export class SlotController {
 			{
 				fontSize: '30px',
 				color: '#00ff00', // Bright vibrant green as shown in image
-				fontFamily: 'poppins-bold'
+				fontFamily: 'poppins-bold',
+				stroke: '#004400', // Dark green stroke for better readability
+				strokeThickness: 4
 			}
 		).setOrigin(0.5, 0.5).setDepth(15);
 		this.controllerContainer.add(this.freeSpinLabel);
@@ -2921,7 +2928,9 @@ export class SlotController {
 			{
 				fontSize: '30px',
 				color: '#00ff00', // Bright vibrant green as shown in image
-				fontFamily: 'poppins-bold'
+				fontFamily: 'poppins-bold',
+				stroke: '#004400', // Dark green stroke for better readability
+				strokeThickness: 4
 			}
 		).setOrigin(0.5, 0.5).setDepth(15);
 		this.controllerContainer.add(this.freeSpinSubLabel);
@@ -2934,7 +2943,9 @@ export class SlotController {
 			{
 				fontSize: '80px', // Larger and bolder than the label
 				color: '#ffffff', // Pure white as shown in image
-				fontFamily: 'poppins-bold'
+				fontFamily: 'poppins-bold',
+				stroke: '#004400', // Dark green stroke around the free spin amount
+				strokeThickness: 6
 			}
 		).setOrigin(0.5, 0.5).setDepth(15);
 		this.controllerContainer.add(this.freeSpinNumber);

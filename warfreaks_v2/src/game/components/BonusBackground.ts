@@ -12,6 +12,8 @@ export class BonusBackground {
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
 	private archSpine: SpineGameObject;
+	private reelFrame: Phaser.GameObjects.Image;
+	private movingDoves: SpineGameObject[] = [];
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -57,16 +59,14 @@ export class BonusBackground {
 			doveSpineObject.setScale(scale.x, scale.y);
 			doveSpineObject.setDepth(5);
 			doveSpineObject.animationState.setAnimation(0, "animation", true);
+
+			doveSpineObject.animationState.timeScale = 0.5;
 			
 			this.bonusContainer.add(doveSpineObject);
 			
 			console.log('[BonusBackground] Mobile dove Spine animation created successfully');
-		} catch (error) {
-			console.error('[BonusBackground] Error creating dove Spine animation:', error);
-			console.error('[BonusBackground] This usually means the dove spine assets are not loaded or the paths are incorrect.');
-			console.error('[BonusBackground] Expected assets:');
-			console.error('[BonusBackground] - assets/portrait/high/bonus_background/dove/dove.atlas');
-			console.error('[BonusBackground] - assets/portrait/high/bonus_background/dove/dove.json');
+		} catch (e) {
+			console.warn('[BonusBackground] createDoveSpineAnimation failed:', e);
 		}
 	}
 
@@ -89,12 +89,14 @@ export class BonusBackground {
 		this.createArchSpine(scene, assetScale);
 
 		// Add reel frame
-		const reelFrame = scene.add.image(
-			scene.scale.width * 0.5,
-			scene.scale.height * 0.61,
+		this.reelFrame = scene.add.image(
+			scene.scale.width * 0.495,
+			scene.scale.height * 0.62,
 			'bonus-reel-frame'
-		).setOrigin(0.5, 0.95).setScale(assetScale * 0.325, assetScale * 0.275).setDepth(5);
-		this.bonusContainer.add(reelFrame);
+		).setOrigin(0.5, 0.95)
+		.setScale(assetScale * 0.323, assetScale * 0.291)
+		.setDepth(5);
+		this.bonusContainer.add(this.reelFrame);
 
 		// Dove spine animation
 		const doveYPosition = scene.scale.height * 0.09;
@@ -120,8 +122,9 @@ export class BonusBackground {
 		const scale = 0.42;
 		const offset = {x: 3, y: 0};
 		const anchor = {x: 0.5, y: 1};
-		const origin = {x: 0.5, y: 0.89};
+		const origin = {x: 0.5, y: 0.87};
 		playSpineAnimationSequence(scene, this.archSpine, [0], {x: scale, y: scale}, anchor, origin, offset);
+		this.archSpine.animationState.timeScale = 0.5;
 		this.bonusContainer.add(this.archSpine);
 	}
 
@@ -168,6 +171,10 @@ export class BonusBackground {
 
 	getContainer(): Phaser.GameObjects.Container {
 		return this.bonusContainer;
+	}
+
+	getReelFrame(): Phaser.GameObjects.Image {
+		return this.reelFrame;
 	}
 
 	destroy(): void {

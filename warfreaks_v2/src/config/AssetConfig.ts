@@ -73,6 +73,7 @@ export class AssetConfig {
 			images: {
 				// 'warfreaks-logo': `${prefix}/header/Logo.png`,
 				'win-bar': `${prefix}/win_bar/win_bar.png`,
+				'multiplier-bar': `${prefix}/header/multiplier_bar.png`,
 				// Add more header images here
 			},
 			spine: {
@@ -97,6 +98,7 @@ export class AssetConfig {
 			images: {
 				// 'logo-bonus': `${prefix}/bonus_header/logo-bonus.png`,
 				'win-bar-bonus': `${prefix}/win_bar/win_bar_bonus.png`,
+				'multiplier-bar-bonus': `${prefix}/bonus_header/multiplier_bar_bonus.png`,
 			},
 			spine: {
 				'dove': {
@@ -176,21 +178,6 @@ export class AssetConfig {
 		const symbolImages: { [key: string]: string } = {};
 		const symbolSpine: { [key: string]: { atlas: string; json: string } } = {};
 		const symbolCount: number = 10
-		
-		// for (let i = 0; i < 3; i++) {
-		// 	const isScatter = i === 0;
-		// 	const isHighPaying = i === 1;
-
-		// 	const spineAssetKey = isHighPaying ? 'HighPayingSymbol' : 'LowPayingSymbol';
-		// 	const symbolName = isScatter ? 'Symbol_0_WF' : `Symbol_${isHighPaying ? 'HP' : 'LP'}_256`;
-		// 	const atlasPath = `${prefix}/symbols/Animations/${symbolName}.atlas`;
-		// 	const jsonPath = `${prefix}/symbols/Animations/${symbolName}.json`;
-
-		// 	symbolSpine[spineAssetKey] = {
-		// 		atlas: atlasPath,
-		// 		json: jsonPath
-		// 	};
-		// }
 
 		for (let i = 0; i < symbolCount; i++) {
 			const isScatter = i === 0;
@@ -213,6 +200,46 @@ export class AssetConfig {
 				atlas: atlasPath,
 				json: jsonPath
 			};
+		}
+		
+		// Drop multiplier symbol animations for hit effects
+		const wholeMultiplierSpineKey = `multiplier_WF`;
+		const wholeMultiplierSymbolName = 'multiplier_WF';
+		const wholeMultiplierAtlasPath = `${prefix}/symbols/multipliers/${wholeMultiplierSymbolName}.atlas`;
+		const wholeMultiplierJsonPath = `${prefix}/symbols/multipliers/${wholeMultiplierSymbolName}.json`;
+
+		symbolSpine[wholeMultiplierSpineKey] = {
+			atlas: wholeMultiplierAtlasPath,
+			json: wholeMultiplierJsonPath
+		};
+
+
+		// Spine animations for hit effects
+		const frameSpineKey = `multiplier_frame`;
+		const frameSymbolName = 'multiplier_WF_frame';
+		const frameAtlasPath = `${prefix}/symbols/multipliers/${frameSymbolName}.atlas`;
+		const frameJsonPath = `${prefix}/symbols/multipliers/${frameSymbolName}.json`;
+
+		symbolSpine[frameSpineKey] = {
+			atlas: frameAtlasPath,
+			json: frameJsonPath
+		};
+
+		// Spine animations for hit effects
+		const doveSpineKey = `multiplier_dove`;
+		const doveSymbolName = 'multiplier_WF_dove';
+		const doveAtlasPath = `${prefix}/symbols/multipliers/${doveSymbolName}.atlas`;
+		const doveJsonPath = `${prefix}/symbols/multipliers/${doveSymbolName}.json`;
+
+		symbolSpine[doveSpineKey] = {
+			atlas: doveAtlasPath,
+			json: doveJsonPath
+		};
+
+		for(let i = 0; i < 15; i++) {
+			const spriteKey = `multiplier_${i}`;
+			const spritePath = `${prefix}/symbols/multipliers/multiplier_${i}.png`;
+			symbolImages[spriteKey] = spritePath;
 		}
 		
 		return {
@@ -366,8 +393,6 @@ export class AssetConfig {
 				'scatterIcon': `${prefix}/help_screen/scatterIcon.png`,
 				'scatterWin': `${prefix}/help_screen/scatterWin.png`,
 				'ScatterLabel': `${prefix}/help_screen/ScatterSymbol.png`,
-				'wheelSpin_helper': `assets/portrait/high/help_screen/wheelSpin_helper.png`,
-				'freeSpin_round': `assets/portrait/high/help_screen/freeSpin_round.png`,
 				'tumbleIcon': `${prefix}/help_screen/tumbleIcon.png`,
 				'tumbleWin': `${prefix}/help_screen/tumbleWin.png`,
 				'multiplierGame': `${prefix}/help_screen/multiplierGame.png`,
@@ -392,11 +417,28 @@ export class AssetConfig {
 		console.log(`[AssetConfig] Loading dialog assets with prefix: ${prefix}`);
 		
 		return {
+			images: {
+				'total_win_background': `${prefix}/dialogs/total_win_background.png`,
+				'total_win_foreground': `${prefix}/dialogs/total_win_foreground.png`,
+				'max_win_background': `${prefix}/dialogs/max_win_background.png`
+			},
 			spine: {
 				'win_dialog': {
 					atlas: `${prefix}/dialogs/win_dialog.atlas`,
 					json: `${prefix}/dialogs/win_dialog.json`
-				}
+				},
+				'free_spin': {
+					atlas: `${prefix}/dialogs/free_spin.atlas`,
+					json: `${prefix}/dialogs/free_spin.json`
+				},
+				'max_win': {
+					atlas: `${prefix}/dialogs/max_win.atlas`,
+					json: `${prefix}/dialogs/max_win.json`
+				},
+				'total_win': {
+					atlas: `${prefix}/dialogs/total_win.atlas`,
+					json: `${prefix}/dialogs/total_win.json`
+				},
 			}
 		};
 	}
@@ -464,6 +506,19 @@ export class AssetConfig {
 		};
 	}
 
+	getSymbolEffectsAssets(): AssetGroup {
+		const prefix = this.getAssetPrefix();
+
+		return {
+			spine: {
+				'spark_vfx': {
+					atlas: `${prefix}/symbols/Spark_VFX/Spark_VFX.atlas`,
+					json: `${prefix}/symbols/Spark_VFX/Spark_VFX.json`
+				}
+			}
+		};
+	}
+
 	// Network resources notes: ~8MB | Light
 	getBuyFeatureAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix();
@@ -484,40 +539,68 @@ export class AssetConfig {
 		
 		return {
 			audio: {
-				// Menu/UI clicks
-				'click_sw': 'assets/sounds/click_sw.ogg',
-				'mainbg_ka': 'assets/sounds/BG/mainbg_ka.ogg',
-				'bonusbg_ka': 'assets/sounds/BG/bonusbg_ka.ogg',
-				'freespinbg_ka': 'assets/sounds/Wins/freespin_ka.ogg',
-				'ambience_ka': 'assets/sounds/SFX/ambience_ka.ogg',
-				'spinb_ka': 'assets/sounds/SFX/spinb_ka.ogg',
-				'reeldrop_ka': 'assets/sounds/SFX/reeldrop_ka.ogg',
-				'turbodrop_ka': 'assets/sounds/SFX/turbodrop_ka.ogg',
-				'wheelspin_ka': 'assets/sounds/SFX/wheelspin_ka.ogg',
-				'coin_throw_ka': 'assets/sounds/SFX/coin_throw_ka.ogg',
-				'coin_drop_ka': 'assets/sounds/SFX/coin_drop_ka.ogg',
-				// Hit win SFX
-				'hitwin_ka': 'assets/sounds/SFX/hitwin_ka.ogg',
-				// Wild multi SFX
-				'wildmulti_ka': 'assets/sounds/SFX/wildmulti_ka.ogg',
-				'scatter_ka': 'assets/sounds/SFX/scatter_ka.ogg',
-				'anticipation_ka': 'assets/sounds/SFX/anticipation_ka.ogg',
-				// Winline SFX
-				'winline_1_ka': 'assets/sounds/SFX/winline_1_ka.ogg',
-				'winline_2_ka': 'assets/sounds/SFX/winline_2_ka.ogg',
+				// Updated to WF
 				// Win dialog SFX
-				'bigw_ka': 'assets/sounds/Wins/bigw_ka.ogg',
-				'megaw_ka': 'assets/sounds/Wins/megaw_ka.ogg',
-				'superw_ka': 'assets/sounds/Wins/superw_ka.ogg',
-				'epicw_ka': 'assets/sounds/Wins/epicw_ka.ogg',
-				'freespin_ka': 'assets/sounds/Wins/freespin_ka.ogg',
-				'congrats_ka': 'assets/sounds/Wins/congrats_ka.ogg',
+				'freespin_wf': 'assets/sounds/Wins/freespin_wf.ogg',
+				'congrats_wf': 'assets/sounds/Wins/congrats_wf.ogg',
+				'bigw_wf': 'assets/sounds/Wins/bigw_wf.ogg',
+				'megaw_wf': 'assets/sounds/Wins/megaw_wf.ogg',
+				'superw_wf': 'assets/sounds/Wins/superw_wf.ogg',
+				'epicw_wf': 'assets/sounds/Wins/epicw_wf.ogg',
 
-				// Win dialog SFX
-				'bigwskip_ka': 'assets/sounds/Wins/bigwskip_ka.ogg',
-				'megawskip_ka': 'assets/sounds/Wins/megawskip_ka.ogg',
-				'superwskip_ka': 'assets/sounds/Wins/superwskip_ka.ogg',
-				'epicwskip_ka': 'assets/sounds/Wins/epicwskip_ka.ogg'
+				// Menu/UI clicks
+				'click_wf': 'assets/sounds/click_wf.ogg',
+				'mainbg_wf': 'assets/sounds/BG/mainbg_wf.ogg',
+				'bonusbg_wf': 'assets/sounds/BG/bonusbg_wf.ogg',
+				
+				'turbodrop_wf': 'assets/sounds/SFX/turbodrop_wf.ogg',
+				'reeldrop_wf': 'assets/sounds/SFX/reeldrop_wf.ogg',
+
+				// Unused SFX
+				'argun_wf': 'assets/sounds/SFX/argun_wf.ogg',
+				'explosion_wf': 'assets/sounds/SFX/explosion_wf.ogg',
+				'hit_win_2_wf': 'assets/sounds/SFX/hit_win_2_wf.ogg',
+				'hit_win_wf': 'assets/sounds/SFX/hit_win_wf.ogg',
+				'missile_wf': 'assets/sounds/SFX/missile_wf.ogg',
+				'multi_wf': 'assets/sounds/SFX/multi_wf.ogg',
+				'nuke_wf': 'assets/sounds/SFX/nuke_wf.ogg',
+				'reeldrop2_wf': 'assets/sounds/SFX/reeldrop2_wf.ogg',
+				'spin_wf': 'assets/sounds/SFX/spin_wf.ogg',
+				'spin2_wf': 'assets/sounds/SFX/spin2_wf.ogg',
+				'turbo2_wf': 'assets/sounds/SFX/turbo2_wf.ogg',
+				'ub_win_wf': 'assets/sounds/SFX/ub_win_wf.ogg',
+				
+				// Unused Wins
+				'maxw_end_wf': 'assets/sounds/Wins/maxw_end_wf.ogg',
+				'maxw_wf': 'assets/sounds/Wins/maxw_wf.ogg',
+				'twin1_wf': 'assets/sounds/Wins/twin1_wf.ogg',
+				'twin2_wf': 'assets/sounds/Wins/twin2_wf.ogg',
+				'twin3_wf': 'assets/sounds/Wins/twin3_wf.ogg',
+				'twin4_wf': 'assets/sounds/Wins/twin4_wf.ogg',
+				'twinheaven1_wf': 'assets/sounds/Wins/twinheaven1_wf.ogg',
+				'twinheaven2_wf': 'assets/sounds/Wins/twinheaven2_wf.ogg',
+				'twinheaven3_wf': 'assets/sounds/Wins/twinheaven3_wf.ogg',
+				'twinheaven4_wf': 'assets/sounds/Wins/twinheaven4_wf.ogg',
+
+				// 'freespinbg_ka': 'assets/sounds/Wins/freespin_wf.ogg',
+				// 'ambience_ka': 'assets/sounds/SFX/ambience_wf.ogg',
+				// 'spinb_ka': 'assets/sounds/SFX/spinb_wf.ogg',
+				// // Hit win SFX
+				// 'hitwin_ka': 'assets/sounds/SFX/hitwin_wf.ogg',
+				// // Wild multi SFX
+				// 'wildmulti_ka': 'assets/sounds/SFX/wildmulti_wf.ogg',
+				// 'scatter_ka': 'assets/sounds/SFX/scatter_ka.ogg',
+				// 'anticipation_ka': 'assets/sounds/SFX/anticipation_ka.ogg',
+				// // Winline SFX
+				// 'winline_1_ka': 'assets/sounds/SFX/winline_1_wf.ogg',
+				// 'winline_2_ka': 'assets/sounds/SFX/winline_2_wf.ogg',
+
+				// // Win dialog SFX
+				// 'bigwskip_ka': 'assets/sounds/Wins/bigwskip_wf.ogg',
+				// 'megawskip_ka': 'assets/sounds/Wins/megawskip_wf.ogg',
+				// 'superwskip_ka': 'assets/sounds/Wins/superwskip_wf.ogg',
+				// 'epicwskip_ka': 'assets/sounds/Wins/epicwskip_wf.ogg',
+
 			}
 		};
 	}
@@ -538,6 +621,7 @@ export class AssetConfig {
 			coin: this.getCoinAssets(),
 			buyFeature: this.getBuyFeatureAssets(),
 			audio: this.getAudioAssets(),
+			symbolEffects: this.getSymbolEffectsAssets(),
 		};
 	}
 

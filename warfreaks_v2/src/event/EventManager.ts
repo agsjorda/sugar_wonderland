@@ -5,6 +5,7 @@ export enum GameEventType {
   START = 'START',
   SPIN = 'SPIN',
   SPIN_DATA_RESPONSE = 'SPIN_DATA_RESPONSE', // New event for SpinData from GameAPI
+  UPDATE_MULTIPLIER_VALUE = 'UPDATE_MULTIPLIER_VALUE', // New event to update multiplier value in normal or bonus header
   REELS_START = 'REELS_START',
   REELS_STOP = 'REELS_STOP',
   WIN_START = 'WIN_START',
@@ -85,6 +86,10 @@ export interface BackendStatusEventData {
   responseId?: string;
 }
 
+export interface UpdateMultiplierValueEventData {
+  multiplier: number;
+}
+
 // Union type for all event data
 export type GameEventData = 
   | SpinEventData
@@ -97,6 +102,7 @@ export type GameEventData =
   | AutoStartEventData
   | WheelSpinEventData
   | BackendStatusEventData
+  | UpdateMultiplierValueEventData
   | undefined;
 
 // Event listener type

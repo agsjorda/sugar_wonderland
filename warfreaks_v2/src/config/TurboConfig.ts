@@ -20,10 +20,10 @@
 export class TurboConfig {
     // Main turbo speed multiplier (4x faster = 0.25x duration)
     // Change this value to affect ALL turbo-affected functions
-    public static readonly TURBO_SPEED_MULTIPLIER: number = 0.5;
+    public static readonly TURBO_SPEED_MULTIPLIER: number = 0.65;
     
     // Turbo delay multiplier for spin timing
-    public static readonly TURBO_DELAY_MULTIPLIER: number = 0.5;
+    public static readonly TURBO_DELAY_MULTIPLIER: number = 0.1;
     
     // Turbo duration multiplier for animations
     public static readonly TURBO_DURATION_MULTIPLIER: number = 0.5;

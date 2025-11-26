@@ -18,7 +18,7 @@ import { SlotController } from '../components/SlotController';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { AssetConfig } from '../../config/AssetConfig';
-import { PaylineData } from '../../backend/SpinData';
+import { PaylineData, SpinData, SpinDataUtils } from '../../backend/SpinData';
 import { AssetLoader } from '../../utils/AssetLoader';
 import { Symbols } from '../components/Symbols';
 import { GameData } from '../components/GameData';
@@ -30,16 +30,16 @@ import { BetOptions } from '../components/BetOptions';
 import { AutoplayOptions } from '../components/AutoplayOptions';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
-import { IrisTransition } from '../components/IrisTransition';
+import { SplitTransition } from '../components/SplitTransition';
 import { CoinAnimation } from '../components/CoinAnimation';
 import { GameAPI } from '../../backend/GameAPI';
-import { SpinData } from '../../backend/SpinData';
 import { AudioManager, MusicType, SoundEffectType } from '../../managers/AudioManager';
 import { Menu } from '../components/Menu';
 import { FullScreenManager } from '../../managers/FullScreenManager';
 import { ScatterAnticipation } from '../components/ScatterAnticipation';
 import { ClockDisplay } from '../components/ClockDisplay';
 import { EmberParticleSystem } from '../components/EmberParticleSystem';
+import { cameraShake } from '../components/CameraShake';
 
 export class Game extends Scene
 {
@@ -58,7 +58,7 @@ export class Game extends Scene
 	private dialogs: Dialogs;
 	private betOptions: BetOptions;
 	private autoplayOptions: AutoplayOptions;
-	private irisTransition: IrisTransition;
+	private splitTransition: SplitTransition;
 	private coinAnimation: CoinAnimation;
 	public gameAPI: GameAPI;
 	public audioManager: AudioManager;
@@ -112,8 +112,16 @@ export class Game extends Scene
 		return this.background;
 	}
 
+	public getBonusBackground(): BonusBackground {
+		return this.bonusBackground;
+	}
+
 	public getHeader(): Header {
 		return this.header;
+	}
+
+	public getBonusHeader(): BonusHeader {
+		return this.bonusHeader;
 	}
 
 	preload () 
@@ -239,12 +247,7 @@ export class Game extends Scene
 		this.slotController.setBuyFeatureReference(); // Set BuyFeature reference for bet access
 		this.slotController.create(this);
 		
-		// Create iris transition component
-		this.irisTransition = new IrisTransition(this);
-		// Show the iris transition and set it to radius 30 for game scene start
-		this.irisTransition.show();
-		// Set the iris to radius 30 (zoomed in) immediately for game scene
-		this.irisTransition.setRadiusImmediate(30);
+		this.startSplitTransition();
 		
 		// Create coin animation component
 		this.coinAnimation = new CoinAnimation(this.networkManager, this.screenModeManager);
@@ -255,11 +258,7 @@ export class Game extends Scene
 		this.scatterAnticipation.hide();
 		(this as any).scatterAnticipation = this.scatterAnticipation;
 		
-		// Zoom out the iris transition after 0.5 seconds
-		this.time.delayedCall(500, () => {
-			console.log('[Game] Starting iris zoom out from radius 30 to 1000');
-			this.irisTransition.zoomInToRadius(1000, 2500); // Zoom out over 1.5 seconds
-		});
+		// (SplitTransition handles its own timing; no additional delayed zoom needed)
 		
 		// Initialize balance on game start
 		this.initializeGameBalance();
@@ -307,32 +306,23 @@ export class Game extends Scene
 		//this.dialogs.showPaintEffect(this);
 		
 		// Show congratulations dialog (on top)
-		//this.dialogs.showCongrats(this);
+		this.time.delayedCall(2500, () => {
+			// this.dialogs.showCongratulations(this, { winAmount: 10000.00 });
 
-		// Show congratulations dialog (on top)
-		//this.dialogs.showFreeSpinDialog(this);
-
-		// Show large win dialog (on top)
-		//this.dialogs.showLargeWin(this);
-
-		// Show medium win dialog (on top)
-		//this.dialogs.showMediumWin(this);
-
-		// Bet options will be shown when + or - buttons are clicked
-
-		// Show small win dialog (on top)
-		// this.time.delayedCall(2500, () => {
-		// 	this.dialogs.showMegaWin(this, { winAmount: 123456789.00 });
-		// });
-
-		// Show medium win dialog (on top)
-		//this.dialogs.showMediumWin(this, { winAmount: 2500000.50 });
-
-		// Show large win dialog (on top)
-		//this.dialogs.showLargeWin(this, { winAmount: 5000000.75 });
-
-		// Show super win dialog (on top)
-		// this.dialogs.showSuperWin(this, { winAmount: 10000000.00 });
+			// this.dialogs.showFreeSpinDialog(this, { freeSpins: 15 });
+	
+			// Show small win dialog (on top)
+			// this.dialogs.showMegaWin(this, { winAmount: 1234567891231.00 });
+			
+			// Show medium win dialog (on top)
+			//this.dialogs.showMediumWin(this, { winAmount: 2500000.50 });
+	
+			// Show large win dialog (on top)
+			//this.dialogs.showLargeWin(this, { winAmount: 5000000.75 });
+	
+			// Show super win dialog (on top)
+			// this.dialogs.showSuperWin(this, { winAmount: 10000000.00 });
+		});
 
 		EventBus.on('spin', () => {
 			this.spin();
@@ -410,8 +400,8 @@ export class Game extends Scene
 			
 			// Get current spin data to determine win amount
 			if (this.symbols && this.symbols.currentSpinData) {
-				const spinData = this.symbols.currentSpinData;
-				const totalWin = this.calculateTotalWinFromPaylines(spinData.slot.paylines);
+				const spinData = this.symbols.currentSpinData as SpinData;
+				const totalWin = this.calculateTotalWinFromPaylines(spinData);
 				const betAmount = parseFloat(spinData.bet);
 				
 				console.log(`[Game] WIN_START: Total win: $${totalWin}, bet: $${betAmount}`);
@@ -428,11 +418,11 @@ export class Game extends Scene
 			
 			// Get the current spin data from the Symbols component
 			if (this.symbols && this.symbols.currentSpinData) {
-				const spinData = this.symbols.currentSpinData;
+				const spinData = this.symbols.currentSpinData as SpinData;
 				console.log('[Game] WIN_STOP: Found current spin data, calculating total win from paylines');
 				
-				// Calculate total win from paylines
-				const totalWin = this.calculateTotalWinFromPaylines(spinData.slot.paylines);
+				// Calculate total win from SpinData (handles base + freespins)
+				const totalWin = this.calculateTotalWinFromPaylines(spinData);
 				const betAmount = parseFloat(spinData.bet);
 				
 				console.log(`[Game] WIN_STOP: Total win calculated: $${totalWin}, bet: $${betAmount}`);
@@ -541,6 +531,43 @@ export class Game extends Scene
 			}
 			console.log('[Game] AUTO_START allowed - no win dialog showing');
 		});
+
+		// Keyboard shortcuts to switch between base and bonus modes
+		this.input.keyboard?.on('keydown-Q', () => {
+			this.switchBetweenModes(true); // T => enter bonus mode
+		});
+		this.input.keyboard?.on('keydown-E', () => {
+			this.switchBetweenModes(false); // Y => return to base mode
+		});
+	}
+
+	/**
+	 * Start the split transition animation
+	 */
+	private startSplitTransition(): void {
+		// Create split transition component
+		this.splitTransition = new SplitTransition(this);
+		// Create a temporary fullscreen background image for the split transition effect
+		try {
+			const transitionImage = this.add.image(
+				this.scale.width * 0.5,
+				this.scale.height * 0.5,
+				'loading_background'
+			).setOrigin(0.5, 0.5);
+			// Fit to screen (match logic used in Background)
+			const imgFrame = transitionImage.frame;
+			const imgW = imgFrame?.width || 1;
+			const imgH = imgFrame?.height || 1;
+			const scaleX = this.scale.width / imgW;
+			const scaleY = this.scale.height / imgH;
+			const fitScale = Math.max(scaleX, scaleY);
+			transitionImage.setScale(fitScale * 1.05);
+			// Play the split animation on this temporary image
+			this.splitTransition.playOn(transitionImage, 1500, 250, 'Cubic.easeInOut', this.scale.width / 2);
+			cameraShake(this, 1250 , 0.004, 100);
+		} catch (e) {
+			console.warn('[Game] SplitTransition failed to start:', e);
+		}
 	}
 
 	/**
@@ -613,20 +640,15 @@ export class Game extends Scene
 	}
 
 	/**
-	 * Calculate total win amount from paylines array
+	 * Calculate total win amount using SpinData (base paylines or free spins)
 	 */
-	private calculateTotalWinFromPaylines(paylines: PaylineData[]): number {
-		if (!paylines || paylines.length === 0) {
+	private calculateTotalWinFromPaylines(spinData: SpinData): number {
+		if (!spinData) {
 			return 0;
 		}
-		
-		const totalWin = paylines.reduce((sum, payline) => {
-			const winAmount = payline.win || 0;
-			console.log(`[Game] Payline ${payline.lineKey}: ${winAmount} (symbol ${payline.symbol}, count ${payline.count})`);
-			return sum + winAmount;
-		}, 0);
-		
-		console.log(`[Game] Calculated total win: ${totalWin} from ${paylines.length} paylines`);
+
+		const totalWin = SpinDataUtils.getAggregateTotalWin(spinData);
+		console.log(`[Game] Calculated aggregate total win from SpinData: ${totalWin}`);
 		return totalWin;
 	}
 
@@ -656,7 +678,17 @@ export class Game extends Scene
 			return;
 		}
 		
-		const multiplier = payout / bet;
+		const multiplier = !gameStateManager.isBonus
+			? this.symbols.currentSpinData?.slot?.tumbles?.multiplier?.total ?? 0
+			: (() => {
+				const items = this.symbols.currentSpinData?.slot?.freespin?.items;
+				if (!items || items.length === 0) {
+					return 0;
+				}
+				const lastItem = items[items.length - 1];
+				return lastItem?.tumble?.multiplier ?? 0;
+			})();
+		
 		console.log(`[Game] Win detected - Payout: $${payout}, Bet: $${bet}, Multiplier: ${multiplier}x`);
 		
 		// Only show dialogs for wins that are at least 20x the bet size
@@ -672,7 +704,7 @@ export class Game extends Scene
 			console.log(`[Game] Large Win! Showing LargeW_KA dialog for ${multiplier.toFixed(2)}x multiplier`);
 			this.dialogs.showSuperWin(this, { winAmount: payout });
 		} else if (multiplier >= 45) {
-			console.log(`[Game] Super Win! Showing SuperW_KA dialog for ${multiplier.toFixed(2)}x multiplier`);
+			console.log(`[Game] Super Win! Showing superw_wf dialog for ${multiplier.toFixed(2)}x multiplier`);
 			this.dialogs.showEpicWin(this, { winAmount: payout });
 		} else if (multiplier >= 30) {
 			console.log(`[Game] Medium Win! Showing MediumW_KA dialog for ${multiplier.toFixed(2)}x multiplier`);
@@ -1109,6 +1141,20 @@ export class Game extends Scene
 		console.log('- spawnSingleCoin(400, 300) - Spawn one coin at position');
 		console.log('- clearCoins() - Remove all coins');
 		console.log('- getCoinCount() - Check active coin count');
+	}
+
+	switchBetweenModes(isBonus: boolean): void {
+		if (isBonus) {
+			this.background.getContainer().setVisible(false);
+			this.bonusBackground.getContainer().setVisible(true);	
+			this.header.getContainer().setVisible(false);
+			this.bonusHeader.getContainer().setVisible(true);
+		} else {
+			this.background.getContainer().setVisible(true);
+			this.bonusBackground.getContainer().setVisible(false);
+			this.header.getContainer().setVisible(true);
+			this.bonusHeader.getContainer().setVisible(false);
+		}
 	}
 
 	changeScene() {

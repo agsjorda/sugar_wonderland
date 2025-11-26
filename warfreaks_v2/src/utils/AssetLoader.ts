@@ -92,6 +92,12 @@ export class AssetLoader {
 		console.log('[AssetLoader] Symbol assets loaded');
 	}
 
+	loadSymbolEffectsAssets(scene: Scene): void {
+		console.log('[AssetLoader] Loading symbol effects assets...');
+		this.loadAssetGroup(scene, this.assetConfig.getSymbolEffectsAssets());
+		console.log('[AssetLoader] Symbol effects assets loaded');
+	}
+
 	loadButtonAssets(scene: Scene): void {
 		console.log('[AssetLoader] Loading button assets...');
 		this.loadAssetGroup(scene, this.assetConfig.getButtonAssets());

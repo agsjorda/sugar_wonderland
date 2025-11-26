@@ -36,6 +36,8 @@ export class Preloader extends Scene
 	private fullscreenBtn?: Phaser.GameObjects.Image;
 	private clockDisplay: ClockDisplay;
 
+	private studioLoadingScreen?: StudioLoadingScreen;
+
 	constructor ()
 	{
 		super('Preloader');
@@ -78,7 +80,7 @@ export class Preloader extends Scene
 		const scaleY = this.scale.height / background.height;
 		const scale = Math.max(scaleX, scaleY);
 		
-		background.setScale(scale);
+		background.setScale(scale * 1.05);
 		
 		console.log(`[Preloader] Background original size: ${background.width}x${background.height}`);
 		console.log(`[Preloader] Canvas size: ${this.scale.width}x${this.scale.height}`);
@@ -90,26 +92,25 @@ export class Preloader extends Scene
 		console.log(`[Preloader] Background position: (${this.scale.width * 0.5}, ${this.scale.height * 0.5})`);
 
 		if (screenConfig.isPortrait) {
-		// Display studio loading screen
-		const studio = new StudioLoadingScreen(this, {
-			loadingFrameOffsetX: 0,
-			loadingFrameOffsetY: 335,
-			loadingFrameScaleModifier: 0.04,
-			text: 'PLAY LOUD. WIN WILD. DIJOKER STYLE',
-			textOffsetX: -5,
-			textOffsetY: 365,
-			textScale: 1,
-			textColor: '#FFFFFF',
-			text2: 'www.dijoker.com',
-			text2OffsetX: 0,
-			text2OffsetY: 370,
-			text2Scale: 1,
-			text2Color: '#FFFFFF'
-			
+			// Display studio loading screen
+			this.studioLoadingScreen = new StudioLoadingScreen(this, {
+				loadingFrameOffsetX: 0,
+				loadingFrameOffsetY: 335,
+				loadingFrameScaleModifier: 0.04,
+				text: 'PLAY LOUD. WIN WILD. DIJOKER STYLE',
+				textOffsetX: -5,
+				textOffsetY: 365,
+				textScale: 1,
+				textColor: '#FFFFFF',
+				text2: 'www.dijoker.com',
+				text2OffsetX: 0,
+				text2OffsetY: 370,
+				text2Scale: 1,
+				text2Color: '#FFFFFF'
 		});
-		studio.show();
+		this.studioLoadingScreen.show();
 		// Schedule fade-out after minimum 3s, then reveal preloader UI if needed
-		studio.fadeOutAndDestroy(3000, 500);
+		this.studioLoadingScreen.bedazzle(3000, 500);
 
 		// Delay revealing Preloader's own progress UI until studio fade completes
 		this.events.once('studio-fade-complete', () => {
@@ -145,46 +146,6 @@ export class Preloader extends Scene
 				duration: 5000,
 				repeat: -1,
 			});
-
-			// Progress bar below the spinning button
-			const barWidth = this.scale.width * 0.5;
-			const barHeight = Math.max(18, 30 * assetScale);
-			const barX = this.scale.width * 0.5;
-			const barY = buttonY + (this.buttonBg.displayHeight * 0.5) + Math.max(20, 24 * assetScale) + 50;
-
-			this.progressBarBg = this.add.graphics();
-			this.progressBarBg.fillStyle(0x000000, 0.5);
-			this.progressBarBg.fillRoundedRect(barX - barWidth * 0.5, barY - barHeight * 0.5, barWidth, barHeight, barHeight * 0.5);
-
-			this.progressBarFill = this.add.graphics();
-			this.progressBarFill.fillStyle(0x66D449, 1);
-			this.progressBarFill.fillRoundedRect(barX - barWidth * 0.5 + this.progressBarPadding, barY - barHeight * 0.5 + this.progressBarPadding, 0, barHeight - this.progressBarPadding * 2, (barHeight - this.progressBarPadding * 2) * 0.5);
-
-			// Save geometry for updates
-			this.progressBarX = barX;
-			this.progressBarY = barY;
-			this.progressBarWidth = barWidth;
-			this.progressBarHeight = barHeight;
-
-			this.progressText = this.add.text(barX, barY, '0%', {
-				fontFamily: 'poppins-bold',
-				fontSize: `${Math.round(18 * assetScale)}px`,
-				color: '#FFFFFF',
-			})
-			.setOrigin(0.5, 0.5)
-			.setShadow(0, 3, '#000000', 6, true, true);
-
-			// "Press Play To Continue" text (initially hidden)
-			this.pressToPlayText = this.add.text(barX, barY - (barHeight * 1), 'Press Play To Continue', {
-				fontFamily: 'Poppins-Regular',
-				fontSize: `${Math.round(22 * assetScale)}px`,
-				color: '#FFFFFF',
-				align: 'center'
-			})
-			.setOrigin(0.5, 1)
-			.setAlpha(0)
-			.setShadow(0, 3, '#000000', 6, true, true);
-
 		}
 		
 
@@ -223,13 +184,13 @@ export class Preloader extends Scene
 		this.load.maxParallelDownloads = Math.max(this.load.maxParallelDownloads, 8);
 		// Show debug info
 		this.assetConfig.getDebugInfo();
-
 		
 		// Load background and header assets (will be used in Game scene)
 		this.assetLoader.loadBackgroundAssets(this);
 		this.assetLoader.loadHeaderAssets(this);
 		this.assetLoader.loadBonusHeaderAssets(this);
 		this.assetLoader.loadSymbolAssets(this);
+		this.assetLoader.loadSymbolEffectsAssets(this);
 		this.assetLoader.loadButtonAssets(this);
 		this.assetLoader.loadFontAssets(this);
 		this.assetLoader.loadSpinnerAssets(this);
@@ -302,11 +263,37 @@ export class Preloader extends Scene
         ).setOrigin(0.5, 0.5).setScrollFactor(0).setAlpha(0);
 
         // Start game on click
-        this.buttonSpin?.once('pointerdown', () => {
+        // this.buttonSpin?.once('pointerdown', () => {
+        //     this.tweens.add({
+        //         targets: fadeOverlay,
+        //         alpha: 1,
+        //         duration: 500,
+        //         ease: 'Power2',
+        //         onComplete: () => {
+        //             console.log('[Preloader] Starting Game scene after click');
+        //             this.scene.start('Game', { 
+        //                 networkManager: this.networkManager, 
+        //                 screenModeManager: this.screenModeManager 
+        //             });
+        //         }
+        //     });
+        // });
+
+		this.buttonSpin?.once('pointerdown', () => {
+			const duration = 300;
+			
             this.tweens.add({
-                targets: fadeOverlay,
-                alpha: 1,
-                duration: 500,
+                targets: [
+					this.buttonSpin, 
+					this.buttonBg, 
+					this.progressBarBg, 
+					this.progressBarFill, 
+					this.progressText, 
+					this.pressToPlayText,
+					// this.fullscreenBtn,
+				],
+                alpha: 0,
+                duration: duration,
                 ease: 'Power2',
                 onComplete: () => {
                     console.log('[Preloader] Starting Game scene after click');
@@ -316,6 +303,8 @@ export class Preloader extends Scene
                     });
                 }
             });
+
+			this.studioLoadingScreen?.fadeOutRemainingElements(duration);
         });
 
 		// Ensure web fonts are applied after they are ready

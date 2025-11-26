@@ -64,7 +64,7 @@ export class EmberParticleSystem {
         const y = Math.random() * (screenHeight + this.SCREEN_MARGIN * 2) - this.SCREEN_MARGIN;
         
         // Random size (1.5-3.5 pixels)
-        const size = Math.random() * 2.5 + 1;
+        const size = Math.random() * 4 + 1;
         
         // Random velocity
         const vx = (Math.random() - 0.5) * 2; // -1 to 1
@@ -72,7 +72,7 @@ export class EmberParticleSystem {
         
         // Random fiery color
         const colors = [
-            0xff4400, // Bright orange-red
+            0xffAA33, // Bright yellow-orange
             0xff6600, // Orange
             0xff8800, // Light orange
             0xffaa00, // Yellow-orange
@@ -82,7 +82,7 @@ export class EmberParticleSystem {
         const color = colors[Math.floor(Math.random() * colors.length)];
         
         // Random alpha
-        const alpha = Math.random() * 0.8 + 0.2; // 0.2 to 1.0
+        const alpha = Math.random() * 0.2 + 0.2; // 0.4 to 1.0
         
         // Random lifetime
         const lifetime = Math.random() * 10000 + 5000; // 5-15 seconds
@@ -114,8 +114,8 @@ export class EmberParticleSystem {
         graphics.clear();
         
         // Create cylindrical shapes with varying aspect ratios
-        const width = size * (Math.random() * 0.8 + 0.6); // 0.6x to 1.4x of size
-        const height = size * (Math.random() * 1.2 + 0.8); // 0.8x to 2.0x of size
+        const width = size * (Math.random() * 0.6 + 0.6); // 0.6x to 1.4x of size
+        const height = size * (Math.random() * 0.9 + 0.8); // 0.8x to 2.0x of size
         
         // Create a multi-layered cylindrical glow effect
         // Outer glow (largest, most transparent)

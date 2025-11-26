@@ -1,4 +1,5 @@
 import { Scene } from 'phaser';
+import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { SlotController } from './SlotController';
 
 export interface BuyFeatureConfig {
@@ -39,7 +40,7 @@ export class BuyFeature {
 	private readonly CONTINUOUS_DELAY: number = 500; // 1 second initial delay
 	private readonly CONTINUOUS_INTERVAL: number = 200; // 150ms interval for continuous press
 	private priceDisplay: Phaser.GameObjects.Text;
-	private featureLogo: Phaser.GameObjects.Image;
+	private featureLogo: SpineGameObject;
 	private backgroundImage: Phaser.GameObjects.Image;
 	private onCloseCallback?: () => void;
 	private onConfirmCallback?: () => void;
@@ -180,10 +181,21 @@ export class BuyFeature {
 		const screenWidth = scene.cameras.main.width;
 		const screenHeight = scene.cameras.main.height;
 
-		const x = screenHeight - this.globalBottomAnchorOffset - 390;
-		
-		this.featureLogo = scene.add.image(screenWidth / 2, x, 'buy_feature_logo');
-		this.featureLogo.setScale(1); // Default scale
+		const y = screenHeight - this.globalBottomAnchorOffset - 402;
+		const spineKey = 'Symbol0_WF';
+		const spineAtlasKey = `${spineKey}-atlas`;
+
+		// Scatter symbol idle loop reused as the buy feature logo to keep the area animated
+		this.featureLogo = scene.add.spine(screenWidth / 2, y, spineKey, spineAtlasKey) as SpineGameObject;
+		this.featureLogo.setOrigin(0.5, 0.5);
+		this.featureLogo.setScale(0.8);
+
+		try {
+			this.featureLogo.animationState.setAnimation(0, 'symbol0_WF', true);
+		} catch (error) {
+			console.warn('[BuyFeature] Unable to start feature logo animation', error);
+		}
+
 		this.container.add(this.featureLogo);
 	}
 

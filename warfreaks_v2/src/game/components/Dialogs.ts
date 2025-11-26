@@ -2,15 +2,15 @@ import { Scene } from 'phaser';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { NumberDisplay, NumberDisplayConfig } from './NumberDisplay';
-import { IrisTransition } from './IrisTransition';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { getFullScreenSpineScale, playSpineAnimationSequence } from './SpineBehaviorHelper';
+import { FlashTransition } from './FlashTransition';
 
 export interface DialogConfig {
-	//type: 'confetti_KA' | 'Congrats_KA' | 'Explosion_AK' | 'FreeSpinDialog_KA' | 'largeW_KA' | 'LargeW_KA' | 'MediumW_KA' | 'SmallW_KA' | 'SuperW_KA';
-	type: 'Congrats_KA' | 'Explosion_AK' | 'FreeSpinDialog' | 'BigWin' | 'MegaWin' | 'EpicWin' | 'SuperWin';
+	//type: 'confetti_KA' | 'congrats_wf' | 'Explosion_AK' | 'FreeSpinDialog_KA' | 'largeW_KA' | 'LargeW_KA' | 'MediumW_KA' | 'SmallW_KA' | 'superw_wf';
+	type: 'Congratulations' | 'FreeSpinDialog' | 'BonusFreeSpinDialog' | 'BigWin' | 'MegaWin' | 'EpicWin' | 'SuperWin';
 	position?: { x: number; y: number };
 	scale?: number;
 	duration?: number;
@@ -54,40 +54,33 @@ export class Dialogs {
 	private screenModeManager: ScreenModeManager;
 	private currentScene: Scene | null = null;
 	
-	// Iris transition for scatter animation
-	private irisTransition: IrisTransition | null = null;
-
 	// Dialog configuration
 	private dialogScales: Record<string, number> = {
-		'Congrats_KA': 0.3,
-		'Explosion_AK': 0.8,
-		'FreeSpinDialog_KA': 0.7,
+		'Congratulations': 1,
+		'FreeSpinDialog': 1,
+		'BonusFreeSpinDialog': 1,
 		'EpicWin': 0.9,
 		'MegaWin': 0.9,
 		'BigWin': 0.9,
 		'SuperWin': 0.9,
-		'Paint_KA': 0.41
 	};
 
 	// Dialog positions (relative: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom)
 	private dialogPositions: Record<string, { x: number; y: number }> = {
-		'Congrats_KA': { x: 0.5, y: 0.5 },
-		'Explosion_AK': { x: 0.5, y: 0.5 },
-		'FreeSpinDialog_KA': { x: 0.5, y: 0.5 },
+		'Congratulations': { x: 0.535, y: 0.625 },
+		'FreeSpinDialog': { x: 0.5, y: 0.3 },
+		'BonusFreeSpinDialog': { x: 0.5, y: 0.3 },
 		'EpicWin': { x: 0.5, y: 0.5 },
 		'MegaWin': { x: 0.5, y: 0.5 },
 		'BigWin': { x: 0.5, y: 0.5 },
 		'SuperWin': { x: 0.5, y: 0.5 },
-		'Paint_KA': { x: 0.52, y: 0.72 }
 	};
 
 	private dialogLoops: Record<string, boolean> = {
-		// Effects
-		'Explosion_AK': true,
-		'Paint_KA': false,
 		// Dialog texts
-		'Congrats_KA': true,
-		'FreeSpinDialog_KA': true,
+		'Congratulations': true,
+		'FreeSpinDialog': true,
+		'BonusFreeSpinDialog': true,
 		'EpicWin': true,
 		'MegaWin': true,
 		'BigWin': true,
@@ -95,11 +88,25 @@ export class Dialogs {
 	};
 
 	private winDialogAnimationNames: Record<string, string> = {
+		'Congratulations': 'total_win_idle',
+		'FreeSpinDialog': 'freespin_WF_idle',
+		'BonusFreeSpinDialog': 'free5spin_WF_idle',
 		'BigWin': 'big_WF',
 		'MegaWin': 'mega_WF',
 		'EpicWin': 'epic_WF',
 		'SuperWin': 'super_WF'
 	}
+
+	private dialogSpineNames: Record<string, string> = {
+		'Congratulations': 'total_win',
+		'FreeSpinDialog': 'free_spin',
+		'BonusFreeSpinDialog': 'free_spin',
+		'BigWin': 'win_dialog',
+		'MegaWin': 'win_dialog',
+		'EpicWin': 'win_dialog',
+		'SuperWin': 'win_dialog'
+	}
+	private flashTransition: FlashTransition | null = null;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -109,9 +116,6 @@ export class Dialogs {
 	create(scene: Scene): void {
 		// Store scene reference for later use
 		this.currentScene = scene;
-		
-		// Initialize iris transition for scatter animation
-		this.irisTransition = new IrisTransition(scene);
 		
 		// Create main dialog overlay container
 		this.dialogOverlay = scene.add.container(0, 0);
@@ -134,6 +138,10 @@ export class Dialogs {
 		this.dialogContentContainer = scene.add.container(0, 0);
 		this.dialogContentContainer.setDepth(300); // Highest depth to be in front
 		this.dialogOverlay.add(this.dialogContentContainer);
+
+		// Prepare white flash transition overlay for special dialog exits (e.g., congrats)
+		this.flashTransition = new FlashTransition(scene);
+		this.flashTransition.hide();
 		
 		console.log('[Dialogs] Dialog system created');
 	}
@@ -204,7 +212,7 @@ export class Dialogs {
 		});
 		
 		// Create the dialog content
-		this.createDialogContentWithCustomSpineName(scene, 'win_dialog', config);
+		this.createDialogContentWithCustomSpineName(scene, this.getDialogSpineName(config), config);
 
 		// if(this.currentDialog)
 		// {
@@ -227,13 +235,13 @@ export class Dialogs {
 			if (audioManager && typeof audioManager.playSoundEffect === 'function') {
 				const type = (this.currentDialogType || '').toLowerCase();
                 if (type === 'freespindialog_ka') {
-                    // Use congrats_ka for the FreeSpin dialog per request
+                    // Use congrats_wf for the FreeSpin dialog per request
                     audioManager.playSoundEffect('dialog_congrats');
                     // Duck background music similar to win dialogs
                     if (typeof audioManager.duckBackground === 'function') {
                         audioManager.duckBackground(0.3);
                     }
-                } else if (type === 'congrats_ka') {
+                } else if (type === 'congrats_wf') {
 					audioManager.playSoundEffect('dialog_congrats');
                     if (typeof audioManager.duckBackground === 'function') {
                         audioManager.duckBackground(0.3);
@@ -299,8 +307,6 @@ export class Dialogs {
 		
 		// Create number display if win amount or free spins are provided (AFTER effects)
 		if (config.winAmount !== undefined || config.freeSpins !== undefined) {
-			// const randomValue = Math.random() * 1000000;
-			// this.createNumberDisplay(scene, randomValue, config.freeSpins);
 			this.createNumberDisplay(scene, config.winAmount || 0, config.freeSpins);
 		}
 		
@@ -312,6 +318,10 @@ export class Dialogs {
 		
 		// Set up auto-close timer for win dialogs during autoplay
 		this.setupAutoCloseTimer(scene);
+	}
+
+	private getDialogSpineName(config: DialogConfig): string {
+		return this.dialogSpineNames[config.type] || config.type;
 	}
 
 	/**
@@ -378,7 +388,7 @@ export class Dialogs {
 		// Create Spine animation for the dialog
 		try {
 			console.log(`[Dialogs] Creating Spine animation for dialog: ${config.type}`);
-			console.log(`[Dialogs] Using atlas: ${config.type}-atlas`);
+			console.log(`[Dialogs] Using atlas: ${spineName}-atlas`);
 			this.currentDialog = scene.add.spine(
 				position.x,
 				position.y,
@@ -391,14 +401,21 @@ export class Dialogs {
 			const shouldLoop = this.getDialogLoop(config.type);
 			const rootAnimName = this.winDialogAnimationNames[config.type];
 			try {
-				console.log(`[Dialogs] Playing intro animation: ${rootAnimName ? rootAnimName : config.type}_win`);
-				this.currentDialog.animationState.setAnimation(0, `${rootAnimName ? rootAnimName : config.type}_win`, false);
-				this.currentDialog.animationState.addAnimation(0, `${rootAnimName ? rootAnimName : config.type}_idle`, shouldLoop, 0);
-			} catch (error) {
-				console.log(`[Dialogs] Intro animation failed, falling back to idle: ${rootAnimName ? rootAnimName : config.type}_idle`);
-				// Fallback to idle animation if intro is missing
-				this.currentDialog.animationState.setAnimation(0, `${rootAnimName ? rootAnimName : config.type}_idle`, shouldLoop);
+				console.log(`[Dialogs] Playing intro animation: ${rootAnimName ? rootAnimName : config.type}`);
+				this.currentDialog.animationState.setAnimation(0, `${rootAnimName ? rootAnimName : config.type}`, shouldLoop);
 			}
+			catch (error) {
+				try {
+					console.log(`[Dialogs] Playing intro animation: ${rootAnimName ? rootAnimName : config.type}_win`);
+					this.currentDialog.animationState.setAnimation(0, `${rootAnimName ? rootAnimName : config.type}_win`, false);
+					this.currentDialog.animationState.addAnimation(0, `${rootAnimName ? rootAnimName : config.type}_idle`, shouldLoop, 0);
+				} catch (error) {
+					console.log(`[Dialogs] Intro animation failed, falling back to idle: ${rootAnimName ? rootAnimName : config.type}_idle`);
+					// Fallback to idle animation if intro is missing
+					this.currentDialog.animationState.setAnimation(0, `${rootAnimName ? rootAnimName : config.type}_idle`, shouldLoop);
+				}
+			}
+			
 		} catch (error) {
 			console.error(`[Dialogs] Error creating dialog content: ${config.type}`, error);
 			console.error(`[Dialogs] This might be due to missing assets for ${config.type}`);
@@ -412,7 +429,6 @@ export class Dialogs {
 		this.dialogContentContainer.add(this.currentDialog);
 		
 		console.log(`[Dialogs] Created dialog content: ${config.type}`);
-
 	}
 	/**
 	 * Set up auto-close timer for win dialogs during autoplay or when scatter is hit
@@ -673,7 +689,7 @@ export class Dialogs {
 		};
 
 		// Create the number display
-		const numberDisplay = new NumberDisplay(this.networkManager, this.screenModeManager, numberConfig);
+		const numberDisplay = new NumberDisplay(numberConfig, this.networkManager, this.screenModeManager);
 		numberDisplay.create(scene);
 		// Display free spins if provided, otherwise display win amount
 		const displayValue = freeSpins !== undefined ? freeSpins : winAmount;
@@ -724,6 +740,14 @@ export class Dialogs {
 	 */
 	private handleDialogClick(scene: Scene): void {
 		console.log('[Dialogs] Dialog clicked, starting fade-out sequence');
+		
+		// Emit an event specifically when Free Spin dialog is clicked
+		if (this.currentDialogType === 'FreeSpinDialog') {
+			try {
+				scene.events.emit('freeSpinDialogClicked');
+				console.log('[Dialogs] Emitted freeSpinDialogClicked event');
+			} catch {}
+		}
 		
 		// Clear auto-close timer if it exists (prevents double-triggering)
 		if (this.autoCloseTimer) {
@@ -880,8 +904,8 @@ export class Dialogs {
 			});
 		} else {
 			console.log('[Dialogs] Free spin dialog - delaying click enablement for 2.2 seconds');
-			// Delay for free spin dialogs to allow animations to complete
-		scene.time.delayedCall(2200, () => {
+		// Delay for free spin dialogs to allow animations to complete
+		scene.time.delayedCall(1000, () => {
 				if (this.clickArea) {
 					this.clickArea.on('pointerdown', () => {
 						console.log('[Dialogs] Free spin dialog clicked!');
@@ -952,11 +976,11 @@ export class Dialogs {
 			return;
 		}
 		
-		// Check if this is a free spin dialog - use iris transition
-		if (this.currentDialogType === 'FreeSpinDialog_KA') {
-			console.log('[Dialogs] Free spin dialog clicked - starting iris transition');
-			// Don't disable dialog elements yet for free spin dialogs - let iris transition handle it
-			this.startIrisTransition(scene);
+		// Check if this is a free spin dialog - start special transition
+		if (this.currentDialogType === 'FreeSpinDialog') {
+			console.log('[Dialogs] Free spin dialog clicked - starting transition');
+			// Don't disable dialog elements yet for free spin dialogs
+			this.startWinDialogFadeOut(scene);
 			return;
 		}
 		
@@ -978,94 +1002,26 @@ export class Dialogs {
 	}
 	
 	/**
-	 * Start iris transition for free spin dialog
-	 */
-	private startIrisTransition(scene: Scene): void {
-		if (!this.irisTransition) {
-			console.warn('[Dialogs] Iris transition not available, falling back to normal transition');
-			this.startNormalTransition(scene);
-			return;
-		}
-		
-		console.log('[Dialogs] Starting iris transition for free spin dialog');
-		
-		// Store the dialog type before cleanup for bonus mode check
-		const dialogTypeBeforeCleanup = this.currentDialogType;
-		
-		// Stop all effect animations immediately
-		this.stopAllEffectAnimations();
-		
-		// Disable spinner immediately when iris transition starts
-		scene.events.emit('disableSpinner');
-		console.log('[Dialogs] Spinner disabled during iris transition');
-		
-		// Show iris transition overlay
-		this.irisTransition.show();
-		
-		// Start iris transition - zoom in to small radius (closing iris effect)
-		this.irisTransition.zoomInToRadius(28, 1500); // Fast transition to 28px radius
-		
-		// Hide dialog content quickly after iris starts closing (200ms delay)
-		scene.time.delayedCall(200, () => {
-			console.log('[Dialogs] Hiding dialog content quickly for better iris visibility');
-			// Fade out FreeSpin dialog SFX if playing
-			try {
-				const audioManager = (window as any).audioManager;
-				if (audioManager && typeof audioManager.fadeOutSfx === 'function') {
-					audioManager.fadeOutSfx('dialog_congrats', 400);
-				}
-			} catch {}
-			// Disable dialog elements before cleanup
-			this.disableAllWinDialogElements();
-			this.cleanupDialog();
-		});
-		
-		// Wait for iris transition to complete, then proceed
-		scene.time.delayedCall(1500, () => {
-			console.log('[Dialogs] Iris closed - triggering bonus mode');
-			
-			// Trigger bonus mode during closed iris
-			console.log('[Dialogs] Triggering bonus mode during closed iris');
-			this.triggerBonusMode(scene);
-			
-			// Wait 0.5 seconds, then open iris (zoom out) - faster for better flow
-			scene.time.delayedCall(500, () => {
-				console.log('[Dialogs] Opening iris transition');
-				this.irisTransition!.zoomInToRadius(1000, 1500); // Open iris to full size
-				
-				// Clean up after iris opens
-				scene.time.delayedCall(1500, () => {
-					console.log('[Dialogs] Iris transition complete');
-					// Hide the iris transition overlay
-					this.irisTransition!.hide();
-					
-					// Emit dialog animations complete event AFTER the full iris transition completes
-					scene.events.emit('dialogAnimationsComplete');
-					console.log('[Dialogs] Dialog animations complete event emitted after full iris transition');
-					// Restore background music volume after dialog completes
-					try {
-						const audioManager = (window as any).audioManager;
-						if (audioManager && typeof audioManager.restoreBackground === 'function') {
-							audioManager.restoreBackground();
-						}
-					} catch {}
-				});
-			});
-		});
-	}
-	
-	/**
 	 * Start normal black screen transition for non-free spin dialogs
 	 */
 	private startNormalTransition(scene: Scene): void {
-		console.log('[Dialogs] Starting normal black screen transition');
-		
+		console.log('[Dialogs] Starting normal dialog transition');
 		
 		// Store the dialog type before cleanup for bonus mode check
 		const dialogTypeBeforeCleanup = this.currentDialogType;
 		
 		// Stop all effect animations immediately
 		this.stopAllEffectAnimations();
+		
+		// Disable spinner immediately when transition starts
+		scene.events.emit('disableSpinner');
+		console.log('[Dialogs] Spinner disabled during transition');
+
+		const shouldUseWhiteFlash = dialogTypeBeforeCleanup === 'Congratulations' && this.flashTransition;
+		if (shouldUseWhiteFlash) {
+			this.startWhiteFlashTransition(scene, dialogTypeBeforeCleanup);
+			return;
+		}
 		
 		// Create centralized black screen overlay
 		const blackScreen = scene.add.graphics();
@@ -1073,10 +1029,6 @@ export class Dialogs {
 		blackScreen.fillStyle(0x000000, 1);
 		blackScreen.fillRect(0, 0, scene.scale.width, scene.scale.height);
 		blackScreen.setAlpha(0); // Start transparent
-		
-		// Disable spinner immediately when black screen starts fading in
-		scene.events.emit('disableSpinner');
-		console.log('[Dialogs] Spinner disabled during transition');
 		
 		// Fade in black screen
 		scene.tweens.add({
@@ -1088,45 +1040,7 @@ export class Dialogs {
 				console.log('[Dialogs] Black screen fade-in complete');
 				
 				// Hide dialog immediately while screen is black
-				this.cleanupDialog();
-
-				// Check if we need to trigger bonus mode while screen is black
-				if (dialogTypeBeforeCleanup === 'FreeSpinDialog_KA') {
-					console.log('[Dialogs] Triggering bonus mode during black screen');
-					this.triggerBonusMode(scene);
-				} else {
-					// If congrats closed while in bonus mode, revert to base visuals and reset symbols
-					if (dialogTypeBeforeCleanup === 'Congrats_KA') {
-						console.log('[Dialogs] Congrats dialog closed - reverting from bonus visuals to base');
-						// Switch off bonus mode visuals and music
-						scene.events.emit('setBonusMode', false);
-						scene.events.emit('hideBonusBackground');
-						scene.events.emit('hideBonusHeader');
-						// Reset symbols/winlines state for base game
-						scene.events.emit('resetSymbolsForBase');
-
-						// Ensure win sequence finalization when starting normal transition
-					try {
-						gameEventManager.emit(GameEventType.WIN_STOP);
-						console.log('[Dialogs] Emitted WIN_STOP at start of normal transition');
-					} catch {}
-
-					}
-					// Re-enable symbols after transition completes (normal flow)
-					scene.events.emit('enableSymbols');
-					console.log('[Dialogs] Symbols re-enabled after transition');
-				}
-				
-					// Emit dialog animations complete event for scatter bonus reset
-					scene.events.emit('dialogAnimationsComplete');
-				console.log('[Dialogs] Dialog animations complete event emitted');
-					// Restore background music volume after dialog completes
-					try {
-						const audioManager = (window as any).audioManager;
-						if (audioManager && typeof audioManager.restoreBackground === 'function') {
-							audioManager.restoreBackground();
-						}
-					} catch {}
+				this.finalizeDialogTransition(scene, dialogTypeBeforeCleanup);
 				
 				// Wait 0.7 seconds, then fade out
 				scene.time.delayedCall(700, () => {
@@ -1140,7 +1054,7 @@ export class Dialogs {
 							blackScreen.destroy();
 							
 							// Ensure UI is back to normal only when congrats dialog closes
-							if (dialogTypeBeforeCleanup === 'Congrats_KA') {
+							if (dialogTypeBeforeCleanup === 'Congratulations') {
 								console.log('[Dialogs] Black screen faded out after congrats - restoring normal background and header');
 								scene.events.emit('hideBonusBackground');
 								scene.events.emit('hideBonusHeader');
@@ -1152,6 +1066,82 @@ export class Dialogs {
 				});
 			}
 		});
+	}
+
+	private startWhiteFlashTransition(scene: Scene, dialogTypeBeforeCleanup: string | null): void {
+		if (!this.flashTransition) {
+			console.warn('[Dialogs] FlashTransition missing - falling back to black transition');
+			this.finalizeDialogTransition(scene, dialogTypeBeforeCleanup);
+			return;
+		}
+
+		console.log('[Dialogs] Starting white flash transition for Congratulations dialog');
+
+		const flashDuration = 300;
+		const holdDuration = 700;
+
+		this.flashTransition.show();
+		this.flashTransition.setAlphaImmediate(0);
+		this.flashTransition.flashOverlay(1, flashDuration, 'In');
+
+		scene.time.delayedCall(flashDuration, () => {
+			this.finalizeDialogTransition(scene, dialogTypeBeforeCleanup);
+
+			scene.time.delayedCall(holdDuration, () => {
+				this.flashTransition?.flashOverlay(0, flashDuration, 'Out');
+
+				scene.time.delayedCall(flashDuration, () => {
+					this.flashTransition?.hide();
+
+					if (dialogTypeBeforeCleanup === 'Congratulations') {
+						scene.events.emit('hideBonusBackground');
+						scene.events.emit('hideBonusHeader');
+					}
+
+					console.log('[Dialogs] White flash transition complete');
+				});
+			});
+		});
+	}
+
+	private finalizeDialogTransition(scene: Scene, dialogTypeBeforeCleanup: string | null): void {
+		this.cleanupDialog();
+
+		if (dialogTypeBeforeCleanup === 'FreeSpinDialog') {
+			console.log('[Dialogs] Triggering bonus mode during transition');
+			this.triggerBonusMode(scene);
+		} else {
+			if (dialogTypeBeforeCleanup === 'Congratulations') {
+				console.log('[Dialogs] Congrats dialog closed - reverting from bonus visuals to base');
+				scene.events.emit('setBonusMode', false);
+				scene.events.emit('hideBonusBackground');
+				scene.events.emit('hideBonusHeader');
+				scene.events.emit('resetSymbolsForBase');
+
+				try {
+					gameEventManager.emit(GameEventType.WIN_STOP);
+					console.log('[Dialogs] Emitted WIN_STOP at start of congrats transition');
+				} catch {}
+
+				try {
+					scene.events.emit('betBorderInteractive', true);
+					console.log('[Dialogs] Re-enabled bet border input after total win dialog');
+				} catch {}
+			}
+
+			scene.events.emit('enableSymbols');
+			console.log('[Dialogs] Symbols re-enabled after transition');
+		}
+
+		scene.events.emit('dialogAnimationsComplete');
+		console.log('[Dialogs] Dialog animations complete event emitted');
+
+		try {
+			const audioManager = (window as any).audioManager;
+			if (audioManager && typeof audioManager.restoreBackground === 'function') {
+				audioManager.restoreBackground();
+			}
+		} catch {}
 	}
 
 	/**
@@ -1322,10 +1312,6 @@ export class Dialogs {
 						console.log('[Dialogs] Black overlay completely hidden after win dialog fade-out');
 					}
 					
-					// Emit dialog animations complete event
-					scene.events.emit('dialogAnimationsComplete');
-					console.log('[Dialogs] Win dialog animations complete event emitted');
-					
 					// Emit win dialog closed event for autoplay
 					gameEventManager.emit(GameEventType.WIN_DIALOG_CLOSED);
 					console.log('[Dialogs] WIN_DIALOG_CLOSED event emitted after fade-out');
@@ -1410,7 +1396,7 @@ export class Dialogs {
 	 * Check if we should trigger bonus mode based on current dialog type
 	 */
 	private shouldTriggerBonusMode(): boolean {
-		return this.currentDialogType === 'FreeSpinDialog_KA';
+		return this.currentDialogType === 'FreeSpinDialog' || this.currentDialogType === 'BonusFreeSpinDialog';
 	}
 
 	/**
@@ -1656,12 +1642,66 @@ export class Dialogs {
 		}
 		
 	// Convenience methods for specific dialog types
-	showCongrats(scene: Scene, config?: Partial<DialogConfig>): void {
-		this.showDialog(scene, { type: 'Congrats_KA', ...config });
+	showCongratulations(scene: Scene, config?: Partial<DialogConfig>): void {
+		this.showDialog(scene, { type: 'Congratulations', ...config });
+		this.addTotalWinSprites(scene);
 	}
+
+	addTotalWinSprites(scene: Scene) : void
+	{
+		const centerX = scene.scale.width / 2;
+		const centerY = scene.scale.height / 2;
+
+		const background = scene.add.image(centerX, centerY, 'total_win_background');
+		const foreground = scene.add.image(centerX, centerY * 2, 'total_win_foreground');
+
+		foreground.setOrigin(0.5, 1);
+
+		background.setAlpha(0);
+		foreground.setAlpha(0);
+
+		this.dialogContentContainer.add(background);
+		this.dialogContentContainer.add(foreground);
+
+		this.dialogContentContainer.sendToBack(background);
+
+		// Fade both background and foreground in over 500ms
+		scene.tweens.add({
+			targets: [background, foreground],
+			alpha: 1,
+			duration: 250,
+			ease: 'easeIn'
+		});
+
+		scene.events.on('dialogAnimationsComplete', () => {
+			console.log('[Dialogs] Dialog animations complete - removing total win sprites');
+			this.removeTotalWinSprites(scene, background, foreground);
+		});
+	}
+
+	removeTotalWinSprites(scene: Scene, background: Phaser.GameObjects.Image, foreground: Phaser.GameObjects.Image) : void
+	{
+		// Fade both background and foreground in over 500ms
+		scene.tweens.add({
+			targets: [background, foreground],
+			alpha: 0,
+			duration: 250,
+			ease: 'easeOut',
+			onComplete: () => {
+				background.destroy();
+				foreground.destroy();
+				console.log('[Dialogs] Total win sprites destroyed');
+			}
+		});
+	}
+
 
 	showFreeSpinDialog(scene: Scene, config?: Partial<DialogConfig>): void {
 		this.showDialog(scene, { type: 'FreeSpinDialog', ...config });
+	}
+
+	showBonusFreeSpinDialog(scene: Scene, config?: Partial<DialogConfig>): void {
+		this.showDialog(scene, { type: 'BonusFreeSpinDialog', ...config });
 	}
 
 	// 20x
