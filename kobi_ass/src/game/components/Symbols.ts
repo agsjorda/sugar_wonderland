@@ -32,6 +32,11 @@ export class Symbols {
   public winLineDrawer: WinLineDrawer;
   private overlayRect?: Phaser.GameObjects.Graphics;
   public currentSpinData: any = null; // Store current spin data for access by other components
+
+  // Skip-drop state
+  private skipReelDropsActive: boolean = false;
+  // Clickable hitbox over the symbol grid to allow skipping during reel drops
+  private skipHitbox?: Phaser.GameObjects.Zone;
   
   // Idle "breathing" animation tweens per symbol (keyed by "col_row")
   private idleTweens: Map<string, Phaser.Tweens.Tween> = new Map();
@@ -137,6 +142,9 @@ export class Symbols {
       this.freeSpinAutoplayTriggered = false;
       this.dialogListenerSetup = false;
     });
+
+    // Install per-spin skip zone over the reels
+    this.createSkipHitbox();
   }
 
   // Ensure sticky wilds container exists (rendered above regular symbols and overlays)
@@ -146,6 +154,159 @@ export class Symbols {
       // Place above overlay (overlay depth is 500) and above moved winning symbols (600)
       this.stickyWildsContainer.setDepth(700);
     }
+  }
+
+  /**
+   * Request to skip current reel drop animations by speeding up symbol tweens
+   * and shrinking the remaining delays/durations for drop logic.
+   */
+  public requestSkipReelDrops(): void {
+    try {
+      if (this.skipReelDropsActive) return;
+      this.skipReelDropsActive = true;
+      // Speed up active symbol tweens without touching global tween manager
+      this.accelerateActiveSymbolTweens(60);
+      // Cut down remaining drop timings so new tweens also finish fast
+      const gd = (this.scene as any)?.gameData as GameData | undefined;
+      if (gd) {
+        gd.dropReelsDelay = 0;
+        gd.dropDuration = Math.max(1, Math.floor(gd.dropDuration * 0.1));
+        gd.winUpDuration = Math.max(1, Math.floor(gd.winUpDuration * 0.1));
+      }
+      console.log('[Symbols] Skip requested: speeding up reel drops and reducing delays');
+    } catch (e) {
+      console.warn('[Symbols] Failed to apply skip reel drops acceleration:', e);
+    }
+  }
+
+  /**
+   * Clear skip state once the spin has moved beyond reel drops.
+   */
+  public clearSkipReelDrops(): void {
+    try {
+      if (!this.skipReelDropsActive) return;
+      this.skipReelDropsActive = false;
+      console.log('[Symbols] Skip cleared');
+    } catch (e) {
+      console.warn('[Symbols] Failed to clear skip state:', e);
+    }
+  }
+
+  public isSkipReelDropsActive(): boolean {
+    return !!this.skipReelDropsActive;
+  }
+
+  /**
+   * Create an invisible interactive hitbox over the symbol grid area that,
+   * when clicked during a spin, requests skipping all reel drops.
+   */
+  private createSkipHitbox(): void {
+    try {
+      if (!this.scene) return;
+      // Remove any previous hitbox to prevent duplicates
+      try { this.skipHitbox?.destroy(); } catch {}
+
+      const zone = this.scene.add.zone(
+        this.slotX,
+        this.slotY,
+        this.totalGridWidth,
+        this.totalGridHeight
+      ).setOrigin(0.5, 0.5);
+
+      zone.setDepth(20);
+      zone.disableInteractive();
+
+      zone.on('pointerdown', () => {
+        try {
+          if (gameStateManager.isReelSpinning && !gameStateManager.isTurbo) {
+            this.requestSkipReelDrops();
+          }
+        } catch {}
+      });
+
+      this.skipHitbox = zone as Phaser.GameObjects.Zone;
+
+      const enable = () => {
+        try { this.updateSkipHitboxGeometry(); } catch {}
+        if (gameStateManager.isTurbo) {
+          try { this.skipHitbox?.disableInteractive(); } catch {}
+        } else {
+          try { this.skipHitbox?.setInteractive({ useHandCursor: false }); } catch {}
+        }
+      };
+
+      const disable = () => {
+        try { this.skipHitbox?.disableInteractive(); } catch {}
+      };
+
+      const onTurboOn = () => { try { this.skipHitbox?.disableInteractive(); } catch {} };
+      const onTurboOff = () => {
+        try {
+          if (gameStateManager.isReelSpinning) enable();
+        } catch {}
+      };
+
+      gameEventManager.on(GameEventType.REELS_START, enable);
+      gameEventManager.on(GameEventType.REELS_STOP, disable);
+      gameEventManager.on(GameEventType.TURBO_ON, onTurboOn);
+      gameEventManager.on(GameEventType.TURBO_OFF, onTurboOff);
+
+      this.scene.events.once('shutdown', () => {
+        try { gameEventManager.off(GameEventType.REELS_START, enable); } catch {}
+        try { gameEventManager.off(GameEventType.REELS_STOP, disable); } catch {}
+        try { gameEventManager.off(GameEventType.TURBO_ON, onTurboOn); } catch {}
+        try { gameEventManager.off(GameEventType.TURBO_OFF, onTurboOff); } catch {}
+        try { this.skipHitbox?.destroy(); this.skipHitbox = undefined; } catch {}
+      });
+    } catch {}
+  }
+
+  /** Ensure the skip hitbox tracks the symbol grid geometry */
+  private updateSkipHitboxGeometry(): void {
+    try {
+      if (!this.skipHitbox) return;
+      this.skipHitbox.setPosition(this.slotX, this.slotY);
+      try { (this.skipHitbox as any).setSize(this.totalGridWidth, this.totalGridHeight); } catch {}
+    } catch {}
+  }
+
+  /** Speed up active tweens for all objects inside the symbol grid containers */
+  private accelerateActiveSymbolTweens(timeScale: number): void {
+    if (!this.scene?.tweens) return;
+    try {
+      const accel = (obj: any) => {
+        if (!obj) return;
+        try {
+          const tweens = this.scene.tweens.getTweensOf(obj) as any[];
+          if (Array.isArray(tweens)) {
+            for (const t of tweens) {
+              try { (t as any).timeScale = Math.max(1, timeScale); } catch {}
+            }
+          }
+        } catch {}
+      };
+
+      const accelerateCollection = (collection?: any[][]) => {
+        try {
+          if (!Array.isArray(collection)) return;
+          for (const col of collection) {
+            if (!Array.isArray(col)) continue;
+            for (const obj of col) accel(obj);
+          }
+        } catch {}
+      };
+
+      accelerateCollection(this.symbols);
+      accelerateCollection(this.newSymbols);
+
+      try {
+        const list: any[] = (this.container as any)?.list || [];
+        for (const child of list) accel(child);
+      } catch {}
+
+      try { if (this.overlayRect) accel(this.overlayRect); } catch {}
+      try { if (this.stickyWildsContainer) accel(this.stickyWildsContainer); } catch {}
+    } catch {}
   }
 
   private gridKey(col: number, row: number): string {
@@ -2513,6 +2674,8 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
     console.warn('[Symbols] Failed to start idle animation for non-winning symbols:', e);
   }
   
+  // Restore tween speeds if skip was requested and mark spin as complete
+  try { (self as any).clearSkipReelDrops?.(); } catch {}
   // Set spinning state to false
   gameStateManager.isReelSpinning = false;
   

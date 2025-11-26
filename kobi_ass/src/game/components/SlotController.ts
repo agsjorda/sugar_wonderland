@@ -858,7 +858,12 @@ export class SlotController {
 				return;
 			}
 			if (gameStateManager.isReelSpinning) {
-				console.log('[SlotController] Spin blocked - already spinning');
+				if (!gameStateManager.isTurbo) {
+					console.log('[SlotController] Spin pressed during active spin - requesting skip of reel drops');
+					try { this.symbols?.requestSkipReelDrops?.(); } catch {}
+				} else {
+					console.log('[SlotController] Skip disabled while turbo is ON');
+				}
 				return;
 			}
 			
@@ -1521,7 +1526,12 @@ export class SlotController {
 				return;
 			}
 			if (gameStateManager.isReelSpinning) {
-				console.log('[SlotController] Spin blocked - already spinning');
+				if (!gameStateManager.isTurbo) {
+					console.log('[SlotController] Spin pressed during active spin - requesting skip of reel drops');
+					try { this.symbols?.requestSkipReelDrops?.(); } catch {}
+				} else {
+					console.log('[SlotController] Skip disabled while turbo is ON');
+				}
 				return;
 			}
 			
@@ -3282,6 +3292,15 @@ public updateAutoplayButtonState(): void {
 	 * Handle spin logic - either normal API call or free spin simulation
 	 */
 	private async handleSpin(): Promise<void> {
+		if (gameStateManager.isReelSpinning) {
+			if (!gameStateManager.isTurbo) {
+				console.log('[SlotController] Spin pressed during active spin - requesting skip of reel drops');
+				try { this.symbols?.requestSkipReelDrops?.(); } catch {}
+			} else {
+				console.log('[SlotController] Skip disabled while turbo is ON');
+			}
+			return;
+		}
 		if (this.isSpinRequestInFlight) {
 			console.warn('[SlotController] handleSpin invoked while a spin request is already in flight');
 			return;
