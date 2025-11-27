@@ -1,7 +1,7 @@
-Symbol_HP_256.png
+Symbol_HP_256.webp
 size:2048,2048
 filter:Linear,Linear
-pma:true
+pma:false
 BB_aura
 bounds:1479,138,211,211
 offsets:1,1,213,213
@@ -198,10 +198,10 @@ bounds:1867,573,68,69
 zelenski_head_b
 bounds:1977,1076,66,69
 
-Symbol_HP_256_2.png
+Symbol_HP_256_2.webp
 size:548,548
 filter:Linear,Linear
-pma:true
+pma:false
 M48 (1)
 bounds:2,144,194,193
 offsets:31,31,256,256

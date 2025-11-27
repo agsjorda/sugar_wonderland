@@ -1841,7 +1841,7 @@ export class SlotController {
 
 			// For manual spins, re-enable spin button and hide autoplay counter immediately after REELS_STOP
 			// Check autoplay counter instead of state manager to avoid timing issues
-			if (this.autoplaySpinsRemaining === 0) {
+			if (this.autoplaySpinsRemaining === 0 && !gameStateManager.isShowingWinDialog) {
 				this.enableSpinButton();
 				this.enableAutoplayButton();
 				this.enableBetButtons();
@@ -1858,7 +1858,7 @@ export class SlotController {
 
 			// Update spin button state when spin completes
 			// Only enable spin button if not autoplaying AND reels are not spinning
-			if (!this.gameData?.isAutoPlaying && !gameStateManager.isReelSpinning) {
+			if (!this.gameData?.isAutoPlaying && !gameStateManager.isReelSpinning && !gameStateManager.isShowingWinDialog) {
 				this.enableSpinButton();
 				this.enableAutoplayButton();
 				this.enableBetButtons();
@@ -1991,7 +1991,7 @@ export class SlotController {
 					console.log(`[SlotController] Scheduling next autoplay spin. ${this.autoplaySpinsRemaining} spins remaining`);
 					// WIN_STOP is emitted both for no wins (immediately) and after first win loop
 					// Apply turbo to the delay
-					const baseDelay = 500;
+					const baseDelay = 250;
 					// FIXED: Use GameData.isTurbo instead of gameStateManager.isTurbo for consistency
 					const gameData = this.getGameData();
 					const isTurbo = gameData?.isTurbo || false;
@@ -2238,9 +2238,18 @@ export class SlotController {
 			return;
 		}
 
-		// Re-enable spin button if not spinning
+		// Re-enable spin button if not spinning, with a slight delay to avoid immediate re-clicks
 		if (!gameStateManager.isReelSpinning) {
-			this.enableSpinButton();
+			if (this.scene) {
+				this.scene.time.delayedCall(150, () => {
+					// Only re-enable if we're still not spinning and autoplay hasn't restarted
+					if (!gameStateManager.isReelSpinning && !gameStateManager.isAutoPlaying) {
+						this.enableSpinButton();
+					}
+				});
+			} else {
+				this.enableSpinButton();
+			}
 		}
 	}
 
@@ -3098,7 +3107,7 @@ export class SlotController {
 
 		// Play spin sound effect
 		if ((window as any).audioManager) {
-			(window as any).audioManager.playSoundEffect(SoundEffectType.SPIN);
+			(window as any).audioManager.playSoundEffect(gameStateManager.isBonus ? SoundEffectType.BONUS_SPIN : SoundEffectType.SPIN);
 			console.log('[SlotController] Playing spin sound effect');
 		}
 

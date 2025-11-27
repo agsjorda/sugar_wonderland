@@ -88,7 +88,7 @@ export class AssetLoader {
 
 	loadSymbolAssets(scene: Scene): void {
 		console.log('[AssetLoader] Loading symbol assets...');
-		this.loadAssetGroup(scene, this.assetConfig.getSymbolSpineAssets());
+		this.loadAssetGroup(scene, this.assetConfig.getSymbolSpineAndPngAssets());
 		console.log('[AssetLoader] Symbol assets loaded');
 	}
 

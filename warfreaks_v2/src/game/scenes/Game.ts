@@ -40,6 +40,8 @@ import { ScatterAnticipation } from '../components/ScatterAnticipation';
 import { ClockDisplay } from '../components/ClockDisplay';
 import { EmberParticleSystem } from '../components/EmberParticleSystem';
 import { cameraShake } from '../components/CameraShake';
+import { WinTracker } from '../components/WinTracker';
+import { GameEventData, SpinDataEventData } from '../../event/EventManager';
 
 export class Game extends Scene
 {
@@ -64,6 +66,7 @@ export class Game extends Scene
 	public audioManager: AudioManager;
 	private menu: Menu;
 	private scatterAnticipation: ScatterAnticipation;
+		private winTrackerRow?: Phaser.GameObjects.Container;
 	
 	// Note: Payout data now calculated directly from paylines in WIN_STOP handler
 	// Track whether this spin has winlines to animate
@@ -367,6 +370,9 @@ export class Game extends Scene
 			const currentBalance = this.slotController.getBalanceAmount();
 			
 			console.log(`[Game] Current balance for autoplay options: $${currentBalance}`);
+
+			// Disable the spin button while autoplay settings are open
+			this.slotController.disableSpinButton();
 			
 			this.autoplayOptions.show({
 				currentAutoplayCount: 10,
@@ -374,6 +380,14 @@ export class Game extends Scene
 				currentBalance: currentBalance,
 				onClose: () => {
 					console.log('[Game] Autoplay options closed');
+					// Re‑enable the spin button with a slight delay after closing the panel
+					if (this.time) {
+						this.time.delayedCall(150, () => {
+							this.slotController.enableSpinButton();
+						});
+					} else {
+						this.slotController.enableSpinButton();
+					}
 				},
 				onConfirm: (autoplayCount: number) => {
 					console.log(`[Game] Autoplay confirmed: ${autoplayCount} spins`);
@@ -386,6 +400,15 @@ export class Game extends Scene
 					}
 					console.log(`[Game] Total cost: $${(selectedBet * autoplayCount).toFixed(2)}`);
 					
+					// Re‑enable the spin button shortly after the panel closes
+					if (this.time) {
+						this.time.delayedCall(150, () => {
+							this.slotController.enableSpinButton();
+						});
+					} else {
+						this.slotController.enableSpinButton();
+					}
+
 					// Start autoplay using the new SlotController method
 					this.slotController.startAutoplay(autoplayCount);
 				}
@@ -397,6 +420,24 @@ export class Game extends Scene
 		// Listen for win start to spawn coins based on win amount
 		gameEventManager.on(GameEventType.WIN_START, (data: any) => {
 			console.log('[Game] WIN_START event received - spawning coins based on win amount');
+			
+			// Try to obtain SpinData from the event payload, then fall back to Symbols.currentSpinData
+			const spinDataFromEvent = (data as SpinDataEventData | undefined)?.spinData as SpinData | undefined;
+			const spinData = spinDataFromEvent || (this.symbols?.currentSpinData as SpinData | null) || undefined;
+
+			if (spinData) {
+				this.showWinTrackerForSpinData(spinData);
+			} else {
+				console.warn('[Game] WIN_START: No SpinData available for WinTracker');
+			}
+			
+			// Update balance from server after REELS_STOP (for no-wins scenarios)
+			// Skip during scatter/bonus; balance will be finalized after bonus ends
+			if (!gameStateManager.isScatter && !gameStateManager.isBonus) {
+				this.updateBalanceAfterWinStop();
+			} else {
+				console.log('[Game] Skipping balance update on REELS_STOP (scatter/bonus active)');
+			}
 			
 			// Get current spin data to determine win amount
 			if (this.symbols && this.symbols.currentSpinData) {
@@ -418,12 +459,13 @@ export class Game extends Scene
 			
 			// Get the current spin data from the Symbols component
 			if (this.symbols && this.symbols.currentSpinData) {
-				const spinData = this.symbols.currentSpinData as SpinData;
 				console.log('[Game] WIN_STOP: Found current spin data, calculating total win from paylines');
 				
 				// Calculate total win from SpinData (handles base + freespins)
-				const totalWin = this.calculateTotalWinFromPaylines(spinData);
-				const betAmount = parseFloat(spinData.bet);
+				// const totalWin = this.calculateTotalWinFromPaylines(spinData);
+				// const betAmount = parseFloat(spinData.bet);
+				const betAmount = parseFloat(this.symbols.currentSpinData.bet);
+				const totalWin = this.symbols.currentSpinData.slot?.totalWin ?? 0;
 				
 				console.log(`[Game] WIN_STOP: Total win calculated: $${totalWin}, bet: $${betAmount}`);
 				
@@ -445,17 +487,9 @@ export class Game extends Scene
 			}
 		});
 
-		// Listen for reel completion to handle balance updates only
-		gameEventManager.on(GameEventType.REELS_STOP, () => {
+		// Listen for reel completion to handle balance updates and win tracker display
+		gameEventManager.on(GameEventType.REELS_STOP, (eventData?: GameEventData) => {
 			console.log('[Game] REELS_STOP event received');
-			
-			// Update balance from server after REELS_STOP (for no-wins scenarios)
-			// Skip during scatter/bonus; balance will be finalized after bonus ends
-			if (!gameStateManager.isScatter && !gameStateManager.isBonus) {
-				this.updateBalanceAfterWinStop();
-			} else {
-				console.log('[Game] Skipping balance update on REELS_STOP (scatter/bonus active)');
-			}
 			
 			// Request balance update to finalize the spin (add winnings to balance)
 			// This is needed to complete the spin cycle and update the final state
@@ -465,6 +499,14 @@ export class Game extends Scene
 			// Note: Win dialog logic moved to WIN_STOP handler using payline data
 			// No fallback logic needed here - WinLineDrawer handles all timing
 			console.log('[Game] REELS_STOP: Balance update requested, WIN_STOP handled by winline animations');
+		});
+
+		gameEventManager.on(GameEventType.REELS_START, () => {
+			console.log('[Game] REELS_START event received');
+			// Clear any existing win tracker row when reels start
+			
+			// Clear any existing win tracker row when a new spin starts
+			WinTracker.clearFromScene(this);
 		});
 
 		// Listen for dialog animations to complete
@@ -492,6 +534,7 @@ export class Game extends Scene
 			console.log('[Game] SPIN event received - clearing win queue for new spin');
 			// Reset winlines tracking for the new spin
 			this.hasWinlinesThisSpin = false;
+
 			// Allow win dialogs again on the next spin
 			this.suppressWinDialogsUntilNextSpin = false;
 			
@@ -538,6 +581,76 @@ export class Game extends Scene
 		});
 		this.input.keyboard?.on('keydown-E', () => {
 			this.switchBetweenModes(false); // Y => return to base mode
+		});
+	}
+
+	/**
+	 * Show a WinTracker row under the reels border based on SpinData paylines
+	 */
+	private showWinTrackerForSpinData(spinData: any): void {
+		if (!spinData || !spinData.slot) {
+			console.warn('[Game] showWinTrackerForSpinData called without valid SpinData');
+			return;
+		}
+
+		// Ensure we have symbol grid metrics available
+		if (!this.symbols) {
+			console.warn('[Game] Symbols component not available - cannot position WinTracker');
+			return;
+		}
+
+		console.log(`[Game] showWinTrackerForSpinData: `, spinData);
+
+		const outResult = gameStateManager.isBonus ? 
+		spinData.slot?.freespin?.items[this.gameAPI.getCurrentFreeSpinIndex() - 1]?.tumble?.items[this.gameAPI.getCurrentTumbleIndex()]?.symbols?.out: 
+		spinData.slot?.tumbles?.items[this.gameAPI.getCurrentTumbleIndex()]?.symbols?.out;
+
+		if (!outResult.length) {
+			console.log('[Game] No winning symbols in tumble item - skipping WinTracker display');
+			return;
+		}
+
+		// Clean up any existing WinTracker row
+		if (this.winTrackerRow) {
+			this.winTrackerRow.destroy();
+			this.winTrackerRow = undefined;
+		}
+
+		// Compute position just under the reels border, using the same grid metrics as Symbols
+		const slotX = this.symbols.slotX;
+		const slotY = this.symbols.slotY;
+		const totalGridHeight = this.symbols.totalGridHeight;
+
+		// These values mirror the padding logic used in Symbols.getSymbolGridBounds()
+		const paddingY = 8;
+		const offsetY = 0.7;
+		const reelsBottomY = slotY + totalGridHeight * 0.5 + paddingY + offsetY;
+
+		const rowX = slotX;
+		const rowY = reelsBottomY + 34; // Slight offset below the border
+
+		console.log(`[Game] outResult: `, outResult);
+
+		// Build one config per winning symbol and let WinTracker lay them out side by side
+		const winRowConfigs = outResult.map((item: any) => ({
+			scene: this,
+			symbolScale: 0.06,
+			symbolIndex: item.symbol,
+			symbolWinCount: item.count,
+			totalWinAmount: item.win,
+			x: rowX,
+			y: rowY,
+			depth: 950,
+			textFontSize: '16px',
+			// dark green instead of black for bonus mode same as the remaining free spin stroke color
+			textColor: gameStateManager.isBonus ? '#000000' : '#ffffff',
+		}));
+
+		this.winTrackerRow = WinTracker.createSymbolWinRow(winRowConfigs);
+
+		console.log('[Game] WinTracker rows displayed under reels border from tumble data', {
+			outResult,
+			position: { x: rowX, y: rowY }
 		});
 	}
 
@@ -692,24 +805,24 @@ export class Game extends Scene
 		console.log(`[Game] Win detected - Payout: $${payout}, Bet: $${bet}, Multiplier: ${multiplier}x`);
 		
 		// Only show dialogs for wins that are at least 20x the bet size
-		if (multiplier < 20) {
+		if (multiplier < 2) {
 			console.log(`[Game] Win below threshold - No dialog shown for ${multiplier.toFixed(2)}x multiplier`);
 			// Clear the win dialog state since no dialog was shown
 			gameStateManager.isShowingWinDialog = false;
 			return;
 		}
-		
+
 		// Determine which win dialog to show based on multiplier thresholds
-		if (multiplier >= 60) {
+		if (multiplier >= this.gameData.superWinThreshold) { // 60x
 			console.log(`[Game] Large Win! Showing LargeW_KA dialog for ${multiplier.toFixed(2)}x multiplier`);
 			this.dialogs.showSuperWin(this, { winAmount: payout });
-		} else if (multiplier >= 45) {
+		} else if (multiplier >= this.gameData.epicWinThreshold) { // 45x
 			console.log(`[Game] Super Win! Showing superw_wf dialog for ${multiplier.toFixed(2)}x multiplier`);
 			this.dialogs.showEpicWin(this, { winAmount: payout });
-		} else if (multiplier >= 30) {
+		} else if (multiplier >= this.gameData.megaWinThreshold) { // 30x
 			console.log(`[Game] Medium Win! Showing MediumW_KA dialog for ${multiplier.toFixed(2)}x multiplier`);
 			this.dialogs.showMegaWin(this, { winAmount: payout });
-		} else if (multiplier >= 20) {
+		} else if (multiplier >= this.gameData.bigWinThreshold) { // 20x
 			console.log(`[Game] Small Win! Showing SmallW_KA dialog for ${multiplier.toFixed(2)}x multiplier`);
 			this.dialogs.showBigWin(this, { winAmount: payout });
 		}

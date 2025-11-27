@@ -1,7 +1,7 @@
-jetfighter_02.png
+jetfighter_02.webp
 size:248,248
 filter:Linear,Linear
-pma:true
+pma:false
 firing_bullet_01
 bounds:198,178,10,65
 jetfighter_a_01

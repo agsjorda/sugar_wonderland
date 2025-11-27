@@ -326,8 +326,8 @@ export class GameAPI {
 
         // Play spin sound effect for free spin simulation
         if ((window as any).audioManager) {
-            (window as any).audioManager.playSoundEffect(SoundEffectType.SPIN);
-            console.log('[GameAPI] Playing spin sound effect for free spin simulation');
+            (window as any).audioManager.playSoundEffect(gameStateManager.isBonus ? SoundEffectType.BONUS_SPIN : SoundEffectType.SPIN);
+            console.log('[GameAPI] Playing', gameStateManager.isBonus ? 'bonus spin' : 'spin', 'sound effect for free spin simulation');
         }
 
         console.log('🎰 ===== SIMULATING FREE SPIN =====');

@@ -76,13 +76,13 @@ export class TestBed extends Scene {
 		// this.displayMaxWinSpine();
 		// this.displayLogoSpine();
 		// this.displayColumnRifleSpine();
-		this.displayMultiplierWFSpine(0);
+		// this.displayMultiplierWFSpine(0);
 		// this.displayNuclearSpine();
 
-		this.displayMultiplierSymbolSpine(14, 0.4);
+		// this.displayMultiplierSymbolSpine(14, 0.4);
 
 		// this.displaySymbolLPSpine(1.75);
-		// this.displaySymbolHPSpine(0);
+		this.displaySymbolHPSpine(1);
 	}
 
 	update()

@@ -8,7 +8,7 @@ import { GameEventData, gameEventManager, GameEventType, UpdateMultiplierValueEv
 import { gameStateManager } from '../../managers/GameStateManager';
 import { TurboConfig } from '../../config/TurboConfig';
 import { SLOT_ROWS, SLOT_COLUMNS, DELAY_BETWEEN_SPINS, WILDCARD_SYMBOLS } from '../../config/GameConfig';
-import { SoundEffectType } from '../../managers/AudioManager';
+import { AudioManager, SoundEffectType } from '../../managers/AudioManager';
 import { Dialogs } from "./Dialogs";
 import { SpineGameObject } from "@esotericsoftware/spine-phaser-v3";
 import {
@@ -53,11 +53,11 @@ export class Symbols {
 
   private symbolWinTimeScales: { [key: number]: number } = {
     0: 1.5,
-    1: 1.4,
-    2: 1.4,
-    3: 1.4,
-    4: 1.4,
-    5: 1.4,
+    1: 1.41,
+    2: 1.41,
+    3: 1.41,
+    4: 1.41,
+    5: 1.41,
     6: 1.75,
     7: 1.75,
     8: 1.75,
@@ -1125,6 +1125,14 @@ export class Symbols {
                         duration: fastPhaseDuration,
                         ease: 'Expo.easeIn'
                       });
+
+                      
+                      // Play missile SFX once when scatter symbols begin their animation sequence
+                      try {
+                        const audio = (window as any)?.audioManager as AudioManager;
+                        audio.playOneShot(SoundEffectType.MISSILE);
+                        console.log('[Symbols] Missile SFX played at scatter symbol animation start');
+                      } catch { }
                     }
                   });
                 });
@@ -1873,10 +1881,6 @@ function simulateCameraShake(self: Symbols, targets: any[], durationMs: number, 
 
   if (gameStateManager.isBonus) return;
 
-  if (self.scene.gameData.isTurbo) {
-    return; // turbo mode does not shake the camera
-  }
-
   const affectX = axis === 'x' || axis === 'both';
   const affectY = axis === 'y' || axis === 'both';
 
@@ -2191,6 +2195,44 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   console.log('[Symbols] ScatterGrids found:', scatterGrids);
   console.log('[Symbols] ScatterGrids length:', scatterGrids.length);
 
+  /**
+   * During autoplay, we must know *before* WIN_STOP is emitted whether
+   * a win dialog will be shown, so that SlotController's WIN_STOP handler
+   * can pause scheduling the next autoplay spin.
+   *
+   * This early check mirrors the win-dialog multiplier thresholds used in
+   * Game.checkAndShowWinDialog():
+   *   - BigWin   : multiplier >= 2
+   *   - MegaWin  : multiplier >= 4
+   *   - EpicWin  : multiplier >= 6
+   *   - SuperWin : multiplier >= 8
+   *
+   * Any win at or above 2x bet will trigger a dialog and should therefore
+   * pause autoplay until the dialog is closed.
+   */
+  if (spinData) {
+    const multiplier = spinData.slot?.tumbles?.multiplier?.total ?? 0;
+    const totalWin = spinData.slot?.totalWin ?? 0;
+
+    if (multiplier >= self.scene.gameData.bigWinThreshold && totalWin > 0) {
+      console.log(`[Symbols] Win meets dialog threshold (${multiplier.toFixed(2)}x) - pausing autoplay immediately`);
+      gameStateManager.isShowingWinDialog = true;
+    } else {
+      console.log(`[Symbols] Win below dialog threshold (${multiplier.toFixed(2)}x) - autoplay continues (multiplier < 2x)`);
+    }
+
+    // Wait up to 1 second, or exit sooner once any win dialog has fully closed
+    // (i.e., gameStateManager.isShowingWinDialog becomes false).
+    const maxWaitMs = 500;
+    const pollIntervalMs = 50;
+    let waitedMs = 0;
+
+    while (waitedMs < maxWaitMs && gameStateManager.isShowingWinDialog) {
+      await delay(pollIntervalMs);
+      waitedMs += pollIntervalMs;
+    }
+  }
+
   // Check if this win meets the dialog threshold and pause autoplay if so
   // if (spinData) {
   //   const totalWin = calculateTotalWinFromPaylines(spinData as SpinData);
@@ -2286,8 +2328,10 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   // Mark spin as done after all animations and tumbles finish (no winline drawer flow)
   console.log('[Symbols] Emitting REELS_STOP and WIN_STOP after symbol animations and tumbles (no winlines flow)');
   try {
-    gameEventManager.emit(GameEventType.REELS_STOP);
     gameEventManager.emit(GameEventType.WIN_STOP);
+    this.scene.time.delayedCall(50, () => {
+      gameEventManager.emit(GameEventType.REELS_STOP);
+    });
   } catch (e) {
     console.warn('[Symbols] Failed to emit REELS_STOP/WIN_STOP:', e);
   }
@@ -2780,7 +2824,7 @@ function dropPrevSymbols(self: Symbols, index: number, extendDuration: boolean =
   const distanceToScreenBottom = Math.max(0, self.scene.scale.height - gridBottomY);
   const DROP_DISTANCE = distanceToScreenBottom + self.totalGridHeight + (height * 2) + self.scene.gameData.winUpHeight;
   const totalAnimations = self.symbols.length;
-  const STAGGER_MS = 50; // match dropNewSymbols stagger (left-to-right, one by one feel)
+  const STAGGER_MS = gameStateManager.isTurbo ? 0 : 75; // match dropNewSymbols stagger (left-to-right, one by one feel)
   const clearHop = self.scene.gameData.winUpHeight * 0.2;
 
   for (let i = 0; i < self.symbols.length; i++) {
@@ -2901,7 +2945,7 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
 
     let completedAnimations = 0;
     const totalAnimations = self.newSymbols.length;
-    const STAGGER_MS = 150; // delay between each column drop
+    const STAGGER_MS = gameStateManager.isTurbo ? 0 : 150; // delay between each column drop
     const symbolHop = self.scene.gameData.winUpHeight * 0.5;
 
     for (let col = 0; col < self.newSymbols.length; col++) {
@@ -2936,7 +2980,9 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
               } catch { }
               // Play reel drop sound effect only when turbo mode is off
               if (!self.scene.gameData.isTurbo && (window as any).audioManager) {
-                (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
+                (window as any).audioManager.playSoundEffect(gameStateManager.isBonus ? 
+                  gameStateManager.isTurbo ? SoundEffectType.BONUS_TURBO_DROP : SoundEffectType.BONUS_REEL_DROP : 
+                  gameStateManager.isTurbo ? SoundEffectType.TURBO_DROP : SoundEffectType.REEL_DROP);
                 console.log(`[Symbols] Playing reel drop sound effect for reel ${index} after drop completion`);
               }
 
@@ -2946,7 +2992,14 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
               completedAnimations++;
               if (completedAnimations === totalAnimations) {
                 // Anticipation behavior disabled
-                resolve();
+                if(gameStateManager.isTurbo)
+                {
+                  self.scene.time.delayedCall(500, () => {
+                    resolve();
+                  });
+                }
+                else
+                  resolve();
               }
             }
           }
@@ -3263,13 +3316,13 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
 
             // Create shatter spine 
             try {
-              const shatterKey = 'multiplier_dove';
+              const shatterKey = 'shatter_frame';
               const shatterAtlasKey = `${shatterKey}-atlas`;
               const shatterSpine: SpineGameObject = self.scene.add.spine(0, 0, shatterKey, shatterAtlasKey);
               if (shatterSpine) {
                 try {
                   shatterSpine.setOrigin(0.5, 0.5);
-                  shatterSpine.setScale(scale);
+                  shatterSpine.setScale(scale * 0.4);
                   shatterSpine.setVisible(false);
                   multContainer.add(shatterSpine);
 
@@ -3279,7 +3332,7 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
                     // get first animation in skeleton
                     const animationName = shatterSpine.skeleton?.data?.animations[0]?.name ?? 'animation';
                     shatterSpine.animationState.setAnimation(0, animationName, false);
-                    shatterSpine.animationState.timeScale = 0;
+                    shatterSpine.animationState.timeScale = 1;
                   });
                 } catch { }
               }
@@ -3322,11 +3375,17 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
                   if (doveSpine.animationState) {
                     doveSpine.animationState.setAnimation(0, `symbol10_WF`, true);
 
+                    // Play spin sound effect
+                    if ((window as any).audioManager) {
+                      (window as any).audioManager.playOneShot(SoundEffectType.MULTI);
+                      console.log('[Symbols] Playing multiplier sound effect');
+                    }
+
                     // Pre‑compute path parameters so both dove and value image can share them
                     leaveTargetX = col < numCols / 2 ? -self.scene.scale.width * 0.6 : self.scene.scale.width * 0.6;
                     leaveTargetY = -self.scene.scale.height * 0.3;
                     leaveDelay = Math.random() * 100 + 150 / (isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
-                    leaveDuration = 800 / (isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
+                    leaveDuration = 1250 / (isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
                     const leaveFacingDirection = col < numCols / 2 ? 1 : -1;
                     doveSpine.setScale(leaveFacingDirection * scale, scale);
                     scheduleTranslate(self, doveSpine, leaveDelay, leaveDuration, leaveTargetX, leaveTargetY);
@@ -3337,11 +3396,28 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
                     returnTargetX = self.scene.scale.width * 0.68 + Math.random() * self.scene.scale.width * 0.07;
                     returnTargetY = self.scene.scale.height * 0.1;
                     returnDelay = leaveDelay + leaveDuration;
-                    returnDuration = (Math.random() * 500 + 750) / (isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
+                    returnDuration = (Math.random() * 400 + 600) / (isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
+
+                    // Ensure the awaited duration also covers the full leave + return tweens,
+                    // including the final value-image drop/fade sequence that runs after the
+                    // dove has reached its target.
+                    //
+                    //  - Outbound:  leaveDelay + leaveDuration
+                    //  - Return:    returnDelay + returnDuration (where returnDelay already
+                    //               includes leaveDelay + leaveDuration)
+                    //  - Tail:      ~400ms for the drop (250ms) + fade (150ms, delayed by 250ms)
+                    //
+                    // We only care about when everything is visually finished, so use the
+                    // actual tween timings (already turbo-adjusted above).
+                    const tweenTailMs = 400;
+                    const extraDelayMs = 150;
+                    const totalTweenDurationMs = returnDelay + returnDuration + tweenTailMs + extraDelayMs;
+                    if (totalTweenDurationMs > localMaxDurationMs) {
+                      localMaxDurationMs = totalTweenDurationMs;
+                    }
 
                     console.log('[Symbols] returnStartingX ', returnStartingX);
                     self.scene.time.delayedCall(returnDelay - 50, () => {
-
                       multContainer.remove(doveSpine);
                       doveSpine.animationState.setAnimation(0, `symbol10_WF`, true);
                       doveSpine.setPosition(returnStartingX, returnStartingY);
@@ -3395,12 +3471,18 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
                             delay: 250,
                             ease: Phaser.Math.Easing.Quadratic.Out,
                             onComplete: () => {
-                            // call event here to update multiplier value in normal or bonus header
-                            const multiplierValue = self.multiplierIndexMapping[value];
+                              // play multiplier_added_wf sound effect
+                              if ((window as any).audioManager) {
+                                (window as any).audioManager.playSoundEffect(SoundEffectType.MULTIPLIER_ADDED);
+                                console.log('[Symbols] Playing multiplier_added_wf sound effect');
+                              }
+                              
+                              // call event here to update multiplier value in normal or bonus header
+                              const multiplierValue = self.multiplierIndexMapping[value];
 
-                            gameEventManager.emit(GameEventType.UPDATE_MULTIPLIER_VALUE,
-                              { multiplier: multiplierValue } as UpdateMultiplierValueEventData
-                            );
+                              gameEventManager.emit(GameEventType.UPDATE_MULTIPLIER_VALUE,
+                                { multiplier: multiplierValue } as UpdateMultiplierValueEventData
+                              );
                             try { valueImage.destroy(); } catch { }
                             }
                           });
@@ -3476,6 +3558,40 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
 
 
 /**
+ * Play a sound effect when a tumble step is applied.
+ * Uses turbo drop SFX when turbo is active, otherwise uses the regular reel drop SFX.
+ */
+function playTumbleSfx(self: Symbols): void {
+  try {
+    const audio = (window as any)?.audioManager;
+    if (!audio || typeof audio.playSoundEffect !== 'function') {
+      return;
+    }
+
+    const isTurbo = !!(self.scene?.gameData?.isTurbo || gameStateManager.isTurbo);
+    let sfxType: SoundEffectType = SoundEffectType.TWIN1;
+    switch(self.scene.gameAPI.getCurrentTumbleIndex()) {
+      case 0:
+        sfxType = gameStateManager.isBonus ? SoundEffectType.TWINHEAVEN1 : SoundEffectType.TWIN1;
+        break;
+      case 1:
+        sfxType = gameStateManager.isBonus ? SoundEffectType.TWINHEAVEN2 : SoundEffectType.TWIN2;
+        break;
+      case 2:
+        sfxType = gameStateManager.isBonus ? SoundEffectType.TWINHEAVEN3 : SoundEffectType.TWIN3;
+        break;
+      default:
+        sfxType = gameStateManager.isBonus ? SoundEffectType.TWINHEAVEN4 : SoundEffectType.TWIN4;
+        break;
+    }
+    audio.playSoundEffect(sfxType);
+    console.log('[Symbols] Playing tumble sound effect', { isTurbo, sfxType });
+  } catch (e) {
+    console.warn('[Symbols] Failed to play tumble SFX:', e);
+  }
+}
+
+/**
  * Apply a sequence of tumble steps: remove "out" symbols, compress columns down, and drop "in" symbols from top.
  * Expects tumbles to be in the SpinData format: [{ symbols: { in: number[][], out: {symbol:number,count:number,win:number}[] }, win: number }, ...]
  */
@@ -3499,6 +3615,9 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
     console.warn('[Symbols] applySingleTumble: Symbols grid not initialized');
     return;
   }
+
+  // Play an SFX to indicate that a tumble step is being applied
+  playTumbleSfx(self);
 
   // Grid orientation: self.symbols[col][row]
   const numCols = self.symbols.length;
@@ -3710,6 +3829,17 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
                         }
                       } catch { }
                     }
+
+                    // play explosion sfx
+                    try {
+                      const audio = (window as any)?.audioManager;
+                      if (audio && typeof audio.playSingleInstanceSoundEffect === 'function') {
+                        self.scene.time.delayedCall(animationDuration * 0.8, () => {
+                          audio.playSingleInstanceSoundEffect(gameStateManager.isBonus ? SoundEffectType.BONUS_EXPLOSION : SoundEffectType.EXPLOSION);
+                          console.log('[Symbols] Playing explosion SFX');
+                        });
+                      }
+                    } catch { }
 
                     try { self.moveSymbolToFront(fx); } catch { }
                     try { scheduleScaleUp(self, fx, 20, 200, 1.05); } catch { }
@@ -3934,12 +4064,12 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
                 const dur = Math.max(50, (self.scene.gameData as any)?.dropShakeDurationMs ?? 120);
                 if (mag > 0) {
                   const axis = (self.scene.gameData as any)?.dropShakeAxis ?? 'both';
-                  simulateCameraShake(self, getObjectsToShake(self), dur, mag, axis);
+                  if(!gameStateManager.isTurbo) simulateCameraShake(self, getObjectsToShake(self), dur, mag, axis);
                 }
               } catch { }
               try {
                 if (!self.scene.gameData.isTurbo && (window as any).audioManager) {
-                  (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
+                  (window as any).audioManager.playSoundEffect(gameStateManager.isBonus ? SoundEffectType.BONUS_REEL_DROP : SoundEffectType.REEL_DROP);
                 }
               } catch { }
               tryPlaySparkVFXForColumn(self, col, created);
@@ -4038,12 +4168,12 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
                 const dur = Math.max(50, (self.scene.gameData as any)?.dropShakeDurationMs ?? 120);
                 if (mag > 0) {
                   const axis = (self.scene.gameData as any)?.dropShakeAxis ?? 'both';
-                  simulateCameraShake(self, getObjectsToShake(self), dur, mag, axis);
+                  if(!gameStateManager.isTurbo) simulateCameraShake(self, getObjectsToShake(self), dur, mag, axis);
                 }
               } catch { }
               try {
                 if (!self.scene.gameData.isTurbo && (window as any).audioManager) {
-                  (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
+                  (window as any).audioManager.playSoundEffect(gameStateManager.isBonus ? SoundEffectType.BONUS_REEL_DROP : SoundEffectType.REEL_DROP);
                 }
               } catch { }
               tryPlaySparkVFXForColumn(self, col, created);

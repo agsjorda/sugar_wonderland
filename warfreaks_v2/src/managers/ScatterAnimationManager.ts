@@ -3,6 +3,7 @@ import { Data } from '../tmp_backend/Data';
 import { SpinData } from '../backend/SpinData';
 import { gameEventManager, GameEventType } from '../event/EventManager';
 import { gameStateManager } from './GameStateManager';
+import { SoundEffectType } from './AudioManager';
 import { TurboConfig } from '../config/TurboConfig';
 import { SCATTER_MULTIPLIERS } from '../config/GameConfig';
 import { getFullScreenSpineScale, playSpineAnimationSequence } from '../game/components/SpineBehaviorHelper';
@@ -320,6 +321,29 @@ export class ScatterAnimationManager {
     };
 
     const animationDuration = playSpineAnimationSequence(scene, spine, [0], { x: scale.x * 1.1, y: scale.y * 1.2 }, anchor, origin, offset, 999, false, onComplete);
+
+    // Play missile SFX when the nuclear animation starts
+    try {
+      const audioMgr = (window as any).audioManager;
+      if (audioMgr && typeof audioMgr.playSoundEffect === 'function') {
+        audioMgr.playSoundEffect(SoundEffectType.MISSILE);
+        console.log('[ScatterAnimationManager] Missile SFX played at nuclear animation start');
+
+        const isTurbo = gameStateManager.isTurbo;
+        this.scene?.time.delayedCall(900, () => {
+          audioMgr.fadeOutSfx(SoundEffectType.MISSILE, 300);
+          audioMgr.playSoundEffect(SoundEffectType.EXPLOSION);
+          this.scene?.time.delayedCall(300, () => {
+            audioMgr.playSoundEffect(SoundEffectType.NUKE);
+            console.log('[ScatterAnimationManager] Nuke SFX played at nuclear animation end');
+          });
+          console.log('[ScatterAnimationManager] Missile SFX faded out at nuclear animation end');
+        });
+
+      }
+    } catch (e) {
+      console.warn('[ScatterAnimationManager] Failed to play missile SFX at nuclear animation start', e);
+    }
     const delay = delayModifier ? animationDuration * delayModifier : animationDuration;
 
     // use FlashTransition component for the flash instead of manual tween

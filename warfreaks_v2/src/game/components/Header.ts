@@ -10,12 +10,14 @@ import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { hideSpineAttachmentsByKeywords, playSpineAnimationSequence } from "./SpineBehaviorHelper";
 import { Game } from "../scenes/Game";
 import { NumberDisplay, NumberDisplayConfig } from "./NumberDisplay";
+import { TurboConfig } from "../../config/TurboConfig";
 
 export class Header {
 	private headerContainer: Phaser.GameObjects.Container;
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
 	private amountText: Phaser.GameObjects.Text;
+	private amountTotalText: Phaser.GameObjects.Text | null = null;
 	private youWonText: Phaser.GameObjects.Text;
 	private currentWinnings: number = 0;
 	private pendingWinnings: number = 0;
@@ -152,13 +154,22 @@ export class Header {
 		}).setOrigin(0.5, 0.5).setDepth(11); // Higher depth than win bar
 		this.headerContainer.add(this.youWonText);
 
-		// Line 2: "$ 160.00" with bold formatting
+		// Line 2: "$ 0.00" with bold formatting (base winnings / expression prefix)
 		this.amountText = scene.add.text(x, y + 7, '$ 0.00', {
 			fontSize: '18px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
 		}).setOrigin(0.5, 0.5).setDepth(11); // Higher depth than win bar
 		this.headerContainer.add(this.amountText);
+
+		// Separate text object for the total winnings part (shown in green)
+		this.amountTotalText = scene.add.text(x, y + 7, '', {
+			fontSize: '18px',
+			color: '#00ff00',
+			fontFamily: 'Poppins-Bold'
+		}).setOrigin(0, 0.5).setDepth(11);
+		this.amountTotalText.setVisible(false);
+		this.headerContainer.add(this.amountTotalText);
 	}
 
 	resize(scene: Scene): void {
@@ -194,6 +205,17 @@ export class Header {
 			
 			this.currentMultiplier = this.currentMultiplier > 0 ? this.currentMultiplier + multiplier : multiplier;
 			this.updateMultiplierValue(this.currentMultiplier);
+
+			this.scene.time.delayedCall(250 * (gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1), () => {
+				const formattedTotalWinnings = this.formatCurrency(this.currentWinnings * this.currentMultiplier);
+				const formattedCurrentWinnings = this.formatCurrency(this.currentWinnings);
+
+				// Use a separate text object to render the total winnings in green
+				this.updateWinningsDisplayAsText(
+					`${formattedCurrentWinnings}  x  ${this.currentMultiplier}  =  `,
+					formattedTotalWinnings
+				);
+			});
 		});
 
 		// Note: SPIN_RESPONSE event listener removed - now using SPIN_DATA_RESPONSE
@@ -248,32 +270,6 @@ export class Header {
 				}
 			}
 		});
-
-		// Listen for reel done events to show winnings display
-		gameEventManager.on(GameEventType.REELS_STOP, (data: any) => {
-			console.log(`[Header] REELS_STOP received - checking for wins`);
-			
-			// Get the current spin data from the Symbols component
-			const symbolsComponent = (this.headerContainer.scene as any).symbols;
-			if (symbolsComponent && symbolsComponent.currentSpinData) {
-				const spinData = symbolsComponent.currentSpinData;
-				console.log(`[Header] Found current spin data:`, spinData);
-				
-				const totalWin = gameStateManager.isBonus ? -1 : spinData.slot?.totalWin || 0;
-
-				if (totalWin > 0) {
-					console.log(`[Header] Total winnings calculated from paylines: ${totalWin}`);
-					
-					this.updateWinningsDisplay(totalWin);
-				} else {
-					console.log('[Header] No paylines in current spin data - hiding winnings display');
-					this.hideWinningsDisplay();
-				}
-			} else {
-				console.log('[Header] No current spin data available - hiding winnings display');
-				this.hideWinningsDisplay();
-			}
-		});
 	}
 
 	resetMultiplierValue() {
@@ -299,11 +295,49 @@ export class Header {
 		if (this.amountText) {
 			this.currentWinnings = winnings;
 			const formattedWinnings = this.formatCurrency(winnings);
+
+			// Reset color to default white for regular winnings display
+			this.amountText.setColor('#ffffff');
 			this.amountText.setText(formattedWinnings);
+			this.amountText.setPosition(this.scene.scale.width * 0.5, this.amountText.y);
 			console.log(`[Header] Winnings updated to: ${formattedWinnings} (raw: ${winnings})`);
 
-			this.animateWinningsDisplay();
+			// Hide and clear the separate total text when not showing the expression
+			if (this.amountTotalText) {
+				this.amountTotalText.setVisible(false);
+				this.amountTotalText.setText('');
+			}
+
+			this.animateWinningsDisplay(this.amountText);
 		}
+	}
+
+	public updateWinningsDisplayAsText(prefixText: string, totalText: string): void {
+		if (this.amountText) {
+			// Base expression (e.g. "$ 10.00  x  5  =  ") stays white
+			this.amountText.setColor('#ffffff');
+			this.amountText.setText(prefixText);
+			this.amountText.setVisible(true);
+		}
+
+		if (this.amountTotalText) {
+			// Total winnings (e.g. "$ 50.00") is rendered separately in green
+			this.amountTotalText.setColor('#00ff00');
+			this.amountTotalText.setText(totalText);
+			this.amountTotalText.setVisible(true);
+
+			const baseX = this.scene.scale.width * 0.5;
+			const baseY = this.amountText.y;
+
+			// Keep the base centered and let the total extend to the right
+			this.amountText.setOrigin(0.5, 0.5);
+			this.amountTotalText.setOrigin(0, 0.5);
+
+			this.amountText.setPosition(baseX - this.amountTotalText.width / 2, baseY);
+			this.amountTotalText.setPosition(this.amountText.x + this.amountText.width / 2, baseY);
+		}
+
+		this.animateWinningsDisplay(this.amountTotalText);
 	}
 
 	/**
@@ -314,6 +348,11 @@ export class Header {
 			// Hide both texts
 			this.youWonText.setVisible(false);
 			this.amountText.setVisible(false);
+
+			// Also hide the separate total text, if present
+			if (this.amountTotalText) {
+				this.amountTotalText.setVisible(false);
+			}
 			
 			console.log('[Header] Winnings display hidden');
 		} else {
@@ -332,13 +371,23 @@ export class Header {
 			this.currentWinnings = winnings;
 			const formattedWinnings = this.formatCurrency(winnings);
 			
+			// Reset color to default white when showing standard winnings
+			this.amountText.setColor('#ffffff');
+
 			// Show both texts
 			this.youWonText.setVisible(true);
 			this.amountText.setVisible(true);
+			this.amountText.setPosition(this.scene.scale.width * 0.5, this.amountText.y);
 			
 			// Update amount text with winnings
 			this.amountText.setText(formattedWinnings);
 			console.log(`[Header] Winnings display shown: ${formattedWinnings} (raw: ${winnings})`);
+
+			// Hide and clear the separate total text when showing standard winnings
+			if (this.amountTotalText) {
+				this.amountTotalText.setVisible(false);
+				this.amountTotalText.setText('');
+			}
 		} else {
 			console.warn('[Header] Cannot show winnings display - text objects not available', {
 				amountText: !!this.amountText,
@@ -347,9 +396,9 @@ export class Header {
 		}
 	}
 
-	public animateWinningsDisplay(): void {
+	public animateWinningsDisplay(target: any): void {
 		this.scene.tweens.add({
-			targets: this.amountText,
+			targets: target,
 			scaleX: 1.25,
 			scaleY: 1.25,
 			duration: 250,

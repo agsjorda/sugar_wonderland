@@ -2,7 +2,7 @@
 
 
 export class GameData {
-	static WIN_UP_HEIGHT: number = 50;
+	static WIN_UP_HEIGHT: number = 75;
 
   public isAutoPlaying: boolean = false;
   public isShowingWinlines: boolean = false; // Track if winline animations are playing
@@ -26,7 +26,10 @@ export class GameData {
 	public dropShakeMagnitude: number = 1.5; // 0 disables shake; typical values ~0.002 - 0.01
 	public dropShakeDurationMs: number = 150; // duration per shake event
 	public dropShakeAxis: 'both' | 'x' | 'y' = 'both'; // restrict shake to one dimension if needed
-
+	public bigWinThreshold: number = 2;
+	public megaWinThreshold: number = 4;
+	public epicWinThreshold: number = 6;
+	public superWinThreshold: number = 8;
 	public constructor() {
 		setSpeed(this, 1.0);
 	}
@@ -36,11 +39,11 @@ import { DROP_REEL_START_INTERVAL_RATIO } from '../../config/GameConfig';
 
 // Global time multiplier for symbol drop and reset animations
 // Lower than 1.0 = faster; higher than 1.0 = slower
-export const DROP_RESET_TIME_MULTIPLIER: number = 0.8;
+export const DROP_RESET_TIME_MULTIPLIER: number = 1.2;
 
 export function setSpeed(data: GameData, DELAY_BETWEEN_SPINS: number) {
 	// Apply global multiplier to win-up (reset) and drop durations
-	data.winUpDuration = DELAY_BETWEEN_SPINS * 0.05 * DROP_RESET_TIME_MULTIPLIER;
+	data.winUpDuration = DELAY_BETWEEN_SPINS * 0.1 * DROP_RESET_TIME_MULTIPLIER;
 	data.dropDuration = DELAY_BETWEEN_SPINS * 0.15 * DROP_RESET_TIME_MULTIPLIER;
     data.dropReelsDelay = DELAY_BETWEEN_SPINS * 0.1 * DROP_REEL_START_INTERVAL_RATIO;
 	data.dropReelsDuration = DELAY_BETWEEN_SPINS * 0.7 * DROP_RESET_TIME_MULTIPLIER;

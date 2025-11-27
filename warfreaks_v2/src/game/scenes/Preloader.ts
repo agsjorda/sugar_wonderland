@@ -7,9 +7,11 @@ import { AssetLoader } from '../../utils/AssetLoader';
 import { GameAPI } from '../../backend/GameAPI';
 import { GameData } from '../components/GameData';
 import { FullScreenManager } from '../../managers/FullScreenManager';
-import { ensureSpineLoader } from '../../utils/SpineGuard';
+import { ensureSpineLoader, ensureSpineFactory } from '../../utils/SpineGuard';
 import { StudioLoadingScreen } from '../components/StudioLoadingScreen';
 import { ClockDisplay } from '../components/ClockDisplay';
+import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
+import { hideSpineAttachmentsByKeywords, playSpineAnimationSequence } from '../components/SpineBehaviorHelper';
 
 export class Preloader extends Scene
 {
@@ -37,6 +39,7 @@ export class Preloader extends Scene
 	private clockDisplay: ClockDisplay;
 
 	private studioLoadingScreen?: StudioLoadingScreen;
+	private preloaderLogoSpine?: SpineGameObject;
 
 	constructor ()
 	{
@@ -90,6 +93,9 @@ export class Preloader extends Scene
 		console.log(`[Preloader] Background dimensions: ${background.width}x${background.height}, canvas: ${this.scale.width}x${this.scale.height}`);
 		console.log(`[Preloader] Background display size: ${this.scale.width}x${this.scale.height}`);
 		console.log(`[Preloader] Background position: (${this.scale.width * 0.5}, ${this.scale.height * 0.5})`);
+
+		// Create War Freaks spine logo at the top area of the preloader
+		this.createSpineLogo();
 
 		if (screenConfig.isPortrait) {
 			// Display studio loading screen
@@ -401,6 +407,38 @@ export class Preloader extends Scene
 		}
 		} catch (e) {
 			console.warn('Could not set font weight for website text');
+		}
+	}
+
+	private createSpineLogo()
+	{
+		try {
+			// Ensure Spine factory is available
+			if (!ensureSpineFactory(this, '[Preloader] createSpineLogo')) {
+				console.warn('[Preloader] Spine factory unavailable. Skipping preloader logo spine.');
+				return;
+			}
+
+			// Make sure the spine data is in cache (Boot scene loads it via loading assets)
+			const cacheJson: any = this.cache.json as any;
+			if (!cacheJson?.has('warfreaks-logo-spine')) {
+				console.warn('[Preloader] Spine json \'warfreaks-logo-spine\' not ready. Skipping preloader logo.');
+				return;
+			}
+
+			const spine = (this.add as any).spine(0, 0, 'warfreaks-logo-spine', 'warfreaks-logo-spine-atlas') as SpineGameObject;
+			const scale = 0.9;
+			const offset = { x: 0, y: 12.5 };
+			const anchor = { x: 0.5, y: 0 };
+			const origin = { x: 0.5, y: 0 };
+
+			hideSpineAttachmentsByKeywords(spine, ['bonus_base']);
+			// Position at the top center of the screen, similar to header logo behavior
+			playSpineAnimationSequence(this, spine, [0], { x: scale, y: scale }, anchor, origin, offset, 5, true);
+
+			this.preloaderLogoSpine = spine;
+		} catch (e) {
+			console.warn('[Preloader] Failed to create preloader logo spine:', e);
 		}
 	}
 }

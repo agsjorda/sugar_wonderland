@@ -17,9 +17,10 @@ export const SCATTER_MULTIPLIERS: number[] = [9, 11, 13, 15, 17, 19, 21, 23, 25,
 // Timing Configuration
 export const DELAY_BETWEEN_SPINS: number = 2000;
 // Ratio for time between column starts relative to DELAY_BETWEEN_SPINS
-export const DROP_REEL_START_INTERVAL_RATIO: number = 0.001;
+export const DROP_REEL_START_INTERVAL_RATIO: number = 0;
 // Delay before starting autoplay for free spins
 export const AUTO_SPIN_START_DELAY: number = 1000;
+export const AUTO_SPIN_WIN_DIALOG_TIMEOUT: number = 2000;
 
 export const MULTIPLIER_VALUE_REFERENCE: { [key: number]: number } = {
   10: 2,

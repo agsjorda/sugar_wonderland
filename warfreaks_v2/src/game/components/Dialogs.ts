@@ -7,6 +7,8 @@ import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { getFullScreenSpineScale, playSpineAnimationSequence } from './SpineBehaviorHelper';
 import { FlashTransition } from './FlashTransition';
+import { WinTracker } from './WinTracker';
+import { AUTO_SPIN_WIN_DIALOG_TIMEOUT } from '../../config/GameConfig';
 
 export interface DialogConfig {
 	//type: 'confetti_KA' | 'congrats_wf' | 'Explosion_AK' | 'FreeSpinDialog_KA' | 'largeW_KA' | 'LargeW_KA' | 'MediumW_KA' | 'SmallW_KA' | 'superw_wf';
@@ -214,27 +216,12 @@ export class Dialogs {
 		// Create the dialog content
 		this.createDialogContentWithCustomSpineName(scene, this.getDialogSpineName(config), config);
 
-		// if(this.currentDialog)
-		// {
-		// 	this.currentDialog.destroy();
-		// 	this.currentDialog = null;
-		// }
-
-		// this.currentDialog = scene.add.spine(0, 0, 'win_dialog', 'win_dialog-atlas');
-		// const scale = 0.8;
-		// const offset = { x: 0, y: 0 };
-		// const anchor = { x: 0.5, y: 0.1 };
-		// const origin = { x: 0.5, y: 0 };
-		// const sequence: number[] = this.winDialogAnimationSequences[config.type];
-		// playSpineAnimationSequence(scene, this.currentDialog, sequence, {x:scale, y:scale}, anchor, origin, offset, 101);
-		// this.dialogContentContainer.add(this.currentDialog);
-
         // Play dialog-specific SFX (FreeSpin/ Congrats) when shown
 		try {
 			const audioManager = (window as any).audioManager;
 			if (audioManager && typeof audioManager.playSoundEffect === 'function') {
 				const type = (this.currentDialogType || '').toLowerCase();
-                if (type === 'freespindialog_ka') {
+                if (type === 'freespindialog') {
                     // Use congrats_wf for the FreeSpin dialog per request
                     audioManager.playSoundEffect('dialog_congrats');
                     // Duck background music similar to win dialogs
@@ -455,7 +442,7 @@ export class Dialogs {
 			console.log(`[Dialogs] Setting up auto-close timer for win dialog during ${reason} (2 seconds)`);
 			console.log(`[Dialogs] Win dialog will automatically close in 2 seconds due to ${reason}`);
 			
-			this.autoCloseTimer = scene.time.delayedCall(2500, () => {
+			this.autoCloseTimer = scene.time.delayedCall(AUTO_SPIN_WIN_DIALOG_TIMEOUT, () => {
 				console.log(`[Dialogs] Auto-close timer triggered for win dialog during ${reason} - closing dialog`);
 				this.handleDialogClick(scene);
 			});
@@ -1113,6 +1100,13 @@ export class Dialogs {
 		} else {
 			if (dialogTypeBeforeCleanup === 'Congratulations') {
 				console.log('[Dialogs] Congrats dialog closed - reverting from bonus visuals to base');
+				// Clear any WinTracker rows that were displayed for the completed bonus
+				try {
+					WinTracker.clearFromScene(scene);
+					console.log('[Dialogs] Cleared WinTracker rows after Congratulations dialog');
+				} catch (e) {
+					console.warn('[Dialogs] Failed to clear WinTracker rows after Congratulations dialog:', e);
+				}
 				scene.events.emit('setBonusMode', false);
 				scene.events.emit('hideBonusBackground');
 				scene.events.emit('hideBonusHeader');

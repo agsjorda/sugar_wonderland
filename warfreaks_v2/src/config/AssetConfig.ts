@@ -33,9 +33,9 @@ export class AssetConfig {
 
 		return {
 			images: {
-				'default_background': `${prefix}/background/BG-Default.png`,
-				'reel-frame': `${prefix}/background/reel-frame.png`,
-				'rifle': `${prefix}/background/rifle.png`,
+				'default_background': `${prefix}/background/BG-Default.webp`,
+				'reel-frame': `${prefix}/background/reel-frame.webp`,
+				'rifle': `${prefix}/background/rifle.webp`,
 			},
 			spine: {
 				'nuclear': {
@@ -56,9 +56,9 @@ export class AssetConfig {
 
 		return {
 			images: {
-				'bonus_background': `${prefix}/bonus_background/BG-Bonus.png`,
-				'bonus-reel-frame': `${prefix}/bonus_background/bonus-reel-frame.png`,
-				'arch': `${prefix}/bonus_background/arch.png`,
+				'bonus_background': `${prefix}/bonus_background/BG-Bonus.webp`,
+				'bonus-reel-frame': `${prefix}/bonus_background/bonus-reel-frame.webp`,
+				'arch': `${prefix}/bonus_background/arch.webp`,
 			},
 			spine: {
 			}
@@ -71,19 +71,14 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				// 'warfreaks-logo': `${prefix}/header/Logo.png`,
-				'win-bar': `${prefix}/win_bar/win_bar.png`,
-				'multiplier-bar': `${prefix}/header/multiplier_bar.png`,
+				'win-bar': `${prefix}/win_bar/win_bar.webp`,
+				'multiplier-bar': `${prefix}/header/multiplier_bar.webp`,
 				// Add more header images here
 			},
 			spine: {
 				'jetfighter': {
 					atlas: `${prefix}/header/jetfighter/jetfighter_02.atlas`,
 					json: `${prefix}/header/jetfighter/jetfighter_02.json`
-				},
-				'warfreaks-logo-spine': {
-					atlas: `${prefix}/logo/logo_250.atlas`,
-					json: `${prefix}/logo/logo_250.json`
 				},
 				// Add more Spine animations here
 			}
@@ -96,9 +91,8 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				// 'logo-bonus': `${prefix}/bonus_header/logo-bonus.png`,
-				'win-bar-bonus': `${prefix}/win_bar/win_bar_bonus.png`,
-				'multiplier-bar-bonus': `${prefix}/bonus_header/multiplier_bar_bonus.png`,
+				'win-bar-bonus': `${prefix}/win_bar/win_bar_bonus.webp`,
+				'multiplier-bar-bonus': `${prefix}/bonus_header/multiplier_bar_bonus.webp`,
 			},
 			spine: {
 				'dove': {
@@ -115,19 +109,23 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				'loading_background': `${prefix}/loading/loading_background.png`,
-				'button_bg': `${prefix}/loading/button_bg.png`,
-				'button_spin': `${prefix}/loading/button_spin.png`,
-				'loading_frame': `${prefix}/loading/loading-frame.png`,
-				'loading_frame_2': `${prefix}/loading/loading-frame-2.png`,
-				'dijoker_logo': `${prefix}/loading/DiJoker-logo.png`
+				'loading_background': `${prefix}/loading/loading_background.webp`,
+				'button_bg': `${prefix}/loading/button_bg.webp`,
+				'button_spin': `${prefix}/loading/button_spin.webp`,
+				'loading_frame': `${prefix}/loading/loading-frame.webp`,
+				'loading_frame_2': `${prefix}/loading/loading-frame-2.webp`,
+				'dijoker_logo': `${prefix}/loading/DiJoker-logo.webp`
 			},
 			spine: {
 				// Studio loading spine (DI JOKER) – only available in portrait/high
 				'di_joker': {
 					atlas: `assets/portrait/high/dijoker_loading/DI JOKER.atlas`,
 					json: `assets/portrait/high/dijoker_loading/DI JOKER.json`
-				}
+				},
+				'warfreaks-logo-spine': {
+					atlas: `${prefix}/logo/logo_250.atlas`,
+					json: `${prefix}/logo/logo_250.json`
+				},
 			}
 		};
 	}
@@ -144,7 +142,7 @@ export class AssetConfig {
 		for (let i = 0; i <= 9; i++) {
 			// PNG sprites for normal display
 			const spriteKey = `symbol_${i}`;
-			const spritePath = `${prefix}/symbols/symbol_${i}.png`;
+			const spritePath = `${prefix}/symbols/symbol_${i}.webp`;
 			symbolImages[spriteKey] = spritePath;
 			
 			// Spine animations for hit effects
@@ -170,7 +168,7 @@ export class AssetConfig {
 	// Network resources notes: PNG: ~14.5MB | Very heavy
 	// Network resources notes: SPINE: ~87.5MB | Very heavy
 
-	getSymbolSpineAssets(): AssetGroup {
+	getSymbolSpineAndPngAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix(); // This gives us assets/{orientation}/{quality}
 		console.log(`[AssetConfig] Loading symbol assets from: ${prefix}/symbols/ and ${prefix}/Symbols_KA/`);
 		
@@ -185,7 +183,7 @@ export class AssetConfig {
 
 			// PNG sprites for normal display
 			const spriteKey = `symbol_${i}`;
-			const spritePath = `${prefix}/symbols/symbol_${i}.png`;
+			const spritePath = `${prefix}/symbols/symbol_${i}.webp`;
 			symbolImages[spriteKey] = spritePath;
 
 			// Spine animations for hit effects
@@ -238,7 +236,7 @@ export class AssetConfig {
 
 		for(let i = 0; i < 15; i++) {
 			const spriteKey = `multiplier_${i}`;
-			const spritePath = `${prefix}/symbols/multipliers/multiplier_${i}.png`;
+			const spritePath = `${prefix}/symbols/multipliers/multiplier_${i}.webp`;
 			symbolImages[spriteKey] = spritePath;
 		}
 		
@@ -323,12 +321,7 @@ export class AssetConfig {
 		console.log(`[AssetConfig] Loading spinner assets with prefix: ${prefix}`);
 		
 		return {
-			images: {
-				'spin_01': `${prefix}/spinner/spin_01.png`,
-				'spin_02': `${prefix}/spinner/spin_02.png`,
-				'spin_03': `${prefix}/spinner/spin_03.png`,
-				'spin_04': `${prefix}/spinner/spin_04.png`,
-			}
+			
 		};
 	}
 
@@ -361,51 +354,42 @@ export class AssetConfig {
 		return {
 			images: {
 				// HowToPlay images
-				'howToPlay1': `${prefix}/help_screen/HowToPlay1.png`,
-				'howToPlay1Mobile': `${prefix}/help_screen/HowToPlay1Mobile.png`,
-				'howToPlay2': `${prefix}/help_screen/HowToPlay2.png`,
-				'howToPlay2Mobile': `${prefix}/help_screen/HowToPlay2Mobile.png`,
-				'howToPlay3': `${prefix}/help_screen/HowToPlay3.png`,
-				'howToPlay3Mobile': `${prefix}/help_screen/HowToPlay3Mobile.png`,
-				'howToPlay4': `${prefix}/help_screen/HowToPlay4.png`,
-				'howToPlay4Mobile': `${prefix}/help_screen/HowToPlay4Mobile.png`,
-				'howToPlay5': `${prefix}/help_screen/HowToPlay5.png`,
-				'howToPlay6': `${prefix}/help_screen/HowToPlay6.png`,
-				'howToPlay7': `${prefix}/help_screen/HowToPlay7.png`,
-				'howToPlay8': `${prefix}/help_screen/HowToPlay8.png`,
-				'howToPlay8Mobile': `${prefix}/help_screen/HowToPlay8Mobile.png`,
-				'howToPlay9': `${prefix}/help_screen/HowToPlay9.png`,
-				'howToPlay9Mobile': `${prefix}/help_screen/HowToPlay9Mobile.png`,
-				'howToPlay10': `${prefix}/help_screen/HowToPlay10.png`,
-				'howToPlay10Mobile': `${prefix}/help_screen/HowToPlay10Mobile.png`,
-				'howToPlay11Mobile': `${prefix}/help_screen/HowToPlay11Mobile.png`,
-				'howToPlay12Mobile': `${prefix}/help_screen/HowToPlay12Mobile.png`,
+				'howToPlay1': `${prefix}/help_screen/HowToPlay1.webp	`,
+				'howToPlay1Mobile': `${prefix}/help_screen/HowToPlay1Mobile.webp`,
+				'howToPlay2': `${prefix}/help_screen/HowToPlay2.webp`,
+				'howToPlay2Mobile': `${prefix}/help_screen/HowToPlay2Mobile.webp`,
+				'howToPlay3': `${prefix}/help_screen/HowToPlay3.webp`,
+				'howToPlay3Mobile': `${prefix}/help_screen/HowToPlay3Mobile.webp`,
+				'howToPlay4': `${prefix}/help_screen/HowToPlay4.webp`,
+				'howToPlay4Mobile': `${prefix}/help_screen/HowToPlay4Mobile.webp`,
+				'howToPlay5': `${prefix}/help_screen/HowToPlay5.webp`,
+				'howToPlay6': `${prefix}/help_screen/HowToPlay6.webp`,
+				'howToPlay7': `${prefix}/help_screen/HowToPlay7.webp`,
+				'howToPlay8': `${prefix}/help_screen/HowToPlay8.webp`,
+				'howToPlay8Mobile': `${prefix}/help_screen/HowToPlay8Mobile.webp`,
+				'howToPlay9': `${prefix}/help_screen/HowToPlay9.webp`,
+				'howToPlay9Mobile': `${prefix}/help_screen/HowToPlay9Mobile.webp`,
+				'howToPlay10': `${prefix}/help_screen/HowToPlay10.webp`,
+				'howToPlay10Mobile': `${prefix}/help_screen/HowToPlay10Mobile.webp`,
+				'howToPlay11Mobile': `${prefix}/help_screen/HowToPlay11Mobile.webp`,
+				'howToPlay12Mobile': `${prefix}/help_screen/HowToPlay12Mobile.webp`,
 				// Feature help
-				'BuyFeatHelp': `${prefix}/help_screen/BuyFeatHelp.png`,
-				'BuyFeatMobile': `${prefix}/help_screen/BuyFeatMobile.png`,
-				'DoubleHelp': `${prefix}/help_screen/DoubleHelp.png`,
-				'DoubleHelpMobile': `${prefix}/help_screen/DoubleHelpMobile.png`,
+				'BuyFeatHelp': `${prefix}/help_screen/BuyFeatHelp.webp`,
+				'BuyFeatMobile': `${prefix}/help_screen/BuyFeatMobile.webp`,
+				'DoubleHelp': `${prefix}/help_screen/DoubleHelp.webp`,
+				'DoubleHelpMobile': `${prefix}/help_screen/DoubleHelpMobile.webp`,
 				// Payline visuals
-				'paylineMobileWin': `${prefix}/help_screen/paylineMobileWin.png`,
-				'paylineMobileNoWin': `${prefix}/help_screen/paylineMobileNoWin.png`,
+				'paylineMobileWin': `${prefix}/help_screen/paylineMobileWin.webp`,
+				'paylineMobileNoWin': `${prefix}/help_screen/paylineMobileNoWin.webp`,
 				// Scatter / Tumble / Multiplier visuals
-				'scatterGame': `${prefix}/help_screen/scatterGame.png`,
-				'scatterIcon': `${prefix}/help_screen/scatterIcon.png`,
-				'scatterWin': `${prefix}/help_screen/scatterWin.png`,
-				'ScatterLabel': `${prefix}/help_screen/ScatterSymbol.png`,
-				'tumbleIcon': `${prefix}/help_screen/tumbleIcon.png`,
-				'tumbleWin': `${prefix}/help_screen/tumbleWin.png`,
-				'multiplierGame': `${prefix}/help_screen/multiplierGame.png`,
-				'multiplierIcon': `${prefix}/help_screen/multiplierIcon.png`,
-				// Winlines thumbnails (static, not dependent on screen prefix)
-				// Keys: winlines1 .. winlines20
-				...(() => {
-					const map: { [key: string]: string } = {};
-					for (let i = 1; i <= 20; i++) {
-						map[`winlines${i}`] = `assets/winlines/winline${i}.png`;
-					}
-					return map;
-				})()
+				'scatterGame': `${prefix}/help_screen/scatterGame.webp`,
+				'scatterIcon': `${prefix}/help_screen/scatterIcon.webp`,
+				'scatterWin': `${prefix}/help_screen/scatterWin.webp`,
+				'ScatterLabel': `${prefix}/help_screen/ScatterSymbol.webp`,
+				'tumbleIcon': `${prefix}/help_screen/tumbleIcon.webp`,
+				'tumbleWin': `${prefix}/help_screen/tumbleWin.webp`,
+				'multiplierGame': `${prefix}/help_screen/multiplierGame.webp`,
+				'multiplierIcon': `${prefix}/help_screen/multiplierIcon.webp`,
 			}
 		};
 	}
@@ -418,9 +402,9 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				'total_win_background': `${prefix}/dialogs/total_win_background.png`,
-				'total_win_foreground': `${prefix}/dialogs/total_win_foreground.png`,
-				'max_win_background': `${prefix}/dialogs/max_win_background.png`
+				'total_win_background': `${prefix}/dialogs/total_win_background.webp`,
+				'total_win_foreground': `${prefix}/dialogs/total_win_foreground.webp`,
+				'max_win_background': `${prefix}/dialogs/max_win_background.webp`
 			},
 			spine: {
 				'win_dialog': {
@@ -452,10 +436,6 @@ export class AssetConfig {
 		console.log('[AssetConfig] Loading Scatter Anticipation assets');
 		return {
 			spine: {
-				'reelanim_KA': {
-					atlas: `assets/portrait/high/scatterAnticipation/reelanim_KA.atlas`,
-					json: `assets/portrait/high/scatterAnticipation/reelanim_KA.json`
-				}
 			}
 		};
 	}
@@ -472,18 +452,18 @@ export class AssetConfig {
 		// Add digit images (0-9)
 		for (let i = 0; i <= 9; i++) {
 			const key = `number_${i}`;
-			const path = `${prefix}/numbers/0${i}_WF_G.png`;
+			const path = `${prefix}/numbers/0${i}_WF_G.webp`;
 			numberImages[key] = path;
 			console.log(`[AssetConfig] Number ${key}: ${path}`);
 		}
 		
 		// Add comma and dot
-		numberImages['number_comma'] = `${prefix}/numbers/comma_WF_G.png`;
-		numberImages['number_dot'] = `${prefix}/numbers/point_WF_G.png`;
-		numberImages['number_x'] = `${prefix}/numbers/x_WF_G.png`;
+		numberImages['number_comma'] = `${prefix}/numbers/comma_WF_G.webp`;
+		numberImages['number_dot'] = `${prefix}/numbers/point_WF_G.webp`;
+		numberImages['number_x'] = `${prefix}/numbers/x_WF_G.webp`;
 		
-		console.log(`[AssetConfig] Number comma: ${prefix}/numbers/comma_KA.png`);
-		console.log(`[AssetConfig] Number dot: ${prefix}/numbers/dot_KA.png`);
+		console.log(`[AssetConfig] Number comma: ${prefix}/numbers/comma_KA.webp`);
+		console.log(`[AssetConfig] Number dot: ${prefix}/numbers/dot_KA.webp`);
 
 		return {
 			images: numberImages
@@ -497,13 +477,6 @@ export class AssetConfig {
 		console.log(`[AssetConfig] Loading coin assets with prefix: ${prefix}`);
 
 		return {};
-
-		// Not being used
-		return {
-			images: {
-				'coin': `${prefix}/coin/coin.png`
-			}
-		};
 	}
 
 	getSymbolEffectsAssets(): AssetGroup {
@@ -514,6 +487,10 @@ export class AssetConfig {
 				'spark_vfx': {
 					atlas: `${prefix}/symbols/Spark_VFX/Spark_VFX.atlas`,
 					json: `${prefix}/symbols/Spark_VFX/Spark_VFX.json`
+				},
+				'shatter_frame': {
+					atlas: `${prefix}/symbols/Glass_Shattered_VFX_WF/Glass_Shattered_VFX_WF.atlas`,
+					json: `${prefix}/symbols/Glass_Shattered_VFX_WF/Glass_Shattered_VFX_WF.json`
 				}
 			}
 		};
@@ -527,8 +504,8 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				'buy_feature_logo': `${prefix}/buy_feature/buy_feature_logo.png`,
-				'buy_feature_bg': `${prefix}/buy_feature/buy_feature_bg.png`
+				'buy_feature_logo': `${prefix}/buy_feature/buy_feature_logo.webp`,
+				'buy_feature_bg': `${prefix}/background/BG-Default.webp`
 			}
 		};
 	}
@@ -548,31 +525,7 @@ export class AssetConfig {
 				'superw_wf': 'assets/sounds/Wins/superw_wf.ogg',
 				'epicw_wf': 'assets/sounds/Wins/epicw_wf.ogg',
 
-				// Menu/UI clicks
-				'click_wf': 'assets/sounds/click_wf.ogg',
-				'mainbg_wf': 'assets/sounds/BG/mainbg_wf.ogg',
-				'bonusbg_wf': 'assets/sounds/BG/bonusbg_wf.ogg',
-				
-				'turbodrop_wf': 'assets/sounds/SFX/turbodrop_wf.ogg',
-				'reeldrop_wf': 'assets/sounds/SFX/reeldrop_wf.ogg',
-
-				// Unused SFX
-				'argun_wf': 'assets/sounds/SFX/argun_wf.ogg',
-				'explosion_wf': 'assets/sounds/SFX/explosion_wf.ogg',
-				'hit_win_2_wf': 'assets/sounds/SFX/hit_win_2_wf.ogg',
-				'hit_win_wf': 'assets/sounds/SFX/hit_win_wf.ogg',
-				'missile_wf': 'assets/sounds/SFX/missile_wf.ogg',
-				'multi_wf': 'assets/sounds/SFX/multi_wf.ogg',
-				'nuke_wf': 'assets/sounds/SFX/nuke_wf.ogg',
-				'reeldrop2_wf': 'assets/sounds/SFX/reeldrop2_wf.ogg',
-				'spin_wf': 'assets/sounds/SFX/spin_wf.ogg',
-				'spin2_wf': 'assets/sounds/SFX/spin2_wf.ogg',
-				'turbo2_wf': 'assets/sounds/SFX/turbo2_wf.ogg',
-				'ub_win_wf': 'assets/sounds/SFX/ub_win_wf.ogg',
-				
-				// Unused Wins
-				'maxw_end_wf': 'assets/sounds/Wins/maxw_end_wf.ogg',
-				'maxw_wf': 'assets/sounds/Wins/maxw_wf.ogg',
+				// Tumble win SFX
 				'twin1_wf': 'assets/sounds/Wins/twin1_wf.ogg',
 				'twin2_wf': 'assets/sounds/Wins/twin2_wf.ogg',
 				'twin3_wf': 'assets/sounds/Wins/twin3_wf.ogg',
@@ -581,6 +534,39 @@ export class AssetConfig {
 				'twinheaven2_wf': 'assets/sounds/Wins/twinheaven2_wf.ogg',
 				'twinheaven3_wf': 'assets/sounds/Wins/twinheaven3_wf.ogg',
 				'twinheaven4_wf': 'assets/sounds/Wins/twinheaven4_wf.ogg',
+
+				// Background SFX
+				'mainbg_wf': 'assets/sounds/BG/mainbg_wf.ogg',
+				'bonusbg_wf': 'assets/sounds/BG/bonusbg_wf.ogg',
+				'argun_wf': 'assets/sounds/SFX/argun_wf.ogg',
+
+				// Menu/UI clicks
+				'click_wf': 'assets/sounds/click_wf.ogg',
+				
+				'turbodrop_wf': 'assets/sounds/SFX/turbodrop_wf.ogg',
+				'reeldrop_wf': 'assets/sounds/SFX/reeldrop_wf.ogg',
+
+				// WIP
+				
+				'bonus_explosion_wf': 'assets/sounds/SFX/explosion_heaven_wf.ogg',
+				'multiplier_added_wf': 'assets/sounds/SFX/birdland_wf.ogg',
+				'explosion_wf': 'assets/sounds/SFX/explosion_wf.ogg',
+				'missile_wf': 'assets/sounds/SFX/missile_wf.ogg',
+				'multi_wf': 'assets/sounds/SFX/multi_wf.ogg',
+				'nuke_wf': 'assets/sounds/SFX/nuke_wf.ogg',
+
+				// Unused SFX
+				'hit_win_2_wf': 'assets/sounds/SFX/hit_win_2_wf.ogg',
+				'hit_win_wf': 'assets/sounds/SFX/hit_win_wf.ogg',
+				'reeldrop2_wf': 'assets/sounds/SFX/reeldrop2_wf.ogg',
+				'turbo2_wf': 'assets/sounds/SFX/turbo2_wf.ogg',
+				'spin_wf': 'assets/sounds/SFX/spin_wf.ogg',
+				'spin2_wf': 'assets/sounds/SFX/spin2_wf.ogg',
+				'ub_wf': 'assets/sounds/SFX/ub_wf.ogg',
+				
+				// Unused Wins
+				'maxw_end_wf': 'assets/sounds/Wins/maxw_end_wf.ogg',
+				'maxw_wf': 'assets/sounds/Wins/maxw_wf.ogg',
 
 				// 'freespinbg_ka': 'assets/sounds/Wins/freespin_wf.ogg',
 				// 'ambience_ka': 'assets/sounds/SFX/ambience_wf.ogg',
@@ -612,7 +598,7 @@ export class AssetConfig {
 			header: this.getHeaderAssets(),
 			bonusHeader: this.getBonusHeaderAssets(),
 			loading: this.getLoadingAssets(),
-			symbols: this.getSymbolSpineAssets(),
+			symbols: this.getSymbolSpineAndPngAssets(),
 			buttons: this.getButtonAssets(),
 			fonts: this.getFontAssets(),
 			spinner: this.getSpinnerAssets(),

@@ -7,6 +7,7 @@ import { SpineGameObject } from "@esotericsoftware/spine-phaser-v3";
 import { playSpineAnimationSequence } from "./SpineBehaviorHelper";
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { SoundEffectType } from "../../managers/AudioManager";
+import { gameStateManager } from "../../managers/GameStateManager";
 
 export class Background {
 	private bgContainer: Phaser.GameObjects.Container;
@@ -104,11 +105,33 @@ export class Background {
 	}
 
 	private toggleRifleSpineAnimation(isPlaying: boolean) : void {
+		if(gameStateManager.isBonus) {
+			this.rifleSpine.animationState.timeScale = 0;
+			return;
+		}
+		
 		const trackEntry = this.rifleSpine.animationState.getCurrent(0);
 		if(trackEntry && trackEntry.trackTime) {
 			trackEntry.trackTime = 0;
 		}
 		this.rifleSpine.animationState.timeScale = isPlaying ? 1 : 0;
+
+		// Play / stop ARGUN_WF SFX in sync with rifle animation
+		try {
+			const audio = (window as any)?.audioManager;
+			if (!audio) return;
+
+			if (isPlaying && typeof audio.playSoundEffect === 'function') {
+				audio.playSoundEffect(SoundEffectType.ARGUN);
+				console.log('[Background] Playing ARGUN_WF SFX for rifle spine animation');
+			} else if (!isPlaying && typeof audio.fadeOutSfx === 'function') {
+				// Fade out and stop ARGUN when animation stops
+				audio.fadeOutSfx(SoundEffectType.ARGUN, 300);
+				console.log('[Background] Fading out ARGUN_WF SFX as rifle spine animation stops');
+			}
+		} catch {
+			// Fail silently to avoid breaking gameplay if audio is unavailable
+		}
 	}
 
 	private fitBackgroundToScreen(scene: Scene): void {

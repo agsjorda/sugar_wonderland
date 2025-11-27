@@ -1,7 +1,7 @@
-multiplier_WF_dove.png
+multiplier_WF_dove.webp
 size:344,344
 filter:Linear,Linear
-pma:true
+pma:false
 dove_body
 bounds:2,116,193,224
 dove_feet

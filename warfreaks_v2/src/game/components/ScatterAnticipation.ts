@@ -70,7 +70,7 @@ export class ScatterAnticipation {
 				this.scene.time.delayedCall(250, () => this.tryCreateSpine(centerX, centerY));
 				return;
 			} else {
-				console.error('[ScatterAnticipation] Spine assets still not ready after retries. Skipping creation.');
+				console.warn('[ScatterAnticipation] Spine assets still not ready after retries. Skipping creation.');
 				return;
 			}
 		}
@@ -85,7 +85,7 @@ export class ScatterAnticipation {
 			// Do not change visibility here; Game controls start visibility
 			console.log('[ScatterAnticipation] Created spine animation at center');
 		} catch (error) {
-			console.error('[ScatterAnticipation] Failed to create spine animation', error);
+			console.warn('[ScatterAnticipation] Failed to create spine animation', error);
 		}
 	}
 

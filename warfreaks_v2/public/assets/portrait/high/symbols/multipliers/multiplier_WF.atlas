@@ -1,7 +1,7 @@
-multiplier_WF.png
+multiplier_WF.webp
 size:2048,2048
 filter:Linear,Linear
-pma:true
+pma:false
 M48 (13)
 bounds:518,1289,247,247
 offsets:5,4,256,256
@@ -161,7 +161,7 @@ random_glass_00001
 bounds:1808,540,236,236
 offsets:8,5,250,250
 
-multiplier_WF_2.png
+multiplier_WF_2.webp
 size:2044,2044
 filter:Linear,Linear
 pma:true

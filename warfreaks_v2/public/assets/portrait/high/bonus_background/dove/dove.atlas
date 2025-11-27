@@ -1,7 +1,7 @@
-dove.png
+dove.webp
 size:272,272
 filter:Linear,Linear
-pma:true
+pma:false
 dove_body
 bounds:2,92,192,177
 offsets:0,2,192,180

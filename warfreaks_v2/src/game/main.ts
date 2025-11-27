@@ -8,29 +8,29 @@ import { SpinePlugin } from '@esotericsoftware/spine-phaser-v3';
 //  Find out more information about the Game Config at:
 //  https://docs.phaser.io/api-documentation/typedef/types-core#gameconfig
 const config: Phaser.Types.Core.GameConfig = {
-    type: Phaser.WEBGL,
-    width: 428,
-    height: 926,
-    parent: 'game-container',
-    backgroundColor: 'transparent',
-		scale: {
-			mode: Phaser.Scale.FIT,
-			autoCenter: Phaser.Scale.CENTER_BOTH
-		},
-    physics: {
-        default: 'arcade',
-        arcade: {
-            gravity: { x: 0, y: 1000 },
-            debug: false
-        }
-    },
-    scene: [
-        // TestBed,
-        Boot,
-        Preloader,
-        MainGame,
-    ],
-    plugins: {
+	type: Phaser.WEBGL,
+	width: 428,
+	height: 926,
+	parent: 'game-container',
+	backgroundColor: 'transparent',
+	scale: {
+		mode: Phaser.Scale.FIT,
+		autoCenter: Phaser.Scale.CENTER_BOTH
+	},
+	physics: {
+		default: 'arcade',
+		arcade: {
+			gravity: { x: 0, y: 1000 },
+			debug: false
+		}
+	},
+	scene: [
+		// TestBed,
+		Boot,
+		Preloader,
+		MainGame,
+	],
+	plugins: {
 		scene: [
 			{
 				key: 'SpinePlugin',
@@ -39,8 +39,12 @@ const config: Phaser.Types.Core.GameConfig = {
 			}
 		]
 	},
-    render: {
+	render: {
+		// Enable full antialiasing / smoothing for WebGL-rendered sprites
 		antialias: true,
+		antialiasGL: true,
+		pixelArt: false,
+		mipmapFilter: 'LINEAR',
 	}
 };
 
