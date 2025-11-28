@@ -128,7 +128,7 @@ export class Symbols {
     this.scene.events.on('hideBonusBackground', () => this.clearStickyWilds());
     this.scene.events.on('hideBonusHeader', () => this.clearStickyWilds());
     this.scene.events.on('scatterBonusCompleted', () => this.clearStickyWilds());
-
+//
     // Listen for a full free spin reset request (after congrats/bonus end)
     this.scene.events.on('resetFreeSpinState', () => {
       console.log('[Symbols] resetFreeSpinState received - clearing free spin autoplay state');

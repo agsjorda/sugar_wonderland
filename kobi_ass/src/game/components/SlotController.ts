@@ -2187,6 +2187,16 @@ export class SlotController {
 					console.log('[SlotController] In bonus mode - free spin autoplay is handled by Symbols component');
 				}
 			}
+
+			// In base scene, when win dialog closes and autoplay is not active,
+			// ensure the spin button is re-enabled so the player can spin again.
+			// This covers big/medium/small/super win overlays for manual spins.
+			const currentGameData = this.getGameData();
+			const isAutoPlayingNow = (currentGameData?.isAutoPlaying || gameStateManager.isAutoPlaying) ?? false;
+			if (!isAutoPlayingNow && !gameStateManager.isBonus && !gameStateManager.isScatter) {
+				console.log('[SlotController] WIN_DIALOG_CLOSED in base manual mode - re-enabling spin button');
+				this.enableSpinButton();
+			}
 		});
 
 		// Note: SPIN_RESPONSE event listeners removed - now using SPIN_DATA_RESPONSE
