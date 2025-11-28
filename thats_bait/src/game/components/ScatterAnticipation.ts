@@ -5,23 +5,6 @@ import { TurboConfig } from '../../config/TurboConfig';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { SCATTER_ANTICIPATION_POS_X_MUL, SCATTER_ANTICIPATION_POS_Y_MUL, SCATTER_ANTICIPATION_DEFAULT_SCALE } from '../../config/UIPositionConfig';
 
-// Animation configuration
-const ANIMATION_CONFIG = {
-  OVERLAY: {
-    DURATION: 500,
-    EASE: 'Cubic.easeOut',
-    HIDE_EASE: 'Cubic.easeIn',
-    BASE_OVERLAY_OPACITY: 0.2,
-    OVERLAY_OPACITY: 0.85
-  },
-  SHAKE: {
-    DURATION: 2500,
-    INTENSITY: 0.004,
-    DRAGON_MOVE_DURATION: 1200,
-    DRAGON_MOVE_DELAY: 500
-  }
-} as const;
-
 interface ScatterAnticipationOptions {
   x?: number;
   y?: number;
@@ -193,21 +176,6 @@ export class ScatterAnticipation {
         }
       } catch {}
 
-      if (!this.useLegacyAnticipationOverlay) {
-        try {
-          if (show) {
-            symbols.tweenReelBackgroundToAnticipationTint?.(ANIMATION_CONFIG.OVERLAY.DURATION);
-            symbols.startReelBgAnticipationFlash(450);
-          } else {
-            // Ensure any previous scatter-win flash is stopped and reset tint
-            symbols.stopReelBgAnticipationFlash?.();
-            symbols.tweenReelBackgroundToDefaultTint?.(ANIMATION_CONFIG.OVERLAY.DURATION);
-          }
-        } catch {}
-        console.log('[ScatterAnticipation] startOverlayTransition (legacy overlay disabled) - using reel background tint only');
-        return;
-      }
-
       this.ensureOverlaysExist(symbols);
       
       if (show) {
@@ -346,7 +314,6 @@ export class ScatterAnticipation {
     return () => {
       if (!this.shouldTriggerWinSequence()) return;
       this.triggerCameraShake();
-      this.animateDragons();
     };
   }
 
@@ -378,33 +345,7 @@ export class ScatterAnticipation {
     }
   }
 
-  private animateDragons(): void {
-    try {
-      const symbols = (this.scene as any)?.symbols;
-      if (!symbols?.animateBottomDragonToX || !symbols.animateTopDragonToX) return;
 
-      const turboMul = gameStateManager?.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1.0;
-      const {
-        DRAGON_MOVE_DURATION: baseDuration,
-        DRAGON_MOVE_DELAY: baseDelay
-      } = ANIMATION_CONFIG.SHAKE;
-      
-      const moveDur = Math.max(100, Math.floor(baseDuration * turboMul));
-      const delayTop = Math.max(0, Math.floor(baseDelay * turboMul));
-      
-      // Animate bottom dragon to right
-      const rightX = this.scene.scale.width + 900;
-      symbols.animateBottomDragonToX(rightX, moveDur, 'Sine.easeInOut');
-      
-      // Animate top dragon to left after delay
-      this.scene.time.delayedCall(delayTop, () => {
-        const leftX = -900;
-        symbols.animateTopDragonToX(leftX, moveDur, 'Sine.easeInOut');
-      });
-    } catch (error) {
-      console.error('[ScatterAnticipation] Error animating dragons:', error);
-    }
-  }
 
   public hide(): void {
     if (!this.container || !this.isVisible) return;

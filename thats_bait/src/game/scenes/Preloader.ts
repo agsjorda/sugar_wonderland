@@ -9,6 +9,7 @@ import { GameData } from '../components/GameData';
 import { FullScreenManager } from '../../managers/FullScreenManager';
 import { StudioLoadingScreen, queueGameAssetLoading } from '../components/StudioLoadingScreen';
 import { ClockDisplay } from '../components/ClockDisplay';
+import { WaterWavePipeline } from '../pipelines/WaterWavePipeline';
 
 export class Preloader extends Scene
 {
@@ -35,6 +36,12 @@ export class Preloader extends Scene
 
 	init (data: any)
 	{
+		const { screenConfig, assetScale } = this.setupCoreServices(data);
+		this.createBaseLoadingView(screenConfig, assetScale);
+		this.setupHtmlBootLoaderBridge();
+	}
+
+	private setupCoreServices(data: any): { screenConfig: any; assetScale: number } {
 		// Receive managers from Boot scene
 		this.networkManager = data.networkManager;
 		this.screenModeManager = data.screenModeManager;
@@ -52,6 +59,11 @@ export class Preloader extends Scene
 		
 		console.log(`[Preloader] Applying asset scale: ${assetScale}x`);
 		
+		return { screenConfig, assetScale };
+	}
+
+	private createBaseLoadingView(screenConfig: any, assetScale: number): void
+	{
 		// Background color for studio loading (#10161D)
 		this.cameras.main.setBackgroundColor(0x10161D);
 
@@ -240,6 +252,22 @@ export class Preloader extends Scene
 				.setOrigin(0.5, 0.5)
 				.setScale(assetScale);
 			console.log(`[Preloader] Added thats-bait-logo at scale: ${assetScale}x`);
+			const renderer: any = this.game.renderer;
+			const pipelineManager: any = renderer && renderer.pipelines;
+			if (pipelineManager && typeof pipelineManager.add === 'function') {
+				try {
+					const store = pipelineManager.pipelines;
+					const already = store && typeof store.has === 'function' && store.has('WaterWave');
+					if (!already) {
+						pipelineManager.add('WaterWave', new WaterWavePipeline(this.game, {
+							amplitude: 0.025,
+							frequency: 10.0,
+							speed: 2.5
+						}));
+					}
+				} catch (_e) {}
+				thatsBaitLogo.setPipeline('WaterWave');
+			}
 
 			// Wave-like "floating on water" motion: gentle vertical bob + slight tilt
 			const waveOffset = this.scale.height * 0.01; // 1% of screen height
@@ -260,9 +288,12 @@ export class Preloader extends Scene
 				repeat: -1,
 			});
 		}
+	}
 
+	private setupHtmlBootLoaderBridge(): void
+	{
 		try { (window as any).hideBootLoader?.(); } catch {}
-
+		
 		this.load.on('progress', (progress: number) => {
 			EventBus.emit('progress', progress);
 			try { (window as any).setBootLoaderProgress?.(0.25 + progress * 0.75); } catch {}
@@ -402,12 +433,12 @@ export class Preloader extends Scene
             });
         }
 
-        // Start game on click
+		// Start game on click
         this.buttonSpin?.once('pointerdown', () => {
             // Fade out the Preloader camera, then start Game when complete
             this.cameras.main.once('camerafadeoutcomplete', () => {
-                console.log('[Preloader] Starting TemporaryScene scene after camera fade out');
-                this.scene.start('TemporaryScene', {
+				console.log('[Preloader] Starting Game scene after camera fade out');
+				this.scene.start('Game', {
                     networkManager: this.networkManager,
                     screenModeManager: this.screenModeManager
                 });

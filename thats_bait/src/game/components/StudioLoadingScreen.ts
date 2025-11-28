@@ -523,21 +523,7 @@ export class StudioLoadingScreen {
     }
 
     public beginLoading(assetLoader: AssetLoader): void {
-        assetLoader.loadCoinAssets(this.scene);
-        assetLoader.loadBuyFeatureAssets(this.scene);
-        assetLoader.loadBackgroundAssets(this.scene);
-        assetLoader.loadBonusBackgroundAssets(this.scene);
-        assetLoader.loadBonusHeaderAssets(this.scene);
-        assetLoader.loadScatterAnticipationAssets(this.scene);
-        assetLoader.loadButtonAssets(this.scene);
-        assetLoader.loadMenuAssets(this.scene);
-        assetLoader.loadHelpScreenAssets(this.scene);
-        assetLoader.loadSymbolAssets(this.scene);
-        assetLoader.loadNumberAssets(this.scene);
-        assetLoader.loadScatterWinOverlayAssets(this.scene);
-        assetLoader.loadDialogAssets(this.scene);
-        assetLoader.loadAudioAssets(this.scene);
-        assetLoader.loadSpinCardAssets(this.scene);
+        queueGameAssetLoading(this.scene, assetLoader);
         console.log('[StudioLoadingScreen] Queued game assets (optimized)');
     }
 }

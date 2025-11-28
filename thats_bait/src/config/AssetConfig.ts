@@ -29,25 +29,15 @@ export class AssetConfig {
 
 	getBackgroundAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix();
-		// Use skeleton.png for the upper border in portrait/high only; fallback elsewhere
-		const screenConfig = this.screenModeManager.getScreenConfig();
-		const isHighSpeed = this.networkManager.getNetworkSpeed();
-		const useDragonTail = screenConfig.isPortrait && isHighSpeed;
 		
 		return {
 			images: {
-				'BG-Normal': `${prefix}/background/BG-Normal.png`,
-				// Mostly for landscape bg
-				// 'balloon-01': `${prefix}/background/balloon-01.png`,
-				// 'balloon-02': `${prefix}/background/balloon-02.png`,
-				// 'balloon-03': `${prefix}/background/balloon-03.png`,
-				// 'balloon-04': `${prefix}/background/balloon-04.png`,
-				// 'reel-xmaslight-default': `${prefix}/background/reel-xmaslight-default.png`,
-				// 'bulb-01': `${prefix}/background/bulb-01.png`,
-				// 'bulb-02': `${prefix}/background/bulb-02.png`,
-				// 'bulb-03': `${prefix}/background/bulb-03.png`,
+				'BG-Depth': `${prefix}/background/BG-Depth.webp`,
+				'BG-Surface': `${prefix}/background/BG-Surface.webp`,
+				'BG-Sky': `${prefix}/background/BG-Sky.webp`,
+				'BG-Normal-Slots': `${prefix}/background/BG-Normal-Slots.webp`,
+				'Sea-Edge': `${prefix}/background/Sea-Edge.webp`,
 			},
-			// Decorative dragon spine assets (dragon_default) were removed for this game
 			spine: {}
 		};
 	}
@@ -80,13 +70,13 @@ export class AssetConfig {
 		return {
 			images: {
 				// Note: BG-Default.png was removed; only BG-loading.png remains
-				'loading_background': `${prefix}/loading/BG-loading.png`,
-				'button_bg': `${prefix}/loading/button_bg.png`,
-				'button_spin': `${prefix}/loading/button_spin.png`,
-				'thats-bait-logo': `${prefix}/loading/thats-bait-logo.png`,
-				'loading_frame': `${prefix}/loading/loading-frame.png`,
-				'loading_frame_2': `${prefix}/loading/loading-frame-2.png`,
-				'dijoker_logo': `${prefix}/loading/DiJoker-logo.png`
+				'loading_background': `${prefix}/loading/BG-loading.webp`,
+				'button_bg': `${prefix}/loading/button_bg.webp`,
+				'button_spin': `${prefix}/loading/button_spin.webp`,
+				'thats-bait-logo': `${prefix}/loading/thats-bait-logo.webp`,
+				'loading_frame': `${prefix}/loading/loading-frame.webp`,
+				'loading_frame_2': `${prefix}/loading/loading-frame-2.webp`,
+				'dijoker_logo': `${prefix}/loading/DiJoker-logo.webp`
 			},
 			spine: {
 				// Studio loading spine (DI JOKER) – only available in portrait/high
@@ -101,35 +91,34 @@ export class AssetConfig {
 	// Add more asset groups as needed
 	getSymbolAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix(); // This gives us assets/{orientation}/{quality}
-		console.log(`[AssetConfig] Loading symbol assets from: assets/symbols/ (PNGs) and assets/Symbols_HTBH/ (Spine)`);
+		console.log(`[AssetConfig] Loading Spine-only symbol assets from assets/portrait/high/spine_symbols (no PNG sprites)`);
 		
-		// Generate symbol assets for all symbols (0-14)
+		// Generate Spine symbol assets for all symbols (0-14)
 		const symbolImages: { [key: string]: string } = {};
 		const symbolSpine: { [key: string]: { atlas: string; json: string } } = {};
 		
+		// Symbols that have TB Spine atlases/json in public/assets/portrait/high/spine_symbols
+		// All symbols 0-14 are now backed by TB Spine assets.
+		const tbSpineSymbols = new Set<number>([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+		
+		const spinePrefix = `assets/portrait/high`;
+		
 		for (let i = 0; i <= 14; i++) {
-			// PNG sprites for normal display (HTBH set)
-			const spriteKey = `symbol_${i}`;
-			const isHigh = this.networkManager.getNetworkSpeed();
-			const quality = isHigh ? 'high' : 'low';
-			// HTBH PNGs are organized by quality only (no orientation)
-			const spritePath = `${prefix}/symbols/Symbol${i}_HTBH.png`;
-			symbolImages[spriteKey] = spritePath;
-			
-			// Spine animations for hit effects (HTBH set)
-			const spineKey = `symbol_${i}_spine`;
-			const symbolName = `Symbol${i}_HTBH`;
-			// HTBH symbol atlases are currently stored only under portrait/high
-			const spinePrefix = `assets/portrait/high`;
-			const atlasPath = `${spinePrefix}/spine_symbols/${symbolName}.atlas`;
-			const jsonPath = `${spinePrefix}/spine_symbols/${symbolName}.json`;
-			
-			symbolSpine[spineKey] = {
-				atlas: atlasPath,
-				json: jsonPath
-			};
-			
-			console.log(`[AssetConfig] Symbol ${i}: sprite=${spritePath}, spine=${atlasPath}`);
+			if (tbSpineSymbols.has(i)) {
+				const spineKey = `symbol_${i}_spine`;
+				const symbolNameTB = `Symbol${i}_TB`;
+				const atlasPath = `${spinePrefix}/spine_symbols/${symbolNameTB}.atlas`;
+				const jsonPath = `${spinePrefix}/spine_symbols/${symbolNameTB}.json`;
+				
+				symbolSpine[spineKey] = {
+					atlas: atlasPath,
+					json: jsonPath
+				};
+				
+				console.log(`[AssetConfig] Symbol ${i}: spine=${atlasPath}`);
+			} else {
+				console.log(`[AssetConfig] Symbol ${i}: spine=<none> (no TB Spine asset)`);
+			}
 		}
 		
 		return {
@@ -162,7 +151,7 @@ export class AssetConfig {
 				'turbo_off': `assets/controller/${screenMode}/${quality}/turbo_off.png`,
 				'turbo_on': `assets/controller/${screenMode}/${quality}/turbo_on.png`,
 				'amplify': `assets/controller/${screenMode}/${quality}/amplify.png`,
-				'feature': `assets/controller/${screenMode}/${quality}/feature.png`,
+				'feature': `assets/controller/${screenMode}/${quality}/feature.webp`,
 				'long_button': `assets/controller/${screenMode}/${quality}/long_button.png`,
 				'maximize': `assets/controller/${screenMode}/${quality}/maximize.png`,
 				'minimize': `assets/controller/${screenMode}/${quality}/minimize.png`,
@@ -310,10 +299,9 @@ export class AssetConfig {
 		// Force portrait/high paths to ensure presence (these packs may be absent in low quality builds)
 		const forcedPortraitHighPrefix = `assets/portrait/high`;
 		console.log('[AssetConfig] Loading Scatter Anticipation assets (forced portrait/high)');
+		// Reel background visuals are no longer used in this game; no images are required here.
 		return {
-			images: {
-				'reel-background': `${forcedPortraitHighPrefix}/background/reel-background.png`
-			},
+			images: {},
 			// Sparkler_Reel spine assets were removed for this game
 			spine: {}
 		};

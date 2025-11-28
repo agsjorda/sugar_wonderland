@@ -54,7 +54,7 @@ export const CONTROLLER_LABEL_OFFSET_Y = 0;
 
 // Single container-level offset applied to the entire controller UI (buttons + labels)
 export const CONTROLLER_CONTAINER_OFFSET_X = 0;
-export const CONTROLLER_CONTAINER_OFFSET_Y = 22;
+export const CONTROLLER_CONTAINER_OFFSET_Y = -10;
 
 // Amplify description ("Double Chance" / "For Feature") block offsets
 export const AMPLIFY_DESCRIPTION_OFFSET_X = 0;

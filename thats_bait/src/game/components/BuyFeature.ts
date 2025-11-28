@@ -145,8 +145,8 @@ export class BuyFeature {
 		// Create close button
 		this.createCloseButton(scene);
 		
-		// Initially hide the component
-		this.hide();
+		// Ensure the drawer starts hidden off-screen without playing the hide animation
+		this.hideImmediately();
 	}
 
 	private createBackground(scene: Scene): void {
@@ -407,12 +407,6 @@ export class BuyFeature {
 	private confirmPurchase(): void {
 		console.log(`[BuyFeature] Confirming purchase`);
 		// Trigger symbol flash effect
-		try {
-			this.sceneRef?.events.emit('flashAllSymbolsNow');
-		} catch (err) {
-			console.warn('[BuyFeature] Failed to trigger flashAllSymbolsNow', err);
-		}
-		
 		// Play spin sound immediately when buy feature is confirmed
 		try {
 			const am: any = (window as any).audioManager;
@@ -730,6 +724,19 @@ export class BuyFeature {
 			scale: this.featureLogoBackgroundScale,
 			texture: this.featureLogoBackground.texture?.key
 		});
+	}
+
+	private hideImmediately(): void {
+		if (!this.container) return;
+		const scene = this.container.scene;
+		if (scene) {
+			this.container.setY(scene.scale.height);
+		}
+		this.container.setVisible(false);
+		if (this.confirmButtonMask) {
+			this.confirmButtonMask.setVisible(false);
+			this.confirmButtonMask.setAlpha(0);
+		}
 	}
 
 	public hide(): void {

@@ -264,6 +264,7 @@ export class SlotController {
 		}
 	}
 
+
 	/**
 	 * Create the spin button spine animation
 	 */
@@ -954,15 +955,11 @@ export class SlotController {
 				return;
 			}
 			console.log('[SlotController] Spin button clicked');
-			// Ensure symbols container is restored above reel background for the new spin
+			// Ensure symbols container is restored for the new spin
 			try { this.symbols?.restoreSymbolsAboveReelBg?.(); } catch {}
-			// Tint reel background for spin start (safe-guarded)
-			try { this.symbols?.tweenReelBackgroundToSpinTint(300); } catch {}
 			if ((window as any).audioManager) {
 				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
 			}
-			// Trigger symbols flash overlay immediately on spin click
-			try { this.scene?.events.emit('flashAllSymbolsNow'); } catch {}
 			// Block spin during scatter anticipation/transition to overlay
 			if (gameStateManager.isScatter) {
 				console.log('[SlotController] Spin blocked - scatter transition/animation in progress');
@@ -1836,8 +1833,6 @@ export class SlotController {
 			if ((window as any).audioManager) {
 				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
 			}
-			// Trigger symbols flash overlay immediately on spin click
-			try { this.scene?.events.emit('flashAllSymbolsNow'); } catch {}
 			// Block spin during scatter anticipation/transition to overlay
 			if (gameStateManager.isScatter) {
 				console.log('[SlotController] Spin blocked - scatter transition/animation in progress');
@@ -2341,18 +2336,13 @@ setBuyFeatureBetAmount(amount: number): void {
 			this.hasScheduledNextAutoplayForCurrentSpin = false;
 			// Bump spin sequence and tag this spin
 			this.currentSpinId = ++this.spinSequence;
-			// During autoplay (base or bonus), flash all symbols at spin start and apply spin tint
+			// During autoplay (base or bonus), flash all symbols at spin start
 			try {
 				if (gameStateManager.isAutoPlaying) {
 					const symbolsComponent = (this.scene as any).symbols;
 					if (symbolsComponent) {
-						try { (this.scene as any)?.events?.emit?.('flashAllSymbolsNow'); } catch {}
-						// Ensure reel background is visible, then apply spin tint during autoplay (base or bonus)
-						try { symbolsComponent.showReelBackground?.(); } catch {}
-						try { symbolsComponent.tweenReelBackgroundToSpinTint?.(0); } catch {}
-						// Ensure symbols render above reel background at spin start (base & bonus)
+						// Ensure symbols render correctly at spin start (base & bonus)
 						try { symbolsComponent.restoreSymbolsAboveReelBg?.(); } catch {}
-						console.log('[SlotController] Emitted flashAllSymbolsNow for autoplay spin start');
 					}
 				}
 			} catch {}
@@ -4305,17 +4295,12 @@ public updateAutoplayButtonState(): void {
 		gameEventManager.on(GameEventType.FREE_SPIN_AUTOPLAY, async () => {
 			console.log('[SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation');
 			// Trigger same white overlay flash for bonus spins
-			try { this.scene?.events.emit('flashAllSymbolsNow'); } catch {}
-			// Apply reel background spin tint during free spin autoplay (bonus mode)
+			// Ensure symbols are above background at the immediate start of the free spin
 			try {
 				const symbolsComponent = (this.scene as any)?.symbols;
-				if (symbolsComponent && typeof symbolsComponent.tweenReelBackgroundToSpinTint === 'function') {
-					// Ensure reel background is visible first, then tint to spin state
-					try { symbolsComponent.showReelBackground?.(); } catch {}
-					symbolsComponent.tweenReelBackgroundToSpinTint(0);
+				if (symbolsComponent) {
+					try { symbolsComponent.restoreSymbolsAboveReelBg?.(); } catch {}
 				}
-				// Ensure symbols are above reel background at the immediate start of the free spin
-				try { symbolsComponent?.restoreSymbolsAboveReelBg?.(); } catch {}
 			} catch {}
 			
 			// Apply turbo mode to game data and winlines (same as normal autoplay)

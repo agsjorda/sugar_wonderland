@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 	<meta charset="UTF-8" />
-	<link rel="icon" type="image/png" href="/favicon.png" />
+	<link rel="icon" type="image/png" href="/favicon.webp" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<link rel="stylesheet" href="/style.css">
 	<title>That's Bait</title>
@@ -85,29 +85,36 @@
 			font-family: Poppins-Regular, Arial, sans-serif;
 		}
 
+		#boot-loader, #boot-loader * {
+			box-sizing: border-box;
+		}
+
 		#boot-loader .bl-spine-slot {
 			position: absolute;
-			left: 30%;
+			left: 50%;
 			top: 48%;
 			transform: translate(-50%, -50%);
 			display: flex;
 			align-items: center;
-			gap: 0;
+			justify-content: center;
+			gap: 2.5%;
 		}
 
 		#boot-loader .bl-dijoker-left {
 			display: block;
-			max-width: 39%;
-			margin-left: 35%;
+			width: 28%;
+			max-width: none;
 			height: auto;
+			margin: 0;
 		}
 
 		#boot-loader .bl-dijoker-logo {
 			display: block;
-			max-width: 45%;
-			margin-left: 14%;
+			width: 42%;
+			max-width: none;
 			height: auto;
-			transform: scale(1.5);
+			transform: none;
+			margin: 0;
 		}
 
 		#boot-loader .bl-progress-slot {
@@ -160,14 +167,12 @@
 			<div class="bl-grid"></div>
 			<div class="bl-content">
 				<div class="bl-spine-slot">
-					<img class="bl-dijoker-left" src="assets/portrait/high/loading/DiJoker.png" alt="DiJoker" onerror="this.style.display='none'"/>
-					<img class="bl-dijoker-logo" src="assets/portrait/high/loading/DiJoker-logo.png" alt="DiJoker Logo" onerror="this.style.display='none'"/>
+					<img class="bl-dijoker-left" src="assets/portrait/high/loading/DiJoker.webp" alt="DiJoker" onerror="this.style.display='none'"/>
+					<img class="bl-dijoker-logo" src="assets/portrait/high/loading/DiJoker-logo.webp" alt="DiJoker Logo" onerror="this.style.display='none'"/>
 				</div>
 				<div class="bl-progress-slot">
 					<div class="bl-spinner"></div>
 				</div>
-				<div class="bl-motto">PLAY LOUD. WIN WILD. DIJOKER STYLE</div>
-				<div class="bl-website">www.dijoker.com</div>
 			</div>
 		</div>
 	</div>

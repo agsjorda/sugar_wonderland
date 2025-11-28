@@ -1,37 +1,44 @@
-import { Scene } from "phaser";
-import { NetworkManager } from "../../managers/NetworkManager";
-import { ScreenModeManager } from "../../managers/ScreenModeManager";
-import { AssetConfig } from "../../config/AssetConfig";
+ import { Scene } from "phaser";
+ import { NetworkManager } from "../../managers/NetworkManager";
+ import { ScreenModeManager } from "../../managers/ScreenModeManager";
+ import { AssetConfig } from "../../config/AssetConfig";
+ import { WaterWavePipeline, WaterWaveVerticalPipeline } from "../pipelines/WaterWavePipeline";
+ import { BubbleParticleSystem, BubbleParticleModifiers } from "./BubbleParticleSystem";
 
 export class Background {
-	private bgContainer: Phaser.GameObjects.Container;
-	private networkManager: NetworkManager;
-	private screenModeManager: ScreenModeManager;
-	private sceneRef: Scene | null = null;
-
-	// Ember/fiery particle system (inspired by warfreaks)
-	private particles: Array<{
-		graphics: Phaser.GameObjects.Graphics;
-		x: number;
-		y: number;
-		vx: number;
-		vy: number;
-		size: number;
-		color: number;
-		alpha: number;
-		lifetime: number;
-		age: number;
-		screenWidth: number;
-		screenHeight: number;
-	}> = [];
-	private readonly PARTICLE_COUNT: number = 30;
+ 	private bgContainer!: Phaser.GameObjects.Container;
+ 	private networkManager: NetworkManager;
+ 	private screenModeManager: ScreenModeManager;
+ 	private sceneRef: Scene | null = null;
+ 	private seaEdgeWidthMultiplier: number = 1.1;
+	private bubbleSystem?: BubbleParticleSystem;
 	private readonly SCREEN_MARGIN: number = 80;
-	private windDirectionX: number = 0;
-	private windDirectionY: number = 0;
-	private windStrength: number = 0;
-	private windChangeTimer: number = 0;
-	private readonly WIND_CHANGE_INTERVAL: number = 3000;
-	private readonly WIND_STRENGTH_MAX: number = 0.8;
+	private bgDepth?: Phaser.GameObjects.Image;
+	private bgSurface?: Phaser.GameObjects.Image;
+	private bgSky?: Phaser.GameObjects.Image;
+	private depthWavePipeline?: WaterWavePipeline;
+	private surfaceWavePipeline?: WaterWavePipeline;
+	private readonly depthBackgroundModifiers = {
+		offsetX: 0,
+		offsetY: -410,
+		scale: 1,
+ 		scaleXMultiplier: 1,
+ 		scaleYMultiplier: 0.8,
+ 	};
+ 	private readonly surfaceBackgroundModifiers = {
+ 		offsetX: 0,
+ 		offsetY: -369.5,
+ 		scale: 1,
+ 		scaleXMultiplier: 1,
+ 		scaleYMultiplier: 1,
+ 	};
+ 	private readonly skyBackgroundModifiers = {
+ 		offsetX: 0,
+ 		offsetY: 0,
+ 		scale: 1,
+ 		scaleXMultiplier: 1,
+ 		scaleYMultiplier: 1,
+ 	};
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -60,14 +67,27 @@ export class Background {
 		// Add background layers
 		this.createBackgroundLayers(scene, assetScale);
 		// (Spine-based border is handled by `Symbols` component)
-
 		// Create ember/fiery particle backdrop (behind gameplay)
-		this.createParticleSystem(scene);
+		this.bubbleSystem = new BubbleParticleSystem(scene, -9, {
+			count: 15,
+			speedMin: 0.5,
+			speedMax: 1,
+			lifeMin: 6000,
+			lifeMax: 16000,
+			screenMargin: this.SCREEN_MARGIN,
+			spawnPerSecond: 5,
+			maskLeft: 0,
+			maskRight: 0,
+			maskTop: 280,
+			maskBottom: 250,
+			showMaskDebug: false,
+			burstOnStart: false,
+		});
 		// Drive particles using scene update events
 		scene.events.on('update', this.handleUpdate, this);
 		scene.events.once('shutdown', () => {
 			try { scene.events.off('update', this.handleUpdate, this); } catch {}
-			this.destroyParticles();
+			try { this.bubbleSystem?.destroy(); } catch {}
 		});
 		
 		// Add decorative elements
@@ -79,19 +99,146 @@ export class Background {
 
 
 	private createBackgroundLayers(scene: Scene, assetScale: number): void {
-		// Replace with a single normal background, scaled to cover
-		const bg = scene.add.image(
+		// Depth layer (behind)
+		const bgDepth = scene.add.image(
+			scene.scale.width * 0.5,
+			scene.scale.height * 0.9,
+			'BG-Depth'
+		).setOrigin(0.5, 0.5);
+		this.bgContainer.add(bgDepth);
+		this.bgDepth = bgDepth;
+
+		// Surface layer (between depth and sky)
+		const bgSurface = scene.add.image(
+			scene.scale.width * 0.5,
+			scene.scale.height * 0.9,
+			'BG-Surface'
+		).setOrigin(0.5, 0.5);
+		this.bgContainer.add(bgSurface);
+		this.bgSurface = bgSurface;
+
+		// Sky layer (in front, with its own offset)
+		const bgSky = scene.add.image(
 			scene.scale.width * 0.5,
 			scene.scale.height * 0.5,
-			'BG-Normal'
+			'BG-Sky'
 		).setOrigin(0.5, 0.5);
-		this.bgContainer.add(bg);
+		this.bgContainer.add(bgSky);
+		this.bgSky = bgSky;
 
-		// Scale to cover viewport
-		const scaleX = scene.scale.width / bg.width;
-		const scaleY = scene.scale.height / bg.height;
-		const coverScale = Math.max(scaleX, scaleY);
-		bg.setScale(coverScale);
+		// Scale both to cover viewport
+		const scaleDepthX = scene.scale.width / bgDepth.width;
+		const scaleDepthY = scene.scale.height / bgDepth.height;
+		const depthCoverBase = Math.max(scaleDepthX, scaleDepthY) * this.depthBackgroundModifiers.scale;
+		bgDepth.setScale(
+			depthCoverBase * this.depthBackgroundModifiers.scaleXMultiplier,
+			depthCoverBase * this.depthBackgroundModifiers.scaleYMultiplier
+		);
+
+		const scaleSurfaceX = scene.scale.width / bgSurface.width;
+		const scaleSurfaceY = scene.scale.height / bgSurface.height;
+		const surfaceCoverBase = Math.max(scaleSurfaceX, scaleSurfaceY) * this.surfaceBackgroundModifiers.scale;
+		bgSurface.setScale(
+			surfaceCoverBase * this.surfaceBackgroundModifiers.scaleXMultiplier,
+			surfaceCoverBase * this.surfaceBackgroundModifiers.scaleYMultiplier
+		);
+
+		const scaleSkyX = scene.scale.width / bgSky.width;
+		const scaleSkyY = scene.scale.height / bgSky.height;
+		const skyCoverBase = Math.max(scaleSkyX, scaleSkyY) * this.skyBackgroundModifiers.scale;
+		bgSky.setScale(
+			skyCoverBase * this.skyBackgroundModifiers.scaleXMultiplier,
+			skyCoverBase * this.skyBackgroundModifiers.scaleYMultiplier
+		);
+
+		// Apply per-layer offsets (tweak as needed)
+		const baseDepthX = scene.scale.width * 0.5;
+		const baseDepthY = scene.scale.height * 0.9;
+		bgDepth.setPosition(
+			baseDepthX + this.depthBackgroundModifiers.offsetX,
+			baseDepthY + this.depthBackgroundModifiers.offsetY
+		);
+		const baseSurfaceX = scene.scale.width * 0.5;
+		const baseSurfaceY = scene.scale.height * 0.9;
+		bgSurface.setPosition(
+			baseSurfaceX + this.surfaceBackgroundModifiers.offsetX,
+			baseSurfaceY + this.surfaceBackgroundModifiers.offsetY
+		);
+		const baseSkyX = scene.scale.width * 0.5;
+		const baseSkyY = scene.scale.height * 0.5;
+		bgSky.setPosition(
+			baseSkyX + this.skyBackgroundModifiers.offsetX,
+			baseSkyY + this.skyBackgroundModifiers.offsetY
+		);
+
+		const seaEdgeY = scene.scale.height * 0.5;
+		const seaEdge = scene.add.image(
+			scene.scale.width * 0.5,
+			seaEdgeY,
+			'Sea-Edge'
+		).setOrigin(0.5, 5.0);
+		const seaEdgeScaleBase = scene.scale.width / seaEdge.width;
+		const seaEdgeScale = seaEdgeScaleBase * assetScale;
+		seaEdge.setScale(seaEdgeScale * this.seaEdgeWidthMultiplier, seaEdgeScale);
+		// Place Sea-Edge above the reel slot background (depth 880) but below controller UI (900)
+		seaEdge.setDepth(885);
+
+		const renderer: any = scene.game.renderer;
+		const pipelineManager: any = renderer && renderer.pipelines;
+		if (pipelineManager && typeof pipelineManager.add === 'function') {
+			try {
+				const store = pipelineManager.pipelines;
+				const hasVerticalEdge = store && typeof store.has === 'function' && store.has('WaterWaveVerticalSeaEdge');
+				const hasDepth = store && typeof store.has === 'function' && store.has('WaterWaveDepth');
+				const hasSurface = store && typeof store.has === 'function' && store.has('WaterWaveSurface');
+				if (!hasVerticalEdge) {
+					pipelineManager.add('WaterWaveVerticalSeaEdge', new WaterWaveVerticalPipeline(scene.game, {
+						amplitude: 0.015,
+						frequency: 15.0,
+						speed: 6
+					}));
+				}
+				if (!hasDepth) {
+					const depthWave = new WaterWavePipeline(scene.game, {
+						amplitude: 0.02,
+						frequency: 10.0,
+						speed: 2.0
+					});
+					pipelineManager.add('WaterWaveDepth', depthWave);
+					this.depthWavePipeline = depthWave;
+				} else if (renderer && typeof renderer.getPipeline === 'function') {
+					try {
+						const existingDepth = renderer.getPipeline('WaterWaveDepth');
+						if (existingDepth) {
+							this.depthWavePipeline = existingDepth as WaterWavePipeline;
+						}
+					} catch (_getDepthErr) {}
+				}
+				if (!hasSurface) {
+					const surfaceWave = new WaterWavePipeline(scene.game, {
+						amplitude: 0.02,
+						frequency: 15.0,
+						speed: 0.9
+					});
+					pipelineManager.add('WaterWaveSurface', surfaceWave);
+					this.surfaceWavePipeline = surfaceWave;
+				} else if (renderer && typeof renderer.getPipeline === 'function') {
+					try {
+						const existingSurface = renderer.getPipeline('WaterWaveSurface');
+						if (existingSurface) {
+							this.surfaceWavePipeline = existingSurface as WaterWavePipeline;
+						}
+					} catch (_getSurfaceErr) {}
+				}
+			} catch (_e) {}
+			seaEdge.setPipeline('WaterWaveVerticalSeaEdge');
+			if (this.bgDepth) {
+				this.bgDepth.setPipeline('WaterWaveDepth');
+			}
+			if (this.bgSurface) {
+				this.bgSurface.setPipeline('WaterWaveSurface');
+			}
+		}
 
 		// Optional tiny padding if desired to avoid edge seams
 		// bg.setScale(bg.scaleX * 1.02, bg.scaleY * 1.02);
@@ -100,183 +247,127 @@ export class Background {
 
 	}
 
-	private createParticleSystem(scene: Scene): void {
-		const width = scene.scale.width;
-		const height = scene.scale.height;
-		for (let i = 0; i < this.PARTICLE_COUNT; i++) {
-			this.createFieryParticle(scene, width, height);
-		}
-	}
-
-	private createFieryParticle(scene: Scene, screenWidth: number, screenHeight: number): void {
-		const graphics = scene.add.graphics();
-		// Random position including off-screen margins for smooth entry
-		const x = Math.random() * (screenWidth + this.SCREEN_MARGIN * 2) - this.SCREEN_MARGIN;
-		const y = Math.random() * (screenHeight + this.SCREEN_MARGIN * 2) - this.SCREEN_MARGIN;
-		// Size 1.5–3.5 px
-		const size = Math.random() * 2.0 + 1.5;
-		// Random velocity
-		const vx = (Math.random() - 0.5) * 2;
-		const vy = (Math.random() - 0.5) * 2;
-		// Gold palette
-		const colors = [0xffd700, 0xffe04a, 0xfff0a0, 0xffc107];
-		const color = colors[Math.floor(Math.random() * colors.length)];
-		// Base alpha
-		const alpha = Math.random() * 0.6 + 0.3;
-		// Lifetime 5–15s
-		const lifetime = Math.random() * 10000 + 5000;
-		const particle = { graphics, x, y, vx, vy, size, color, alpha, lifetime, age: 0, screenWidth, screenHeight };
-		this.particles.push(particle);
-		this.bgContainer.add(graphics);
-		this.drawParticle(particle);
-	}
-
-	private drawParticle(particle: { graphics: Phaser.GameObjects.Graphics; x: number; y: number; size: number; color: number; alpha: number; }): void {
-		const { graphics, x, y, size, color, alpha } = particle;
-		graphics.clear();
-		// Layered glow ellipses
-		const w = size * (Math.random() * 0.8 + 0.6);
-		const h = size * (Math.random() * 1.2 + 0.8);
-		graphics.fillStyle(color, alpha * 0.10); graphics.fillEllipse(x, y, w * 3.0, h * 3.0);
-		graphics.fillStyle(color, alpha * 0.20); graphics.fillEllipse(x, y, w * 2.2, h * 2.2);
-		graphics.fillStyle(color, alpha * 0.40); graphics.fillEllipse(x, y, w * 1.5, h * 1.5);
-		graphics.fillStyle(color, alpha * 0.70); graphics.fillEllipse(x, y, w * 0.8, h * 0.8);
-		graphics.fillStyle(0xffffaa, alpha * 0.30); graphics.fillEllipse(x, y, w * 0.35, h * 0.35);
-		graphics.setDepth(-9); // just above base bg, still behind gameplay
-	}
-
 	private handleUpdate(_time: number, delta: number): void {
 		if (!this.sceneRef) return;
-		this.updateWind(delta);
-		this.updateParticles(delta);
-	}
-
-	private updateWind(delta: number): void {
-		this.windChangeTimer += delta;
-		if (this.windChangeTimer >= this.WIND_CHANGE_INTERVAL) {
-			this.windChangeTimer = 0;
-			const windChance = Math.random();
-			let dx = 0, dy = 0, s = 0;
-			if (windChance < 0.60) {
-				const dirIndex = Math.floor(windChance / 0.15);
-				const dirs = [ {x:-1,y:0}, {x:1,y:0}, {x:-1,y:-1}, {x:1,y:-1} ];
-				dx = dirs[dirIndex].x; dy = dirs[dirIndex].y; s = Math.random() * this.WIND_STRENGTH_MAX + 0.2;
-			} else { dx = 0; dy = 0; s = Math.random() * 0.3; }
-			this.windDirectionX = dx; this.windDirectionY = dy; this.windStrength = s;
+		if (this.bubbleSystem) {
+			this.bubbleSystem.update(delta);
 		}
 	}
 
-	private updateParticles(delta: number): void {
-		if (!this.sceneRef) return;
-		const sw = this.sceneRef.scale.width;
-		const sh = this.sceneRef.scale.height;
-		for (let i = this.particles.length - 1; i >= 0; i--) {
-			const p = this.particles[i];
-			p.age += delta;
-			if (p.age > p.lifetime) {
-				try { p.graphics.destroy(); } catch {}
-				this.particles.splice(i, 1);
-				continue;
-			}
-			// Wind influence
-			p.vx += this.windDirectionX * this.windStrength * 0.5;
-			p.vy += this.windDirectionY * this.windStrength * 0.3;
-			// Random jitter (reduced under strong wind)
-			const rf = this.windStrength > 0.5 ? 0.05 : 0.10;
-			p.vx += (Math.random() - 0.5) * rf;
-			p.vy += (Math.random() - 0.5) * rf;
-			// Clamp speed
-			p.vx = Math.max(-3, Math.min(3, p.vx));
-			p.vy = Math.max(-2, Math.min(2, p.vy));
-			// Integrate
-			p.x += p.vx; p.y += p.vy;
-			// Wrap around
-			if (p.x < -this.SCREEN_MARGIN) p.x = sw + this.SCREEN_MARGIN; else if (p.x > sw + this.SCREEN_MARGIN) p.x = -this.SCREEN_MARGIN;
-			if (p.y < -this.SCREEN_MARGIN) p.y = sh + this.SCREEN_MARGIN; else if (p.y > sh + this.SCREEN_MARGIN) p.y = -this.SCREEN_MARGIN;
-			// Fade by age
-			const ageRatio = p.age / p.lifetime; p.alpha = Math.max(0.1, 1 - ageRatio * 0.5);
-			this.drawParticle(p);
+	updateSurfaceBackgroundModifiers(mods: { offsetX?: number; offsetY?: number; scale?: number; scaleXMultiplier?: number; scaleYMultiplier?: number }): void {
+		if (typeof mods.offsetX === 'number') this.surfaceBackgroundModifiers.offsetX = mods.offsetX;
+		if (typeof mods.offsetY === 'number') this.surfaceBackgroundModifiers.offsetY = mods.offsetY;
+		if (typeof mods.scale === 'number') this.surfaceBackgroundModifiers.scale = mods.scale;
+		if (typeof mods.scaleXMultiplier === 'number') this.surfaceBackgroundModifiers.scaleXMultiplier = mods.scaleXMultiplier;
+		if (typeof mods.scaleYMultiplier === 'number') this.surfaceBackgroundModifiers.scaleYMultiplier = mods.scaleYMultiplier;
+		if (this.bgSurface && this.sceneRef) {
+			const scaleSurfaceX = this.sceneRef.scale.width / this.bgSurface.width;
+			const scaleSurfaceY = this.sceneRef.scale.height / this.bgSurface.height;
+			const surfaceCoverBase = Math.max(scaleSurfaceX, scaleSurfaceY) * this.surfaceBackgroundModifiers.scale;
+			this.bgSurface.setScale(
+				surfaceCoverBase * this.surfaceBackgroundModifiers.scaleXMultiplier,
+				surfaceCoverBase * this.surfaceBackgroundModifiers.scaleYMultiplier
+			);
+
+			const baseSurfaceX = this.sceneRef.scale.width * 0.5;
+			const baseSurfaceY = this.sceneRef.scale.height * 0.9;
+			this.bgSurface.setPosition(
+				baseSurfaceX + this.surfaceBackgroundModifiers.offsetX,
+				baseSurfaceY + this.surfaceBackgroundModifiers.offsetY
+			);
 		}
-		// Maintain target count
-		while (this.particles.length < this.PARTICLE_COUNT) {
-			this.createFieryParticle(this.sceneRef, sw, sh);
-		}
-	}
-
-	private destroyParticles(): void {
-		for (const p of this.particles) {
-			try { p.graphics.destroy(); } catch {}
-		}
-		this.particles = [];
-	}
-
-	private createDecorativeElements(scene: Scene, assetScale: number): void {
-		// Add balloons
-		const balloon1 = scene.add.image(
-			scene.scale.width * 0.04,
-			scene.scale.height * 0.5,
-			'balloon-01'
-		).setOrigin(0.5, 0.5).setScale(assetScale);
-		this.bgContainer.add(balloon1);
-
-		const balloon2 = scene.add.image(
-			scene.scale.width * 0.06,
-			scene.scale.height * 0.3,
-			'balloon-02'
-		).setOrigin(0.5, 0.5).setScale(assetScale);
-		this.bgContainer.add(balloon2);
-
-		const balloon3 = scene.add.image(
-			scene.scale.width * 0.95,
-			scene.scale.height * 0.6,
-			'balloon-03'
-		).setOrigin(0.5, 0.5).setScale(assetScale);
-		this.bgContainer.add(balloon3);
-
-		const balloon4 = scene.add.image(
-			scene.scale.width * 0.92,
-			scene.scale.height * 0.35,
-			'balloon-04'
-		).setOrigin(0.5, 0.5).setScale(assetScale);
-		this.bgContainer.add(balloon4);
-
-		// Add Christmas lights
-		const xmasLights = scene.add.image(
-			scene.scale.width * 0.495,
-			scene.scale.height * 0.40,
-			'reel-xmaslight-default'
-		).setOrigin(0.5, 0.5).setScale(assetScale);
-		this.bgContainer.add(xmasLights);
-
-		
-	}
-
-	private createUIElements(scene: Scene, assetScale: number): void {
-		// Add logo
-		const logoY = scene.scale.height * 0.05;
-		const logo = scene.add.image(
-			scene.scale.width * 0.5,
-			logoY,
-			'thats-bait-logo'
-		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(1);
-		this.bgContainer.add(logo);
-
-		// Wave-like floating motion for the logo in the main game scene
-		const waveOffset = scene.scale.height * 0.01;
-		scene.tweens.add({
-			targets: logo,
-			y: { from: logoY - waveOffset, to: logoY + waveOffset },
-			rotation: { from: -0.03, to: 0.03 },
-			duration: 2600,
-			ease: 'Sine.easeInOut',
-			yoyo: true,
-			repeat: -1
-		});
 	}
 
 	resize(scene: Scene): void {
 		if (this.bgContainer) {
 			this.bgContainer.setSize(scene.scale.width, scene.scale.height);
+		}
+		if (this.bubbleSystem) {
+			this.bubbleSystem.resize();
+		}
+	}
+
+	configureBubbleParticles(modifiers: BubbleParticleModifiers): void {
+		if (this.bubbleSystem) {
+			this.bubbleSystem.configure(modifiers);
+		}
+	}
+
+	updateDepthBackgroundModifiers(mods: { offsetX?: number; offsetY?: number; scale?: number; scaleXMultiplier?: number; scaleYMultiplier?: number }): void {
+		if (typeof mods.offsetX === 'number') this.depthBackgroundModifiers.offsetX = mods.offsetX;
+		if (typeof mods.offsetY === 'number') this.depthBackgroundModifiers.offsetY = mods.offsetY;
+		if (typeof mods.scale === 'number') this.depthBackgroundModifiers.scale = mods.scale;
+		if (typeof mods.scaleXMultiplier === 'number') this.depthBackgroundModifiers.scaleXMultiplier = mods.scaleXMultiplier;
+		if (typeof mods.scaleYMultiplier === 'number') this.depthBackgroundModifiers.scaleYMultiplier = mods.scaleYMultiplier;
+		if (this.bgDepth && this.sceneRef) {
+			const scaleDepthX = this.sceneRef.scale.width / this.bgDepth.width;
+			const scaleDepthY = this.sceneRef.scale.height / this.bgDepth.height;
+			const depthCoverBase = Math.max(scaleDepthX, scaleDepthY) * this.depthBackgroundModifiers.scale;
+			this.bgDepth.setScale(
+				depthCoverBase * this.depthBackgroundModifiers.scaleXMultiplier,
+				depthCoverBase * this.depthBackgroundModifiers.scaleYMultiplier
+			);
+
+			const baseDepthX = this.sceneRef.scale.width * 0.5;
+			const baseDepthY = this.sceneRef.scale.height * 0.9;
+			this.bgDepth.setPosition(
+				baseDepthX + this.depthBackgroundModifiers.offsetX,
+				baseDepthY + this.depthBackgroundModifiers.offsetY
+			);
+		}
+	}
+
+	updateDepthWaveModifiers(mods: { amplitude?: number; frequency?: number; speed?: number }): void {
+		if (!this.depthWavePipeline) {
+			return;
+		}
+		if (typeof mods.amplitude === 'number') {
+			this.depthWavePipeline.setAmplitude(mods.amplitude);
+		}
+		if (typeof mods.frequency === 'number') {
+			this.depthWavePipeline.setFrequency(mods.frequency);
+		}
+		if (typeof mods.speed === 'number') {
+			this.depthWavePipeline.setSpeed(mods.speed);
+		}
+	}
+
+	updateSurfaceWaveModifiers(mods: { amplitude?: number; frequency?: number; speed?: number }): void {
+		if (!this.surfaceWavePipeline) {
+			return;
+		}
+		if (typeof mods.amplitude === 'number') {
+			this.surfaceWavePipeline.setAmplitude(mods.amplitude);
+		}
+		if (typeof mods.frequency === 'number') {
+			this.surfaceWavePipeline.setFrequency(mods.frequency);
+		}
+		if (typeof mods.speed === 'number') {
+			this.surfaceWavePipeline.setSpeed(mods.speed);
+		}
+	}
+
+	updateSkyBackgroundModifiers(mods: { offsetX?: number; offsetY?: number; scale?: number; scaleXMultiplier?: number; scaleYMultiplier?: number }): void {
+		if (typeof mods.offsetX === 'number') this.skyBackgroundModifiers.offsetX = mods.offsetX;
+		if (typeof mods.offsetY === 'number') this.skyBackgroundModifiers.offsetY = mods.offsetY;
+		if (typeof mods.scale === 'number') this.skyBackgroundModifiers.scale = mods.scale;
+		if (typeof mods.scaleXMultiplier === 'number') this.skyBackgroundModifiers.scaleXMultiplier = mods.scaleXMultiplier;
+		if (typeof mods.scaleYMultiplier === 'number') this.skyBackgroundModifiers.scaleYMultiplier = mods.scaleYMultiplier;
+		if (this.bgSky && this.sceneRef) {
+			const scaleSkyX = this.sceneRef.scale.width / this.bgSky.width;
+			const scaleSkyY = this.sceneRef.scale.height / this.bgSky.height;
+			const skyCoverBase = Math.max(scaleSkyX, scaleSkyY) * this.skyBackgroundModifiers.scale;
+			this.bgSky.setScale(
+				skyCoverBase * this.skyBackgroundModifiers.scaleXMultiplier,
+				skyCoverBase * this.skyBackgroundModifiers.scaleYMultiplier
+			);
+
+			const baseSkyX = this.sceneRef.scale.width * 0.5;
+			const baseSkyY = this.sceneRef.scale.height * 0.5;
+			this.bgSky.setPosition(
+				baseSkyX + this.skyBackgroundModifiers.offsetX,
+				baseSkyY + this.skyBackgroundModifiers.offsetY
+			);
 		}
 	}
 
