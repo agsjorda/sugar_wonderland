@@ -23,6 +23,7 @@ export class BonusHeader {
 	// Tracks cumulative total during bonus mode by incrementing each spin's subtotal
 	private cumulativeBonusWin: number = 0;
 	private hasStartedBonusTracking: boolean = false;
+	private hasShownFinalTotalWin: boolean = false;
 
 	// Logo spine config (mirrors base header)
 	private logoOffsetX: number = 0;
@@ -451,15 +452,50 @@ export class BonusHeader {
 			this.hideWinningsDisplay();
 		});
 
+		// Listen for autoplay stop to reveal final TOTAL WIN when bonus free spins finish
+		gameEventManager.on(GameEventType.AUTO_STOP, () => {
+			// Only react when bonus free spins have fully completed
+			if (!gameStateManager.isBonusFinished || this.hasShownFinalTotalWin) {
+				return;
+			}
+			let totalWin = this.cumulativeBonusWin;
+			try {
+				const sceneAny: any = this.bonusHeaderContainer?.scene;
+				const symbolsComponent = sceneAny?.symbols;
+				const spinData = symbolsComponent?.currentSpinData;
+				const slot = spinData?.slot;
+				if (slot) {
+					const freespinData = slot.freespin || slot.freeSpin;
+					if (freespinData) {
+						if (typeof freespinData.totalWin === 'number') {
+							totalWin = freespinData.totalWin;
+						} else if (Array.isArray(freespinData.items)) {
+							totalWin = freespinData.items.reduce((sum: number, item: any) => {
+								return sum + (item.subTotalWin || 0);
+							}, 0);
+						}
+					}
+				}
+			} catch (e) {
+				console.warn('[BonusHeader] AUTO_STOP: failed to derive backend freespin total, falling back to cumulativeBonusWin', e);
+			}
+			console.log(`[BonusHeader] AUTO_STOP (bonus finished): showing final TOTAL WIN = $${totalWin}`);
+			if (this.youWonText) {
+				this.youWonText.setText('TOTAL WIN');
+			}
+			this.showWinningsDisplay(totalWin);
+			this.hasShownFinalTotalWin = true;
+		});
+
 		// Listen for reels start to hide winnings display
 		gameEventManager.on(GameEventType.REELS_START, () => {
 			console.log('[BonusHeader] Reels started');
-			// During bonus mode, display TOTAL WIN accumulated so far at the start of the spin
 			if (gameStateManager.isBonus) {
 				// Initialize tracking on first spin in bonus mode
 				if (!this.hasStartedBonusTracking) {
 					this.cumulativeBonusWin = 0;
 					this.hasStartedBonusTracking = true;
+					this.hasShownFinalTotalWin = false;
 				}
 				const totalWinSoFar = this.cumulativeBonusWin;
 				console.log(`[BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $${totalWinSoFar}`);
@@ -533,9 +569,9 @@ export class BonusHeader {
 			}
 		});
 
-		// On WIN_STOP during bonus, only accumulate subtotal for next REELS_START display
+		// On WIN_STOP during bonus, accumulate subtotal and, on the final free spin, show TOTAL WIN immediately
 		gameEventManager.on(GameEventType.WIN_STOP, () => {
-			if (!gameStateManager.isBonus) {
+			if (!gameStateManager.isBonus && !gameStateManager.isBonusFinished) {
 				return;
 			}
 			const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
@@ -550,6 +586,18 @@ export class BonusHeader {
 			}
 			this.cumulativeBonusWin += (spinWin || 0);
 			console.log(`[BonusHeader] WIN_STOP (bonus): accumulated spinWin=$${spinWin}, cumulativeBonusWin=$${this.cumulativeBonusWin}`);
+
+			// When the bonus is finished, show the final TOTAL WIN for the entire bonus session
+			if (gameStateManager.isBonusFinished && !this.hasShownFinalTotalWin) {
+				this.hasShownFinalTotalWin = true;
+				try {
+					const totalToShow = this.cumulativeBonusWin;
+					if (this.youWonText) {
+						this.youWonText.setText('TOTAL WIN');
+					}
+					this.showWinningsDisplay(totalToShow);
+				} catch {}
+			}
 		});
 	}
 

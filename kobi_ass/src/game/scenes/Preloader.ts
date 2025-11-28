@@ -282,8 +282,6 @@ export class Preloader extends Scene
 		try { (window as any).hideBootLoader?.(); } catch {}
 		
 		EventBus.emit('current-scene-ready', this);	
-
-		this.startLazyBonusAssetLoad();
 	}
 
 	preload ()
@@ -452,31 +450,4 @@ export class Preloader extends Scene
 			this.pressToPlayText?.setFontFamily('poppins-regular');
 		}
     }
-	private startLazyBonusAssetLoad(): void {
-		if (this.lazyBonusLoadStarted) {
-			return;
-		}
-		this.lazyBonusLoadStarted = true;
-
-		const queueBonusAssets = () => {
-			console.log('[Preloader] Starting background bonus asset load');
-			this.assetLoader.loadBonusBackgroundAssets(this);
-			this.assetLoader.loadBonusHeaderAssets(this);
-			const onBonusComplete = () => {
-				console.log('[Preloader] Background bonus assets loaded');
-			};
-			this.load.once('complete', onBonusComplete, this);
-			this.load.start();
-		};
-
-		const loaderAny = this.load as any;
-		const isBusy = !!(loaderAny?.isLoading || loaderAny?.isRunning);
-		if (isBusy) {
-			this.load.once('complete', () => {
-				this.time.delayedCall(0, queueBonusAssets);
-			});
-		} else {
-			this.time.delayedCall(0, queueBonusAssets);
-		}
-	}
 }

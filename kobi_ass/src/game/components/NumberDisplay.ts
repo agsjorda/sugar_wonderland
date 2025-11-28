@@ -14,6 +14,7 @@ export interface NumberDisplayConfig {
 	suffix?: string;
 	commaYOffset?: number;
 	dotYOffset?: number;
+	maxWidth?: number;
 }
 
 export class NumberDisplay {
@@ -55,6 +56,7 @@ export class NumberDisplay {
 			suffix: '',
 			commaYOffset: 0,
 			dotYOffset: 0,
+			maxWidth: undefined,
 			...config
 		};
 	}
@@ -100,25 +102,37 @@ export class NumberDisplay {
 		const formattedNumber = this.formatNumber(this.currentValue);
 		console.log(`[NumberDisplay] Displaying: ${formattedNumber}`);
 
-		// Create sprites for each character
+		// Determine target scale so the number fits within the allowed width
 		let currentX = 0;
-		const totalWidth = this.calculateTotalWidth(formattedNumber);
+		let targetScale = this.config.scale!;
+		let maxWidth = this.config.maxWidth;
+		if (!maxWidth) {
+			// Default to a fraction of the screen width if no explicit maxWidth provided
+			const screenWidth = this.scene.scale.width;
+			maxWidth = screenWidth * 0.8;
+		}
+		let totalWidth = this.calculateTotalWidth(formattedNumber, targetScale);
+		if (maxWidth && totalWidth > maxWidth && totalWidth > 0) {
+			const scaleFactor = maxWidth / totalWidth;
+			targetScale = targetScale * scaleFactor;
+			totalWidth = this.calculateTotalWidth(formattedNumber, targetScale);
+		}
 
-		// Adjust starting position based on alignment
+		// Adjust starting position based on alignment and final width
 		if (this.config.alignment === 'center') {
 			currentX = -totalWidth / 2;
 		} else if (this.config.alignment === 'right') {
 			currentX = -totalWidth;
 		}
 
-		// Create sprites for each character
+		// Create sprites for each character using the computed scale
 		for (let i = 0; i < formattedNumber.length; i++) {
 			const char = formattedNumber[i];
 			const key = this.numberKeys[char];
 			
 			if (key && this.scene!.textures.exists(key)) {
 				const sprite = this.scene!.add.image(currentX, 0, key);
-				sprite.setScale(this.config.scale!);
+				sprite.setScale(targetScale);
 				sprite.setOrigin(0, 0.5);
 				
 				// Apply y-offset for commas and decimal points
@@ -132,7 +146,7 @@ export class NumberDisplay {
 				this.numberSprites.push(sprite);
 				
 				// Move to next position
-				currentX += sprite.width * this.config.scale! + this.config.spacing!;
+				currentX += sprite.width * targetScale + this.config.spacing!;
 			} else {
 				console.warn(`[NumberDisplay] Missing texture for character: ${char}`);
 			}
@@ -186,8 +200,9 @@ export class NumberDisplay {
 	/**
 	 * Calculate total width of the formatted number
 	 */
-	private calculateTotalWidth(formattedNumber: string): number {
+	private calculateTotalWidth(formattedNumber: string, scaleOverride?: number): number {
 		let totalWidth = 0;
+		const effectiveScale = scaleOverride !== undefined ? scaleOverride : this.config.scale!;
 		
 		for (let i = 0; i < formattedNumber.length; i++) {
 			const char = formattedNumber[i];
@@ -195,7 +210,7 @@ export class NumberDisplay {
 			
 			if (key && this.scene!.textures.exists(key)) {
 				const texture = this.scene!.textures.get(key);
-				totalWidth += texture.source[0].width * this.config.scale! + this.config.spacing!;
+				totalWidth += texture.source[0].width * effectiveScale + this.config.spacing!;
 			}
 		}
 		

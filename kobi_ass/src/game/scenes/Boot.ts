@@ -78,7 +78,7 @@ export class Boot extends Scene
 			studio.show();
 
 			// Queue all game assets and start loader (progress handled by studio screen)
-			queueGameAssetLoading(this, this.assetLoader, { includeBonusAssets: false });
+			queueGameAssetLoading(this, this.assetLoader, { includeBonusAssets: true });
 			this.load.once('complete', () => {
 				// After studio screen fades out, proceed to Preloader UI
 				this.events.once('studio-fade-complete', () => {

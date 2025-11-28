@@ -4371,8 +4371,16 @@ export class Symbols {
     
     // Show congrats dialog with total win amount
     if (gameScene.dialogs && typeof gameScene.dialogs.showCongrats === 'function') {
-      gameScene.dialogs.showCongrats(this.scene, { winAmount: totalWin });
-      console.log(`[Symbols] Congrats dialog shown with total win: ${totalWin}`);
+      const delayMs = 500;
+      if (gameScene.time && typeof gameScene.time.delayedCall === 'function') {
+        gameScene.time.delayedCall(delayMs, () => {
+          gameScene.dialogs.showCongrats(this.scene, { winAmount: totalWin });
+          console.log(`[Symbols] Congrats dialog shown with total win: ${totalWin}`);
+        });
+      } else {
+        gameScene.dialogs.showCongrats(this.scene, { winAmount: totalWin });
+        console.log(`[Symbols] Congrats dialog shown with total win: ${totalWin}`);
+      }
     } else {
       console.warn('[Symbols] Dialogs component not available for congrats dialog');
     }

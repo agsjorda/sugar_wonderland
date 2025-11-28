@@ -2372,16 +2372,7 @@ setBuyFeatureBetAmount(amount: number): void {
 
 		gameEventManager.on(GameEventType.REELS_STOP, () => {
 			console.log('[SlotController] Reels stopped event received - updating spin button state');
-			// Single decrement per spinId at REELS_STOP
-			if (gameStateManager.isAutoPlaying && this.autoplaySpinsRemaining > 0 && !this.hasDecrementedAutoplayForCurrentSpin) {
-				if (this.lastDecrementSpinId !== this.currentSpinId) {
-					this.autoplaySpinsRemaining = Math.max(0, this.autoplaySpinsRemaining - 1);
-					this.updateAutoplaySpinsRemainingText(this.autoplaySpinsRemaining);
-					this.hasDecrementedAutoplayForCurrentSpin = true;
-					this.lastDecrementSpinId = this.currentSpinId;
-					console.log(`[SlotController] Decremented on REELS_STOP (spinId=${this.currentSpinId}). Remaining: ${this.autoplaySpinsRemaining}`);
-				}
-			}
+			// Autoplay UI counter is now decremented before spin start in performAutoplaySpin
 
 			// Schedule next autoplay spin only once per spinId and only if no win dialog is showing
 			if (gameStateManager.isAutoPlaying && this.autoplaySpinsRemaining > 0 && !gameStateManager.isShowingWinDialog && !this.hasScheduledNextAutoplayForCurrentSpin && this.lastScheduleSpinId !== this.currentSpinId) {
@@ -2474,7 +2465,7 @@ setBuyFeatureBetAmount(amount: number): void {
 				return;
 			}
 			
-			// Note: autoplaySpinsRemaining is decremented in REELS_STOP (single decrement per spin)
+			// Note: autoplaySpinsRemaining is now decremented before each autoplay spin in performAutoplaySpin
 			// Note: AUTO_STOP is emitted when spins reach 0
 			
 			// For manual spins, re-enable spin button and hide autoplay counter immediately after REELS_STOP
@@ -2964,71 +2955,6 @@ setBuyFeatureBetAmount(amount: number): void {
 	public hasPausedAutoplayToResume(): boolean {
 		return this.resumeAutoplayAfterBonusPending && this.autoplaySpinsBackupBeforeBonus > 0;
 	}
-
-	public resumeAutoplayAfterBonusIfPaused(): void {
-		this.tryResumeAutoplayAfterBonus();
-	}
-
-	/**
-	 * Perform a single autoplay spin
-	 */
-	private async performAutoplaySpin(): Promise<void> {
-		// Safety gate: only spin when the game is fully idle and safe
-		try {
-			const gsm = gameStateManager;
-			const sceneAny: any = this.scene as any;
-			const scatterMgrBusy = !!(sceneAny?.symbols?.scatterAnimationManager && typeof sceneAny.symbols.scatterAnimationManager.isAnimationInProgress === 'function' && sceneAny.symbols.scatterAnimationManager.isAnimationInProgress());
-			const anticipationActive = !!sceneAny?.__isScatterAnticipationActive;
-			if (
-				!gsm || !gsm.isAutoPlaying ||
-				this.autoplaySpinsRemaining <= 0 ||
-				gsm.isReelSpinning ||
-				gsm.isShowingWinDialog ||
-				gsm.isShowingWinlines ||
-				gsm.isScatter ||
-				scatterMgrBusy ||
-				anticipationActive
-			) {
-				// Re-check soon; don't overlap spins
-				const fallbackDelay = 250;
-				console.log('[SlotController] Autoplay gated - rescheduling performAutoplaySpin in', fallbackDelay, 'ms', {
-					isAutoPlaying: gsm?.isAutoPlaying,
-					spinsRemaining: this.autoplaySpinsRemaining,
-					isReelSpinning: gsm?.isReelSpinning,
-					isShowingWinDialog: gsm?.isShowingWinDialog,
-					isShowingWinlines: gsm?.isShowingWinlines,
-					isScatter: gsm?.isScatter,
-					scatterMgrBusy,
-					anticipationActive
-				});
-				this.scheduleNextAutoplaySpin(fallbackDelay);
-				return;
-			}
-			// Force-hide any leftover anticipation effects before starting a new spin
-			try { sceneAny?.scatterAnticipation?.hide?.(); } catch {}
-			try { sceneAny?.scatterAnticipation2?.hide?.(); } catch {}
-			try { sceneAny?.symbols?.stopReelBgAnticipationFlash?.(); } catch {}
-			try { sceneAny?.symbols?.tweenReelBackgroundToSpinTint?.(0); } catch {}
-			try { sceneAny?.symbols?.restoreSymbolsAboveReelBg?.(); } catch {}
-		} catch {}
-		// Play spin button animations
-		this.playSpinButtonAnimation();
-		this.rotateSpinButton();
-		
-		// Play autoplay button animation once per spin
-		this.playAutoplayAnimation();
-		
-		// Use the centralized spin handler
-		await this.handleSpin();
-		
-		// Note: autoplaySpinsRemaining is decremented in REELS_STOP handler
-		console.log(`[SlotController] Autoplay spin initiated, spins remaining: ${this.autoplaySpinsRemaining}`);
-	}
-
-	/**
-	 * Schedule next autoplay spin based on game state
-	 * @param delay - Delay in milliseconds (will be affected by turbo if not already applied)
-	 */
 	public scheduleNextAutoplaySpin(delay: number = 500): void {
 		if (this.autoplaySpinsRemaining <= 0) {
 			console.log('[SlotController] No more autoplay spins to schedule');

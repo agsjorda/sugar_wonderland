@@ -341,17 +341,30 @@ export class BonusHeader {
 			if (!gameStateManager.isBonus) {
 				return;
 			}
-			const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
+			const sceneAny: any = this.bonusHeaderContainer?.scene;
+			const symbolsComponent = sceneAny?.symbols;
 			const spinData = symbolsComponent?.currentSpinData;
 			let spinWin = 0;
 			if (spinData?.slot?.paylines && spinData.slot.paylines.length > 0) {
 				spinWin = this.calculateTotalWinFromPaylines(spinData.slot.paylines);
 			}
-			if (this.youWonText) {
-				this.youWonText.setText('YOU WIN');
-			}
 			if (spinWin > 0) {
-				this.showWinningsDisplay(spinWin);
+				if (sceneAny?.time?.delayedCall) {
+					sceneAny.time.delayedCall(300, () => {
+						if (!gameStateManager.isBonus) {
+							return;
+						}
+						if (this.youWonText) {
+							this.youWonText.setText('YOU WIN');
+						}
+						this.showWinningsDisplay(spinWin);
+					});
+				} else {
+					if (this.youWonText) {
+						this.youWonText.setText('YOU WIN');
+					}
+					this.showWinningsDisplay(spinWin);
+				}
 			} else {
 				this.hideWinningsDisplay();
 			}
