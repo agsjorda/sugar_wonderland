@@ -240,6 +240,41 @@ export class BonusHeader {
 			this.hideWinningsDisplay();
 		});
 
+		// Listen for autoplay stop to reveal final TOTAL WIN when bonus free spins finish
+		gameEventManager.on(GameEventType.AUTO_STOP, () => {
+			// Only react when bonus free spins have fully completed
+			if (!gameStateManager.isBonusFinished) {
+				return;
+			}
+			// Prefer backend freespin total so this matches the Congrats dialog
+			let totalWin = this.cumulativeBonusWin;
+			try {
+				const sceneAny: any = this.bonusHeaderContainer?.scene;
+				const symbolsComponent = sceneAny?.symbols;
+				const spinData = symbolsComponent?.currentSpinData;
+				const slot = spinData?.slot;
+				if (slot) {
+					const freespinData = slot.freespin || slot.freeSpin;
+					if (freespinData) {
+						if (typeof freespinData.totalWin === 'number') {
+							totalWin = freespinData.totalWin;
+						} else if (Array.isArray(freespinData.items)) {
+							totalWin = freespinData.items.reduce((sum: number, item: any) => {
+								return sum + (item.subTotalWin || 0);
+							}, 0);
+						}
+					}
+				}
+			} catch (e) {
+				console.warn('[BonusHeader] AUTO_STOP: failed to derive backend freespin total, falling back to cumulativeBonusWin', e);
+			}
+			console.log(`[BonusHeader] AUTO_STOP (bonus finished): showing final TOTAL WIN = $${totalWin}`);
+			if (this.youWonText) {
+				this.youWonText.setText('TOTAL WIN');
+			}
+			this.showWinningsDisplay(totalWin);
+		});
+
 		// Listen for reels start to hide winnings display
 		gameEventManager.on(GameEventType.REELS_START, () => {
 			console.log('[BonusHeader] Reels started');

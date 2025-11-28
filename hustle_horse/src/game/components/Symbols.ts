@@ -5237,6 +5237,14 @@ async function dropReels(self: Symbols, data: Data): Promise<void> {
     console.warn('[Symbols] Anticipation check failed:', e);
     extendLastReelDrop = false;
   }
+  try {
+    if (gameStateManager.isBonus) {
+      if (extendLastReelDrop) {
+        console.log('[Symbols] Bonus mode active - disabling scatter anticipation extension');
+      }
+      extendLastReelDrop = false;
+    }
+  } catch {}
   // Persist anticipation state on scene for cross-function checks
   try { (self.scene as any).__isScatterAnticipationActive = extendLastReelDrop; } catch {}
 

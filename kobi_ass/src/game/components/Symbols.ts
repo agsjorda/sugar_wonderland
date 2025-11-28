@@ -96,6 +96,7 @@ export class Symbols {
   private freeSpinAutoplayWaitingForReelsStop: boolean = false;
   private freeSpinAutoplayWaitingForWinlines: boolean = false;
   private freeSpinAutoplayTriggered: boolean = false;
+  private freeSpinAutoplayWaitingForDialogClose: boolean = false;
   private dialogListenerSetup: boolean = false;
 
   constructor() { 
@@ -140,6 +141,7 @@ export class Symbols {
       this.freeSpinAutoplayWaitingForReelsStop = false;
       this.freeSpinAutoplayWaitingForWinlines = false;
       this.freeSpinAutoplayTriggered = false;
+      this.freeSpinAutoplayWaitingForDialogClose = false;
       this.dialogListenerSetup = false;
     });
 
@@ -708,6 +710,28 @@ export class Symbols {
         // Show congrats now and reset the flag; bonus mode exit happens on congrats close
         this.showCongratsDialogAfterDelay();
         gameStateManager.isBonusFinished = false;
+      }
+
+      // If free spin autoplay was waiting for dialog close, resume autoplay
+      if (this.freeSpinAutoplayActive && this.freeSpinAutoplayWaitingForDialogClose) {
+        console.log('[Symbols] Free spin autoplay was waiting for dialog close - scheduling next free spin');
+        this.freeSpinAutoplayWaitingForDialogClose = false;
+
+        // Clear any existing timer since dialog has fully closed
+        if (this.freeSpinAutoplayTimer) {
+          this.freeSpinAutoplayTimer.destroy();
+          this.freeSpinAutoplayTimer = null;
+        }
+
+        // Use the same timing as normal autoplay (500ms base with turbo multiplier)
+        const baseDelay = 500;
+        const turboDelay = gameStateManager.isTurbo ? 
+          baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER : baseDelay;
+        console.log(`[Symbols] Scheduling next free spin after dialog close in ${turboDelay}ms (base: ${baseDelay}ms, turbo: ${gameStateManager.isTurbo})`);
+
+        this.freeSpinAutoplayTimer = this.scene.time.delayedCall(turboDelay, () => {
+          this.performFreeSpinAutoplay();
+        });
       }
     });
 
@@ -1491,63 +1515,71 @@ export class Symbols {
     for (let col = 0; col < this.symbols.length; col++) {
       for (let row = 0; row < this.symbols[col].length; row++) {
         const symbol = this.symbols[col][row];
-        if (symbol) {
-          // Check if this is a Spine scatter symbol and reset it to normal sprite
-          if (symbol.animationState && symbol.texture && symbol.texture.key.includes('symbol_0_spine')) {
-            try {
-              console.log(`[Symbols] Resetting scatter symbol at (${col}, ${row}) back to normal sprite`);
-              
-              // Unregister the scatter symbol from ScatterAnimationManager
-              if (this.scatterAnimationManager) {
-                this.scatterAnimationManager.unregisterScatterSymbol(symbol);
-              }
-              
-              // Store position and scale for the new sprite
-              const x = symbol.x;
-              const y = symbol.y;
-              const displayWidth = symbol.displayWidth;
-              const displayHeight = symbol.displayHeight;
-              
-              // Destroy the Spine animation
-              symbol.destroy();
-              
-              // Create regular sprite in its place
-              const regularSprite = this.scene.add.sprite(x, y, 'symbol_0');
-              regularSprite.setOrigin(0.5, 0.5);
-              regularSprite.displayWidth = displayWidth;
-              regularSprite.displayHeight = displayHeight;
-              regularSprite.setDepth(0); // Reset to normal depth
-              
-              // Add to container and update symbols array
-              this.container.add(regularSprite);
-              this.symbols[col][row] = regularSprite;
-              
-              scatterSymbolsReset++;
-              console.log(`[Symbols] Successfully reset scatter symbol to normal sprite at (${col}, ${row})`);
-              
-            } catch (error) {
-              console.warn(`[Symbols] Error resetting scatter symbol at (${col}, ${row}):`, error);
+
+        // Skip empty slots
+        if (!symbol) {
+          continue;
+        }
+
+        // Guard against symbols that have been detached from any scene
+        const symbolScene = (symbol as any).scene;
+        if (!symbolScene) {
+          console.warn(`[Symbols] Skipping depth reset for symbol at (${col}, ${row}) without valid scene reference`);
+          continue;
+        }
+
+        // Check if this is a Spine scatter symbol and reset it to normal sprite
+        if (symbol.animationState && symbol.texture && symbol.texture.key.includes('symbol_0_spine')) {
+          try {
+            console.log(`[Symbols] Resetting scatter symbol at (${col}, ${row}) back to normal sprite`);
+
+            // Unregister the scatter symbol from ScatterAnimationManager
+            if (this.scatterAnimationManager) {
+              this.scatterAnimationManager.unregisterScatterSymbol(symbol);
             }
-          } else {
+
+            // Store position and scale for the new sprite
+            const x = symbol.x;
+            const y = symbol.y;
+            const displayWidth = symbol.displayWidth;
+            const displayHeight = symbol.displayHeight;
+
+            // Destroy the Spine animation
+            symbol.destroy();
+
+            // Create regular sprite in its place
+            const regularSprite = symbolScene.add.sprite(x, y, 'symbol_0');
+            regularSprite.setOrigin(0.5, 0.5);
+            regularSprite.displayWidth = displayWidth;
+            regularSprite.displayHeight = displayHeight;
+            regularSprite.setDepth(0); // Reset to normal depth
+
+            // Add to container and update symbols array
+            this.container.add(regularSprite);
+            this.symbols[col][row] = regularSprite;
+
+            scatterSymbolsReset++;
+            console.log(`[Symbols] Successfully reset scatter symbol to normal sprite at (${col}, ${row})`);
+
+          } catch (error) {
+            console.warn(`[Symbols] Error resetting scatter symbol at (${col}, ${row}):`, error);
+          }
+        } else {
           // Move symbol back to container if it's not already there
           if (symbol.parentContainer !== this.container) {
-            this.scene.children.remove(symbol);
+            symbolScene.children.remove(symbol);
             this.container.add(symbol);
           }
           if (typeof symbol.setDepth === 'function') {
             symbol.setDepth(0); // Reset to default depth
-            }
           }
-          resetCount++;
         }
+        resetCount++;
       }
     }
     console.log(`[Symbols] Reset depths and container for ${resetCount} symbols (${scatterSymbolsReset} scatter symbols converted to normal sprites)`);
   }
 
-  /**
-   * Move scatter symbols to front (above overlay) - similar to winning symbols
-   */
   public moveScatterSymbolsToFront(data: Data, scatterGrids: any[]): void {
     if (scatterGrids.length === 0) {
       console.log('[Symbols] No scatter symbols to move to front');
