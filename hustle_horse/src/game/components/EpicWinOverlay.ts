@@ -144,22 +144,7 @@ export class EpicWinOverlay {
                 }
                 this.hasStoppedBigWinMusic = true;
             } catch {}
-            this.isTransitioning = true;
-            this.playFireTransitionThenFinish(() => {
-                try {
-                    const audio = (window as any).audioManager;
-                    if (audio) {
-                        if (typeof audio.unlockMusic === 'function') audio.unlockMusic();
-                        if (this.prevMusicType && typeof audio.setExclusiveBackground === 'function') {
-                            audio.setExclusiveBackground(this.prevMusicType);
-                        } else if (typeof audio.stopAllMusic === 'function') {
-                            audio.stopAllMusic();
-                        }
-                        this.prevMusicType = null;
-                    }
-                } catch {}
-                this.isTransitioning = false;
-            });
+            // Directly hide overlay; hide() will handle restoring background music
             this.hide();
         });
 

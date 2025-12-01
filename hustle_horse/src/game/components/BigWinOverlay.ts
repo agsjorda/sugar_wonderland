@@ -151,25 +151,7 @@ export class BigWinOverlay {
                 }
                 this.hasStoppedBigWinMusic = true;
             } catch {}
-            // Start fullscreen Fire_Transition overlay immediately; let it overlap fade
-            this.isTransitioning = true;
-            this.playFireTransitionThenFinish(() => {
-                // After transition completes, restore previous music and finalize
-                try {
-                    const audio = (window as any).audioManager;
-                    if (audio) {
-                        if (typeof audio.unlockMusic === 'function') audio.unlockMusic();
-                        if (this.prevMusicType && typeof audio.setExclusiveBackground === 'function') {
-                            audio.setExclusiveBackground(this.prevMusicType);
-                        } else if (typeof audio.stopAllMusic === 'function') {
-                            audio.stopAllMusic();
-                        }
-                        this.prevMusicType = null;
-                    }
-                } catch {}
-                this.isTransitioning = false;
-            });
-            // Begin fading out overlay visuals underneath
+            // Begin fading out overlay visuals; hide() will restore previous background music
             this.hide();
         });
 
@@ -359,7 +341,6 @@ export class BigWinOverlay {
             // Fit number width responsively (similar to Congrats overlay) – slightly larger, tighter spacing
             try {
                 const targetWidth = this.scene.cameras.main.width * 0.66; // occupy more width for larger digits
-                const minScale = 0.16;
                 const maxScale = 0.34;
                 const numContainer = this.numberDisplay.getContainer();
                 // Measure at scale 1 to get raw width
@@ -367,7 +348,7 @@ export class BigWinOverlay {
                 const bounds = (numContainer as any).getBounds?.();
                 const rawWidth = bounds?.width || 1;
                 let fitScale = targetWidth / rawWidth;
-                fitScale = Math.max(minScale, Math.min(maxScale, fitScale));
+                fitScale = Math.min(maxScale, fitScale);
                 (numContainer as any).setScale?.(fitScale, fitScale);
                 (numContainer as any).setPosition?.(amountConfig.x, amountConfig.y);
             } catch {}

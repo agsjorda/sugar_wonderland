@@ -123,6 +123,7 @@ export class AudioManager {
 		this.scene.load.audio('reeldrop_hh', 'assets/sounds/SFX/reeldrop_hh.ogg');
 		this.scene.load.audio('turbodrop_hh', 'assets/sounds/SFX/turbodrop_hh.ogg');
 		this.scene.load.audio('coin_drop_ka', 'assets/sounds/SFX/coin_drop_ka.ogg');
+		this.scene.load.audio('wildmulti_hh', 'assets/sounds/SFX/wildmulti_hh.ogg');
 		
 		console.log('[AudioManager] Audio files preloaded successfully');
 	}

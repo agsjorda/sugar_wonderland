@@ -491,8 +491,9 @@ export class AssetConfig {
 				'cardflip_hh': 'assets/sounds/SFX/cardflip_hh.ogg',
 				// Hit win SFX
 				'hitwin_hh': 'assets/sounds/SFX/hitwin_hh.ogg',
-				// Wild multi SFX
+				// Wild / special SFX
 				'scatter_hh': 'assets/sounds/SFX/scatter_hh.ogg',
+				'wildmulti_hh': 'assets/sounds/SFX/wildmulti_hh.ogg',
 				'anticipation_hh': 'assets/sounds/SFX/anticipation_hh.ogg',
 				// Winline SFX
 				'winline_1_ka': 'assets/sounds/SFX/winline_1_ka.ogg',
@@ -508,7 +509,7 @@ export class AssetConfig {
 				'epicw_ka': 'assets/sounds/Wins/epicw_ka.ogg',
 				'freespin_ka': 'assets/sounds/Wins/freespin_ka.ogg',
 				'congrats_ka': 'assets/sounds/Wins/congrats_ka.ogg',
-				
+				'congrats_hh': 'assets/sounds/Wins/congrats_hh.ogg',
 				// Win dialog SFX
 				'bigwskip_ka': 'assets/sounds/Wins/bigwskip_ka.ogg',
 				'megawskip_ka': 'assets/sounds/Wins/megawskip_ka.ogg',

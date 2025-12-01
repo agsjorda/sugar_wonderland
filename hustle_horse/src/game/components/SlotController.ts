@@ -978,12 +978,8 @@ export class SlotController {
 				return;
 			}
 			if (gameStateManager.isReelSpinning) {
-				if (!gameStateManager.isTurbo) {
-					console.log('[SlotController] Spin pressed during active spin - requesting skip of reel drops');
-					try { (this.symbols as any)?.requestSkipReelDrops?.(); } catch {}
-				} else {
-					console.log('[SlotController] Skip disabled while turbo is ON');
-				}
+				console.log('[SlotController] Spin pressed during active spin - requesting skip of reel drops');
+				try { (this.symbols as any)?.requestSkipReelDrops?.(); } catch {}
 				return;
 			}
 			
@@ -1858,12 +1854,8 @@ export class SlotController {
 				return;
 			}
 			if (gameStateManager.isReelSpinning) {
-				if (!gameStateManager.isTurbo) {
-					console.log('[SlotController] Spin pressed during active spin - requesting skip of reel drops');
-					try { (this.symbols as any)?.requestSkipReelDrops?.(); } catch {}
-				} else {
-					console.log('[SlotController] Skip disabled while turbo is ON');
-				}
+				console.log('[SlotController] Spin pressed during active spin - requesting skip of reel drops');
+				try { (this.symbols as any)?.requestSkipReelDrops?.(); } catch {}
 				return;
 			}
 			
@@ -2834,6 +2826,52 @@ setBuyFeatureBetAmount(amount: number): void {
 		
 		// Start the first autoplay spin immediately
 		this.performAutoplaySpin();
+	}
+
+	/**
+	 * Perform a single autoplay spin
+	 */
+	private async performAutoplaySpin(): Promise<void> {
+		console.log('[SlotController] performAutoplaySpin called');
+		// Guard: if stopping autoplay or no spins remaining, do nothing
+		if (this.isStoppingAutoplay || this.autoplaySpinsRemaining <= 0) {
+			console.log('[SlotController] performAutoplaySpin aborted - isStoppingAutoplay or no spins remaining', {
+				isStoppingAutoplay: this.isStoppingAutoplay,
+				autoplaySpinsRemaining: this.autoplaySpinsRemaining
+			});
+			return;
+		}
+		// Guard: do not start a new autoplay spin while reels are already spinning
+		if (gameStateManager.isReelSpinning) {
+			console.log('[SlotController] performAutoplaySpin aborted - reels already spinning');
+			return;
+		}
+		// Guard: block autoplay spins when win dialog is showing
+		if (gameStateManager.isShowingWinDialog) {
+			console.log('[SlotController] performAutoplaySpin blocked - win dialog is showing');
+			return;
+		}
+		// Guard: skip autoplay during scatter/bonus transitions
+		if (gameStateManager.isScatter || gameStateManager.isBonus) {
+			console.log('[SlotController] performAutoplaySpin blocked - scatter or bonus active');
+			return;
+		}
+		// Decrement autoplay counter once per spin before starting
+		this.autoplaySpinsRemaining = Math.max(0, this.autoplaySpinsRemaining - 1);
+		this.updateAutoplaySpinsRemainingText(this.autoplaySpinsRemaining);
+		this.bounceAutoplaySpinsRemainingText();
+		console.log(`[SlotController] Autoplay spin starting - spins remaining after decrement: ${this.autoplaySpinsRemaining}`);
+		// Ensure global autoplay flags are set
+		if (this.gameData) {
+			this.gameData.isAutoPlaying = true;
+		}
+		gameStateManager.isAutoPlaying = true;
+		// Trigger the actual spin using the centralized handler
+		try {
+			await this.handleSpin();
+		} catch (error) {
+			console.error('[SlotController] Error during performAutoplaySpin handleSpin call:', error);
+		}
 	}
 
 	/**

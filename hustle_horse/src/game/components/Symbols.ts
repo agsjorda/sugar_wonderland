@@ -298,7 +298,17 @@ export class Symbols {
   public requestSkipReelDrops(): void {
     try {
       if (this.skipReelDropsActive) return;
+
+      const isAnticipationActive = !!(this.scene as any)?.__isScatterAnticipationActive;
       this.skipReelDropsActive = true;
+
+      // During scatter anticipation, allow skip flag for winline behaviour but do not
+      // accelerate drop tweens or shorten anticipation timings.
+      if (isAnticipationActive) {
+        console.log('[Symbols] Skip requested during scatter anticipation - preserving anticipation sequence');
+        return;
+      }
+
       // Speed up only symbol-related tweens (avoid global tween timeScale to not affect logo breathing)
       this.accelerateActiveSymbolTweens(60);
       // Reduce any further delays/durations used by drop logic
@@ -1440,10 +1450,10 @@ export class Symbols {
       // Disabled by default; only active while reels are spinning
       zone.disableInteractive();
       
-      // Click to skip while spinning (disabled when turbo is ON)
+      // Click to skip while spinning
       zone.on('pointerdown', () => {
         try {
-          if (gameStateManager.isReelSpinning && !gameStateManager.isTurbo) {
+          if (gameStateManager.isReelSpinning) {
             this.requestSkipReelDrops();
           }
         } catch {}
@@ -1454,19 +1464,15 @@ export class Symbols {
       // Enable/disable around spin lifecycle
       const enable = () => {
         try { this.updateSkipHitboxGeometry(); } catch {}
-        if (gameStateManager.isTurbo) {
-          try { this.skipHitbox?.disableInteractive(); } catch {}
-        } else {
-          try { this.skipHitbox?.setInteractive({ useHandCursor: false }); } catch {}
-        }
+        try { this.skipHitbox?.setInteractive({ useHandCursor: false }); } catch {}
       };
       const disable = () => {
         try { this.skipHitbox?.disableInteractive(); } catch {}
       };
       gameEventManager.on(GameEventType.REELS_START, enable);
       gameEventManager.on(GameEventType.REELS_STOP, disable);
-      // React to turbo toggles: disable on TURBO_ON, enable on TURBO_OFF only if spinning
-      const onTurboOn = () => { try { this.skipHitbox?.disableInteractive(); } catch {} };
+      // React to turbo toggles: keep hitbox enabled while spinning
+      const onTurboOn = () => { try { if (gameStateManager.isReelSpinning) enable(); } catch {} };
       const onTurboOff = () => { try { if (gameStateManager.isReelSpinning) enable(); } catch {} };
       gameEventManager.on(GameEventType.TURBO_ON, onTurboOn);
       gameEventManager.on(GameEventType.TURBO_OFF, onTurboOff);
@@ -1494,6 +1500,14 @@ export class Symbols {
   /** Speed up active tweens for all objects in the symbol grid containers */
   private accelerateActiveSymbolTweens(timeScale: number): void {
     try {
+      const isAnticipationActive = !!(this.scene as any)?.__isScatterAnticipationActive;
+      let anticipationRowIndex = -1;
+      try {
+        if (isAnticipationActive && this.symbols && Array.isArray(this.symbols[0])) {
+          anticipationRowIndex = this.symbols[0].length - 1;
+        }
+      } catch {}
+
       const accel = (obj: any) => {
         try {
           const tweens = this.scene.tweens.getTweensOf(obj) as any[];
@@ -1511,6 +1525,7 @@ export class Symbols {
             const col = this.symbols[c];
             if (!Array.isArray(col)) continue;
             for (let r = 0; r < col.length; r++) {
+              if (isAnticipationActive && r === anticipationRowIndex) continue;
               const obj = col[r];
               if (obj) accel(obj);
             }
@@ -1520,10 +1535,15 @@ export class Symbols {
       // New symbols currently dropping
       try {
         if (this.newSymbols) {
+          // Fallback: if anticipationRowIndex not known yet, derive from first column
+          if (isAnticipationActive && anticipationRowIndex === -1 && Array.isArray(this.newSymbols[0])) {
+            anticipationRowIndex = this.newSymbols[0].length - 1;
+          }
           for (let c = 0; c < this.newSymbols.length; c++) {
             const col = this.newSymbols[c];
             if (!Array.isArray(col)) continue;
             for (let r = 0; r < col.length; r++) {
+              if (isAnticipationActive && r === anticipationRowIndex) continue;
               const obj = col[r];
               if (obj) accel(obj);
             }
@@ -1535,14 +1555,20 @@ export class Symbols {
         const list: any[] = (this.container as any)?.list || [];
         for (const child of list) accel(child);
       } catch {}
-      // Foreground scatter container (anticipation overlays)
+      // Foreground scatter container (anticipation overlays) and overlays
+      // Do not accelerate these while scatter anticipation is active so the player always sees it.
       try {
-        const list: any[] = (this.scatterForegroundContainer as any)?.list || [];
-        for (const child of list) accel(child);
+        if (!isAnticipationActive) {
+          const list: any[] = (this.scatterForegroundContainer as any)?.list || [];
+          for (const child of list) accel(child);
+        }
       } catch {}
-      // Overlays
-      try { if (this.overlayRect) accel(this.overlayRect); } catch {}
-      try { if (this.baseOverlayRect) accel(this.baseOverlayRect); } catch {}
+      try {
+        if (!isAnticipationActive && this.overlayRect) accel(this.overlayRect);
+      } catch {}
+      try {
+        if (!isAnticipationActive && this.baseOverlayRect) accel(this.baseOverlayRect);
+      } catch {}
     } catch {}
   }
 
@@ -1601,6 +1627,18 @@ export class Symbols {
       // If bonus just finished, immediately show congrats and reset flag
       if (gameStateManager.isBonusFinished) {
         console.log('[Symbols] isBonusFinished is true on WIN_DIALOG_CLOSED - showing congrats now');
+        try {
+          const sceneAny: any = this.scene as any;
+          const overlayMgr = sceneAny?.winOverlayManager;
+          const hasOverlayWork =
+            overlayMgr &&
+            typeof overlayMgr.hasActiveOrQueued === 'function' &&
+            overlayMgr.hasActiveOrQueued();
+          if (hasOverlayWork) {
+            console.log('[Symbols] Win overlays still active/queued on WIN_DIALOG_CLOSED - deferring congrats to WinOverlayManager');
+            return;
+          }
+        } catch {}
         // Show congrats now and reset the flag; bonus mode exit happens on congrats close
         this.showCongratsDialogAfterDelay();
         gameStateManager.isBonusFinished = false;
@@ -4321,6 +4359,26 @@ export class Symbols {
     console.log('[Symbols] Showing congrats dialog after delay');
     
     const gameScene = this.scene as any;
+
+    // If any win overlay is currently running its fire transition, wait briefly and retry
+    try {
+      const overlays = [
+        gameScene.bigWinOverlay,
+        gameScene.superWinOverlay,
+        gameScene.epicWinOverlay,
+        gameScene.megaWinOverlay,
+      ];
+      const hasTransitioning = overlays.some((ov: any) => ov && ov.isTransitioning);
+      if (hasTransitioning) {
+        console.log('[Symbols] Win overlay transition still playing - delaying congrats dialog');
+        if (gameScene.time && typeof gameScene.time.delayedCall === 'function') {
+          gameScene.time.delayedCall(600, () => {
+            this.showCongratsDialogAfterDelay();
+          });
+        }
+        return;
+      }
+    } catch {}
     
     // Close any open win dialogs first (safety check)
     if (gameScene.dialogs && typeof gameScene.dialogs.hideDialog === 'function') {
@@ -4705,6 +4763,39 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   // Apply timing to GameData for animations
   setSpeed(self.scene.gameData, adjustedDelay);
   
+  // If skip was requested before SpinData arrived, re-apply accelerated timings
+  try {
+    const skipActive = typeof (self as any).isSkipReelDropsActive === 'function'
+      ? (self as any).isSkipReelDropsActive()
+      : false;
+    if (skipActive) {
+      // Detect if this spin will use scatter anticipation (same condition as dropReels)
+      let hasAnticipationScatter = false;
+      try {
+        const s: number[][] = mockData.symbols || [];
+        const scatterVal = Data.SCATTER[0];
+        const hasScatterCol1 = s.some(col => Array.isArray(col) && col[0] === scatterVal);
+        const hasScatterCol3 = s.some(col => Array.isArray(col) && col[2] === scatterVal);
+        hasAnticipationScatter = !!(hasScatterCol1 && hasScatterCol3);
+      } catch {}
+      try {
+        if (gameStateManager.isBonus) {
+          hasAnticipationScatter = false;
+        }
+      } catch {}
+
+      const gd = (self.scene as any)?.gameData;
+      if (hasAnticipationScatter) {
+        console.log('[Symbols] Skip active before SpinData but scatter anticipation detected - preserving anticipation timings');
+      } else if (gd) {
+        gd.dropReelsDelay = 0;
+        gd.dropDuration = Math.max(1, Math.floor(gd.dropDuration * 0.1));
+        gd.winUpDuration = Math.max(1, Math.floor(gd.winUpDuration * 0.1));
+        console.log('[Symbols] Skip active before SpinData - reapplying accelerated drop timings');
+      }
+    }
+  } catch {}
+  
   // Set spinning state
   gameStateManager.isReelSpinning = true;
   // Immediately enforce spin tint after reels are marked spinning (bonus)
@@ -4924,6 +5015,15 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   gameStateManager.isReelSpinning = false;
   // Restore tween speed if skip was active
   try { (self as any).clearSkipReelDrops?.(); } catch {}
+  
+  try {
+    const audio = (window as any)?.audioManager;
+    if (audio && typeof audio.isAnyMusicPlaying === 'function' && typeof audio.resumeMusicBasedOnGameState === 'function') {
+      if (!audio.isAnyMusicPlaying()) {
+        audio.resumeMusicBasedOnGameState();
+      }
+    }
+  } catch {}
   
   console.log('[Symbols] SpinData symbols processed successfully');
 }
@@ -5751,7 +5851,23 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
   
   // Ensure we only play the win SFX once per win animation start
   let hasPlayedWinSfx = false;
+  // Track whether this spin's wins use multiplier symbols (12, 13, 14)
+  let hasMultiplierWin = false;
   
+  // Pre-scan winning grids to detect multiplier symbols participating in the win
+  try {
+    for (const grids of wins.allMatching.values()) {
+      for (const g of grids) {
+        const v = (g as any)?.symbol;
+        if (v === 12 || v === 13 || v === 14) {
+          hasMultiplierWin = true;
+          break;
+        }
+      }
+      if (hasMultiplierWin) break;
+    }
+  } catch {}
+
   // Track all winning grid positions to identify non-winners later
   const winningPositions = new Set<string>();
 
@@ -5781,7 +5897,7 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
         } catch {}
         
         // Get the symbol value and construct the Spine key
-        const symbolValue = data.symbols[grid.y][grid.x];
+        const symbolValue = (grid as any)?.symbol;
 
         
         const spineKey = `symbol_${symbolValue}_spine`;
@@ -5860,9 +5976,17 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
               const audio = (window as any)?.audioManager;
               if (audio && typeof audio.playSoundEffect === 'function') {
                 audio.playSoundEffect(SoundEffectType.HIT_WIN);
+                // If this win includes any multiplier symbols, also play the wildmulti_hh SFX once
+                try {
+                  if (hasMultiplierWin && typeof audio.playOneShot === 'function') {
+                    // Use one-shot for wildmulti_hh so it doesn’t require a SoundEffectType enum value
+                    audio.playOneShot('wildmulti_hh');
+                    console.log('[Symbols] Played wildmulti_hh SFX for multiplier win');
+                  }
+                } catch {}
                 hasPlayedWinSfx = true;
                 try {
-                  if (gameStateManager.isScatter) {
+                  if ((window as any)?.gameStateManager?.isScatter) {
                     self.scene.time.delayedCall(100, () => {
                       try { audio.playSoundEffect(SoundEffectType.SCATTER); } catch {}
                     });

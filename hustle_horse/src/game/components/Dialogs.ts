@@ -765,6 +765,15 @@ export class Dialogs {
 				// Depth within background container is relative; container depth is already 150
 				this.dialogBackgroundContainer.add(bg);
 				this.congratsBgImage = bg;
+				// Play congrats_hh SFX when congrats background is shown
+				try {
+					const audio = (window as any)?.audioManager;
+					if (audio && typeof audio.playOneShot === 'function') {
+						audio.playOneShot('congrats_hh');
+					} else {
+						try { (scene as any)?.sound?.play?.('congrats_hh'); } catch {}
+					}
+				} catch {}
 			} catch (e) {
 				console.warn('[Dialogs] Failed to create congrats background image', e);
 			}
@@ -1046,6 +1055,25 @@ export class Dialogs {
 		// Apply current offsets
 		this.numberDisplayContainer.x = this.numberDisplayOffsetX;
 		this.numberDisplayContainer.y = this.numberDisplayOffsetY;
+		try {
+			const numContainer = numberDisplay.getContainer();
+			(numContainer as any).setScale?.(1, 1);
+			if (isCongrats) {
+				numberDisplay.displayValue(displayValue);
+			}
+			const bounds = (numContainer as any).getBounds?.();
+			const rawWidth = bounds?.width || 0;
+			if (rawWidth > 0) {
+				const targetWidth = scene.scale.width * 0.8;
+				let fitScale = targetWidth / rawWidth;
+				if (fitScale < 1) {
+					(numContainer as any).setScale?.(fitScale, fitScale);
+				}
+			}
+			if (isCongrats) {
+				numberDisplay.displayValue(0);
+			}
+		} catch {}
 		
 		// Start with alpha 0 (invisible) - will be faded in; for Congrats we handle fade-in here
 		this.numberDisplayContainer.setAlpha(0);
