@@ -58,6 +58,10 @@ export class SlotController {
 	// Autoplay stop icon overlay
 	private autoplayStopIcon: Phaser.GameObjects.Image | null = null;
 
+	// Bet HUD background (clickable area that opens bet selection panel)
+	private betBackground: Phaser.GameObjects.Graphics | null = null;
+	private isBetBackgroundEnabled: boolean = true;
+
 	// Guard to ensure we decrement autoplay counter once per spin at REELS_START
 	private hasDecrementedAutoplayForCurrentSpin: boolean = false;
 
@@ -418,6 +422,12 @@ export class SlotController {
 			increaseBetButton.disableInteractive(); // Disable clicking
 			console.log('[SlotController] Increase bet button disabled');
 		}
+
+		// Also visually disable the bet HUD background that opens the bet selection panel
+		if (this.betBackground) {
+			this.betBackground.setAlpha(0.8);
+		}
+		this.isBetBackgroundEnabled = false;
 	}
 
 	/**
@@ -438,6 +448,12 @@ export class SlotController {
 			increaseBetButton.setInteractive(); // Re-enable clicking
 			console.log('[SlotController] Increase bet button enabled');
 		}
+
+		// Also re-enable the bet HUD background that opens the bet selection panel
+		if (this.betBackground) {
+			this.betBackground.setAlpha(1.0);
+		}
+		this.isBetBackgroundEnabled = true;
 	}
 
 	/**
@@ -1054,6 +1070,10 @@ export class SlotController {
 		betBg.setDepth(8);
 		this.controllerContainer.add(betBg);
 
+		// Store reference so we can enable/disable it together with other bet controls
+		this.betBackground = betBg;
+		this.isBetBackgroundEnabled = true;
+
 		// Open Bet Options when the bet background is clicked
 		betBg.setInteractive(
 			new Phaser.Geom.Rectangle(
@@ -1065,11 +1085,17 @@ export class SlotController {
 			Phaser.Geom.Rectangle.Contains
 		);
 		betBg.on('pointerdown', () => {
-			if(gameStateManager.isBonus) {
+			// Guard: ignore clicks while the bet HUD background is logically disabled
+			if (!this.isBetBackgroundEnabled) {
+				console.log('[SlotController] Bet background clicked while disabled - ignoring');
+				return;
+			}
+
+			if (gameStateManager.isBonus) {
 				console.log('[SlotController] Bet background clicked in bonus mode - ignoring');
 				return;
 			}
-			
+
 			console.log('[SlotController] Bet background clicked');
 			EventBus.emit('show-bet-options');
 		});
@@ -1709,6 +1735,10 @@ export class SlotController {
 				this.disableSpinButton();
 			}
 
+			// Disable bet controls and autoplay button for the duration of the spin
+			this.disableBetButtons();
+			this.disableAutoplayButton();
+
 			// Play the spin button spine animation for all spins (manual and autoplay)
 			this.playSpinButtonAnimation();
 
@@ -1839,35 +1869,51 @@ export class SlotController {
 
 			// Note: AUTO_STOP is now emitted in WIN_STOP handler after stopAutoplay() is called
 
-			// For manual spins, re-enable spin button and hide autoplay counter immediately after REELS_STOP
+			// Helper: re-enable all primary controls with a short delay after reels stop
+			const enableControlsWithDelay = (logLabel: string) => {
+				const delayMs = 150;
+				if (this.scene) {
+					this.scene.time.delayedCall(delayMs, () => {
+						// Guard: don't re-enable controls if reels started again or a win dialog is now showing
+						if (gameStateManager.isReelSpinning || gameStateManager.isShowingWinDialog) {
+							console.log(`[SlotController] Skipping control enable (${logLabel}) - state changed during delay`);
+							return;
+						}
+						this.enableSpinButton();
+						this.enableAutoplayButton();
+						this.enableBetButtons();
+						// Keep feature disabled during bonus or until explicitly allowed
+						if (!gameStateManager.isBonus && this.canEnableFeatureButton) {
+							this.enableFeatureButton();
+						}
+						this.enableAmplifyButton();
+						console.log(`[SlotController] Controls enabled after REELS_STOP with delay (${logLabel})`);
+					});
+				} else {
+					this.enableSpinButton();
+					this.enableAutoplayButton();
+					this.enableBetButtons();
+					if (!gameStateManager.isBonus && this.canEnableFeatureButton) {
+						this.enableFeatureButton();
+					}
+					this.enableAmplifyButton();
+					console.log(`[SlotController] Controls enabled after REELS_STOP without delay (${logLabel})`);
+				}
+			};
+
+			// For manual spins, re-enable controls and hide autoplay counter shortly after REELS_STOP
 			// Check autoplay counter instead of state manager to avoid timing issues
 			if (this.autoplaySpinsRemaining === 0 && !gameStateManager.isShowingWinDialog) {
-				this.enableSpinButton();
-				this.enableAutoplayButton();
-				this.enableBetButtons();
-				// Keep feature disabled during bonus or until explicitly allowed
-				if (!gameStateManager.isBonus && this.canEnableFeatureButton) {
-					this.enableFeatureButton();
-				}
-				this.enableAmplifyButton();
+				enableControlsWithDelay('manual-spin');
 				this.hideAutoplaySpinsRemainingText();
 				this.updateAutoplayButtonState();
-				console.log('[SlotController] Manual spin - all buttons re-enabled after REELS_STOP');
 				return;
 			}
 
 			// Update spin button state when spin completes
 			// Only enable spin button if not autoplaying AND reels are not spinning
 			if (!this.gameData?.isAutoPlaying && !gameStateManager.isReelSpinning && !gameStateManager.isShowingWinDialog) {
-				this.enableSpinButton();
-				this.enableAutoplayButton();
-				this.enableBetButtons();
-				// Keep feature disabled during bonus or until explicitly allowed
-				if (!gameStateManager.isBonus && this.canEnableFeatureButton) {
-					this.enableFeatureButton();
-				}
-				this.enableAmplifyButton();
-				console.log('[SlotController] All buttons enabled - manual spin completed and reels stopped');
+				enableControlsWithDelay('not-autoplaying');
 				return;
 			}
 
@@ -2034,9 +2080,16 @@ export class SlotController {
 				console.log(`[SlotController] Autoplay delay: ${baseDelay}ms -> ${turboDelay}ms (turbo: ${isTurbo})`);
 				this.scheduleNextAutoplaySpin(turboDelay);
 			} else {
-				// Only show this log if we're not in bonus mode (free spin autoplay)
+				// No normal autoplay spins remaining after win dialog
 				if (!gameStateManager.isBonus) {
-					console.log('[SlotController] No autoplay spins remaining, not scheduling next spin');
+					// Base‑game autoplay: ensure we fully stop and reset UI after the final
+					// autoplay spin that ended with a win dialog.
+					if (gameStateManager.isAutoPlaying) {
+						console.log('[SlotController] Autoplay finished after win dialog - emitting AUTO_STOP');
+						gameEventManager.emit(GameEventType.AUTO_STOP);
+					} else {
+						console.log('[SlotController] No autoplay spins remaining, not scheduling next spin');
+					}
 				} else {
 					console.log('[SlotController] In bonus mode - free spin autoplay is handled by Symbols component');
 				}
@@ -2785,7 +2838,7 @@ export class SlotController {
 			}
 		} else {
 			// Reset to normal speed by calling setSpeed with the original delay
-			const originalDelay = 2500; // This should match Data.DELAY_BETWEEN_SPINS
+			const originalDelay = 2000; // This should match Data.DELAY_BETWEEN_SPINS
 			setSpeed(gameData, originalDelay);
 			console.log('[SlotController] Normal speed restored for winline animations');
 		}
@@ -3422,9 +3475,9 @@ export class SlotController {
 		});
 
 		// Listen for scatter bonus events with scatter index and actual free spins
-		this.scene.events.on('scatterBonusActivated', (data: { scatterIndex: number; actualFreeSpins: number }) => {
+		this.scene.events.on('scatterBonusActivated', (data: { scatterIndex: number; actualFreeSpins: number; isRetrigger?: boolean }) => {
 			console.log(`[SlotController] scatterBonusActivated event received with data:`, data);
-			console.log(`[SlotController] Data validation: scatterIndex=${data.scatterIndex}, actualFreeSpins=${data.actualFreeSpins}`);
+			console.log(`[SlotController] Data validation: scatterIndex=${data.scatterIndex}, actualFreeSpins=${data.actualFreeSpins}, isRetrigger=${!!data.isRetrigger}`);
 
 			// Stop normal autoplay when scatter is hit
 			if (this.autoplaySpinsRemaining > 0) {
@@ -3439,8 +3492,16 @@ export class SlotController {
 
 			console.log(`[SlotController] Scatter bonus activated with index ${data.scatterIndex} and ${data.actualFreeSpins} free spins - hiding primary controller, free spin display will appear after dialog closes`);
 			this.hidePrimaryControllerWithScatter(data.scatterIndex);
-			// Store the free spins data for later display after dialog closes
-			this.pendingFreeSpinsData = data;
+
+			// Store the free spins data for later display ONLY for the initial bonus trigger.
+			// For retriggers during bonus, we MUST NOT overwrite the existing "Remaining Free Spin"
+			// counter with the raw payload value (which often contains the original 15),
+			// otherwise the UI jumps back to 15 instead of reflecting the true remaining count.
+			if (!data.isRetrigger) {
+				this.pendingFreeSpinsData = data;
+			} else {
+				console.log('[SlotController] Bonus scatter retrigger detected - keeping existing remaining free spin display value');
+			}
 		});
 
 		// Listen for dialog animations completion to show free spin display
@@ -3549,9 +3610,10 @@ export class SlotController {
 		});
 
 		// Listen for scatter bonus activation to reset free spin index
-		this.scene.events.on('scatterBonusActivated', () => {
-			console.log('[SlotController] Scatter bonus activated - resetting free spin index');
-			if (this.gameAPI) {
+		this.scene.events.on('scatterBonusActivated', (data?: { isRetrigger?: boolean }) => {
+			const isRetrigger = !!data?.isRetrigger;
+			console.log(`[SlotController] Scatter bonus activated - ${isRetrigger ? 'retrigger detected, keeping free spin index' : 'resetting free spin index'}`);
+			if (this.gameAPI && !isRetrigger) {
 				this.gameAPI.resetFreeSpinIndex();
 			}
 		});

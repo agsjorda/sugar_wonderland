@@ -24,6 +24,7 @@ export class Header {
 	private multiplierDisplay: NumberDisplay | null = null;
 	private scene: Game;
 	private currentMultiplier: number = 0;
+	private xTextOffset: number = 5;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -206,7 +207,7 @@ export class Header {
 			this.currentMultiplier = this.currentMultiplier > 0 ? this.currentMultiplier + multiplier : multiplier;
 			this.updateMultiplierValue(this.currentMultiplier);
 
-			this.scene.time.delayedCall(250 * (gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1), () => {
+			this.scene.time.delayedCall(25 * (gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1), () => {
 				const formattedTotalWinnings = this.formatCurrency(this.currentWinnings * this.currentMultiplier);
 				const formattedCurrentWinnings = this.formatCurrency(this.currentWinnings);
 
@@ -260,14 +261,17 @@ export class Header {
 				const winnings = spinData?.slot?.tumbles?.items[this.scene.gameAPI.getCurrentTumbleIndex()]?.win || 0;
 
 				console.log(`[Header] Current winnings: ${winnings} ${this.scene.gameAPI.getCurrentTumbleIndex()}`);
-
-				if(this.currentWinnings > 0) {
-					this.currentWinnings += winnings;
-					this.updateWinningsDisplay(this.currentWinnings);
-				} else {
-					this.currentWinnings += winnings;
-					this.showWinningsDisplay(this.currentWinnings);
-				}
+				
+				const updateDelay = 700 * (gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1);
+				this.scene.time.delayedCall(updateDelay, () => {
+					if(this.currentWinnings > 0) {
+						this.currentWinnings += winnings;
+						this.updateWinningsDisplay(this.currentWinnings);
+					} else {
+						this.currentWinnings += winnings;
+						this.showWinningsDisplay(this.currentWinnings);
+					}
+				});
 			}
 		});
 	}
@@ -299,7 +303,7 @@ export class Header {
 			// Reset color to default white for regular winnings display
 			this.amountText.setColor('#ffffff');
 			this.amountText.setText(formattedWinnings);
-			this.amountText.setPosition(this.scene.scale.width * 0.5, this.amountText.y);
+			this.amountText.setPosition(this.scene.scale.width * 0.5 + this.xTextOffset, this.amountText.y);
 			console.log(`[Header] Winnings updated to: ${formattedWinnings} (raw: ${winnings})`);
 
 			// Hide and clear the separate total text when not showing the expression
@@ -326,7 +330,7 @@ export class Header {
 			this.amountTotalText.setText(totalText);
 			this.amountTotalText.setVisible(true);
 
-			const baseX = this.scene.scale.width * 0.5;
+			const baseX = this.scene.scale.width * 0.5 + this.xTextOffset;
 			const baseY = this.amountText.y;
 
 			// Keep the base centered and let the total extend to the right
@@ -377,7 +381,7 @@ export class Header {
 			// Show both texts
 			this.youWonText.setVisible(true);
 			this.amountText.setVisible(true);
-			this.amountText.setPosition(this.scene.scale.width * 0.5, this.amountText.y);
+			this.amountText.setPosition(this.scene.scale.width * 0.5 + this.xTextOffset, this.amountText.y);
 			
 			// Update amount text with winnings
 			this.amountText.setText(formattedWinnings);
@@ -401,7 +405,7 @@ export class Header {
 			targets: target,
 			scaleX: 1.25,
 			scaleY: 1.25,
-			duration: 250,
+			duration: 150 * (gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1),
 			ease: 'Sine.easeInOut',
 			yoyo: true,
 		});

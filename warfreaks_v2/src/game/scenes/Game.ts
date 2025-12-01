@@ -42,6 +42,7 @@ import { EmberParticleSystem } from '../components/EmberParticleSystem';
 import { cameraShake } from '../components/CameraShake';
 import { WinTracker } from '../components/WinTracker';
 import { GameEventData, SpinDataEventData } from '../../event/EventManager';
+import { BONUS_FREE_SPIN_TEST_DATA } from '../../testing/TestSpinData';
 
 export class Game extends Scene
 {
@@ -73,7 +74,7 @@ export class Game extends Scene
 	private hasWinlinesThisSpin: boolean = false;
 	
 	// Queue for wins that occur while a dialog is already showing
-	private winQueue: Array<{ payout: number; bet: number }> = [];
+	private winQueue: Array<{ payout: number; bet: number; multiplier: number }> = [];
 	private suppressWinDialogsUntilNextSpin: boolean = false;
 
 	public gameData: GameData;
@@ -266,12 +267,6 @@ export class Game extends Scene
 		// Initialize balance on game start
 		this.initializeGameBalance();
 		
-		// Add spacebar key listener for coin spawning
-		this.input.keyboard?.on('keydown-SPACE', () => {
-			console.log('[Game] Spacebar pressed - spawning coins');
-			this.spawnCoins(3); // Spawn 3 coins when spacebar is pressed
-		});
-		
 		// Emit START event AFTER SlotController is created
 		console.log(`[Game] Emitting START event to initialize game...`);
 		gameEventManager.emit(GameEventType.START);
@@ -447,10 +442,7 @@ export class Game extends Scene
 				
 				console.log(`[Game] WIN_START: Total win: $${totalWin}, bet: $${betAmount}`);
 				this.spawnCoinsForWin(totalWin, betAmount);
-			} else {
-				console.log('[Game] WIN_START: No current spin data available, spawning default 5 coins');
-				this.spawnCoins(5);
-			}
+			} 
 		});
 
 		// Listen for winline animations completion to show win dialogs
@@ -464,14 +456,23 @@ export class Game extends Scene
 				// Calculate total win from SpinData (handles base + freespins)
 				// const totalWin = this.calculateTotalWinFromPaylines(spinData);
 				// const betAmount = parseFloat(spinData.bet);
-				const betAmount = parseFloat(this.symbols.currentSpinData.bet);
-				const totalWin = this.symbols.currentSpinData.slot?.totalWin ?? 0;
+				// const totalWin = this.symbols.currentSpinData.slot?.totalWin ?? 0;
+				const slotData = this.symbols.currentSpinData.slot;
+				const totalWin = !gameStateManager.isBonus
+					? slotData.totalWin ?? 0
+					: slotData.freespin?.items[this.gameAPI.getCurrentFreeSpinIndex() - 1]?.totalWin ?? 0;
 				
-				console.log(`[Game] WIN_STOP: Total win calculated: $${totalWin}, bet: $${betAmount}`);
+				const multiplierThisSpin = !gameStateManager.isBonus
+					? slotData.tumbles?.multiplier?.total ?? 0
+					: slotData.freespin?.items[this.gameAPI.getCurrentFreeSpinIndex() - 1]?.tumble?.multiplier ?? 0;
+
+				const betAmount = parseFloat(this.symbols.currentSpinData.bet);
+
+				console.log(`[Game] WIN_STOP: Total win calculated: $${totalWin}, bet: $${betAmount}, multiplier: ${multiplierThisSpin}`);
 				
 				if (totalWin > 0) {
 					// Note: Win dialog threshold check moved to Symbols component for earlier detection
-					this.checkAndShowWinDialog(totalWin, betAmount);
+					this.checkAndShowWinDialog(totalWin, betAmount, multiplierThisSpin);
 				} else {
 					console.log('[Game] WIN_STOP: No wins detected from paylines');
 				}
@@ -768,7 +769,7 @@ export class Game extends Scene
 	/**
 	 * Check if payout reaches win dialog thresholds and show appropriate dialog
 	 */
-	private checkAndShowWinDialog(payout: number, bet: number): void {
+	private checkAndShowWinDialog(payout: number, bet: number, multiplier: number): void {
 		console.log(`[Game] checkAndShowWinDialog started`);
 		// Suppress win dialogs if we're transitioning out of bonus back to base
 		if (this.suppressWinDialogsUntilNextSpin) {
@@ -780,32 +781,19 @@ export class Game extends Scene
 		console.log(`[Game] Current isShowingWinDialog state: ${gameStateManager.isShowingWinDialog}`);
 		console.log(`[Game] Current dialog showing state: ${this.dialogs.isDialogShowing()}`);
 		
-		
-		
 		// Check if a dialog is already showing - prevent multiple dialogs
 		if (this.dialogs.isDialogShowing()) {
 			console.log('[Game] Dialog already showing, skipping win dialog for this payout');
 			// Add to queue if dialog is already showing
-			this.winQueue.push({ payout: payout, bet: bet });
+			this.winQueue.push({ payout: payout, bet: bet, multiplier: multiplier });
 			console.log(`[Game] Added to win queue. Queue length: ${this.winQueue.length}`);
 			return;
 		}
 		
-		const multiplier = !gameStateManager.isBonus
-			? this.symbols.currentSpinData?.slot?.tumbles?.multiplier?.total ?? 0
-			: (() => {
-				const items = this.symbols.currentSpinData?.slot?.freespin?.items;
-				if (!items || items.length === 0) {
-					return 0;
-				}
-				const lastItem = items[items.length - 1];
-				return lastItem?.tumble?.multiplier ?? 0;
-			})();
-		
 		console.log(`[Game] Win detected - Payout: $${payout}, Bet: $${bet}, Multiplier: ${multiplier}x`);
 		
-		// Only show dialogs for wins that are at least 20x the bet size
-		if (multiplier < 2) {
+		// Only show dialogs for wins that are at least the bigWinThreshold (e.g. 20x the bet size)
+		if (multiplier < this.gameData.bigWinThreshold) {
 			console.log(`[Game] Win below threshold - No dialog shown for ${multiplier.toFixed(2)}x multiplier`);
 			// Clear the win dialog state since no dialog was shown
 			gameStateManager.isShowingWinDialog = false;
@@ -862,7 +850,7 @@ export class Game extends Scene
 		const nextWin = this.winQueue.shift();
 		if (nextWin) {
 			console.log(`[Game] Processing next win from queue: $${nextWin.payout} on $${nextWin.bet} bet. Queue remaining: ${this.winQueue.length}`);
-			this.checkAndShowWinDialog(nextWin.payout, nextWin.bet);
+			this.checkAndShowWinDialog(nextWin.payout, nextWin.bet, nextWin.multiplier);
 		}
 	}
 
@@ -880,23 +868,6 @@ export class Game extends Scene
 	 */
 	private getWinQueueStatus(): string {
 		return `Win Queue: ${this.winQueue.length} pending wins`;
-	}
-
-
-	/**
-	 * Spawn coins manually (for testing or special events)
-	 */
-	public spawnCoins(count: number = 3): void {
-		if (this.coinAnimation) {
-			this.coinAnimation.spawnCoins(count);
-			// Play coin throw SFX once when coins spawn
-			try {
-				const audio = (window as any).audioManager as AudioManager | undefined;
-				if (audio && typeof audio.playSoundEffect === 'function') {
-					audio.playSoundEffect(SoundEffectType.COIN_THROW);
-				}
-			} catch {}
-		}
 	}
 
 	/**
@@ -933,18 +904,6 @@ export class Game extends Scene
 			coinCount = 5;
 			console.log(`[Game] Below threshold win! Spawning ${coinCount} coins for ${multiplier.toFixed(2)}x multiplier`);
 		}
-		// Delay 1 second before spawning coins and playing SFX
-		this.time.delayedCall(500, () => {
-			// Play coin throw SFX once at start of win-based coin spawn
-			try {
-				const audio = (window as any).audioManager as AudioManager | undefined;
-				if (audio && typeof audio.playSoundEffect === 'function') {
-					audio.playSoundEffect(SoundEffectType.COIN_THROW);
-				}
-			} catch {}
-			// Spawn coins over 1.5 seconds
-			this.spawnCoinsOverTime(coinCount, 1500);
-		});
 	}
 
 	/**
@@ -1225,12 +1184,6 @@ export class Game extends Scene
 			if (this.bonusHeader) console.log('- BonusHeader visible:', this.bonusHeader.getContainer().visible);
 		};
 		
-		// Add coin testing methods
-		(window as any).spawnCoins = (count: number = 3) => {
-			console.log(`[Game] TEST: Spawning ${count} coins (or press SPACEBAR)`);
-			this.spawnCoins(count);
-		};
-		
 		(window as any).spawnSingleCoin = (x?: number, y?: number) => {
 			console.log(`[Game] TEST: Spawning single coin at (${x || 'center'}, ${y || 'center'})`);
 			this.spawnSingleCoin(x, y);
@@ -1254,6 +1207,8 @@ export class Game extends Scene
 		console.log('- spawnSingleCoin(400, 300) - Spawn one coin at position');
 		console.log('- clearCoins() - Remove all coins');
 		console.log('- getCoinCount() - Check active coin count');
+
+		this.registerSpinTestHarness();
 	}
 
 	switchBetweenModes(isBonus: boolean): void {
@@ -1285,6 +1240,101 @@ export class Game extends Scene
 		
 
 		this.gameStateManager.startSpin();
+	}
+
+	private registerSpinTestHarness(): void {
+		const globalScope = window as any;
+		const ensureData = (payload?: any) => payload ?? BONUS_FREE_SPIN_TEST_DATA;
+
+		globalScope.debugSpinData = BONUS_FREE_SPIN_TEST_DATA;
+
+		globalScope.playTestSpin = async (options?: { autoFreeSpins?: boolean; spinData?: any }) => {
+			const data = ensureData(options?.spinData);
+			await this.runDebugSpinData(data, options?.autoFreeSpins ?? false);
+		};
+
+		globalScope.injectSpinData = async (spinData: any, autoFreeSpins: boolean = false) => {
+			await this.runDebugSpinData(spinData, autoFreeSpins);
+		};
+
+		globalScope.startTestFreeSpins = async (spinData?: any) => {
+			const data = ensureData(spinData);
+			await this.runDebugSpinData(data, false);
+			this.forceDebugFreeSpinAutoplay(data);
+		};
+
+		console.log('[Game] Debug spin harness ready. Use playTestSpin({ autoFreeSpins: true }) or startTestFreeSpins().');
+	}
+
+	private async runDebugSpinData(rawSpinData: any, autoFreeSpins: boolean): Promise<void> {
+		if (!rawSpinData) {
+			console.warn('[Game] No spin data supplied for debug run');
+			return;
+		}
+
+		const normalized = this.cloneAndNormalizeSpinData(rawSpinData);
+
+		if (this.gameAPI && typeof this.gameAPI.setFreeSpinData === 'function') {
+			this.gameAPI.setFreeSpinData(normalized as unknown as SpinData);
+		}
+
+		gameEventManager.emit(GameEventType.SPIN_DATA_RESPONSE, { spinData: normalized });
+
+		if (autoFreeSpins) {
+			this.forceDebugFreeSpinAutoplay(normalized);
+		}
+	}
+
+	private cloneAndNormalizeSpinData(spinData: any): any {
+		const clone = JSON.parse(JSON.stringify(spinData ?? {}));
+		clone.playerId = clone.playerId ?? 'debug-player';
+
+		const slot = clone.slot || (clone.slot = {});
+		slot.area = Array.isArray(slot.area) ? slot.area : [];
+		slot.paylines = Array.isArray(slot.paylines) ? slot.paylines : [];
+
+		if (!slot.tumbles) {
+			slot.tumbles = { items: [], multiplier: { symbols: [], total: 0 } };
+		} else {
+			slot.tumbles.items = Array.isArray(slot.tumbles.items) ? slot.tumbles.items : [];
+			slot.tumbles.multiplier = slot.tumbles.multiplier || { symbols: [], total: 0 };
+			slot.tumbles.multiplier.symbols = Array.isArray(slot.tumbles.multiplier.symbols)
+				? slot.tumbles.multiplier.symbols
+				: [];
+			slot.tumbles.multiplier.total = slot.tumbles.multiplier.total ?? 0;
+		}
+
+		const freeSpinData = slot.freeSpin || slot.freespin;
+		if (freeSpinData) {
+			slot.freeSpin = freeSpinData;
+			slot.freespin = freeSpinData;
+			freeSpinData.items = Array.isArray(freeSpinData.items) ? freeSpinData.items : [];
+		} else {
+			slot.freeSpin = slot.freespin = { count: 0, totalWin: 0, items: [] };
+		}
+
+		return clone;
+	}
+
+	private forceDebugFreeSpinAutoplay(spinData: any): void {
+		const freeSpinBlock = spinData?.slot?.freeSpin || spinData?.slot?.freespin;
+		if (!freeSpinBlock || !Array.isArray(freeSpinBlock.items) || freeSpinBlock.items.length === 0) {
+			console.warn('[Game] Debug free spin autoplay requested but the payload has no free spins.');
+			return;
+		}
+
+		this.gameStateManager.isScatter = true;
+		this.gameStateManager.isBonus = true;
+
+		this.events.emit('setBonusMode', true);
+		this.events.emit('showBonusBackground');
+		this.events.emit('showBonusHeader');
+
+		if (this.symbols && typeof (this.symbols as any).debugTriggerFreeSpinAutoplay === 'function') {
+			(this.symbols as any).debugTriggerFreeSpinAutoplay(spinData);
+		} else {
+			console.warn('[Game] Symbols debug helper missing; autoplay will not start automatically.');
+		}
 	}
 
 	turbo() {

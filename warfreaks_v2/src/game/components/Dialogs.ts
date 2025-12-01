@@ -8,7 +8,8 @@ import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { getFullScreenSpineScale, playSpineAnimationSequence } from './SpineBehaviorHelper';
 import { FlashTransition } from './FlashTransition';
 import { WinTracker } from './WinTracker';
-import { AUTO_SPIN_WIN_DIALOG_TIMEOUT } from '../../config/GameConfig';
+import { AUTO_SPIN_WIN_DIALOG_TIMEOUT, BONUS_WIN_DIALOG_DELAY_MS } from '../../config/GameConfig';
+import { TurboConfig } from '../../config/TurboConfig';
 
 export interface DialogConfig {
 	//type: 'confetti_KA' | 'congrats_wf' | 'Explosion_AK' | 'FreeSpinDialog_KA' | 'largeW_KA' | 'LargeW_KA' | 'MediumW_KA' | 'SmallW_KA' | 'superw_wf';
@@ -50,6 +51,8 @@ export class Dialogs {
 	
 	// Auto-close timer for win dialogs during autoplay
 	private autoCloseTimer: Phaser.Time.TimerEvent | null = null;
+	private winDialogDelayTimer: Phaser.Time.TimerEvent | null = null;
+	private isDialogPending: boolean = false;
 	
 	// Managers
 	private networkManager: NetworkManager;
@@ -71,7 +74,7 @@ export class Dialogs {
 	private dialogPositions: Record<string, { x: number; y: number }> = {
 		'Congratulations': { x: 0.535, y: 0.625 },
 		'FreeSpinDialog': { x: 0.5, y: 0.3 },
-		'BonusFreeSpinDialog': { x: 0.5, y: 0.3 },
+		'BonusFreeSpinDialog': { x: 0.5, y: 0.4 },
 		'EpicWin': { x: 0.5, y: 0.5 },
 		'MegaWin': { x: 0.5, y: 0.5 },
 		'BigWin': { x: 0.5, y: 0.5 },
@@ -152,10 +155,24 @@ export class Dialogs {
 	 * Show a dialog with the specified configuration
 	 */
 	public showDialog(scene: Scene, config: DialogConfig): void {
+		this.cancelPendingWinDialogDelay();
+		
+		// Track current dialog type ahead of any delay decision
+		this.currentDialogType = config.type;
+		
 		if (this.isDialogActive) {
 			this.hideDialog();
 		}
 
+		if (this.shouldDelayBonusWinDialog(config.type)) {
+			this.scheduleBonusWinDialog(scene, config);
+			return;
+		}
+
+		this.startDialogDisplay(scene, config);
+	}
+
+	private startDialogDisplay(scene: Scene, config: DialogConfig): void {
 		console.log(`[Dialogs] Showing dialog: ${config.type}`);
 		
 		// Track current dialog type for bonus mode detection
@@ -293,7 +310,11 @@ export class Dialogs {
 		});
 		
 		// Create number display if win amount or free spins are provided (AFTER effects)
-		if (config.winAmount !== undefined || config.freeSpins !== undefined) {
+		const shouldShowNumberDisplay =
+			config.type !== 'BonusFreeSpinDialog' &&
+			(config.winAmount !== undefined || config.freeSpins !== undefined);
+
+		if (shouldShowNumberDisplay) {
 			this.createNumberDisplay(scene, config.winAmount || 0, config.freeSpins);
 		}
 		
@@ -305,6 +326,55 @@ export class Dialogs {
 		
 		// Set up auto-close timer for win dialogs during autoplay
 		this.setupAutoCloseTimer(scene);
+	}
+
+	private shouldDelayBonusWinDialog(dialogType: string): boolean {
+		return BONUS_WIN_DIALOG_DELAY_MS > 0 &&
+			gameStateManager.isBonus &&
+			this.isWinDialogType(dialogType);
+	}
+
+	private scheduleBonusWinDialog(scene: Scene, config: DialogConfig): void {
+		if (!scene.time) {
+			console.warn('[Dialogs] Scene time not available - showing win dialog without bonus delay');
+			this.isDialogPending = false;
+			this.startDialogDisplay(scene, config);
+			return;
+		}
+
+		console.log(`[Dialogs] Bonus win dialog detected (${config.type}) - delaying show by ${BONUS_WIN_DIALOG_DELAY_MS}ms`);
+
+		this.cancelPendingWinDialogDelay();
+		this.isDialogPending = true;
+		this.winDialogDelayTimer = scene.time.delayedCall(BONUS_WIN_DIALOG_DELAY_MS, () => {
+			this.winDialogDelayTimer = null;
+			if (!this.isDialogPending) {
+				console.log('[Dialogs] Pending bonus win dialog delay cancelled before execution');
+				return;
+			}
+			this.isDialogPending = false;
+			this.startDialogDisplay(scene, config);
+		});
+	}
+
+	private cancelPendingWinDialogDelay(): void {
+		if (this.winDialogDelayTimer) {
+			this.winDialogDelayTimer.remove();
+			this.winDialogDelayTimer = null;
+		}
+
+		if (this.isDialogPending) {
+			console.log('[Dialogs] Cleared pending bonus win dialog delay');
+		}
+
+		this.isDialogPending = false;
+	}
+
+	private isWinDialogType(dialogType: string | null): boolean {
+		return dialogType === 'BigWin' ||
+			   dialogType === 'MegaWin' ||
+			   dialogType === 'EpicWin' ||
+			   dialogType === 'SuperWin';
 	}
 
 	private getDialogSpineName(config: DialogConfig): string {
@@ -418,7 +488,7 @@ export class Dialogs {
 		console.log(`[Dialogs] Created dialog content: ${config.type}`);
 	}
 	/**
-	 * Set up auto-close timer for win dialogs during autoplay or when scatter is hit
+	 * Set up auto-close timer for win dialogs during autoplay, scatter, or bonus mode
 	 */
 	private setupAutoCloseTimer(scene: Scene): void {
 		// Clear any existing timer
@@ -426,31 +496,69 @@ export class Dialogs {
 			this.autoCloseTimer.destroy();
 			this.autoCloseTimer = null;
 		}
+
+		// Never auto-close the final Congratulations dialog – it must always wait
+		// for explicit player input to dismiss.
+		if (this.currentDialogType === 'Congratulations') {
+			console.log('[Dialogs] Auto-close explicitly disabled for Congratulations dialog');
+			return;
+		}
 		
-		// Set up auto-close for win dialogs during autoplay OR when scatter is hit
+		// Set up auto-close for win dialogs during:
+		// - normal autoplay
+		// - scatter-triggered flows
+		// - bonus mode (free spin sequences)
+		const isWinDialog = this.isWinDialog();
+		const isAutoPlaying = gameStateManager.isAutoPlaying;
+		const isScatter = gameStateManager.isScatter;
+		const isBonus = gameStateManager.isBonus;
+
 		console.log('[Dialogs] Auto-close timer setup check:', {
-			isWinDialog: this.isWinDialog(),
-			isAutoPlaying: gameStateManager.isAutoPlaying,
-			isScatter: gameStateManager.isScatter,
+			isWinDialog,
+			isAutoPlaying,
+			isScatter,
+			isBonus,
 			currentDialogType: this.currentDialogType
 		});
 		
-		const shouldAutoClose = this.isWinDialog() && (gameStateManager.isAutoPlaying || gameStateManager.isScatter);
+		const shouldAutoClose =
+			isWinDialog &&
+			(isAutoPlaying || isScatter || isBonus);
 		
 		if (shouldAutoClose) {
-			const reason = gameStateManager.isAutoPlaying ? 'autoplay' : 'scatter hit';
-			console.log(`[Dialogs] Setting up auto-close timer for win dialog during ${reason} (2 seconds)`);
-			console.log(`[Dialogs] Win dialog will automatically close in 2 seconds due to ${reason}`);
+			const reason = isAutoPlaying
+				? 'autoplay'
+				: isScatter
+					? 'scatter hit'
+					: 'bonus mode';
+			console.log(`[Dialogs] Setting up auto-close timer for win dialog during ${reason} (2.5 seconds)`);
+			console.log(`[Dialogs] Win dialog will automatically close in 2.5 seconds due to ${reason}`);
 			
 			this.autoCloseTimer = scene.time.delayedCall(AUTO_SPIN_WIN_DIALOG_TIMEOUT, () => {
-				console.log(`[Dialogs] Auto-close timer triggered for win dialog during ${reason} - closing dialog`);
+				console.log(`[Dialogs] Auto-close timer triggered for dialog type: ${this.currentDialogType}, reason: ${reason}`);
+
+				// Safety guard: if, for any reason, the Congratulations dialog is
+				// currently active when this timer fires, do NOT auto-close it.
+				if (this.currentDialogType === 'Congratulations') {
+					console.log('[Dialogs] Auto-close timer fired while Congratulations is active - ignoring to keep dialog on screen');
+					return;
+				}
+
+				// When the auto-close timer fires, immediately make the dialog non-clickable
+				// so that the player cannot trigger additional clicks during the fade-out
+				if (this.clickArea) {
+					this.clickArea.disableInteractive();
+					console.log('[Dialogs] Click area disabled due to auto-close timer');
+				}
+
 				this.handleDialogClick(scene);
 			});
 		} else {
 			console.log('[Dialogs] No auto-close timer needed:', {
-				isWinDialog: this.isWinDialog(),
-				isAutoPlaying: gameStateManager.isAutoPlaying,
-				isScatter: gameStateManager.isScatter
+				isWinDialog,
+				isAutoPlaying,
+				isScatter,
+				isBonus
 			});
 		}
 	}
@@ -572,8 +680,10 @@ export class Dialogs {
 			const introDuration = 1500; // 1.5 seconds
 			
 			scene.time.delayedCall(introDuration, () => {
-				console.log('[Dialogs] Paint intro animation complete, fading in number display');
-				this.fadeInNumberDisplay(scene);
+				if (this.numberDisplayContainer) {
+					console.log('[Dialogs] Paint intro animation complete, fading in number display');
+					this.fadeInNumberDisplay(scene);
+				}
 			});
 			
 		} catch (error) {
@@ -582,8 +692,10 @@ export class Dialogs {
 			paint.animationState.setAnimation(0, 'Paint_KA_idle', shouldLoop);
 			// If intro animation is missing, trigger number display fade-in after a short delay
 			scene.time.delayedCall(500, () => {
-				console.log('[Dialogs] Fallback: triggering number display fade-in after 0.5 seconds');
-				this.fadeInNumberDisplay(scene);
+				if (this.numberDisplayContainer) {
+					console.log('[Dialogs] Fallback: triggering number display fade-in after 0.5 seconds');
+					this.fadeInNumberDisplay(scene);
+				}
 			});
 		}
 			
@@ -672,7 +784,9 @@ export class Dialogs {
 			prefix: '', // No prefix for any number display
 			suffix: '', // No suffix - only display numbers
 			commaYOffset: 18,
-			dotYOffset: 18
+			dotYOffset: 18,
+			tickDurationMs: 1000 * (gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1),
+			animateThreshold: 50
 		};
 
 		// Create the number display
@@ -729,7 +843,7 @@ export class Dialogs {
 		console.log('[Dialogs] Dialog clicked, starting fade-out sequence');
 		
 		// Emit an event specifically when Free Spin dialog is clicked
-		if (this.currentDialogType === 'FreeSpinDialog') {
+		if (this.currentDialogType === 'FreeSpinDialog' || this.currentDialogType === 'BonusFreeSpinDialog') {
 			try {
 				scene.events.emit('freeSpinDialogClicked');
 				console.log('[Dialogs] Emitted freeSpinDialogClicked event');
@@ -964,8 +1078,8 @@ export class Dialogs {
 		}
 		
 		// Check if this is a free spin dialog - start special transition
-		if (this.currentDialogType === 'FreeSpinDialog') {
-			console.log('[Dialogs] Free spin dialog clicked - starting transition');
+		if (this.currentDialogType === 'FreeSpinDialog' || this.currentDialogType === 'BonusFreeSpinDialog') {
+			console.log('[Dialogs] Free spin dialog clicked - starting transition:', this.currentDialogType);
 			// Don't disable dialog elements yet for free spin dialogs
 			this.startWinDialogFadeOut(scene);
 			return;
@@ -982,10 +1096,7 @@ export class Dialogs {
 	 * Check if the current dialog is a win dialog
 	 */
 	private isWinDialog(): boolean {
-		return this.currentDialogType === 'BigWin' || 
-			   this.currentDialogType === 'MegaWin' || 
-			   this.currentDialogType === 'EpicWin' || 
-			   this.currentDialogType === 'SuperWin';
+		return this.isWinDialogType(this.currentDialogType);
 	}
 	
 	/**
@@ -1454,6 +1565,8 @@ export class Dialogs {
 	private performDialogCleanup(): void {
 		console.log('[Dialogs] Starting dialog cleanup');
 		
+		this.cancelPendingWinDialogDelay();
+		
 		// Clean up current dialog
 		if (this.currentDialog) {
 			console.log('[Dialogs] Destroying current dialog');
@@ -1516,7 +1629,17 @@ export class Dialogs {
 	hideDialog(): void {
 		if (!this.isDialogActive) return;
 		
+		// Never programmatically hide the Congratulations dialog – it must be
+		// dismissed explicitly by the player. This prevents any auto-flows
+		// (like bonus retriggers) from accidentally closing it.
+		if (this.currentDialogType === 'Congratulations') {
+			console.log('[Dialogs] hideDialog() called while Congratulations is active - ignoring to keep dialog on screen');
+			return;
+		}
+		
 		console.log('[Dialogs] Hiding dialog with black overlay transition');
+		
+		this.cancelPendingWinDialogDelay();
 		
 		if (this.currentScene) {
 			// Stop all effect animations immediately
@@ -1568,11 +1691,49 @@ export class Dialogs {
 		console.log('[Dialogs] Dialog hidden and cleaned up');
 	}
 
+  /**
+   * Immediately hide the current dialog without any fade-to-black transition.
+   * Useful for automated flows that need to close dialogs silently.
+   */
+  public hideDialogWithoutFade(): void {
+    if (!this.isDialogActive) {
+      return;
+    }
+
+    // Never programmatically hide the Congratulations dialog – it must be
+    // dismissed explicitly by the player. This prevents any silent auto-close
+    // paths from affecting it.
+    if (this.currentDialogType === 'Congratulations') {
+      console.log('[Dialogs] hideDialogWithoutFade() called while Congratulations is active - ignoring to keep dialog on screen');
+      return;
+    }
+
+    console.log('[Dialogs] Hiding dialog without fade transition');
+
+    this.cancelPendingWinDialogDelay();
+    this.stopAllEffectAnimations();
+
+    if (this.blackOverlay) {
+      this.blackOverlay.setVisible(false);
+      this.blackOverlay.setAlpha(0);
+    }
+
+    if (this.dialogOverlay) {
+      this.dialogOverlay.setVisible(false);
+      this.dialogOverlay.setAlpha(0);
+    }
+
+    this.isDialogActive = false;
+    this.currentDialogType = null;
+
+    this.performDialogCleanup();
+  }
+
 	/**
 	 * Check if dialog is currently showing
 	 */
 	isDialogShowing(): boolean {
-		return this.isDialogActive;
+		return this.isDialogActive || this.isDialogPending;
 	}
 
 	/**

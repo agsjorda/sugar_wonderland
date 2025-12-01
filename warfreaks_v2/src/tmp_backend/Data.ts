@@ -8,7 +8,6 @@ import {
   ALL_SYMBOLS, 
   SCATTER_MULTIPLIERS, 
   DELAY_BETWEEN_SPINS,
-  WINLINES 
 } from "../config/GameConfig";
 
 export class Data {
@@ -21,7 +20,6 @@ export class Data {
   public static SCATTER_MULTIPLIERS: number[] = SCATTER_MULTIPLIERS;
   public static DELAY_BETWEEN_SPINS: number = DELAY_BETWEEN_SPINS;
 
-  public static WINLINES: number[][][] = WINLINES;
   public symbols: number[][];
   public wins: Wins;
 

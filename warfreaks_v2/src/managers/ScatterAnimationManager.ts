@@ -9,6 +9,7 @@ import { SCATTER_MULTIPLIERS } from '../config/GameConfig';
 import { getFullScreenSpineScale, playSpineAnimationSequence } from '../game/components/SpineBehaviorHelper';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { FlashTransition } from '../game/components/FlashTransition';
+import { emitKeypressEvents } from 'readline';
 
 export interface ScatterAnimationConfig {
   scatterRevealDelay: number;
@@ -129,19 +130,6 @@ export class ScatterAnimationManager {
       console.log('[ScatterAnimationManager] Waiting for player to see scatter symbols...');
       await this.delay(this.getTurboAdjustedDelay(this.config.scatterRevealDelay));
 
-      // Step 2: Disable symbols
-      // await this.disableSymbols();
-
-      // Step 3: Slide spinner down
-      // await this.slideSpinnerIn();
-
-      // Step 4: Wait for delay then trigger spinner rotation
-      // await this.delay(this.config.spinDelay);
-
-      // Step 5: Trigger the spinner rotation
-      // this.triggerSpinnerRotation(data);
-
-      // Step 6: Wait for spinner to complete and show free spins dialog
       await this.waitForFreeSpinDialogInput(data);
 
       // Call nuclear transition here
@@ -565,6 +553,8 @@ export class ScatterAnimationManager {
     console.log(`[ScatterAnimationManager] Showing free spins dialog for ${freeSpins} free spins`);
     console.log(`[ScatterAnimationManager] Backend data state: freeSpins=${data.freeSpins}, scatterIndex=${data.scatterIndex}`);
 
+    const dialogNameToShow = gameStateManager.isBonus ? 'BonusFreeSpinDialog' : 'FreeSpinDialog';
+    console.log(`[ScatterAnimationManager] Showing ${dialogNameToShow} dialog`);
     // Update game state to reflect bonus mode
     console.log('[ScatterAnimationManager] Setting isBonus to true');
     gameStateManager.isBonus = true;
@@ -574,11 +564,11 @@ export class ScatterAnimationManager {
     try {
       console.log('[ScatterAnimationManager] Calling dialogsComponent.showDialog with type: FreeSpinDialog_KA, freeSpins:', freeSpins);
       this.dialogsComponent.showDialog(this.scene, {
-        type: 'FreeSpinDialog',
+        type: dialogNameToShow,
         freeSpins: freeSpins
       });
 
-      console.log('[ScatterAnimationManager] Free spins dialog displayed successfully');
+      console.log('[ScatterAnimationMa`nager] Free spins dialog displayed successfully');
 
       // Emit IS_BONUS event through the EventManager
       gameEventManager.emit(GameEventType.IS_BONUS, {
@@ -590,7 +580,8 @@ export class ScatterAnimationManager {
       if (this.scene) {
         const eventData = {
           scatterIndex: data.scatterIndex,
-          actualFreeSpins: freeSpins
+          actualFreeSpins: freeSpins,
+          isRetrigger: false,
         };
         console.log(`[ScatterAnimationManager] Emitting scatterBonusActivated event with data:`, eventData);
 

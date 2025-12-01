@@ -7,13 +7,18 @@ import { SymbolDetector, Grid, Wins } from "../../tmp_backend/SymbolDetector";
 import { GameEventData, gameEventManager, GameEventType, UpdateMultiplierValueEventData } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { TurboConfig } from '../../config/TurboConfig';
-import { SLOT_ROWS, SLOT_COLUMNS, DELAY_BETWEEN_SPINS, WILDCARD_SYMBOLS } from '../../config/GameConfig';
+import {
+  SLOT_ROWS,
+  SLOT_COLUMNS,
+  DELAY_BETWEEN_SPINS,
+  WILDCARD_SYMBOLS,
+  AUTO_SPIN_START_DELAY,
+  SCATTER_MULTIPLIERS,
+  AUTO_SPIN_WIN_DIALOG_TIMEOUT,
+} from '../../config/GameConfig';
 import { AudioManager, SoundEffectType } from '../../managers/AudioManager';
 import { Dialogs } from "./Dialogs";
 import { SpineGameObject } from "@esotericsoftware/spine-phaser-v3";
-import {
-  AUTO_SPIN_START_DELAY
-} from "../../config/GameConfig";
 import { hideSpineAttachmentsByKeywords } from "./SpineBehaviorHelper";
 import { NumberDisplay, NumberDisplayConfig } from "./NumberDisplay";
 import { SpinData, SpinDataUtils } from "../../backend/SpinData";
@@ -201,11 +206,12 @@ export class Symbols {
       // Reset dialog showing flag
       gameStateManager.isShowingWinDialog = false;
 
-      // If bonus just finished, immediately show congrats and reset flag
+      // If bonus just finished, simply clear the flag here. The actual
+      // Congratulations dialog is now scheduled centrally via the free spin
+      // autoplay stop flow (stopFreeSpinAutoplay → scheduleCongratsDialogAfterAutoplay)
+      // to avoid double-triggering from multiple listeners.
       if (gameStateManager.isBonusFinished) {
-        console.log('[Symbols] isBonusFinished is true on WIN_DIALOG_CLOSED - showing congrats now');
-        // Show congrats now and reset the flag; bonus mode exit happens on congrats close
-        this.showCongratsDialogAfterDelay(4000 * (gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1));
+        console.log('[Symbols] isBonusFinished is true on WIN_DIALOG_CLOSED - congrats handled by autoplay stop; clearing isBonusFinished flag only');
         gameStateManager.isBonusFinished = false;
       }
     });
@@ -945,6 +951,121 @@ export class Symbols {
   }
 
   /**
+   * Handle scatter retriggers that occur while bonus mode/free spins are already active.
+   * Shows a short Bonus Free Spin dialog, auto-closes it, then resumes the free spin flow.
+   */
+  public async handleBonusScatterRetrigger(mockData: any, scatterGrids: any[], spinData: any): Promise<void> {
+    console.log('[Symbols] Handling bonus-mode scatter retrigger');
+
+    // For retriggers, award a fixed number of extra free spins configured in GameData
+    const awardedFreeSpins = this.scene.gameData?.bonusRetriggerFreeSpins ?? 5;
+    console.log(`[Symbols] Bonus scatter retrigger - awarding ${awardedFreeSpins} extra free spins from GameData`);
+
+    // If our free spin autoplay system is active, extend the remaining count
+    if (this.freeSpinAutoplayActive && awardedFreeSpins > 0) {
+      const before = this.freeSpinAutoplaySpinsRemaining;
+      this.freeSpinAutoplaySpinsRemaining += awardedFreeSpins;
+      console.log(`[Symbols] Extended free spin autoplay remaining: ${before} -> ${this.freeSpinAutoplaySpinsRemaining}`);
+    } else {
+      console.log('[Symbols] Free spin autoplay not active when retrigger hit - no remaining counter to extend');
+    }
+
+    const scatterIndex = this.getScatterIndexForRetrigger(scatterGrids.length, awardedFreeSpins);
+    const dialogs = (this.scene as any)?.dialogs as Dialogs | undefined;
+
+    if (awardedFreeSpins > 0) {
+      try {
+        this.scene.events.emit('scatterBonusActivated', {
+          scatterIndex,
+          actualFreeSpins: awardedFreeSpins,
+          isRetrigger: true,
+        });
+      } catch (error) {
+        console.warn('[Symbols] Failed to emit scatterBonusActivated during bonus retrigger:', error);
+      }
+    }
+
+    if (!dialogs || typeof dialogs.showBonusFreeSpinDialog !== 'function') {
+      console.warn('[Symbols] Dialogs component unavailable - skipping bonus retrigger dialog');
+      gameStateManager.isScatter = false;
+      return;
+    }
+
+    try {
+      gameStateManager.isShowingWinDialog = true;
+      dialogs.showBonusFreeSpinDialog(this.scene, {
+        freeSpins: awardedFreeSpins,
+      });
+    } catch (error) {
+      console.error('[Symbols] Failed to show bonus free spin dialog during retrigger:', error);
+      gameStateManager.isShowingWinDialog = false;
+      gameStateManager.isScatter = false;
+      return;
+    }
+
+    await delay(AUTO_SPIN_WIN_DIALOG_TIMEOUT);
+
+    try {
+      if (typeof (dialogs as any).hideDialogWithoutFade === 'function' && dialogs.isDialogShowing()) {
+        (dialogs as any).hideDialogWithoutFade();
+      } else if (typeof dialogs.hideDialog === 'function' && dialogs.isDialogShowing()) {
+        dialogs.hideDialog();
+      }
+    } catch (error) {
+      console.warn('[Symbols] Failed to auto-hide bonus free spin dialog:', error);
+    } finally {
+      gameStateManager.isShowingWinDialog = false;
+      gameStateManager.isScatter = false;
+      try {
+        gameEventManager.emit(GameEventType.WIN_DIALOG_CLOSED);
+      } catch (error) {
+        console.warn('[Symbols] Failed to emit WIN_DIALOG_CLOSED after bonus retrigger dialog:', error);
+      }
+      try {
+        this.scene.events.emit('dialogAnimationsComplete');
+      } catch (error) {
+        console.warn('[Symbols] Failed to emit dialogAnimationsComplete after bonus retrigger dialog:', error);
+      }
+    }
+  }
+
+  private getFreeSpinAwardFromSpinData(spinData: any, mockData: any): number {
+    if (!spinData?.slot) {
+      return mockData?.freeSpins || 0;
+    }
+
+    const freespin = spinData.slot.freespin || spinData.slot.freeSpin;
+
+    if (typeof freespin?.count === 'number' && freespin.count > 0) {
+      return freespin.count;
+    }
+
+    const items = Array.isArray(freespin?.items) ? freespin.items : [];
+    const firstItem = items.length > 0 ? items[0] : null;
+    if (firstItem && typeof firstItem.spinsLeft === 'number' && firstItem.spinsLeft > 0) {
+      return firstItem.spinsLeft;
+    }
+
+    if (items.length > 0) {
+      return items.length;
+    }
+
+    return mockData?.freeSpins || 0;
+  }
+
+  private getScatterIndexForRetrigger(scatterCount: number, freeSpinAward: number): number {
+    if (freeSpinAward > 0) {
+      const derivedIndex = SCATTER_MULTIPLIERS.indexOf(freeSpinAward);
+      if (derivedIndex >= 0) {
+        return derivedIndex;
+      }
+    }
+
+    const baseIndex = Math.max(0, scatterCount - 3);
+    return Math.min(baseIndex, SCATTER_MULTIPLIERS.length - 1);
+  }
+
+  /**
    * Animate scatter symbols with Spine animations (no winlines)
    */
   public async animateScatterSymbols(data: Data, scatterGrids: any[]): Promise<void> {
@@ -1084,27 +1205,6 @@ export class Symbols {
                 const fastPhaseDuration = Math.max(1, Math.floor(400 * flightTurboMultiplier));
 
                 this.scene.time.delayedCall(flightDelayMs, () => {
-                  // try {
-                  //   hideSpineAttachmentsByKeywords(spineSymbol, [
-                  //     'S_clip',
-                  //     'Speed (8)', 
-                  //     'Speed (8)', 
-                  //     'scatter_target_02',
-                  //     'scatter_target_01',
-                  //     'scatter_fonts_sdw',
-                  //     'scatter_fonts',
-                  //     'scatter_fonts2',
-                  //     'scatter_glow',
-                  //     // 'scatter_missile',
-                  //     // 'scatter_missile2',
-                  //     'scatter_ozz',
-                  //     'scatter_ozz',
-                  //     'scatt_bone_logo',
-                  //     'E7 (1)',
-                  //     'E7 (1)',
-                  //   ])
-                  // } catch {}
-
                   const startX = spineSymbol.x;
                   const startY = spineSymbol.y;
                   const targetX = startX + 1200;
@@ -1125,13 +1225,11 @@ export class Symbols {
                         duration: fastPhaseDuration,
                         ease: 'Expo.easeIn'
                       });
-
                       
-                      // Play missile SFX once when scatter symbols begin their animation sequence
                       try {
                         const audio = (window as any)?.audioManager as AudioManager;
-                        audio.playOneShot(SoundEffectType.MISSILE);
-                        console.log('[Symbols] Missile SFX played at scatter symbol animation start');
+                          audio.playOneShot(SoundEffectType.MISSILE);
+                          console.log('[Symbols] Missile SFX played at scatter symbol animation start');
                       } catch { }
                     }
                   });
@@ -1410,6 +1508,31 @@ export class Symbols {
   }
 
   /**
+   * Developer helper to manually kick off free spin autoplay without the scatter flow.
+   * Optionally accepts a spin payload to override the current spin data before starting.
+   */
+  public debugTriggerFreeSpinAutoplay(spinDataOverride?: any): void {
+    console.log('[Symbols] DEBUG: Forcing free spin autoplay sequence');
+
+    if (spinDataOverride) {
+      console.log('[Symbols] DEBUG: Overriding current spin data for autoplay');
+      this.currentSpinData = spinDataOverride;
+    }
+
+    // Reset guards so triggerAutoplayForFreeSpins can run again
+    this.pendingFreeSpinsData = null;
+    this.freeSpinAutoplayActive = false;
+    this.freeSpinAutoplaySpinsRemaining = 0;
+    this.freeSpinAutoplayTriggered = false;
+
+    if (!gameStateManager.isBonus) {
+      console.warn('[Symbols] DEBUG: Bonus mode is not active; forcing it may be required for full UI state.');
+    }
+
+    this.triggerAutoplayForFreeSpins();
+  }
+
+  /**
    * Start free spin autoplay using our custom system
    */
   private startFreeSpinAutoplay(spinCount: number): void {
@@ -1443,40 +1566,76 @@ export class Symbols {
    * Perform a single free spin autoplay
    */
   private async performFreeSpinAutoplay(): Promise<void> {
-    if (!this.freeSpinAutoplayActive || this.freeSpinAutoplaySpinsRemaining <= 0) {
-      console.log('[Symbols] Free spin autoplay stopped or no spins remaining');
-      this.stopFreeSpinAutoplay();
-      return;
-    }
+  	if (!this.freeSpinAutoplayActive || this.freeSpinAutoplaySpinsRemaining <= 0) {
+  		console.log('[Symbols] Free spin autoplay stopped or no spins remaining');
+  		this.stopFreeSpinAutoplay();
+  		return;
+  	}
 
-    console.log(`[Symbols] ===== PERFORMING FREE SPIN AUTOPLAY =====`);
-    console.log(`[Symbols] Free spin autoplay: ${this.freeSpinAutoplaySpinsRemaining} spins remaining`);
+  	console.log('[Symbols] ===== PERFORMING FREE SPIN AUTOPLAY =====');
+  	console.log(`[Symbols] Free spin autoplay: ${this.freeSpinAutoplaySpinsRemaining} spins remaining`);
 
-    // Check if we're still in bonus mode
-    if (!gameStateManager.isBonus) {
-      console.log('[Symbols] No longer in bonus mode - stopping free spin autoplay');
-      this.stopFreeSpinAutoplay();
-      return;
-    }
+  	// Check if we're still in bonus mode
+  	if (!gameStateManager.isBonus) {
+  		console.log('[Symbols] No longer in bonus mode - stopping free spin autoplay');
+  		this.stopFreeSpinAutoplay();
+  		return;
+  	}
 
-    // Check if win dialog is showing - pause autoplay if so
-    if (gameStateManager.isShowingWinDialog) {
-      console.log('[Symbols] Win dialog is showing - pausing free spin autoplay');
-      // Wait for dialog animations to complete instead of using a fixed delay
-      console.log('[Symbols] Waiting for dialogAnimationsComplete event before continuing free spin autoplay');
-      this.scene.events.once('dialogAnimationsComplete', () => {
-        console.log('[Symbols] Dialog animations complete - continuing free spin autoplay');
-        // Use the same timing as normal autoplay (1000ms base with turbo multiplier)
-        const baseDelay = 500;
-        const turboDelay = gameStateManager.isTurbo ?
-          baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER : baseDelay;
-        console.log(`[Symbols] Scheduling free spin retry in ${turboDelay}ms (base: ${baseDelay}ms, turbo: ${gameStateManager.isTurbo})`);
-        this.scene.time.delayedCall(turboDelay, () => {
-          this.performFreeSpinAutoplay();
-        });
-      });
-      return;
-    }
+  	// In bonus mode, if a win dialog is currently visible, wait for it to fully close
+  	try {
+  		const gameScene: any = this.scene as any;
+  		const dialogs = gameScene?.dialogs;
+  		const hasActiveWinDialog =
+  			dialogs &&
+  			typeof dialogs.isDialogShowing === 'function' &&
+  			typeof dialogs.isWinDialog === 'function' &&
+  			dialogs.isDialogShowing() &&
+  			dialogs.isWinDialog();
+
+  		if (gameStateManager.isBonus && hasActiveWinDialog) {
+  			console.log('[Symbols] Bonus win dialog is showing - waiting for WIN_DIALOG_CLOSED before continuing free spin autoplay');
+
+  			const baseDelay = 500;
+  			const turboDelay = gameStateManager.isTurbo
+  				? baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER
+  				: baseDelay;
+
+  			const onWinDialogClosed = () => {
+  				console.log('[Symbols] WIN_DIALOG_CLOSED received - resuming free spin autoplay after win dialog');
+  				try {
+  					gameEventManager.off(GameEventType.WIN_DIALOG_CLOSED, onWinDialogClosed);
+  				} catch { }
+
+  				this.scene.time.delayedCall(turboDelay, () => {
+  					this.performFreeSpinAutoplay();
+  				});
+  			};
+
+  			// Use event bus so we react exactly when the win dialog finishes its fade-out
+  			gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, onWinDialogClosed);
+  			return;
+  		}
+  	} catch (e) {
+  		console.warn('[Symbols] Failed to inspect dialog state before free spin autoplay:', e);
+  	}
+
+  	// Fallback: if some dialog state still marks a win dialog as showing, wait for dialogAnimationsComplete
+  	if (gameStateManager.isShowingWinDialog) {
+  		console.log('[Symbols] Win dialog flag is set - pausing free spin autoplay until dialogAnimationsComplete');
+  		this.scene.events.once('dialogAnimationsComplete', () => {
+  			console.log('[Symbols] dialogAnimationsComplete received - continuing free spin autoplay');
+  			const baseDelay = 500;
+  			const turboDelay = gameStateManager.isTurbo
+  				? baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER
+  				: baseDelay;
+  			console.log(`[Symbols] Scheduling free spin retry in ${turboDelay}ms (base: ${baseDelay}ms, turbo: ${gameStateManager.isTurbo})`);
+  			this.scene.time.delayedCall(turboDelay, () => {
+  				this.performFreeSpinAutoplay();
+  			});
+  		});
+  		return;
+  	}
 
     try {
       // Use our free spin simulation instead of the old backend
@@ -1536,6 +1695,51 @@ export class Symbols {
       return;
     }
 
+    // Determine if the current bonus spin had any win so we can optionally
+    // add extra delay before starting the next free spin.
+    let hadWinThisBonusSpin = false;
+    try {
+      const spinData: any = this.currentSpinData;
+      const slotData = spinData?.slot;
+
+      if (gameStateManager.isBonus && slotData) {
+        const freespinBlock = slotData.freespin || slotData.freeSpin;
+
+        if (freespinBlock && Array.isArray(freespinBlock.items)) {
+          // Prefer the GameAPI free spin index so we stay in sync with Game.ts
+          const apiIndex =
+            typeof (this.scene as any).gameAPI?.getCurrentFreeSpinIndex === 'function'
+              ? (this.scene as any).gameAPI.getCurrentFreeSpinIndex()
+              : null;
+
+          const fsIndex =
+            apiIndex !== null && apiIndex !== undefined
+              ? apiIndex - 1
+              : this.currentFreeSpinIndex;
+
+          if (fsIndex >= 0 && fsIndex < freespinBlock.items.length) {
+            const currentItem = freespinBlock.items[fsIndex];
+            const currentTotalWin =
+              typeof currentItem?.totalWin === 'number' ? currentItem.totalWin : 0;
+
+            hadWinThisBonusSpin = currentTotalWin > 0;
+            console.log(
+              `[Symbols] Free spin autoplay WIN_STOP: totalWin for current free spin index ${fsIndex} is ${currentTotalWin} (hadWin=${hadWinThisBonusSpin})`
+            );
+          } else {
+            console.log(
+              `[Symbols] Free spin autoplay WIN_STOP: fsIndex ${fsIndex} out of range for freespin items length ${freespinBlock.items.length}`
+            );
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(
+        '[Symbols] Failed to evaluate win amount for free spin autoplay delay:',
+        e
+      );
+    }
+
     console.log('[Symbols] WIN_STOP received - continuing free spin autoplay after winlines complete');
     this.freeSpinAutoplayWaitingForWinlines = false;
 
@@ -1545,11 +1749,24 @@ export class Symbols {
       this.freeSpinAutoplayTimer = null;
     }
 
-    // Use the same timing as normal autoplay (500ms base with turbo multiplier)
-    const baseDelay = 500;
-    const turboDelay = gameStateManager.isTurbo ?
-      baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER : baseDelay;
-    console.log(`[Symbols] Scheduling next free spin in ${turboDelay}ms (base: ${baseDelay}ms, turbo: ${gameStateManager.isTurbo})`);
+    // Base delay before the next free spin starts
+    let baseDelay = 500;
+
+    // In bonus mode, if there was any win on this free spin, add extra delay
+    // so the player has more time to see the result before the next spin.
+    if (hadWinThisBonusSpin && gameStateManager.isBonus) {
+      baseDelay += 1000; // +1s on top of the standard delay
+      console.log(
+        `[Symbols] Applying extra bonus delay after winning free spin. New baseDelay=${baseDelay}ms`
+      );
+    }
+
+    const turboDelay = gameStateManager.isTurbo
+      ? baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER
+      : baseDelay;
+    console.log(
+      `[Symbols] Scheduling next free spin in ${turboDelay}ms (base: ${baseDelay}ms, turbo: ${gameStateManager.isTurbo}, hadWin=${hadWinThisBonusSpin})`
+    );
 
     this.freeSpinAutoplayTimer = this.scene.time.delayedCall(turboDelay, () => {
       this.performFreeSpinAutoplay();
@@ -1588,13 +1805,19 @@ export class Symbols {
   private showCongratsDialogAfterDelay(delay: number = 1000): void {
     console.log('[Symbols] Showing congrats dialog after delay');
 
-    // Close any open win dialogs first (safety check)
+    // If another dialog is still showing, enqueue the congrats dialog to run afterwards
     const gameScene = this.scene as any;
-    if (gameScene.dialogs && typeof gameScene.dialogs.hideDialog === 'function') {
-      if (gameScene.dialogs.isDialogShowing()) {
-        console.log('[Symbols] Closing any remaining win dialogs before showing congrats');
-        gameScene.dialogs.hideDialog();
-      }
+    if (
+      gameScene.dialogs &&
+      typeof gameScene.dialogs.isDialogShowing === 'function' &&
+      gameScene.dialogs.isDialogShowing()
+    ) {
+      console.log('[Symbols] Dialog already showing - enqueueing congrats dialog to show afterwards');
+      // Poll until dialogs are clear, then re-run this method to actually show congrats
+      this.scene.time.delayedCall(500, () => {
+        this.showCongratsDialogAfterDelay(delay);
+      });
+      return;
     }
 
     // Calculate total win from freespinItems
@@ -1698,158 +1921,6 @@ export class Symbols {
   }
 }
 
-function getTestSpinData(): any {
-  return {
-    "bet": "1",
-    "slot": {
-      "area": [
-        [
-          1,
-          9,
-          9,
-          8,
-          8
-        ],
-        [
-          5,
-          5,
-          8,
-          8,
-          11
-        ],
-        [
-          5,
-          5,
-          11,
-          8,
-          8
-        ],
-        [
-          8,
-          6,
-          6,
-          9,
-          9
-        ],
-        [
-          7,
-          7,
-          5,
-          5,
-          8
-        ],
-        [
-          7,
-          7,
-          5,
-          5,
-          9
-        ]
-      ],
-      "totalWin": 6.6,
-      "tumbles": {
-        "items": [
-          {
-            "symbols": {
-              "in": [
-                [
-                  8,
-                  8
-                ],
-                [
-                  4,
-                  4,
-                  7,
-                  7
-                ],
-                [
-                  6,
-                  9,
-                  9,
-                  3
-                ],
-                [
-                  8
-                ],
-                [
-                  1,
-                  1,
-                  2
-                ],
-                [
-                  9,
-                  5
-                ]
-              ],
-              "out": [
-                {
-                  "symbol": 8,
-                  "count": 8,
-                  "win": 0.4
-                },
-                {
-                  "symbol": 5,
-                  "count": 8,
-                  "win": 1
-                }
-              ]
-            },
-            "win": 1.4
-          },
-          {
-            "symbols": {
-              "in": [
-                [
-                  9,
-                  8
-                ],
-                [],
-                [
-                  9,
-                  7
-                ],
-                [
-                  9,
-                  9
-                ],
-                [],
-                [
-                  5,
-                  8
-                ]
-              ],
-              "out": [
-                {
-                  "symbol": 9,
-                  "count": 8,
-                  "win": 0.25
-                }
-              ]
-            },
-            "win": 0.25
-          }
-        ],
-        "multiplier": {
-          "symbols": [
-            {
-              "symbol": 11,
-              "value": 2
-            },
-            {
-              "symbol": 11,
-              "value": 2
-            }
-          ],
-          "total": 4
-        }
-      },
-      "freespin": {
-        "multiplierValue": 0,
-        "items": []
-      }
-    }
-  }
-}
 
 function getObjectsToShake(self: Symbols): any[] {
   const targets: any[] = [];
@@ -2142,6 +2213,7 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   disposeSymbols(self.symbols);
   self.symbols = self.newSymbols;
   self.newSymbols = [];
+  synchronizeMockDataSymbols(self, mockData);
 
   // Re-evaluate wins after initial drop completes
   try { reevaluateWinsFromGrid(self); } catch { }
@@ -2154,7 +2226,7 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
 
     if (Array.isArray(tumbles.items) && tumbles.items.length > 0) {
       console.log(`[Symbols] Applying ${tumbles.length} tumble step(s) from SpinData`);
-      await applyTumbles(self, tumbles.items);
+      await applyTumbles(self, tumbles.items, mockData);
 
       console.log('[Symbols] Tumbles applied');
       // After all tumbles have finished, resume multiplier symbol animations (index >= 10)
@@ -2233,23 +2305,9 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
     }
   }
 
-  // Check if this win meets the dialog threshold and pause autoplay if so
-  // if (spinData) {
-  //   const totalWin = calculateTotalWinFromPaylines(spinData as SpinData);
-  //   const betAmount = parseFloat(spinData.bet);
-  //   const multiplier = totalWin / betAmount;
-
-  //   if (multiplier >= 20) {
-  //     console.log(`[Symbols] Win meets dialog threshold (${multiplier.toFixed(2)}x) - pausing autoplay immediately`);
-  //     gameStateManager.isShowingWinDialog = true;
-  //   } else {
-  //     console.log(`[Symbols] Win below dialog threshold (${multiplier.toFixed(2)}x) - autoplay continues`);
-  //   }
-  // }
-
-
   // NOW handle scatter symbols AFTER winlines are drawn
-  if (scatterGrids.length >= 4) {
+  const targetScatterSymbolCount = gameStateManager.isBonus ? 3 : 4;
+  if (scatterGrids.length >= targetScatterSymbolCount) {
     console.log(`[Symbols] Scatter detected! Found ${scatterGrids.length} scatter symbols`);
     gameStateManager.isScatter = true;
 
@@ -2287,9 +2345,6 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
     try {
       await self.animateScatterSymbols(mockData, scatterGrids);
       console.log('[Symbols] Scatter symbol hit animations completed');
-
-      // Show Free Spin dialog immediately after animating scatter symbols
-      self.showFreeSpinDialog(mockData.freeSpins || 0);
     } catch (error) {
       console.error('[Symbols] Error animating scatter symbols:', error);
       // Show Free Spin dialog immediately if cant animate scatter symbols
@@ -2312,9 +2367,14 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
 
       gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, onWinDialogClosed);
     } else {
-      console.log('[Symbols] No win dialog showing - starting scatter animation immediately');
-      // No win dialog, start scatter animation immediately
-      self.startScatterAnimationSequence(mockData);
+      if (gameStateManager.isBonus) {
+        console.log('[Symbols] Bonus mode active - showing quick bonus free spin dialog before continuing');
+        await self.handleBonusScatterRetrigger(mockData, scatterGrids, spinData);
+      } else {
+        console.log('[Symbols] No win dialog showing - starting scatter animation immediately');
+        // No win dialog, start scatter animation immediately
+        self.startScatterAnimationSequence(mockData);
+      }
     }
   } else {
     console.log(`[Symbols] No scatter detected (found ${scatterGrids.length} scatter symbols, need 4+)`);
@@ -2329,7 +2389,7 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   console.log('[Symbols] Emitting REELS_STOP and WIN_STOP after symbol animations and tumbles (no winlines flow)');
   try {
     gameEventManager.emit(GameEventType.WIN_STOP);
-    this.scene.time.delayedCall(50, () => {
+    self.scene.time.delayedCall(50, () => {
       gameEventManager.emit(GameEventType.REELS_STOP);
     });
   } catch (e) {
@@ -2364,37 +2424,39 @@ function getWinningGridsForPayline(spinData: any, payline: any): any[] {
   const lineKey = payline.lineKey;
   const count = payline.count;
 
-  // Get the winline pattern for this lineKey
-  if (lineKey < 0 || lineKey >= Data.WINLINES.length) {
-    console.warn(`[Symbols] Invalid lineKey: ${lineKey}`);
-    return [];
-  }
+  return [];
 
-  const winline = Data.WINLINES[lineKey];
+  // // Get the winline pattern for this lineKey
+  // if (lineKey < 0 || lineKey >= Data.WINLINES.length) {
+  //   console.warn(`[Symbols] Invalid lineKey: ${lineKey}`);
+  //   return [];
+  // }
 
-  // Get all positions in the winline pattern (where winline[y][x] === 1)
-  const winlinePositions: { x: number, y: number }[] = [];
-  for (let x = 0; x < winline[0].length; x++) {
-    for (let y = 0; y < winline.length; y++) {
-      if (winline[y][x] === 1) {
-        winlinePositions.push({ x, y });
-      }
-    }
-  }
+  // const winline = Data.WINLINES[lineKey];
 
-  // Sort positions by x coordinate to get left-to-right order
-  winlinePositions.sort((a, b) => a.x - b.x);
+  // // Get all positions in the winline pattern (where winline[y][x] === 1)
+  // const winlinePositions: { x: number, y: number }[] = [];
+  // for (let x = 0; x < winline[0].length; x++) {
+  //   for (let y = 0; y < winline.length; y++) {
+  //     if (winline[y][x] === 1) {
+  //       winlinePositions.push({ x, y });
+  //     }
+  //   }
+  // }
 
-  // Take only the first 'count' positions as winning symbols
-  const winningPositions = winlinePositions.slice(0, count);
+  // // Sort positions by x coordinate to get left-to-right order
+  // winlinePositions.sort((a, b) => a.x - b.x);
 
-  // Add the winning positions to the result (SpinData.area is [column][row], bottom->top)
-  for (const pos of winningPositions) {
-    const colLen = spinData.slot.area[pos.x]?.length || 0;
-    const rowIndex = Math.max(0, colLen - 1 - pos.y);
-    const symbolAtPosition = spinData.slot.area[pos.x][rowIndex];
-    winningGrids.push(new Grid(pos.x, pos.y, symbolAtPosition));
-  }
+  // // Take only the first 'count' positions as winning symbols
+  // const winningPositions = winlinePositions.slice(0, count);
+
+  // // Add the winning positions to the result (SpinData.area is [column][row], bottom->top)
+  // for (const pos of winningPositions) {
+  //   const colLen = spinData.slot.area[pos.x]?.length || 0;
+  //   const rowIndex = Math.max(0, colLen - 1 - pos.y);
+  //   const symbolAtPosition = spinData.slot.area[pos.x][rowIndex];
+  //   winningGrids.push(new Grid(pos.x, pos.y, symbolAtPosition));
+  // }
 
   return winningGrids;
 }
@@ -2409,6 +2471,7 @@ function onSpinDataReceived(self: Symbols) {
       console.error('[Symbols] Invalid SpinData received - missing slot.area');
       return;
     }
+
     // Store the current spin data for access by other components
     self.currentSpinData = data.spinData;
     console.log('[Symbols] Stored current spin data for access by other components');
@@ -2424,17 +2487,6 @@ function onSpinDataReceived(self: Symbols) {
       symbols = data.spinData.slot.area;
       console.log('[Symbols] Using symbols from SpinData slot.area:', symbols);
     }
-
-    // let symbols: any;
-    // if (gameStateManager.isBonus) {
-    //   const freeItems = testSpinData?.slot?.freespin?.items;
-    //   const boundedIndex = Math.max(0, Math.min(self.currentFreeSpinIndex, (freeItems?.length ?? 1) - 1));
-    //   symbols = freeItems?.[boundedIndex]?.area ?? testSpinData.slot.area;
-    //   console.log(`[Symbols] Using freespin area at index ${boundedIndex}:`, symbols);
-    // } else {
-    //   symbols = testSpinData.slot.area;
-    //   console.log('[Symbols] Using symbols from SpinData slot.area:', symbols);
-    // }
 
     // Process the symbols using the same logic as before, using mock scatter data
     await processSpinDataSymbols(self, symbols, data.spinData);
@@ -2513,7 +2565,8 @@ function scheduleWinAmountPopup(self: Symbols, x: number, y: number, displayAmou
     prefix: '',
     suffix: '',
     commaYOffset: 7,
-    dotYOffset: 7
+    dotYOffset: 7,
+    animateThreshold: -1
   };
 
   // Schedule the display creation after delay
@@ -2729,11 +2782,6 @@ async function dropReels(self: Symbols, data: Data): Promise<void> {
   console.log('[Symbols] SLOT_ROWS:', SLOT_ROWS);
 
   self.dropSparkPlayedColumns.clear();
-  // Play turbo drop sound effect at the start of reel drop sequence when in turbo mode
-  if (self.scene.gameData.isTurbo && (window as any).audioManager) {
-    (window as any).audioManager.playSoundEffect(SoundEffectType.TURBO_DROP);
-    console.log('[Symbols] Playing turbo drop sound effect at start of reel drop sequence');
-  }
 
   // Stagger reel starts at a fixed interval and let them overlap
 
@@ -2753,7 +2801,6 @@ async function dropReels(self: Symbols, data: Data): Promise<void> {
       await delay(startDelay);
       console.log(`[Symbols] Processing row ${actualRow}`);
       dropPrevSymbols(self, actualRow, isLastReel && extendLastReelDrop)
-      // rowDropPrevSymbols(self, actualRow, isLastReel && extendLastReelDrop)
 
       // Wait before spawning new symbols so previous ones are cleared first
       await delay(PREV_TO_NEW_DELAY_MS);
@@ -2978,11 +3025,16 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
                   simulateCameraShake(self, getObjectsToShake(self), dur, mag, axis);
                 }
               } catch { }
+
+              const audioManager = (window as any).audioManager;
               // Play reel drop sound effect only when turbo mode is off
-              if (!self.scene.gameData.isTurbo && (window as any).audioManager) {
-                (window as any).audioManager.playSoundEffect(gameStateManager.isBonus ? 
-                  gameStateManager.isTurbo ? SoundEffectType.BONUS_TURBO_DROP : SoundEffectType.BONUS_REEL_DROP : 
-                  gameStateManager.isTurbo ? SoundEffectType.TURBO_DROP : SoundEffectType.REEL_DROP);
+              if (audioManager) {
+                if(gameStateManager.isTurbo) {
+                  audioManager.playSingleInstanceSoundEffect(gameStateManager.isBonus ? SoundEffectType.BONUS_TURBO_REEL_DROP : SoundEffectType.TURBO_REEL_DROP);
+                }
+                else {
+                  audioManager.playSoundEffect(gameStateManager.isBonus ? SoundEffectType.BONUS_REEL_DROP : SoundEffectType.REEL_DROP);
+                }
                 console.log(`[Symbols] Playing reel drop sound effect for reel ${index} after drop completion`);
               }
 
@@ -3595,15 +3647,45 @@ function playTumbleSfx(self: Symbols): void {
  * Apply a sequence of tumble steps: remove "out" symbols, compress columns down, and drop "in" symbols from top.
  * Expects tumbles to be in the SpinData format: [{ symbols: { in: number[][], out: {symbol:number,count:number,win:number}[] }, win: number }, ...]
  */
-async function applyTumbles(self: Symbols, tumbles: any[]): Promise<void> {
+async function applyTumbles(self: Symbols, tumbles: any[], mockData?: Data): Promise<void> {
   self.scene.gameAPI.incrementCurrentTumbleIndex();
 
   for (const tumble of tumbles) {
     await applySingleTumble(self, tumble);
+    if (mockData) {
+      synchronizeMockDataSymbols(self, mockData);
+    }
     self.scene.gameAPI.incrementCurrentTumbleIndex();
   }
 
   self.scene.gameAPI.resetCurrentTumbleIndex();
+}
+
+/**
+ * Rebuild mock data symbols (column-major, bottom-up) from the current row-major symbol grid
+ * so backend consumers (scatter detection, etc.) stay in sync with on-screen tumbles.
+ */
+function synchronizeMockDataSymbols(self: Symbols, mockData: Data): void {
+  if (!mockData || !self.currentSymbolData || !self.currentSymbolData.length) {
+    return;
+  }
+
+  const rowCount = self.currentSymbolData.length;
+  const colCount = self.currentSymbolData[0]?.length ?? 0;
+  if (colCount === 0) return;
+
+  const rebuilt: number[][] = Array.from({ length: colCount }, () => Array<number>(rowCount).fill(0));
+
+  for (let row = 0; row < rowCount; row++) {
+    for (let col = 0; col < colCount; col++) {
+      const value = self.currentSymbolData[row]?.[col];
+      const safeValue = typeof value === 'number' ? value : 0;
+      const backendRowIndex = (rowCount - 1) - row; // backend arrays use bottom->top order
+      rebuilt[col][backendRowIndex] = safeValue;
+    }
+  }
+
+  mockData.symbols = rebuilt;
 }
 
 async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
@@ -4317,10 +4399,11 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
             if (!hasPlayedWinSfx) {
               const audio = (window as any)?.audioManager;
               if (audio && typeof audio.playSoundEffect === 'function') {
-                const sfx = hasWildcardInWin ? SoundEffectType.WILD_MULTI : SoundEffectType.HIT_WIN;
+                // Use MULTI when a wildcard is present in the win, otherwise use the standard hit win SFX
+                const sfx = hasWildcardInWin ? SoundEffectType.MULTI : SoundEffectType.HIT_WIN_ALT;
                 audio.playSoundEffect(sfx);
                 hasPlayedWinSfx = true;
-                // If this spin triggered scatter, chain play scatter_ka after hit/wildmulti
+                // If this spin triggered scatter, chain play scatter after the hit/multi SFX
                 try {
                   if (gameStateManager.isScatter) {
                     // short chain delay to ensure ordering

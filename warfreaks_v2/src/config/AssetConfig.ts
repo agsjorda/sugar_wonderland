@@ -504,7 +504,7 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				'buy_feature_logo': `${prefix}/buy_feature/buy_feature_logo.webp`,
+				'buy_feature_logo_bg': `${prefix}/buy_feature/buy_feature_logo_bg.png`,
 				'buy_feature_bg': `${prefix}/background/BG-Default.webp`
 			}
 		};
@@ -545,6 +545,7 @@ export class AssetConfig {
 				
 				'turbodrop_wf': 'assets/sounds/SFX/turbodrop_wf.ogg',
 				'reeldrop_wf': 'assets/sounds/SFX/reeldrop_wf.ogg',
+				'scatter': 'assets/sounds/SFX/missile_electric_wf.ogg',
 
 				// WIP
 				

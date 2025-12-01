@@ -4,11 +4,13 @@
 export class GameData {
 	static WIN_UP_HEIGHT: number = 75;
 
-  public isAutoPlaying: boolean = false;
-  public isShowingWinlines: boolean = false; // Track if winline animations are playing
+  	public isAutoPlaying: boolean = false;
+  	public isShowingWinlines: boolean = false; // Track if winline animations are playing
 	public isTurbo: boolean = false;
 	public isReelSpinning: boolean = false;
 	public isEnhancedBet: boolean = false; // Track amplify bet toggle state
+	// Number of extra free spins awarded when a scatter retriggers during bonus mode
+	public bonusRetriggerFreeSpins: number = 5;
 	public winUpHeight: number = GameData.WIN_UP_HEIGHT;
 	public winUpDuration: number = 0;
 	public dropDuration: number = 0;
@@ -26,10 +28,10 @@ export class GameData {
 	public dropShakeMagnitude: number = 1.5; // 0 disables shake; typical values ~0.002 - 0.01
 	public dropShakeDurationMs: number = 150; // duration per shake event
 	public dropShakeAxis: 'both' | 'x' | 'y' = 'both'; // restrict shake to one dimension if needed
-	public bigWinThreshold: number = 2;
-	public megaWinThreshold: number = 4;
-	public epicWinThreshold: number = 6;
-	public superWinThreshold: number = 8;
+	public bigWinThreshold: number = 20; // 20x multiplier
+	public megaWinThreshold: number = 30; // 30x multiplier
+	public epicWinThreshold: number = 45; // 45x multiplier
+	public superWinThreshold: number = 60; // 60x multiplier
 	public constructor() {
 		setSpeed(this, 1.0);
 	}

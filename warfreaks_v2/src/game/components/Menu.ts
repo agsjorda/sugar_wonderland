@@ -30,6 +30,7 @@ export class Menu {
     private scene: GameScene;
     public settingsOnly: boolean = false;
 
+    private topPadding = 20;
     private padding = 20;
     private contentWidth = 1200;
     private viewWidth = 1329;
@@ -60,6 +61,31 @@ export class Menu {
     private symbolScale: number = 0.5;
     private scaledSymbolSize: number = this.symbolSize * this.symbolScale;
     private dividerColor: number = 0x379557;
+
+    private payoutMap: { [key: number]: [number, number, number] } = {
+        1: [50.00, 25.00, 10.00],
+        2: [25.00, 10.00, 2.50],
+        3: [15.00, 5.00, 2.00],
+        4: [12.00, 2.00, 1.50],
+        5: [10.00, 1.50, 1.00],
+        6: [8.00, 1.20, 0.80],
+        7: [5.00, 1.00, 0.50],
+        8: [4.00, 0.90, 0.40],
+        9: [2.00, 0.75, 0.25],
+    };
+    
+    private payoutRange: string[] = ['12 - 30', '10 - 11', '8 - 9'];
+    private payoutReward: { [key: number]: [number, number, number] } = {
+        1: [50.00, 25.00, 10.00],
+        2: [25.00, 10.00, 2.50],
+        3: [15.00, 5.00, 2.00],
+        4: [12.00, 2.00, 1.50],
+        5: [10.00, 1.50, 1.00],
+        6: [8.00, 1.20, 0.80],
+        7: [5.00, 1.00, 0.50],
+        8: [4.00, 0.90, 0.40],
+        9: [2.00, 0.75, 0.25],
+    };
 
     protected titleStyle = {
         fontSize: '24px',
@@ -104,7 +130,6 @@ export class Menu {
         wordWrap: { width: this.contentWidth }
     };
 
-
     constructor(settingsOnly: boolean = false) {
         this.settingsOnly = settingsOnly;
     }
@@ -117,8 +142,6 @@ export class Menu {
         // No need to store scene reference
         this.contentContainer = scene.add.container(0, 0);
     }
-
-    
 
     public createMenu(scene: GameScene): ButtonContainer {
         this.scene = scene; // Store scene reference
@@ -163,6 +186,7 @@ export class Menu {
         // Create tabs with different widths
         const tabHeight = 61;
         const smallTabScale = 0.5; // X tab will be half the width of normal tabs
+        const tabsTopPadding = this.topPadding; // Space above tabs for the clock display
 
         // Determine which tabs to show
         const baseIcons: string[] = this.settingsOnly
@@ -194,7 +218,8 @@ export class Menu {
         const tabContainers: ButtonContainer[] = [];
 
         tabConfigs.forEach((tabConfig, index) => {
-            const tabContainer = scene.add.container(tabConfig.x, 0) as ButtonContainer;
+            // Position each tab container with a top padding so the clock has space above
+            const tabContainer = scene.add.container(tabConfig.x, tabsTopPadding) as ButtonContainer;
             
             // Tab background
             const tabBg = scene.add.graphics();
@@ -284,13 +309,15 @@ export class Menu {
         this.switchTab(scene, tabContainers, 0, tabConfigs);
 
         // Create content area with mask to prevent overlap with tabs
-        const contentArea = scene.add.container(20, tabHeight + 20);
-        contentArea.setSize(panelWidth - 40, panelHeight - tabHeight - 40);
+        const contentAreaY = tabsTopPadding + tabHeight + 20; // Keep 20px gap below tabs
+        const contentAreaHeight = panelHeight - tabHeight - 40 - tabsTopPadding;
+        const contentArea = scene.add.container(20, contentAreaY);
+        contentArea.setSize(panelWidth - 40, contentAreaHeight);
         
-        // Create mask for content area to prevent overlap with tabs
+        // Create mask for content area to prevent overlap with tabs (start just below tabs)
         const contentMask = scene.add.graphics();
         contentMask.fillStyle(0xffffff);
-        contentMask.fillRect(0, 60, panelWidth, panelHeight);
+        contentMask.fillRect(0, tabsTopPadding + tabHeight, panelWidth, panelHeight - (tabsTopPadding + tabHeight));
         const geometryMask = contentMask.createGeometryMask();
         contentArea.setMask(geometryMask);
         contentMask.setVisible(false); // Hide the mask graphics
@@ -1162,22 +1189,11 @@ export class Menu {
         this.addTextBlock(scene, 'header2', 'Payout');
         this.yPosition += this.padding * 8;
 
-        const payoutRange: string[] = ['12 - 30', '10 - 11', '8 - 9'];
-        const payoutReward: { [key: number]: [number, number, number] } = {
-            1: [50.00, 25.00, 10.00],
-            2: [25.00, 10.00, 2.50],
-            3: [15.00, 5.00, 2.00],
-            4: [12.00, 2.00, 1.50],
-            5: [10.00, 1.50, 1.00],
-            6: [8.00, 1.20, 0.80],
-            7: [5.00, 1.00, 0.50],
-            8: [4.00, 0.90, 0.40],
-            9: [2.00, 0.75, 0.25],
-        };
+        
 
         for (let symbolIndex = 1; symbolIndex <= 9; symbolIndex++)
         {
-            this.createSinglePayoutContent(scene, contentArea, symbolIndex, payoutReward[symbolIndex], payoutRange);
+            this.createSinglePayoutContent(scene, contentArea, symbolIndex, this.payoutReward[symbolIndex], this.payoutRange);
         }
         
         this.yPosition -=  this.scaledSymbolSize;
@@ -2141,18 +2157,9 @@ export class Menu {
                     // For regular symbols
                     if(col < 2) {
                         // Payout values per symbol (1-11) for rows ['12+', '10', '8']
-                        const payoutMap: { [key: number]: [number, number, number] } = {
-                            1: [50.00, 25.00, 10.00],
-                            2: [25.00, 10.00, 2.50],
-                            3: [15.00, 5.00, 2.00],
-                            4: [12.00, 2.00, 1.50],
-                            5: [10.00, 1.50, 1.00],
-                            6: [8.00, 1.20, 0.80],
-                            7: [5.00, 1.00, 0.50],
-                            8: [4.00, 0.90, 0.40],
-                            9: [2.00, 0.75, 0.25],
-                        };
-                        const payoutValue = (payoutMap[symbolIndex] && payoutMap[symbolIndex][row] !== undefined) ? payoutMap[symbolIndex][row] : 0;
+                        const payoutValue = (this.payoutMap[symbolIndex] && this.payoutMap[symbolIndex][row] !== undefined)
+                            ? this.payoutMap[symbolIndex][row]
+                            : 0;
                         const text2 = payoutValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         payoutAdjustments[row] = text2.length;
 

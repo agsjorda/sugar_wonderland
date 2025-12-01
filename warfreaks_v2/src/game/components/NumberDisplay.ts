@@ -149,7 +149,7 @@ export class NumberDisplay {
 		
 		const animateThreshold = this.config.animateThreshold ?? 0;
 		const animationDelayMs = this.config.animationDelayMs ?? 0;
-		const willAnimate = value >= animateThreshold;
+		const willAnimate = animateThreshold > 0 && value >= animateThreshold;
 
 		this.currentValue = willAnimate ? 0 : value;
 		this.updateDisplay();
@@ -597,6 +597,14 @@ export class NumberDisplay {
 		if (this.isInitialized) {
 			this.updateDisplay();
 		}
+	}
+
+	/**
+	 * Set tick duration (in milliseconds) for the curved tick-up animation
+	 */
+	setTickDurationMs(durationMs: number): void {
+		// Clamp to non-negative values to avoid invalid timer configuration
+		this.config.tickDurationMs = Math.max(0, durationMs);
 	}
 
 	/**

@@ -11,29 +11,21 @@ export enum SoundEffectType {
 	BONUS_SPIN = 'bonus_spin',
 	REEL_DROP = 'reeldrop',
 	BONUS_REEL_DROP = 'bonus_reeldrop',
-	TURBO_DROP = 'turbodrop',
-	BONUS_TURBO_DROP = 'bonus_turbodrop',
+	
+	TURBO_REEL_DROP = 'turbodrop',
+	BONUS_TURBO_REEL_DROP = 'bonus_turbodrop',
 	WHEEL_SPIN = 'wheelspin',
 	MENU_CLICK = 'menu_click',
-	HIT_WIN = 'hitwin',
-	WILD_MULTI = 'wildmulti',
 	SCATTER = 'scatter',
 	ANTICIPATION = 'anticipation',
 	WIN_LINE_1 = 'winline_1',
 	WIN_LINE_2 = 'winline_2',
-	COIN_THROW = 'coin_throw',
-	COIN_DROP = 'coin_drop',
 	// Win dialog effects
 	WIN_BIG = 'win_big',
 	WIN_MEGA = 'win_mega',
 	WIN_SUPER = 'win_super',
 	WIN_EPIC = 'win_epic',
 
-	WIN_BIG_TURBO = 'win_big_turbo',
-	WIN_MEGA_TURBO = 'win_mega_turbo',
-	WIN_SUPER_TURBO = 'win_super_turbo',
-	WIN_EPIC_TURBO = 'win_epic_turbo'
-	,
 	DIALOG_FREESPIN = 'dialog_freespin',
 	DIALOG_CONGRATS = 'dialog_congrats',
 
@@ -65,8 +57,8 @@ export enum SoundEffectType {
 export class AudioManager {
 	private scene: Phaser.Scene;
 	private currentMusic: MusicType | null = null;
-	private musicVolume: number = 0.2;
-	private sfxVolume: number = 0.55;
+	private musicVolume: number = 0.75;
+	private sfxVolume: number = 0.4;
 	private ambientVolume: number = 0.3; // Volume for ambient audio layer
 	private isMuted: boolean = false;
 	private musicInstances: Map<MusicType, Phaser.Sound.BaseSound> = new Map();
@@ -200,24 +192,15 @@ export class AudioManager {
 				volume: this.sfxVolume,
 				loop: false
 			});
-			this.sfxInstances.set(SoundEffectType.TURBO_DROP, turboDropSfx);
+			this.sfxInstances.set(SoundEffectType.TURBO_REEL_DROP, turboDropSfx);
 			console.log('[AudioManager] Turbo drop sound effect instance created');
 		} catch (e) {
 			console.warn('[AudioManager] Failed to create turbodrop_wf SFX instance:', e);
 		}
 
-		// Create hit win SFX instance
-		try {
-			const hitWin = this.scene.sound.add('hitwin_ka', { volume: this.sfxVolume, loop: false });
-			this.sfxInstances.set(SoundEffectType.HIT_WIN, hitWin);
-			console.log('[AudioManager] Hit win SFX instance created');
-		} catch (e) {
-			console.warn('[AudioManager] Failed to create hitwin_ka SFX instance:', e);
-		}
-
 		// Create scatter SFX instance
 		try {
-			const scatter = this.scene.sound.add('scatter_ka', { volume: this.sfxVolume, loop: false });
+			const scatter = this.scene.sound.add('scatter', { volume: this.sfxVolume, loop: false });
 			this.sfxInstances.set(SoundEffectType.SCATTER, scatter);
 			console.log('[AudioManager] Scatter SFX instance created');
 		} catch (e) {
@@ -276,7 +259,7 @@ export class AudioManager {
 
 		// Create instances for unused-but-available SFX and win audio keys from AssetConfig
 		// ARGUN SFX is intentionally quieter (50% of base SFX volume)
-		addOptionalSfx(SoundEffectType.ARGUN, 'argun_wf', true, 0.2);
+		addOptionalSfx(SoundEffectType.ARGUN, 'argun_wf', true);
 		addOptionalSfx(SoundEffectType.EXPLOSION, 'explosion_wf');
 		addOptionalSfx(SoundEffectType.BONUS_EXPLOSION, 'bonus_explosion_wf');
 		addOptionalSfx(SoundEffectType.MULTIPLIER_ADDED, 'multiplier_added_wf');
@@ -299,7 +282,7 @@ export class AudioManager {
 		addOptionalSfx(SoundEffectType.TWINHEAVEN3, 'twinheaven3_wf');
 		addOptionalSfx(SoundEffectType.TWINHEAVEN4, 'twinheaven4_wf');
 		addOptionalSfx(SoundEffectType.BONUS_REEL_DROP, 'reeldrop2_wf');
-		addOptionalSfx(SoundEffectType.BONUS_TURBO_DROP, 'turbo2_wf');
+		addOptionalSfx(SoundEffectType.BONUS_TURBO_REEL_DROP, 'turbo2_wf');
 
 		console.log('[AudioManager] Total SFX instances:', this.sfxInstances.size);
 
@@ -907,32 +890,47 @@ export class AudioManager {
 		const isAuto = !!(gameStateManager.isAutoPlaying || gameStateManager.isAutoPlaySpinRequested || sceneAny?.gameData?.isAutoPlaying || isFsAuto);
 		const isTurbo = !!(sceneAny?.gameData?.isTurbo || gameStateManager.isTurbo);
 
-		if (isAuto && isTurbo) {
-			switch (t) {
-				case 'bigwin':
-					effect = SoundEffectType.WIN_BIG_TURBO; break;
-				case 'megawin':
-					effect = SoundEffectType.WIN_MEGA_TURBO; break;
-				case 'superwin':
-					effect = SoundEffectType.WIN_SUPER_TURBO; break;
-				case 'epicwin':
-					effect = SoundEffectType.WIN_EPIC_TURBO; break;
-				default:
-					break;
-			}
-		} else {
-			switch (t) {
-				case 'bigwin':
-					effect = SoundEffectType.WIN_BIG; break;
-				case 'megawin':
-					effect = SoundEffectType.WIN_MEGA; break;
-				case 'superwin':
-					effect = SoundEffectType.WIN_SUPER; break;
-				case 'epicwin':
-					effect = SoundEffectType.WIN_EPIC; break;
-				default:
-					break;
-			}
+		{
+		// if (isAuto && isTurbo) {
+		// 	switch (t) {
+		// 		case 'bigwin':
+		// 			effect = SoundEffectType.WIN_BIG_TURBO; break;
+		// 		case 'megawin':
+		// 			effect = SoundEffectType.WIN_MEGA_TURBO; break;
+		// 		case 'superwin':
+		// 			effect = SoundEffectType.WIN_SUPER_TURBO; break;
+		// 		case 'epicwin':
+		// 			effect = SoundEffectType.WIN_EPIC_TURBO; break;
+		// 		default:
+		// 			break;
+		// 	}
+		// } else {
+		// 	switch (t) {
+		// 		case 'bigwin':
+		// 			effect = SoundEffectType.WIN_BIG; break;
+		// 		case 'megawin':
+		// 			effect = SoundEffectType.WIN_MEGA; break;
+		// 		case 'superwin':
+		// 			effect = SoundEffectType.WIN_SUPER; break;
+		// 		case 'epicwin':
+		// 			effect = SoundEffectType.WIN_EPIC; break;
+		// 		default:
+		// 			break;
+		// 	}
+		// }
+		}
+	
+		switch (t) {
+			case 'bigwin':
+				effect = SoundEffectType.WIN_BIG; break;
+			case 'megawin':
+				effect = SoundEffectType.WIN_MEGA; break;
+			case 'superwin':
+				effect = SoundEffectType.WIN_SUPER; break;
+			case 'epicwin':
+				effect = SoundEffectType.WIN_EPIC; break;
+			default:
+				break;
 		}
 
 		if (effect) {

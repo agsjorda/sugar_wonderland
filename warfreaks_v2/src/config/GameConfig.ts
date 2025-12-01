@@ -20,7 +20,9 @@ export const DELAY_BETWEEN_SPINS: number = 2000;
 export const DROP_REEL_START_INTERVAL_RATIO: number = 0;
 // Delay before starting autoplay for free spins
 export const AUTO_SPIN_START_DELAY: number = 1000;
-export const AUTO_SPIN_WIN_DIALOG_TIMEOUT: number = 2000;
+export const AUTO_SPIN_WIN_DIALOG_TIMEOUT: number = 2500;
+// Delay before showing tiered win dialogs while in bonus mode (ms)
+export const BONUS_WIN_DIALOG_DELAY_MS: number = 1500;
 
 export const MULTIPLIER_VALUE_REFERENCE: { [key: number]: number } = {
   10: 2,
@@ -39,107 +41,3 @@ export const MULTIPLIER_VALUE_REFERENCE: { [key: number]: number } = {
   23: 250,
   24: 500,
 };
-
-// Winline Configuration
-export const WINLINES: number[][][] = [
-  [
-    [1, 1, 1, 1, 1],
-    [0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0],
-  ],
-  [
-    [0, 0, 0, 0, 0],
-    [1, 1, 1, 1, 1],
-    [0, 0, 0, 0, 0],
-  ],
-  [
-    [0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0],
-    [1, 1, 1, 1, 1],
-  ],
-  [
-    [0, 1, 1, 1, 0],
-    [1, 0, 0, 0, 1],
-    [0, 0, 0, 0, 0],
-  ],
-  [
-    [0, 0, 0, 0, 0],
-    [1, 0, 0, 0, 1],
-    [0, 1, 1, 1, 0],
-  ],
-  [
-    [0, 0, 1, 0, 0],
-    [1, 1, 0, 1, 1],
-    [0, 0, 0, 0, 0],
-  ],
-  [
-    [0, 0, 0, 0, 0],
-    [1, 1, 0, 1, 1],
-    [0, 0, 1, 0, 0],
-  ],
-  [
-    [1, 1, 0, 1, 1],
-    [0, 0, 0, 0, 0],
-    [0, 0, 1, 0, 0],
-  ],
-  [
-    [0, 0, 1, 0, 0],
-    [0, 0, 0, 0, 0],
-    [1, 1, 0, 1, 1],
-  ],
-  [
-    [1, 0, 0, 0, 1],
-    [0, 1, 0, 1, 0],
-    [0, 0, 1, 0, 0],
-  ],
-  [
-    [0, 0, 1, 0, 0],
-    [0, 1, 0, 1, 0],
-    [1, 0, 0, 0, 1],
-  ],
-  [
-    [0, 0, 0, 1, 1],
-    [0, 0, 1, 0, 0],
-    [1, 1, 0, 0, 0],
-  ],
-  [
-    [1, 1, 0, 0, 0],
-    [0, 0, 1, 0, 0],
-    [0, 0, 0, 1, 1],
-  ],
-  [
-    [0, 0, 0, 1, 0],
-    [1, 0, 1, 0, 1],
-    [0, 1, 0, 0, 0],
-  ],
-  [
-    [1, 0, 0, 0, 1],
-    [0, 0, 0, 0, 0],
-    [0, 1, 1, 1, 0],
-  ],
-  [
-    [0, 1, 0, 0, 0],
-    [1, 0, 1, 0, 1],
-    [0, 0, 0, 1, 0],
-  ],
-  [
-    [1, 0, 0, 0, 1],
-    [0, 1, 1, 1, 0],
-    [0, 0, 0, 0, 0],
-  ],
-  [
-    [0, 0, 0, 0, 0],
-    [0, 1, 1, 1, 0],
-    [1, 0, 0, 0, 1],
-  ],
-  [
-    [1, 0, 1, 0, 1],
-    [0, 1, 0, 1, 0],
-    [0, 0, 0, 0, 0],
-  ],
-  [
-    [0, 0, 0, 0, 0],
-    [0, 1, 0, 1, 0],
-    [1, 0, 1, 0, 1],
-  ],
-];

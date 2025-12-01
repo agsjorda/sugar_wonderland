@@ -181,14 +181,15 @@ export class BuyFeature {
 		const screenWidth = scene.cameras.main.width;
 		const screenHeight = scene.cameras.main.height;
 
-		const y = screenHeight - this.globalBottomAnchorOffset - 402;
+		const x = screenWidth / 2;
+		const y = screenHeight - this.globalBottomAnchorOffset - 385;
 		const spineKey = 'Symbol0_WF';
 		const spineAtlasKey = `${spineKey}-atlas`;
 
 		// Scatter symbol idle loop reused as the buy feature logo to keep the area animated
-		this.featureLogo = scene.add.spine(screenWidth / 2, y, spineKey, spineAtlasKey) as SpineGameObject;
-		this.featureLogo.setOrigin(0.5, 0.5);
-		this.featureLogo.setScale(0.8);
+		this.featureLogo = scene.add.spine(x, y, spineKey, spineAtlasKey) as SpineGameObject;
+		this.featureLogo.setOrigin(0.485, 0.55);
+		this.featureLogo.setScale(0.65);
 
 		try {
 			this.featureLogo.animationState.setAnimation(0, 'symbol0_WF', true);
@@ -196,6 +197,11 @@ export class BuyFeature {
 			console.warn('[BuyFeature] Unable to start feature logo animation', error);
 		}
 
+		const featureLogoBg = scene.add.image(x, y, 'buy_feature_logo_bg');
+		featureLogoBg.setOrigin(0.5, 0.5);
+		featureLogoBg.setScale(1.1);
+
+		this.container.add(featureLogoBg);
 		this.container.add(this.featureLogo);
 	}
 
