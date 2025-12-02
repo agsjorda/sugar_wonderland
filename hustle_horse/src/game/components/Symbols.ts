@@ -4390,17 +4390,42 @@ export class Symbols {
 
     // Hide any win overlays that might be showing
     try {
-      if (gameScene.bigWinOverlay && typeof gameScene.bigWinOverlay.hide === 'function' && typeof gameScene.bigWinOverlay.getIsShowing === 'function' && gameScene.bigWinOverlay.getIsShowing()) {
-        console.log('[Symbols] Hiding BigWinOverlay before showing congrats');
-        gameScene.bigWinOverlay.hide(150);
-      }
-      if (gameScene.superWinOverlay && typeof gameScene.superWinOverlay.hide === 'function' && typeof gameScene.superWinOverlay.getIsShowing === 'function' && gameScene.superWinOverlay.getIsShowing()) {
-        console.log('[Symbols] Hiding SuperWinOverlay before showing congrats');
-        gameScene.superWinOverlay.hide(150);
-      }
-      if (gameScene.epicWinOverlay && typeof gameScene.epicWinOverlay.hide === 'function' && typeof gameScene.epicWinOverlay.getIsShowing === 'function' && gameScene.epicWinOverlay.getIsShowing()) {
-        console.log('[Symbols] Hiding EpicWinOverlay before showing congrats');
-        gameScene.epicWinOverlay.hide(150);
+      const hidePromises: Promise<void>[] = [];
+      const maybeHideOverlay = (overlay: any, name: string) => {
+        if (!overlay || typeof overlay.hide !== 'function') {
+          return;
+        }
+        let isShowing = false;
+        try {
+          if (typeof overlay.getIsShowing === 'function') {
+            isShowing = !!overlay.getIsShowing();
+          } else if (typeof overlay.isShowing === 'boolean') {
+            isShowing = overlay.isShowing;
+          }
+        } catch {}
+        if (!isShowing) {
+          return;
+        }
+        console.log(`[Symbols] Hiding ${name} before showing congrats`);
+        hidePromises.push(new Promise<void>((resolve) => {
+          try {
+            overlay.hide(150, () => resolve());
+          } catch {
+            resolve();
+          }
+        }));
+      };
+
+      maybeHideOverlay(gameScene.bigWinOverlay, 'BigWinOverlay');
+      maybeHideOverlay(gameScene.superWinOverlay, 'SuperWinOverlay');
+      maybeHideOverlay(gameScene.epicWinOverlay, 'EpicWinOverlay');
+      maybeHideOverlay(gameScene.megaWinOverlay, 'MegaWinOverlay');
+
+      if (hidePromises.length > 0) {
+        Promise.all(hidePromises).then(() => {
+          this.showCongratsDialogAfterDelay();
+        });
+        return;
       }
     } catch (e) {
       console.warn('[Symbols] Error hiding win overlays:', e);

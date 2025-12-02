@@ -15,6 +15,7 @@ export class BonusHeader {
 	// Tracks cumulative total during bonus mode by incrementing each spin's subtotal
 	private cumulativeBonusWin: number = 0;
 	private hasStartedBonusTracking: boolean = false;
+	private hasAccumulatedForCurrentSpin: boolean = false;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -278,6 +279,7 @@ export class BonusHeader {
 		// Listen for reels start to hide winnings display
 		gameEventManager.on(GameEventType.REELS_START, () => {
 			console.log('[BonusHeader] Reels started');
+			this.hasAccumulatedForCurrentSpin = false;
 			// During bonus mode, display TOTAL WIN accumulated so far at the start of the spin
 			if (gameStateManager.isBonus) {
 				// Initialize tracking on first spin in bonus mode
@@ -375,6 +377,9 @@ export class BonusHeader {
 			if (!gameStateManager.isBonus) {
 				return;
 			}
+			if (this.hasAccumulatedForCurrentSpin) {
+				return;
+			}
 			const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
 			const spinData = symbolsComponent?.currentSpinData;
 			let spinWin = 0;
@@ -386,6 +391,7 @@ export class BonusHeader {
 				this.hasStartedBonusTracking = true;
 			}
 			this.cumulativeBonusWin += (spinWin || 0);
+			this.hasAccumulatedForCurrentSpin = true;
 			console.log(`[BonusHeader] WIN_STOP (bonus): accumulated spinWin=$${spinWin}, cumulativeBonusWin=$${this.cumulativeBonusWin}`);
 		});
 	}
