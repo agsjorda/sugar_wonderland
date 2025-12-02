@@ -620,6 +620,14 @@ export class WinTracker {
     });
   }
 
+  /**
+   * Fade the tracker out before clearing it.
+   * Used by callers instead of instantly hiding to give a smoother UX.
+   */
+  public hideWithFade(durationMs: number = 250): void {
+    this.fadeOut(durationMs);
+  }
+
   private fadeOut(durationMs: number): void {
     if (!this.scene || !this.container) {
       return;

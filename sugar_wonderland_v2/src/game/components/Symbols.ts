@@ -111,6 +111,8 @@ export class Symbols {
 
   public create(scene: Game) {
     this.scene = scene;
+    // WinLineDrawer is no longer used in this game (cluster/tumble only).
+    // Keep the property for compatibility but never instantiate it.
     this.winLineDrawer = null;
     initVariables(this);
     createContainer(this);
@@ -752,7 +754,7 @@ export class Symbols {
             }
             
             // Stop any active tweens on this symbol
-            this.scene.tweens.killTweensOf(symbol);
+            //this.scene.tweens.killTweensOf(symbol);
           }
         }
       }
@@ -1434,20 +1436,56 @@ export class Symbols {
               ease: 'Sine.easeOut',
               onComplete: () => {
                 try {
-                  const entry = symbol.animationState?.setAnimation?.(0, winAnimationName, true);
-                  if (entry) {
+                  const state: any = symbol.animationState;
+                  const canAnimate = state && typeof state.setAnimation === 'function';
+                  if (canAnimate) {
+                    let finished = false;
+                    let listenerRef: any = null;
+                    // Attach listener so that after Win plays once, we return to Idle loop
                     try {
-                      const base = (typeof (entry as any).timeScale === 'number' && (entry as any).timeScale > 0) ? (entry as any).timeScale : 1;
-                      (entry as any).timeScale = base * 1.3; // +30% speed
+                      if (typeof state.addListener === 'function') {
+                        listenerRef = {
+                          complete: (entry: any) => {
+                            try {
+                              if (!entry || entry.animation?.name !== winAnimationName) return;
+                            } catch {}
+                            if (finished) return;
+                            finished = true;
+                            // Return to idle loop after win animation completes
+                            try { state.setAnimation(0, idleAnimationName, true); } catch {}
+                            try { if (state.removeListener && listenerRef) state.removeListener(listenerRef); } catch {}
+                          }
+                        };
+                        state.addListener(listenerRef);
+                      }
                     } catch {}
-                  } else if (symbol.animationState) {
-                    // Fallback: speed up the whole state if entry not available
-                    try {
-                      const baseState = (typeof (symbol.animationState as any).timeScale === 'number' && (symbol.animationState as any).timeScale > 0)
-                        ? (symbol.animationState as any).timeScale
-                        : 1;
-                      (symbol.animationState as any).timeScale = baseState * 1.5;
-                    } catch {}
+
+                    const entry = state.setAnimation(0, winAnimationName, false);
+                    if (entry) {
+                      // Speed up this track slightly
+                      try {
+                        const base = (typeof (entry as any).timeScale === 'number' && (entry as any).timeScale > 0)
+                          ? (entry as any).timeScale
+                          : 1;
+                        (entry as any).timeScale = base * 1.3; // +30% speed
+                      } catch {}
+                    } else {
+                      // Fallback: speed up the whole state if entry not available
+                      try {
+                        const baseState = (typeof state.timeScale === 'number' && state.timeScale > 0)
+                          ? state.timeScale
+                          : 1;
+                        state.timeScale = baseState * 1.5;
+                      } catch {}
+                    }
+
+                    // Safety timeout: if complete never fires, still return to idle
+                    this.scene.time.delayedCall(2500, () => {
+                      if (finished) return;
+                      finished = true;
+                      try { state.setAnimation(0, idleAnimationName, true); } catch {}
+                      try { if (state.removeListener && listenerRef) state.removeListener(listenerRef); } catch {}
+                    });
                   }
                 } catch {}
                 resolve();
@@ -2342,13 +2380,26 @@ export class Symbols {
     let totalWin = 0;
     try {
       const bonusHeader = (gameScene as any)?.bonusHeader;
-      if (bonusHeader && typeof bonusHeader.getCurrentWinnings === 'function') {
-        const headerTotal = Number(bonusHeader.getCurrentWinnings()) || 0;
-        if (headerTotal > 0) {
-          totalWin = headerTotal;
-          console.log(`[Symbols] Using BonusHeader cumulative winnings for congrats total: ${totalWin}`);
-        } else {
-          console.log('[Symbols] BonusHeader returned 0 for current winnings - falling back to freespin items sum');
+      if (bonusHeader) {
+        // Use the internal cumulative tracker if available; this includes the
+        // scatter trigger win plus all per-spin bonus wins.
+        if (typeof bonusHeader.getCumulativeBonusWin === 'function') {
+          const cumulativeTotal = Number(bonusHeader.getCumulativeBonusWin()) || 0;
+          if (cumulativeTotal > 0) {
+            totalWin = cumulativeTotal;
+            console.log(`[Symbols] Using BonusHeader cumulative bonus total for congrats: ${totalWin}`);
+          } else {
+            console.log('[Symbols] BonusHeader cumulative total is 0 - falling back to freespin items sum');
+          }
+        } else if (typeof bonusHeader.getCurrentWinnings === 'function') {
+          // Backward compatibility: fall back to whatever the bonus header is currently showing
+          const headerTotal = Number(bonusHeader.getCurrentWinnings()) || 0;
+          if (headerTotal > 0) {
+            totalWin = headerTotal;
+            console.log(`[Symbols] Using BonusHeader current winnings for congrats total (legacy): ${totalWin}`);
+          } else {
+            console.log('[Symbols] BonusHeader returned 0 for current winnings - falling back to freespin items sum');
+          }
         }
       } else {
         console.log('[Symbols] BonusHeader not available on gameScene - falling back to freespin items sum');
@@ -2362,9 +2413,13 @@ export class Symbols {
       const freespinData = this.currentSpinData.slot.freespin || this.currentSpinData.slot.freeSpin;
       if (freespinData && freespinData.items && Array.isArray(freespinData.items)) {
         totalWin = freespinData.items.reduce((sum: number, item: any) => {
-          return sum + (item.subTotalWin || 0);
+          const perSpinTotal =
+            (typeof item.totalWin === 'number' && item.totalWin > 0)
+              ? item.totalWin
+              : (item.subTotalWin || 0);
+          return sum + perSpinTotal;
         }, 0);
-        console.log(`[Symbols] Calculated total win from freespinItems (fallback): ${totalWin}`);
+        console.log(`[Symbols] Calculated total win from freespinItems (fallback, per-spin totalWin/subTotalWin): ${totalWin}`);
       }
     }
     
@@ -2607,17 +2662,9 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
     self.resetSymbolDepths();
     self.restoreSymbolVisibility();
   
-  // Create a mock Data object to use with existing functions
+  // Create a mock Data object to use with existing functions (wins/winlines no longer used)
   const mockData = new Data();
   mockData.symbols = symbols;
-  
-  // Convert SpinData paylines to the format expected by the game
-  const convertedWins = convertPaylinesToWinFormat(spinData);
-  console.log('[Symbols] Converted SpinData paylines to win format:', convertedWins);
-  
-  // Create a Wins object with the converted data
-  mockData.wins = new Wins(convertedWins);
-  
   mockData.balance = 0; // Not used in symbol processing
   mockData.bet = parseFloat(spinData.bet);
   mockData.freeSpins = (
@@ -2657,31 +2704,22 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
     self.symbols = self.newSymbols;
     self.newSymbols = [];
   
-  // Re-evaluate wins after initial drop completes
+  // Re-evaluate wins after initial drop completes using tumble data only.
+  // Legacy winline/payline-based checking has been removed for this game.
   try {
-    // Keep visual reevaluation separate from win gating
-    reevaluateWinsFromGrid(self);
-    // Determine wins strictly from backend-provided spin data (tumbles/paylines)
-    try {
-      const tumblesFromSpin = spinData?.slot?.tumbles;
-      let winsFromSpin = false;
-      if (Array.isArray(tumblesFromSpin) && tumblesFromSpin.length > 0) {
-        winsFromSpin = tumblesFromSpin.some((t: any) => {
-          const outArr = Array.isArray(t?.symbols?.out) ? t.symbols.out as Array<{ count?: number; win?: number }> : [];
-          const hasOut = outArr.some(o => (Number(o?.count) || 0) > 0);
-          const hasWin = Number(t?.win) > 0;
-          return hasOut || hasWin;
-        });
-      } else {
-        const paylines = (spinData?.slot && Array.isArray((spinData.slot as any).paylines))
-          ? (spinData.slot as any).paylines
-          : [];
-        winsFromSpin = paylines.length > 0;
-      }
-      if (winsFromSpin) {
-        (self as any).hadWinsInCurrentItem = true;
-      }
-    } catch {}
+    const tumblesFromSpin = spinData?.slot?.tumbles;
+    let winsFromSpin = false;
+    if (Array.isArray(tumblesFromSpin) && tumblesFromSpin.length > 0) {
+      winsFromSpin = tumblesFromSpin.some((t: any) => {
+        const outArr = Array.isArray(t?.symbols?.out) ? t.symbols.out as Array<{ count?: number; win?: number }> : [];
+        const hasOut = outArr.some(o => (Number(o?.count) || 0) > 0);
+        const hasWin = Number(t?.win) > 0;
+        return hasOut || hasWin;
+      });
+    }
+    if (winsFromSpin) {
+      (self as any).hadWinsInCurrentItem = true;
+    }
   } catch {}
 
   // Apply tumble steps if provided by backend
@@ -2765,7 +2803,7 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
     const betAmount = parseFloat(String(spinData.bet));
     const multiplier = betAmount > 0 ? (totalWinFromTumbles / betAmount) : 0;
 
-    if (multiplier >= 0.5) {
+    if (multiplier >= 20) {
       console.log(`[Symbols] Tumble win meets dialog threshold (${multiplier.toFixed(2)}x) - pausing autoplay immediately`);
       gameStateManager.isShowingWinDialog = true;
     } else {
@@ -2922,67 +2960,9 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   }
 }
 
-/**
- * Convert SpinData paylines to the format expected by the game's win system
- */
-function convertPaylinesToWinFormat(spinData: any): Map<number, any[]> {
-  const allMatching = new Map<number, any[]>();
-  const paylines = spinData?.slot?.paylines;
-  if (!Array.isArray(paylines)) {
-    return allMatching;
-  }
-  for (const payline of paylines) {
-    const lineKey = payline.lineKey;
-    const winningGrids = getWinningGridsForPayline(spinData, payline);
-    if (winningGrids.length > 0) {
-      allMatching.set(lineKey, winningGrids);
-    }
-  }
-  return allMatching;
-}
-
-/**
- * Get winning grids for a specific payline from SpinData
- */
-function getWinningGridsForPayline(spinData: any, payline: any): any[] {
-  const winningGrids: any[] = [];
-  const lineKey = payline.lineKey;
-  const count = payline.count;
-  
-  // Get the winline pattern for this lineKey
-  if (lineKey < 0 || lineKey >= Data.WINLINES.length) {
-    console.warn(`[Symbols] Invalid lineKey: ${lineKey}`);
-    return [];
-  }
-  
-  const winline = Data.WINLINES[lineKey];
-  
-  // Get all positions in the winline pattern (where winline[y][x] === 1)
-  const winlinePositions: { x: number, y: number }[] = [];
-  for (let x = 0; x < winline[0].length; x++) {
-    for (let y = 0; y < winline.length; y++) {
-      if (winline[y][x] === 1) {
-        winlinePositions.push({ x, y });
-      }
-    }
-  }
-  
-  // Sort positions by x coordinate to get left-to-right order
-  winlinePositions.sort((a, b) => a.x - b.x);
-  
-  // Take only the first 'count' positions as winning symbols
-  const winningPositions = winlinePositions.slice(0, count);
-  
-  // Add the winning positions to the result (SpinData.area is [column][row], bottom->top)
-  for (const pos of winningPositions) {
-    const colLen = spinData.slot.area[pos.x]?.length || 0;
-    const rowIndex = Math.max(0, colLen - 1 - pos.y);
-    const symbolAtPosition = spinData.slot.area[pos.x][rowIndex];
-    winningGrids.push(new Grid(pos.x, pos.y, symbolAtPosition));
-  }
-  
-  return winningGrids;
-}
+// Legacy helpers for converting paylines/winlines to internal win formats have been
+// removed. This game now uses cluster/tumble logic exclusively; payline-based
+// evaluation and winline drawing are no longer part of the runtime flow.
 
 
 
@@ -3414,6 +3394,7 @@ async function playMultiplierWinThenIdle(self: Symbols, obj: any, base: string):
   return new Promise<void>((resolve) => {
     let finished = false;
     const safeResolve = () => { if (!finished) { finished = true; resolve(); } };
+    const isTurbo = !!self.scene.gameData?.isTurbo;
     try {
       const animState = obj?.animationState;
       if (!animState || !animState.setAnimation) return safeResolve();
@@ -3436,7 +3417,7 @@ async function playMultiplierWinThenIdle(self: Symbols, obj: any, base: string):
       entry = animState.setAnimation(0, winAnim, false);
       // Apply the same visual scale-up used for normal symbol win animations
       try { scheduleScaleUp(self, obj, 500); } catch {}
-      // Pause a few frames before the end of the Win animation, then resolve so flow can continue
+      // Pause a few frames before the end of the Win animation (non-turbo only), then resolve so flow can continue
       try {
         // Compute pause time near the end of the animation (0.5s before end)
         const animData = (obj as any)?.skeleton?.data?.findAnimation?.(winAnim);
@@ -3447,14 +3428,17 @@ async function playMultiplierWinThenIdle(self: Symbols, obj: any, base: string):
         // Schedule the pause shortly before the end
         self.scene.time.delayedCall(delayMs, () => {
           try {
-            const e = entry || (animState?.getCurrent && animState.getCurrent(0));
-            if (e) {
-              try { (e as any).timeScale = 0; } catch {}
-            } else {
-              try { (animState as any).timeScale = 0; } catch {}
+            // In turbo mode, let the Win animation play through naturally without freezing near the end.
+            if (!isTurbo) {
+              const e = entry || (animState?.getCurrent && animState.getCurrent(0));
+              if (e) {
+                try { (e as any).timeScale = 0; } catch {}
+              } else {
+                try { (animState as any).timeScale = 0; } catch {}
+              }
+              // After pausing near the end, disable the symbol so it won't interact/animate further
+              try { disableSymbolObject(self, obj); } catch {}
             }
-            // After pausing near the end, disable the symbol so it won't interact/animate further
-            try { disableSymbolObject(self, obj); } catch {}
           } catch {}
           // Move multiplier PNG overlay toward the center of the winnings display
           try {
@@ -3806,7 +3790,7 @@ function createNewSymbols(self: Symbols, data: Data) {
 async function dropReels(self: Symbols, data: Data): Promise<void> {
   // Remove init check since we're not using it anymore
   console.log('[Symbols] dropReels called with data:', data);
-  console.log('[Symbols] SLOT_ROWS:', SLOT_ROWS);
+  console.log('[Symbols] SLOT_ROWS (config columns):', SLOT_ROWS);
 
   // Play turbo drop sound effect at the start of reel drop sequence when in turbo mode
   if (self.scene.gameData.isTurbo && (window as any).audioManager) {
@@ -3822,15 +3806,22 @@ async function dropReels(self: Symbols, data: Data): Promise<void> {
 
   const reelPromises: Promise<void>[] = [];
   // Adjustable gap between clearing previous symbols and spawning new ones per row
-  const PREV_TO_NEW_DELAY_MS = (self.scene.gameData as any)?.prevToNewDelayMs ?? 250;
+  const PREV_TO_NEW_DELAY_MS = (self.scene.gameData as any)?.prevToNewDelayMs ?? 400;
+
+  // Determine the actual number of visible rows from the current grid.
+  // This ensures we clear/drop every row even if config/constants change.
+  const numRows = (self.symbols && self.symbols[0] && self.symbols[0].length)
+    ? self.symbols[0].length
+    : SLOT_COLUMNS;
+
   // Reverse the sequence: start from bottom row to top row
-  for (let step = 0; step < SLOT_COLUMNS; step++) {
-    const actualRow = (SLOT_COLUMNS - 1) - step;
+  for (let step = 0; step < numRows; step++) {
+    const actualRow = (numRows - 1) - step;
     const isLastReel = actualRow === 0;
     const startDelay = self.scene.gameData.dropReelsDelay * step;
     const p = (async () => {
       await delay(startDelay);
-      console.log(`[Symbols] Processing row ${actualRow}`);
+      console.log(`[Symbols] Processing row ${actualRow}/${numRows - 1}`);
       dropPrevSymbols(self, actualRow, isLastReel && extendLastReelDrop)
       // Wait before spawning new symbols so previous ones are cleared first
       await delay(PREV_TO_NEW_DELAY_MS);
@@ -3877,20 +3868,24 @@ function dropPrevSymbols(self: Symbols, index: number, extendDuration: boolean =
     const baseObj: any = self.symbols[i][index];
     const overlayObj: any = (baseObj as any)?.__overlayImage;
     const tweenTargets: any = overlayObj ? [baseObj, overlayObj] : baseObj;
-    self.scene.tweens.chain({
-      targets: tweenTargets,
-      tweens: [
-        {
-          delay: STAGGER_MS * i,
-          y: `-= ${clearHop}`,
-          duration: self.scene.gameData.winUpDuration,
-          ease: Phaser.Math.Easing.Circular.Out,
-        },
-        {
-          y: `+= ${DROP_DISTANCE}`,
-          duration: (self.scene.gameData.dropDuration * 0.9) + extraMs,
-          ease: Phaser.Math.Easing.Linear,
-        },
+    const isTurbo = !!self.scene.gameData?.isTurbo;
+    const tweens: any[] = [
+      {
+        delay: STAGGER_MS * i,
+        y: `-= ${clearHop}`,
+        duration: self.scene.gameData.winUpDuration,
+        ease: Phaser.Math.Easing.Circular.Out,
+      },
+      {
+        y: `+= ${DROP_DISTANCE}`,
+        duration: (self.scene.gameData.dropDuration * 0.9) + extraMs,
+        ease: Phaser.Math.Easing.Linear,
+      },
+    ];
+
+    // In turbo mode, skip post-drop bounce tweens to keep drops snappy
+    if (!isTurbo) {
+      tweens.push(
         {
           y: `+= ${5}`,
           duration: self.scene.gameData.dropDuration * 0.05,
@@ -3901,7 +3896,12 @@ function dropPrevSymbols(self: Symbols, index: number, extendDuration: boolean =
           duration: self.scene.gameData.dropDuration * 0.05,
           ease: Phaser.Math.Easing.Linear,
         },
-      ],
+      );
+    }
+
+    self.scene.tweens.chain({
+      targets: tweenTargets,
+      tweens,
     });
   }
 }
@@ -3942,19 +3942,23 @@ function dropFillers(self: Symbols, index: number, extendDuration: boolean = fal
     const baseObj: any = fillerSymbols[i] as any;
     const overlayObj: any = (baseObj as any)?.__overlayImage;
     const tweenTargets: any = overlayObj ? [baseObj, overlayObj] : baseObj;
-    self.scene.tweens.chain({
-      targets: tweenTargets,
-      tweens: [
-        {
-          y: `-= ${self.scene.gameData.winUpHeight}`,
-          duration: self.scene.gameData.winUpDuration,
-          ease: Phaser.Math.Easing.Circular.Out,
-        },
-        {
-          y: `+= ${DROP_DISTANCE}`,
-          duration: (self.scene.gameData.dropDuration * 0.9) + extraMs,
-          ease: Phaser.Math.Easing.Linear,
-        },
+    const isTurbo = !!self.scene.gameData?.isTurbo;
+    const tweens: any[] = [
+      {
+        y: `-= ${self.scene.gameData.winUpHeight}`,
+        duration: self.scene.gameData.winUpDuration,
+        ease: Phaser.Math.Easing.Circular.Out,
+      },
+      {
+        y: `+= ${DROP_DISTANCE}`,
+        duration: (self.scene.gameData.dropDuration * 0.9) + extraMs,
+        ease: Phaser.Math.Easing.Linear,
+      },
+    ];
+
+    // In turbo mode, skip the large post-drop bounce on filler symbols
+    if (!isTurbo) {
+      tweens.push(
         {
           y: `+= ${40}`,
           duration: self.scene.gameData.dropDuration * 0.05,
@@ -3968,8 +3972,22 @@ function dropFillers(self: Symbols, index: number, extendDuration: boolean = fal
             try { if (overlayObj && overlayObj.destroy) overlayObj.destroy(); } catch {}
             baseObj.destroy();
           }
-        }
-      ]
+        },
+      );
+    } else {
+      // Still clean up the filler symbol when the main drop completes
+      const last = tweens[tweens.length - 1];
+      const prevOnComplete = last.onComplete;
+      last.onComplete = () => {
+        try { if (prevOnComplete) prevOnComplete(); } catch {}
+        try { if (overlayObj && overlayObj.destroy) overlayObj.destroy(); } catch {}
+        baseObj.destroy();
+      };
+    }
+
+    self.scene.tweens.chain({
+      targets: tweenTargets,
+      tweens,
     })
 
   }
@@ -4002,20 +4020,24 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
       const baseObj: any = symbol as any;
       const overlayObj: any = (baseObj as any)?.__overlayImage;
       const tweenTargets: any = overlayObj ? [baseObj, overlayObj] : baseObj;
-      self.scene.tweens.chain({ 
-        targets: tweenTargets,
-        tweens: [
-          {
-            delay: STAGGER_MS * col,
-            y: `-= ${symbolHop}`,
-            duration: self.scene.gameData.winUpDuration,
-            ease: Phaser.Math.Easing.Circular.Out,
-          },
-          {
-            y: targetY,
-            duration: (self.scene.gameData.dropDuration * 0.9) + extraMs,
-            ease: Phaser.Math.Easing.Linear,
-          },
+      const isTurbo = !!self.scene.gameData?.isTurbo;
+      const tweens: any[] = [
+        {
+          delay: STAGGER_MS * col,
+          y: `-= ${symbolHop}`,
+          duration: self.scene.gameData.winUpDuration,
+          ease: Phaser.Math.Easing.Circular.Out,
+        },
+        {
+          y: targetY,
+          duration: (self.scene.gameData.dropDuration * 0.9) + extraMs,
+          ease: Phaser.Math.Easing.Linear,
+        },
+      ];
+
+      // In turbo mode, drop directly to target without the post-drop bounce
+      if (!isTurbo) {
+        tweens.push(
           {
             y: `+= ${10}`,
             duration: self.scene.gameData.dropDuration * 0.05,
@@ -4038,8 +4060,24 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
                 resolve();
               }
             }
+          },
+        );
+      } else {
+        // Attach completion and resolve to the main drop tween
+        const last = tweens[tweens.length - 1];
+        const prevOnComplete = last.onComplete;
+        last.onComplete = () => {
+          try { if (prevOnComplete) prevOnComplete(); } catch {}
+          completedAnimations++;
+          if (completedAnimations === totalAnimations) {
+            resolve();
           }
-        ]
+        };
+      }
+
+      self.scene.tweens.chain({ 
+        targets: tweenTargets,
+        tweens,
       })
     }
   });
@@ -4398,17 +4436,8 @@ async function applySingleTumble(self: Symbols, tumble: any, onFirstWinComplete?
                 wt.updateFromSpinData(self.currentSpinData || null);
                 wt.showLatest();
               }
-              // Hide WinTracker at the same time the win text finishes (hold + fade)
-              try {
-                const baseWU = (self.scene as any)?.gameData?.winUpDuration || 700;
-                const holdDuration = Math.max(1000, baseWU);
-                const fadeDuration = Math.max(600, baseWU);
-                const totalDuration = holdDuration + fadeDuration;
-                wt.autoHideAfter(totalDuration);
-              } catch {
-                // Fallback hide timing
-                wt.autoHideAfter(3000);
-              }
+              // Do not auto-hide WinTracker here; it will persist until a new spin starts,
+              // at which point the Game scene explicitly clears it.
             }
           }
         } catch {}
@@ -4655,7 +4684,8 @@ async function applySingleTumble(self: Symbols, tumble: any, onFirstWinComplete?
             y: targetY,
             delay: STAGGER_MS * col * (self.scene?.gameData?.compressionDelayMultiplier ?? 1),
             duration: self.scene.gameData.dropDuration,
-            ease: Phaser.Math.Easing.Bounce.Out,
+            // In turbo mode, avoid extra bouncy easing and move linearly
+            ease: self.scene.gameData?.isTurbo ? Phaser.Math.Easing.Linear : Phaser.Math.Easing.Bounce.Out,
             onComplete: () => resolve(),
           });
         } catch { resolve(); }
@@ -4736,6 +4766,7 @@ async function applySingleTumble(self: Symbols, tumble: any, onFirstWinComplete?
 
         const DROP_STAGGER_MS = (self.scene?.gameData?.tumbleDropStaggerMs ?? (MANUAL_STAGGER_MS * 0.25));
         const symbolHop = self.scene.gameData.winUpHeight * 0.5;
+        const isTurbo = !!self.scene.gameData?.isTurbo;
         dropPromises.push(new Promise<void>((resolve) => {
           try {
             const computedStartDelay = (self.scene?.gameData?.tumbleDropStartDelayMs ?? 0) + (DROP_STAGGER_MS * sequenceIndex);
@@ -4761,26 +4792,37 @@ async function applySingleTumble(self: Symbols, tumble: any, onFirstWinComplete?
                 ease: Phaser.Math.Easing.Linear,
               });
             }
-            tweensArr.push(
-              {
-                y: `+= ${10}`,
-                duration: self.scene.gameData.dropDuration * 0.05,
-                ease: Phaser.Math.Easing.Linear,
-              },
-              {
-                y: `-= ${10}`,
-                duration: self.scene.gameData.dropDuration * 0.05,
-                ease: Phaser.Math.Easing.Linear,
-                onComplete: () => {
-                  try {
-                    if (!self.scene.gameData.isTurbo && (window as any).audioManager) {
-                      (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
-                    }
-                  } catch {}
-                  resolve();
+            if (!isTurbo) {
+              // Normal mode: include the small post-drop bounce and SFX
+              tweensArr.push(
+                {
+                  y: `+= ${10}`,
+                  duration: self.scene.gameData.dropDuration * 0.05,
+                  ease: Phaser.Math.Easing.Linear,
+                },
+                {
+                  y: `-= ${10}`,
+                  duration: self.scene.gameData.dropDuration * 0.05,
+                  ease: Phaser.Math.Easing.Linear,
+                  onComplete: () => {
+                    try {
+                      if (!self.scene.gameData.isTurbo && (window as any).audioManager) {
+                        (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
+                      }
+                    } catch {}
+                    resolve();
+                  }
                 }
-              }
-            );
+              );
+            } else {
+              // Turbo mode: no post-drop bounce; resolve on the main drop completion
+              const last = tweensArr[tweensArr.length - 1];
+              const prevOnComplete = last.onComplete;
+              last.onComplete = () => {
+                try { if (prevOnComplete) prevOnComplete(); } catch {}
+                resolve();
+              };
+            }
             try { self.scene.tweens.chain({ targets: getSymbolTweenTargets(created), tweens: tweensArr }); }
             catch { self.scene.tweens.chain({ targets: created, tweens: tweensArr }); }
           } catch { resolve(); }
@@ -4852,6 +4894,7 @@ async function applySingleTumble(self: Symbols, tumble: any, onFirstWinComplete?
         try { playDropAnimationIfAvailable(created); } catch {}
         const DROP_STAGGER_MS = (self.scene?.gameData?.tumbleDropStaggerMs ?? (MANUAL_STAGGER_MS * 0.25));
         const symbolHop = self.scene.gameData.winUpHeight * 0.5;
+        const isTurbo = !!self.scene.gameData?.isTurbo;
         dropPromises.push(new Promise<void>((resolve) => {
           try {
             const computedStartDelay = (self.scene?.gameData?.tumbleDropStartDelayMs ?? 0) + (DROP_STAGGER_MS * sequenceIndex);
@@ -4863,10 +4906,33 @@ async function applySingleTumble(self: Symbols, tumble: any, onFirstWinComplete?
             } else {
               tweensArr.push({ delay: computedStartDelay, y: targetY, duration: (self.scene.gameData.dropDuration * 0.9), ease: Phaser.Math.Easing.Linear });
             }
-            tweensArr.push(
-              { y: `+= ${10}`, duration: self.scene.gameData.dropDuration * 0.05, ease: Phaser.Math.Easing.Linear },
-              { y: `-= ${10}`, duration: self.scene.gameData.dropDuration * 0.05, ease: Phaser.Math.Easing.Linear, onComplete: () => { try { if (!self.scene.gameData.isTurbo && (window as any).audioManager) { (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP); } } catch {} resolve(); } }
-            );
+            if (!isTurbo) {
+              // Normal mode: include the small post-drop bounce and SFX
+              tweensArr.push(
+                { y: `+= ${10}`, duration: self.scene.gameData.dropDuration * 0.05, ease: Phaser.Math.Easing.Linear },
+                {
+                  y: `-= ${10}`,
+                  duration: self.scene.gameData.dropDuration * 0.05,
+                  ease: Phaser.Math.Easing.Linear,
+                  onComplete: () => {
+                    try {
+                      if (!self.scene.gameData.isTurbo && (window as any).audioManager) {
+                        (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
+                      }
+                    } catch {}
+                    resolve();
+                  }
+                }
+              );
+            } else {
+              // Turbo mode: no post-drop bounce; resolve on the main drop completion
+              const last = tweensArr[tweensArr.length - 1];
+              const prevOnComplete = last.onComplete;
+              last.onComplete = () => {
+                try { if (prevOnComplete) prevOnComplete(); } catch {}
+                resolve();
+              };
+            }
             self.scene.tweens.chain({ targets: created, tweens: tweensArr });
           } catch { resolve(); }
         }));

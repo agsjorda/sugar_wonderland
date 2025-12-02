@@ -142,6 +142,11 @@ export class Header {
 				const amount = Number((data as any)?.totalWin ?? 0);
 				if (amount > 0) {
 					if (this.youWonText) this.youWonText.setText('TOTAL WIN');
+					// Force an animation even if the numeric value hasn't changed from the
+					// last tumble update, so the transition to "TOTAL WIN" feels responsive.
+					// By resetting currentWinnings, showWinningsDisplay will detect a change
+					// and play the pulse or scale-in animation as appropriate.
+					this.currentWinnings = 0;
 					this.showWinningsDisplay(amount);
 				} else {
 					// Zero win - hide if not in scatter

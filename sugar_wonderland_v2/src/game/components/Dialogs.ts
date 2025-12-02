@@ -3,7 +3,7 @@ import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { NumberDisplay, NumberDisplayConfig } from './NumberDisplay';
 import { IrisTransition } from './IrisTransition';
-import { CandyTransition } from './CandyTransition';
+import { SymbolExplosionTransition } from './SymbolExplosionTransition';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
@@ -68,11 +68,12 @@ export class Dialogs {
 	private isStagedWinNumberAnimation: boolean = false;
 	private stagedWinStages: Array<{ type: 'SmallW_KA' | 'MediumW_KA' | 'LargeW_KA' | 'SuperW_KA'; target: number }> = [];
 	private stagedWinCurrentStageIndex: number = 0;
+	private stagedWinStageTimer: Phaser.Time.TimerEvent | null = null;
 	
 	// Iris transition for scatter animation
 	private irisTransition: IrisTransition | null = null;
-	// Candy transition for free spin dialog dismissal
-	private candyTransition: CandyTransition | null = null;
+	// Symbol explosion transition for free spin dialog dismissal
+	private candyTransition: SymbolExplosionTransition | null = null;
 
 	// Dialog configuration
 	private dialogScales: Record<string, number> = {
@@ -106,6 +107,17 @@ export class Dialogs {
 		'SuperW_KA': true
 	};
 
+	// Global toggle to disable intro animations for dialogs (win, free spin, congrats)
+	// When true, dialogs will start directly in their idle loop.
+	private disableIntroAnimations: boolean = true;
+
+	// Remember the intended scale for the current dialog so we can tween from 0 -> target
+	private lastDialogScale: number = 1;
+
+	// Tracks whether we've already shown at least one win dialog. Used to fix an edge
+	// case where the *first* win dialog could occasionally miss the scale "pop" tween.
+	private hasShownAnyWinDialog: boolean = false;
+
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
 		this.screenModeManager = screenModeManager;
@@ -117,8 +129,8 @@ export class Dialogs {
 		
 		// Initialize iris transition for scatter animation
 		this.irisTransition = new IrisTransition(scene);
-		// Initialize candy transition for free spin dialog dismissal
-		this.candyTransition = new CandyTransition(scene);
+		// Initialize symbol explosion transition for free spin dialog dismissal
+		this.candyTransition = new SymbolExplosionTransition(scene);
 		
 		// Create main dialog overlay container
 		this.dialogOverlay = scene.add.container(0, 0);
@@ -251,6 +263,23 @@ export class Dialogs {
 		// Create the dialog content
 		this.createDialogContent(scene, config);
 
+		// Ensure the very first win dialog always gets the scale pop animation.
+		// On some devices the initial tween applied during createDialogContent can
+		// be skipped when the Win spine is created for the first time, so we force
+		// a second pop once the dialog is fully initialized.
+		if (!this.hasShownAnyWinDialog && this.isWinDialogType(config.type)) {
+			this.hasShownAnyWinDialog = true;
+			try {
+				const sceneRef = scene;
+				sceneRef.time.delayedCall(0, () => {
+					if (!this.currentDialog || !this.isDialogActive) {
+						return;
+					}
+					this.applyDialogScalePop(sceneRef);
+				});
+			} catch {}
+		}
+
 		// Notify the scene that a dialog has been shown (type included)
 		try {
 			scene.events.emit('dialogShown', this.currentDialogType);
@@ -277,10 +306,10 @@ export class Dialogs {
 			}
 		} catch {}
 		
-		// Fade in dialog content
+		// Fade dialog content in (scale pop is applied whenever idle starts)
 		if (this.currentDialog) {
 			this.currentDialog.setAlpha(0);
-			
+
 			// Adjust timing based on dialog type
 			const contentDelay = this.isWinDialog() ? 0 : 200; // No delay for win dialogs
 			
@@ -289,7 +318,7 @@ export class Dialogs {
 				alpha: 1,
 				duration: 800,
 				ease: 'Power2',
-				delay: contentDelay, // Start immediately for win dialogs
+				delay: contentDelay,
 				onComplete: () => {
 					console.log('[Dialogs] Dialog content fade-in complete');
 				}
@@ -401,6 +430,7 @@ export class Dialogs {
 
 		const position = config.position || this.getDialogPosition(config.type, scene);
 		const scale = config.scale || this.getDialogScale(config.type);
+		this.lastDialogScale = scale;
 		
 		// Create Spine animation for the dialog
 		try {
@@ -419,6 +449,10 @@ export class Dialogs {
 				atlasKey
 			);
 			this.currentDialog.setOrigin(0.5, 0.5);
+			// Set the base scale *before* we trigger any pop tweens.
+			// If we do this after applyDialogScalePop, it overrides the tween's
+			// starting scale of 0 and the pop animation can appear to be skipped.
+			this.currentDialog.setScale(scale);
 			
 			// Get animation names based on dialog type
 			const shouldLoop = this.getDialogLoop(config.type);
@@ -428,28 +462,47 @@ export class Dialogs {
 				const animations = this.getAnimationNameForDialogType(config.type);
 				if (animations) {
 					try {
-						console.log(`[Dialogs] Playing intro animation: ${animations.intro}`);
-						this.currentDialog.animationState.setAnimation(0, animations.intro, false);
-						this.currentDialog.animationState.addAnimation(0, animations.idle, shouldLoop, 0);
+						if (this.disableIntroAnimations) {
+							console.log(`[Dialogs] Intro disabled for dialog ${config.type}, starting idle with pop: ${animations.idle}`);
+							this.currentDialog.animationState.setAnimation(0, animations.idle, shouldLoop);
+							this.applyDialogScalePop(scene);
+						} else {
+							console.log(`[Dialogs] Playing intro animation: ${animations.intro}`);
+							this.currentDialog.animationState.setAnimation(0, animations.intro, false);
+							this.currentDialog.animationState.addAnimation(0, animations.idle, shouldLoop, 0);
+							this.applyDialogScalePop(scene);
+						}
 					} catch (error) {
-						console.log(`[Dialogs] Intro animation failed, falling back to idle: ${animations.idle}`);
-						// Fallback to idle animation if intro is missing
+						console.log(`[Dialogs] Intro/idle animation failed, falling back to idle with pop: ${animations.idle}`);
+						// Fallback to idle animation if something goes wrong
 						this.currentDialog.animationState.setAnimation(0, animations.idle, shouldLoop);
+						this.applyDialogScalePop(scene);
 					}
 				} else {
 					console.error(`[Dialogs] No animation mapping found for dialog type: ${config.type}`);
 					return;
 				}
 			} else {
-				// Use old animation format for other dialogs (Congrats_KA, etc.)
+				// Use old animation format for other dialogs that still rely on the
+				// "{spine-keyname}_win" / "{spine-keyname}_idle" naming convention.
+				// We also apply the same pop-in effect so these dialogs visually
+				// match the new Win.json-based dialogs.
 				try {
-					console.log(`[Dialogs] Playing intro animation: ${config.type}_win`);
-					this.currentDialog.animationState.setAnimation(0, `${config.type}_win`, false);
-					this.currentDialog.animationState.addAnimation(0, `${config.type}_idle`, shouldLoop, 0);
+					if (this.disableIntroAnimations) {
+						console.log(`[Dialogs] (legacy) Intro disabled for dialog ${config.type}, starting idle with pop: ${config.type}_idle`);
+						this.currentDialog.animationState.setAnimation(0, `${config.type}_idle`, shouldLoop);
+						this.applyDialogScalePop(scene);
+					} else {
+						console.log(`[Dialogs] Playing legacy intro animation: ${config.type}_win`);
+						this.currentDialog.animationState.setAnimation(0, `${config.type}_win`, false);
+						this.currentDialog.animationState.addAnimation(0, `${config.type}_idle`, shouldLoop, 0);
+						this.applyDialogScalePop(scene);
+					}
 				} catch (error) {
-					console.log(`[Dialogs] Intro animation failed, falling back to idle: ${config.type}_idle`);
+					console.log(`[Dialogs] Legacy intro animation failed, falling back to idle with pop: ${config.type}_idle`);
 					// Fallback to idle animation if intro is missing
 					this.currentDialog.animationState.setAnimation(0, `${config.type}_idle`, shouldLoop);
+					this.applyDialogScalePop(scene);
 				}
 			}
 		} catch (error) {
@@ -458,7 +511,6 @@ export class Dialogs {
 			return;
 		}
 		
-		this.currentDialog.setScale(scale);
 		this.currentDialog.setDepth(101);
 		
 		// Add to dialog content container
@@ -537,7 +589,9 @@ export class Dialogs {
 			
 			this.autoCloseTimer = scene.time.delayedCall(delayMs, () => {
 				console.log(`[Dialogs] Auto-close timer triggered during ${reason} - closing dialog`);
-				this.handleDialogClick(scene);
+				// Auto-close should immediately close the dialog rather than advancing
+				// staged tiers one by one, so pass fromAutoClose = true.
+				this.handleDialogClick(scene, true);
 			});
 		} else {
 			console.log('[Dialogs] No auto-close timer needed:', {
@@ -816,23 +870,57 @@ export class Dialogs {
 	}
 
 	/**
-	 * Handle dialog click event
+	 * Handle dialog click event.
+	 *
+	 * fromAutoClose:
+	 *  - false: user clicked "press anywhere to continue"
+	 *  - true:  internal auto-close timer fired (autoplay / scatter / retrigger)
 	 */
-	private handleDialogClick(scene: Scene): void {
-		console.log('[Dialogs] Dialog clicked, starting fade-out sequence');
+	private handleDialogClick(scene: Scene, fromAutoClose: boolean = false): void {
+		console.log('[Dialogs] Dialog clicked, starting fade-out sequence. fromAutoClose =', fromAutoClose);
 		
 		// Clear auto-close timer if it exists (prevents double-triggering)
 		if (this.autoCloseTimer) {
 			this.autoCloseTimer.destroy();
 			this.autoCloseTimer = null;
-			console.log('[Dialogs] Auto-close timer cleared due to manual click');
+			console.log('[Dialogs] Auto-close timer cleared due to manual/auto close');
+		}
+
+		// When a staged win sequence is running (Big -> Mega -> Epic -> Super),
+		// a MANUAL click should behave like "skip to next win animation":
+		//  - Stop the current staged tier
+		//  - Immediately jump to the next tier's animation (if any)
+		//  - Start the number display from the previous tier's threshold (we use
+		//    startFromCurrent in the NumberDisplay to preserve continuity)
+		//
+		// If there is NO next staged tier, we fall through to the normal
+		// "close dialog" behavior so the win dialog ends.
+		if (!fromAutoClose && this.isWinDialog() && this.stagedWinStages.length > 0) {
+			const lastIndex = this.stagedWinStages.length - 1;
+			const nextIndex = Math.min(this.stagedWinCurrentStageIndex + 1, lastIndex);
+			const hasNextStage = nextIndex > this.stagedWinCurrentStageIndex;
+			
+			if (hasNextStage) {
+				console.log('[Dialogs] Manual click during staged win - skipping to next staged tier index:', nextIndex);
+				this.skipToStagedWinStage(scene, nextIndex);
+				// Do NOT close the dialog here; the player now sees the next tier.
+				return;
+			}
+
+			console.log('[Dialogs] Manual click during staged win - already at final tier, closing dialog normally');
 		}
 		
 		// Start the fade-out sequence first (while isDialogActive is still true)
 		this.startFadeOutSequence(scene);
 		
-		// Apply the same reset logic that happens when a new spin is triggered
-		this.resetGameStateForNewSpin(scene);
+		// Apply the same reset logic that happens when a new spin is triggered,
+		// but ONLY for win dialogs. For non-win dialogs (e.g. FreeSpin / Congrats),
+		// we must preserve the win queue so that any deferred win dialogs (such as
+		// those queued during scatter + autoplay) can still be processed once the
+		// non-win dialog finishes.
+		if (this.isWinDialog()) {
+			this.resetGameStateForNewSpin(scene);
+		}
 		
 		// Note: WIN_DIALOG_CLOSED event will be emitted when fade-out completes
 		// This prevents double emission of the event
@@ -1023,6 +1111,13 @@ export class Dialogs {
 				this.disableAllWinDialogElements();
 				// Fully cleanup dialog elements
 				this.cleanupDialog();
+				// Clear scatter state BEFORE dialog completion so that any queued
+				// win dialogs from the retrigger spin are not indefinitely deferred
+				// by the "scatter + autoplay" check inside Game.checkAndShowWinDialog.
+				try {
+					gameStateManager.isScatter = false;
+					console.log('[Dialogs] Retrigger FreeSpinDialog - cleared isScatter before dialogAnimationsComplete');
+				} catch {}
 				// Re-enable symbols immediately (match win dialog behavior)
 				try {
 					scene.events.emit('enableSymbols');
@@ -1081,8 +1176,9 @@ export class Dialogs {
 		// Start transition animation
 		this.candyTransition.show();
 
-		// Hide dialog content shortly after transition starts
-		scene.time.delayedCall(200, () => {
+		// Hide dialog content and switch to bonus visuals after a short delay,
+		// giving the symbol explosion time to cover the screen first.
+		scene.time.delayedCall(900, () => {
 			try {
 				const audioManager = (window as any).audioManager;
 				if (audioManager && typeof audioManager.fadeOutSfx === 'function') {
@@ -1092,10 +1188,35 @@ export class Dialogs {
 			this.disableAllWinDialogElements();
 			this.cleanupDialog();
 			
-			// Immediately apply bonus mode visuals once the dialog is closed
-			// so background and header switch without waiting for transition end
+			// Apply bonus mode visuals once the dialog is closed, slightly after
+			// the explosion has covered the screen for a smoother transition
 			this.triggerBonusMode(scene);
 		});
+
+		// Attempt to restrict explosion symbols to those currently visible on the grid
+		let allowedSymbols: number[] | undefined;
+		try {
+			const gameSceneAny: any = scene as any;
+			const symbolsComponent = gameSceneAny?.symbols;
+			const grid: any = symbolsComponent?.currentSymbolData;
+			if (Array.isArray(grid)) {
+				const set = new Set<number>();
+				for (const col of grid) {
+					if (!Array.isArray(col)) continue;
+					for (const val of col) {
+						const num = Number(val);
+						if (!isNaN(num)) {
+							set.add(num);
+						}
+					}
+				}
+				if (set.size > 0) {
+					allowedSymbols = Array.from(set);
+				}
+			}
+		} catch {
+			// If anything goes wrong, simply fall back to all available symbols.
+		}
 
 		this.candyTransition.play(() => {
 			// Emit dialog animations complete event after transition
@@ -1108,7 +1229,7 @@ export class Dialogs {
 					audioManager.restoreBackground();
 				}
 			} catch {}
-		});
+		}, { allowedSymbols });
 	}
 
 	/**
@@ -1315,7 +1436,7 @@ export class Dialogs {
 				
 				// Get animation duration (estimate 1 second if we can't get it)
 				const outroTrack = this.currentDialog.animationState.getCurrent(0);
-				const outroDuration = outroTrack?.animation?.duration ? outroTrack.animation.duration * 1000 : 1000;
+				const outroDuration = outroTrack?.animation?.duration ? outroTrack.animation.duration * 1000 : 0;
 				
 				// Wait for outro to complete, then start fade-out
 				scene.time.delayedCall(outroDuration, () => {
@@ -1515,6 +1636,10 @@ export class Dialogs {
 
 		// Reset staged win state
 		this.isStagedWinNumberAnimation = false;
+		if (this.stagedWinStageTimer) {
+			(this.stagedWinStageTimer as Phaser.Time.TimerEvent).destroy();
+			this.stagedWinStageTimer = null;
+		}
 		this.stagedWinStages = [];
 		this.stagedWinCurrentStageIndex = 0;
 		
@@ -1586,6 +1711,10 @@ export class Dialogs {
 
 		// Reset staged win state
 		this.isStagedWinNumberAnimation = false;
+		if (this.stagedWinStageTimer) {
+			(this.stagedWinStageTimer as Phaser.Time.TimerEvent).destroy();
+			this.stagedWinStageTimer = null;
+		}
 		this.stagedWinStages = [];
 		this.stagedWinCurrentStageIndex = 0;
 		
@@ -1781,7 +1910,7 @@ export class Dialogs {
 			'LargeW_KA',
 			'SuperW_KA'
 		];
-		const thresholds = [0.8, 1.0, 2.0, 3.0]; // multipliers relative to bet
+		const thresholds = [20, 30, 45, 60]; // multipliers relative to bet
 
 		const finalIndex = orderedTypes.indexOf(config.type as any);
 		if (finalIndex <= 0) {
@@ -1846,11 +1975,24 @@ export class Dialogs {
 					const shouldLoop = this.getDialogLoop(firstStage.type);
 					console.log('[Dialogs] Staged win: initializing spine animation to first stage', animations);
 					try {
-						this.currentDialog.animationState.setAnimation(0, animations.intro, false);
-						this.currentDialog.animationState.addAnimation(0, animations.idle, shouldLoop, 0);
+						if (this.disableIntroAnimations) {
+							this.currentDialog.animationState.setAnimation(0, animations.idle, shouldLoop);
+						} else {
+							this.currentDialog.animationState.setAnimation(0, animations.intro, false);
+							this.currentDialog.animationState.addAnimation(0, animations.idle, shouldLoop, 0);
+						}
+						// Apply scale pop whenever we transition into idle
+						const sceneRef = this.currentScene;
+						if (sceneRef) {
+							this.applyDialogScalePop(sceneRef);
+						}
 					} catch (err) {
-						console.warn('[Dialogs] Staged win: failed to play intro for first stage, using idle only', err);
+						console.warn('[Dialogs] Staged win: failed to play intro/idle for first stage, using idle only', err);
 						this.currentDialog.animationState.setAnimation(0, animations.idle, shouldLoop);
+						const sceneRef = this.currentScene;
+						if (sceneRef) {
+							this.applyDialogScalePop(sceneRef);
+						}
 					}
 				}
 			}
@@ -1869,109 +2011,253 @@ export class Dialogs {
 			return;
 		}
 
-		const runStage = (index: number) => {
-			// Abort if dialog has been deactivated (e.g., user clicked to close)
+		// Clear any previous staged win timer before starting
+		if (this.stagedWinStageTimer) {
+			(this.stagedWinStageTimer as Phaser.Time.TimerEvent).destroy();
+			this.stagedWinStageTimer = null;
+		}
+
+		this.runStagedWinStage(scene, 0, false);
+	}
+
+	/**
+	 * Execute a single staged win tier and schedule the next one if applicable.
+	 * When fastFromSkip is true, we use a shorter number animation for manual skips.
+	 */
+	private runStagedWinStage(scene: Scene, index: number, fastFromSkip: boolean): void {
+		// Abort if staged sequencing has been disabled (e.g., user manually
+		// closed the dialog).
+		if (!this.isStagedWinNumberAnimation) {
+			console.log('[Dialogs] Staged win: staging disabled, aborting stage run');
+			return;
+		}
+
+		// Abort if dialog has been deactivated (e.g., user clicked to close)
+		if (!this.isDialogActive) {
+			console.log('[Dialogs] Staged win: dialog inactive, aborting stage run');
+			this.isStagedWinNumberAnimation = false;
+			return;
+		}
+
+		if (!this.numberDisplay || !this.currentDialog) {
+			console.warn('[Dialogs] Staged win: display or dialog missing during stage run');
+			this.isStagedWinNumberAnimation = false;
+			return;
+		}
+
+		if (index >= this.stagedWinStages.length) {
+			console.log('[Dialogs] Staged win: all stages complete');
+			this.isStagedWinNumberAnimation = false;
+			return;
+		}
+
+		this.stagedWinCurrentStageIndex = index;
+		const stage = this.stagedWinStages[index];
+
+		console.log('[Dialogs] Staged win: running stage', {
+			index,
+			type: stage.type,
+			target: stage.target,
+			fastFromSkip
+		});
+
+		// Play correct audio for the current tier and fade out any previous tier SFX
+		try {
 			if (!this.isDialogActive) {
-				console.log('[Dialogs] Staged win: dialog inactive, aborting stage run');
+				console.log('[Dialogs] Staged win: dialog inactive before SFX, skipping audio');
 				this.isStagedWinNumberAnimation = false;
 				return;
 			}
-
-			if (!this.numberDisplay || !this.currentDialog) {
-				console.warn('[Dialogs] Staged win: display or dialog missing during stage run');
-				this.isStagedWinNumberAnimation = false;
-				return;
-			}
-
-			if (index >= this.stagedWinStages.length) {
-				console.log('[Dialogs] Staged win: all stages complete');
-				this.isStagedWinNumberAnimation = false;
-				return;
-			}
-
-			this.stagedWinCurrentStageIndex = index;
-			const stage = this.stagedWinStages[index];
-
-			console.log('[Dialogs] Staged win: running stage', {
-				index,
-				type: stage.type,
-				target: stage.target
-			});
-
-			// Play correct audio for the current tier and fade out any previous tier SFX
-			try {
-				if (!this.isDialogActive) {
-					console.log('[Dialogs] Staged win: dialog inactive before SFX, skipping audio');
-					this.isStagedWinNumberAnimation = false;
-					return;
+			const audioManager = (window as any).audioManager;
+			if (audioManager) {
+				if (typeof audioManager.fadeOutCurrentWinSfx === 'function') {
+					audioManager.fadeOutCurrentWinSfx(200);
 				}
-				const audioManager = (window as any).audioManager;
-				if (audioManager) {
-					if (typeof audioManager.fadeOutCurrentWinSfx === 'function') {
-						audioManager.fadeOutCurrentWinSfx(200);
-					}
-					if (typeof audioManager.playWinDialogSfx === 'function') {
-						audioManager.playWinDialogSfx(stage.type);
-					}
-					if (typeof audioManager.duckBackground === 'function') {
-						audioManager.duckBackground(0.3);
+				if (typeof audioManager.playWinDialogSfx === 'function') {
+					audioManager.playWinDialogSfx(stage.type);
+				}
+				if (typeof audioManager.duckBackground === 'function') {
+					audioManager.duckBackground(0.3);
+				}
+			}
+		} catch (e) {
+			console.warn('[Dialogs] Failed to trigger staged tier SFX:', e);
+		}
+
+		// Switch the spine animation to match the current tier.
+		// For the first stage, the animation was already initialized in setupStagedWinNumberAnimation,
+		// so avoid resetting it here to prevent the "first tier plays twice" effect.
+		if (index > 0 || fastFromSkip) {
+			try {
+				const animations = this.getAnimationNameForDialogType(stage.type);
+				if (animations && this.currentDialog.animationState) {
+					const shouldLoop = this.getDialogLoop(stage.type);
+					console.log('[Dialogs] Staged win: switching spine animation to', animations);
+					try {
+						if (this.disableIntroAnimations) {
+							this.currentDialog.animationState.setAnimation(0, animations.idle, shouldLoop);
+						} else {
+							this.currentDialog.animationState.setAnimation(0, animations.intro, false);
+							this.currentDialog.animationState.addAnimation(0, animations.idle, shouldLoop, 0);
+						}
+						// Apply scale pop whenever we transition into idle
+						const sceneRef = this.currentScene || scene;
+						if (sceneRef) {
+							this.applyDialogScalePop(sceneRef);
+						}
+					} catch (err) {
+						console.warn('[Dialogs] Staged win: intro/idle animation failed, using idle only', err);
+						this.currentDialog.animationState.setAnimation(0, animations.idle, shouldLoop);
+						const sceneRef = this.currentScene || scene;
+						if (sceneRef) {
+							this.applyDialogScalePop(sceneRef);
+						}
 					}
 				}
 			} catch (e) {
-				console.warn('[Dialogs] Failed to trigger staged tier SFX:', e);
+				console.warn('[Dialogs] Staged win: failed to switch spine animation for stage', stage.type, e);
+			}
+		}
+
+		// Animate the number to this stage target
+		const isFirstStage = index === 0;
+		const defaultDurationMs = 2500; // time for the counter animation
+		const fastDurationMs = 2500; // shorter animation when skipping
+		const numberAnimDurationMs = fastFromSkip ? fastDurationMs : defaultDurationMs;
+		const perStageDwellMs = 2000; // approximate dwell time per tier (matches original auto-close)
+
+		this.numberDisplay!.animateToValue(stage.target, {
+			duration: numberAnimDurationMs,
+			ease: 'Power2',
+			startFromCurrent: !isFirstStage || fastFromSkip
+		});
+
+		const lastIndex = this.stagedWinStages.length - 1;
+
+		// Schedule next stage after the per-stage dwell time so that, visually,
+		// each tier behaves like its own win dialog before the next one appears.
+		if (index + 1 < this.stagedWinStages.length) {
+			// Cancel any previous stage timer before scheduling the next one
+			const timer = this.stagedWinStageTimer;
+			if (timer) {
+				timer.destroy();
+				this.stagedWinStageTimer = null;
 			}
 
-			// Switch the spine animation to match the current tier.
-			// For the first stage, the animation was already initialized in setupStagedWinNumberAnimation,
-			// so avoid resetting it here to prevent the "first tier plays twice" effect.
-			if (index > 0) {
-				try {
-					const animations = this.getAnimationNameForDialogType(stage.type);
-					if (animations && this.currentDialog.animationState) {
-						const shouldLoop = this.getDialogLoop(stage.type);
-						console.log('[Dialogs] Staged win: switching spine animation to', animations);
-						try {
-							this.currentDialog.animationState.setAnimation(0, animations.intro, false);
-							this.currentDialog.animationState.addAnimation(0, animations.idle, shouldLoop, 0);
-						} catch (err) {
-							console.warn('[Dialogs] Staged win: intro animation failed, using idle only', err);
-							this.currentDialog.animationState.setAnimation(0, animations.idle, shouldLoop);
-						}
-					}
-				} catch (e) {
-					console.warn('[Dialogs] Staged win: failed to switch spine animation for stage', stage.type, e);
+			this.stagedWinStageTimer = scene.time.delayedCall(perStageDwellMs, () => {
+				// Guard again in case dialog was closed during the dwell
+				if (!this.isDialogActive || !this.isStagedWinNumberAnimation) {
+					console.log('[Dialogs] Staged win: dialog inactive during dwell, stopping sequence');
+					this.isStagedWinNumberAnimation = false;
+					this.stagedWinStageTimer = null;
+					return;
 				}
-			}
-
-			// Animate the number to this stage target
-			const isFirstStage = index === 0;
-			const numberAnimDurationMs = 2500; // time for the counter animation
-			const perStageDwellMs = 2000; // approximate dwell time per tier (matches original auto-close)
-
-			this.numberDisplay!.animateToValue(stage.target, {
-				duration: numberAnimDurationMs,
-				ease: 'Power2',
-				startFromCurrent: !isFirstStage
+				this.stagedWinStageTimer = null;
+				this.runStagedWinStage(scene, index + 1, false);
 			});
+		} else {
+			console.log('[Dialogs] Staged win: last stage scheduled, will end at full win amount');
 
-			// Schedule next stage after the per-stage dwell time so that, visually,
-			// each tier behaves like its own win dialog before the next one appears.
-			if (index + 1 < this.stagedWinStages.length) {
-				scene.time.delayedCall(perStageDwellMs, () => {
-					// Guard again in case dialog was closed during the dwell
-					if (!this.isDialogActive) {
-						console.log('[Dialogs] Staged win: dialog inactive during dwell, stopping sequence');
-						this.isStagedWinNumberAnimation = false;
-						return;
+			// If we're in autoplay and the original auto-close timer was cleared due to a manual
+			// skip, ensure the final staged tier still auto-closes after a sensible dwell.
+			try {
+				if (!this.autoCloseTimer && this.isWinDialog()) {
+					// Detect free spin autoplay (bonus autoplay) via Symbols component on the scene
+					let isFreeSpinAutoplay = false;
+					try {
+						const gameScene: any = scene as any;
+						const symbolsComponent = gameScene?.symbols;
+						if (symbolsComponent && typeof symbolsComponent.isFreeSpinAutoplayActive === 'function') {
+							isFreeSpinAutoplay = !!symbolsComponent.isFreeSpinAutoplayActive();
+						}
+					} catch {}
+
+					const isAutoplaying = gameStateManager.isAutoPlaying || isFreeSpinAutoplay;
+					if (isAutoplaying) {
+						const perStageDwellFinalMs = 2000; // Keep in sync with setupAutoCloseTimer
+						const finalStageDwellMs = perStageDwellFinalMs + 1500;
+
+						console.log('[Dialogs] Creating auto-close timer for final staged tier during autoplay', {
+							delayMs: finalStageDwellMs,
+							currentStageIndex: this.stagedWinCurrentStageIndex,
+							totalStages: this.stagedWinStages.length
+						});
+
+						this.autoCloseTimer = scene.time.delayedCall(finalStageDwellMs, () => {
+							console.log('[Dialogs] Auto-close after final staged tier during autoplay - closing dialog');
+							this.handleDialogClick(scene, true);
+						});
 					}
-					runStage(index + 1);
-				});
-			} else {
-				console.log('[Dialogs] Staged win: last stage scheduled, will end at full win amount');
+				}
+			} catch (e) {
+				console.warn('[Dialogs] Failed to create auto-close timer for final staged tier:', e);
 			}
-		};
+		}
+	}
 
-		runStage(0);
+	/**
+	 * Skip directly to a specific staged win tier (used for manual "press anywhere"
+	 * skips while a staged win dialog is playing).
+	 */
+	private skipToStagedWinStage(scene: Scene, nextIndex: number): void {
+		if (!this.numberDisplay || !this.currentDialog) {
+			console.warn('[Dialogs] skipToStagedWinStage: missing numberDisplay or currentDialog - closing dialog instead');
+			// Fallback: behave like a normal close
+			this.startFadeOutSequence(scene);
+			this.resetGameStateForNewSpin(scene);
+			return;
+		}
+
+		if (nextIndex < 0 || nextIndex >= this.stagedWinStages.length) {
+			console.warn('[Dialogs] skipToStagedWinStage: invalid staged index', nextIndex);
+			this.isStagedWinNumberAnimation = false;
+			// Fallback: close dialog normally
+			this.startFadeOutSequence(scene);
+			this.resetGameStateForNewSpin(scene);
+			return;
+		}
+
+		// Cancel any pending staged win timer from the previous stage so we can
+		// take over progression from this skipped-to tier.
+		if (this.stagedWinStageTimer) {
+			this.stagedWinStageTimer.destroy();
+			this.stagedWinStageTimer = null;
+		}
+
+		console.log('[Dialogs] Skipping to staged win tier', {
+			index: nextIndex,
+			type: this.stagedWinStages[nextIndex].type,
+			target: this.stagedWinStages[nextIndex].target
+		});
+
+		// Ensure staged sequencing remains active for this dialog and run the
+		// requested tier with a faster number animation.
+		this.isStagedWinNumberAnimation = true;
+		this.runStagedWinStage(scene, nextIndex, true);
+	}
+
+	/**
+	 * Apply a scale "pop-in" from 0 -> lastDialogScale on the current dialog.
+	 * Called whenever we transition into an idle animation so it also applies
+	 * to subsequent dialogs / staged win tiers.
+	 */
+	private applyDialogScalePop(scene: Scene): void {
+		if (!this.currentDialog) {
+			return;
+		}
+
+		const targetScale = this.lastDialogScale || 1;
+		try {
+			(this.currentDialog as any).setScale?.(0);
+		} catch {}
+
+		scene.tweens.add({
+			targets: this.currentDialog,
+			scaleX: targetScale,
+			scaleY: targetScale,
+			duration: 800,
+			ease: 'Back.Out'
+		});
 	}
 
 	// Helper methods for dialog configuration

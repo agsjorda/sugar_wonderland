@@ -62,7 +62,7 @@ const config: Phaser.Types.Core.GameConfig = {
 			autoCenter: Phaser.Scale.CENTER_BOTH
 		},
 		fps: {
-			target: 60,
+			target: 30,
 			min: 1,
 			forceSetTimeOut: false
 		},
@@ -90,7 +90,7 @@ const config: Phaser.Types.Core.GameConfig = {
     render: {
 		antialias: true,
 		clearBeforeRender: false,
-		powerPreference: 'high-performance',
+		powerPreference: 'default',
 	},
     
 };

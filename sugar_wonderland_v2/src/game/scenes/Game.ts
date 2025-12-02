@@ -29,7 +29,7 @@ import { BetOptions } from '../components/BetOptions';
 import { AutoplayOptions } from '../components/AutoplayOptions';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
-import { CandyTransition } from '../components/CandyTransition';
+import { SymbolExplosionTransition } from '../components/SymbolExplosionTransition';
 import { CoinAnimation } from '../components/CoinAnimation';
 import { GameAPI } from '../../backend/GameAPI';
 import { SpinData } from '../../backend/SpinData';
@@ -39,6 +39,7 @@ import { FullScreenManager } from '../../managers/FullScreenManager';
 import { ScatterAnticipation } from '../components/ScatterAnticipation';
 import { ClockDisplay } from '../components/ClockDisplay';
 import WinTracker from '../components/WinTracker';
+import { FreeRoundManager } from '../components/FreeRoundManager';
 
 export class Game extends Scene
 {
@@ -56,7 +57,7 @@ export class Game extends Scene
 	private dialogs: Dialogs;
 	private betOptions: BetOptions;
 	private autoplayOptions: AutoplayOptions;
-	private candyTransition: CandyTransition;
+	private candyTransition: SymbolExplosionTransition;
 	private coinAnimation: CoinAnimation;
 	public gameAPI: GameAPI;
 	public audioManager: AudioManager;
@@ -64,6 +65,7 @@ export class Game extends Scene
 	private scatterAnticipation: ScatterAnticipation;
 	private clockDisplay: ClockDisplay;
 	private winTracker: WinTracker;
+	private freeRoundManager: FreeRoundManager | null = null;
 	
 	// Note: Payout data now calculated directly from paylines in WIN_STOP handler
 	// Track whether this spin has winlines to animate
@@ -100,7 +102,14 @@ export class Game extends Scene
 		this.assetConfig = new AssetConfig(this.networkManager, this.screenModeManager);
 		
 		// Initialize GameAPI
-		this.gameAPI = new GameAPI(this.gameData);
+		// Prefer the instance passed from Preloader so we can reuse initialization data.
+		if (data.gameAPI) {
+			console.log('[Game] Using GameAPI instance from Preloader');
+			this.gameAPI = data.gameAPI as GameAPI;
+		} else {
+			console.log('[Game] No GameAPI instance passed from Preloader, creating a new one');
+			this.gameAPI = new GameAPI(this.gameData);
+		}
 		this.assetLoader = new AssetLoader(this.assetConfig);
 		
 		console.log(`[Game] Received managers from Preloader`);
@@ -138,6 +147,9 @@ export class Game extends Scene
 		).setOrigin(0.5, 0.5).setScrollFactor(0).setAlpha(1);
 		
 		// Backend initialization removed - using SlotController autoplay system
+		// Create header using the managers
+		this.header = new Header(this.networkManager, this.screenModeManager);
+		this.header.create(this);
 		
 		// Create background using the managers
 		this.background = new Background(this.networkManager, this.screenModeManager);
@@ -148,14 +160,16 @@ export class Game extends Scene
 		this.header.create(this);
 
 		// Create persistent clock display (stays on screen)
-		const clockY = this.scale.height * 0.015; // Slightly below top edge
+		// Match positioning + formatting with Preloader scene for consistency
+		const clockY = this.scale.height * 0.015;
 		this.clockDisplay = new ClockDisplay(this, {
 			offsetX: -130,
 			offsetY: clockY,
 			fontSize: 16,
+			fontFamily: 'poppins-regular',
 			color: '#000000',
 			alpha: 0.5,
-			depth: 30000, // Very high depth to stay above overlays
+			depth: 30000,
 			scale: 0.7,
 			suffixText: ' | Sugar Wonderland',
 			additionalText: 'DiJoker',
@@ -163,7 +177,8 @@ export class Game extends Scene
 			additionalTextOffsetY: 0,
 			additionalTextScale: 0.7,
 			additionalTextColor: '#000000',
-			additionalTextFontSize: 16
+			additionalTextFontSize: 16,
+			additionalTextFontFamily: 'poppins-regular'
 		});
 		this.clockDisplay.create();
 
@@ -242,10 +257,65 @@ export class Game extends Scene
 		this.slotController.setSymbols(this.symbols); // Set symbols reference for free spin data access
 		this.slotController.setBuyFeatureReference(); // Set BuyFeature reference for bet access
 		this.slotController.create(this);
+
+		// Create free round manager AFTER SlotController so it can mirror the spin button.
+		// It will read the backend initialization data and decide whether to show itself.
+		try {
+			const initData = this.gameAPI.getInitializationData();
+			const initFsRemaining = this.gameAPI.getRemainingInitFreeSpins();
+			const initFsBet = this.gameAPI.getInitFreeSpinBet();
+
+			this.freeRoundManager = new FreeRoundManager();
+			this.freeRoundManager.create(this, this.gameAPI, this.slotController);
+
+			if (initData && initData.hasFreeSpinRound && initFsRemaining > 0) {
+				console.log(
+					`[Game] Initialization indicates free spin round available (${initFsRemaining}). Enabling FreeRoundManager UI.`
+				);
+
+				// If backend provided a bet size for the free rounds, apply it to the SlotController
+				// so both the UI and the underlying base bet used for spins match the init data.
+				if (this.slotController && initFsBet && initFsBet > 0) {
+					console.log(
+						`[Game] Applying initialization free spin bet to SlotController: ${initFsBet.toFixed(2)}`
+					);
+					this.slotController.updateBetAmount(initFsBet);
+				}
+
+				this.freeRoundManager.setFreeSpins(initFsRemaining);
+				this.freeRoundManager.enableFreeSpinMode();
+			}
+		} catch (e) {
+			console.warn('[Game] Failed to create FreeRoundManager from initialization data:', e);
+		}
 		
-		// Create candy transition component and play at scene start
-		this.candyTransition = new CandyTransition(this);
-		this.candyTransition.play(undefined, 0.2);
+		// Create symbol explosion transition component and play at scene start
+		this.candyTransition = new SymbolExplosionTransition(this);
+
+		// Limit explosion symbols to the ones currently present on the grid (if available)
+		let allowedSymbols: number[] | undefined;
+		try {
+			const grid: any = (this.symbols as any)?.currentSymbolData;
+			if (Array.isArray(grid)) {
+				const set = new Set<number>();
+				for (const col of grid) {
+					if (!Array.isArray(col)) continue;
+					for (const val of col) {
+						const num = Number(val);
+						if (!isNaN(num)) {
+							set.add(num);
+						}
+					}
+				}
+				if (set.size > 0) {
+					allowedSymbols = Array.from(set);
+				}
+			}
+		} catch {
+			// If anything goes wrong, fall back to using all available symbol spines
+		}
+
+		this.candyTransition.play(undefined, { allowedSymbols });
 		
 		// Create coin animation component
 		this.coinAnimation = new CoinAnimation(this.networkManager, this.screenModeManager);
@@ -384,7 +454,8 @@ export class Game extends Scene
 					const selectedBet = this.autoplayOptions.getCurrentBet();
 					// If bet changed, update UI and backend
 					if (Math.abs(selectedBet - currentBet) > 0.0001) {
-						this.slotController.updateBetAmount(selectedBet);
+						// Use a dedicated API so amplify/enhance bet is preserved when active
+						this.slotController.updateBetAmountFromAutoplay(selectedBet);
 						gameEventManager.emit(GameEventType.BET_UPDATE, { newBet: selectedBet, previousBet: currentBet });
 					}
 					console.log(`[Game] Total cost: $${(selectedBet * autoplayCount).toFixed(2)}`);
@@ -481,6 +552,18 @@ export class Game extends Scene
 			console.log('[Game] REELS_STOP: Balance update requested, WIN_STOP handled by winline animations');
 		});
 
+		// Ensure WinTracker is cleared (with a fade-out) as soon as reels actually start for a new spin
+		gameEventManager.on(GameEventType.REELS_START, () => {
+			try {
+				if (this.winTracker) {
+					this.winTracker.hideWithFade(250);
+					console.log('[Game] Fading out WinTracker on REELS_START (new spin started)');
+				}
+			} catch (e) {
+				console.warn('[Game] Failed to clear WinTracker on REELS_START:', e);
+			}
+		});
+
 		// Listen for dialog animations to complete
 		this.events.on('dialogAnimationsComplete', () => {
 			console.log('[Game] Dialog animations complete event received');
@@ -516,6 +599,16 @@ export class Game extends Scene
 				console.log('[Game] Manual spins are still allowed to proceed');
 				return;
 			}
+
+			// Clear any previously displayed WinTracker when a new spin actually starts
+			try {
+				if (this.winTracker) {
+					this.winTracker.hideWithFade(250);
+					console.log('[Game] Fading out WinTracker for new spin');
+				}
+			} catch (e) {
+				console.warn('[Game] Failed to clear WinTracker on SPIN:', e);
+			}
 			
 			// Only clear win queue if this is a new spin (not a retry of a paused spin)
 			// Check if we're retrying a paused autoplay spin
@@ -544,6 +637,16 @@ export class Game extends Scene
 				return;
 			}
 			console.log('[Game] AUTO_START allowed - no win dialog showing');
+
+			// Clear any previously displayed WinTracker when a new autoplay sequence starts
+			try {
+				if (this.winTracker) {
+					this.winTracker.hideWithFade(250);
+					console.log('[Game] Fading out WinTracker on AUTO_START');
+				}
+			} catch (e) {
+				console.warn('[Game] Failed to clear WinTracker on AUTO_START:', e);
+			}
 		});
 	}
 
@@ -695,30 +798,34 @@ export class Game extends Scene
 		console.log(`[Game] Win detected - Payout: $${payout}, Bet: $${bet}, Multiplier: ${multiplier}x`);
 		
 		// Only show dialogs for wins that are at least 20x the bet size
-		if (multiplier < 0.5) {
-			console.log(`[Game] Win below threshold - No dialog shown for ${multiplier.toFixed(2)}x multiplier`);
+		if (multiplier < 20) {
+			console.log(`[Game] Win below threshold (20x) - No dialog shown for ${multiplier.toFixed(2)}x multiplier`);
 			// Clear the win dialog state since no dialog was shown
 			gameStateManager.isShowingWinDialog = false;
 			return;
 		}
 		
 		// Determine which win dialog to show based on multiplier thresholds
-		if (multiplier >= 3) {
+		// Small win: 20x–<30x
+		// Medium win: 30x–<45x
+		// Large win: 45x–<60x
+		// Super win: 60x+
+		if (multiplier >= 60) {
 			console.log(
-				`[Game] Large Win! Showing SuperW_KA dialog for ${multiplier.toFixed(2)}x multiplier (staged inside dialog)`
+				`[Game] Super Win! Showing SuperW_KA dialog for ${multiplier.toFixed(2)}x multiplier (staged inside dialog)`
 			);
 			this.dialogs.showSuperWin(this, { winAmount: payout, betAmount: bet });
-		} else if (multiplier >= 2) {
+		} else if (multiplier >= 45) {
 			console.log(
-				`[Game] Super Win! Showing LargeW_KA dialog for ${multiplier.toFixed(2)}x multiplier (staged inside dialog)`
+				`[Game] Large Win! Showing LargeW_KA dialog for ${multiplier.toFixed(2)}x multiplier (staged inside dialog)`
 			);
 			this.dialogs.showLargeWin(this, { winAmount: payout, betAmount: bet });
-		} else if (multiplier >= 1) {
+		} else if (multiplier >= 30) {
 			console.log(
 				`[Game] Medium Win! Showing MediumW_KA dialog for ${multiplier.toFixed(2)}x multiplier (staged inside dialog)`
 			);
 			this.dialogs.showMediumWin(this, { winAmount: payout, betAmount: bet });
-		} else if (multiplier >= 0.5) {
+		} else if (multiplier >= 20) {
 			console.log(
 				`[Game] Small Win! Showing SmallW_KA dialog for ${multiplier.toFixed(2)}x multiplier (no staging)`
 			);
@@ -925,21 +1032,8 @@ export class Game extends Scene
 								(this.bonusHeader as any).seedCumulativeWin(currentHeaderWin);
 								console.log(`[Game] Seeded BonusHeader with current header winnings: $${currentHeaderWin}`);
 								
-								// Ensure the display is shown with "TOTAL WIN" text now that bonus mode is active
-								// This handles the case where seedCumulativeWin was called before isBonus was set
-								if (typeof (this.bonusHeader as any).showWinningsDisplay === 'function' && 
-								    typeof (this.bonusHeader as any).getCurrentWinnings === 'function') {
-									const seededWin = (this.bonusHeader as any).getCurrentWinnings() || currentHeaderWin;
-									if (seededWin > 0) {
-										// Set text to TOTAL WIN and show the display
-										const bonusHeaderAny = this.bonusHeader as any;
-										if (bonusHeaderAny.youWonText) {
-											bonusHeaderAny.youWonText.setText('TOTAL WIN');
-										}
-										bonusHeaderAny.showWinningsDisplay(seededWin);
-										console.log(`[Game] Displayed BonusHeader winnings: $${seededWin} with "TOTAL WIN" text`);
-									}
-								}
+								// In bonus mode we only show per-tumble "YOU WON" values in the bonus header.
+								// The seeded cumulative value is tracked internally; no immediate header UI update here.
 							} else if (typeof this.bonusHeader.updateWinningsDisplay === 'function') {
 								this.bonusHeader.updateWinningsDisplay(currentHeaderWin);
 								console.log(`[Game] Updated BonusHeader winnings to: $${currentHeaderWin}`);
@@ -984,6 +1078,11 @@ export class Game extends Scene
 					}
 					if (this.bonusHeader && typeof this.bonusHeader.hideWinningsDisplay === 'function') {
 						this.bonusHeader.hideWinningsDisplay();
+					}
+					// Also fade out any lingering WinTracker entries when returning to base game
+					if (this.winTracker) {
+						this.winTracker.hideWithFade(250);
+						console.log('[Game] Fading out WinTracker on bonus mode end (transition to base game)');
 					}
 				} catch (e) {
 					console.warn('[Game] Failed to hide winnings displays on bonus end:', e);

@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
+import { gameStateManager } from "../../managers/GameStateManager";
 
 export interface AutoplayOptionsConfig {
 	position?: { x: number; y: number };
@@ -333,6 +334,18 @@ export class AutoplayOptions {
 		
 		buttonImage.setInteractive();
 		buttonImage.on('pointerdown', () => {
+			console.log('[AutoplayOptions] START AUTOPLAY clicked');
+
+			// Immediately flag that an autoplay spin has been requested so that
+			// the main spin button treats the game as "autoplaying" right away.
+			// This closes the window where a very fast click on SPIN could still
+			// trigger a manual spin before autoplay actually starts.
+			try {
+				gameStateManager.isAutoPlaySpinRequested = true;
+			} catch (e) {
+				console.warn('[AutoplayOptions] Failed to set isAutoPlaySpinRequested:', e);
+			}
+
 			if (this.container.scene) {
 				this.container.scene.tweens.add({
 					targets: this.container,

@@ -7,8 +7,8 @@ import { AssetLoader } from '../../utils/AssetLoader';
 import { GameAPI } from '../../backend/GameAPI';
 import { GameData } from '../components/GameData';
 import { FullScreenManager } from '../../managers/FullScreenManager';
-import { ensureSpineLoader } from '../../utils/SpineGuard';
 import { StudioLoadingScreen } from '../components/StudioLoadingScreen';
+import { ClockDisplay } from '../components/ClockDisplay';
 
 export class Preloader extends Scene
 {
@@ -17,6 +17,9 @@ export class Preloader extends Scene
 	private assetConfig: AssetConfig;
 	private assetLoader: AssetLoader;
 	private gameAPI: GameAPI;
+	private studio?: StudioLoadingScreen;
+	private clockDisplay?: ClockDisplay;
+	private preloaderVerticalOffsetModifier: number = 10;
 
 	// Loading bar graphics
 	private progressBarBg?: Phaser.GameObjects.Graphics;
@@ -32,6 +35,9 @@ export class Preloader extends Scene
 	private buttonSpin?: Phaser.GameObjects.Image;
 	private buttonBg?: Phaser.GameObjects.Image;
 	private pressToPlayText?: Phaser.GameObjects.Text;
+	private taglineText?: Phaser.GameObjects.Text;
+	private websiteText?: Phaser.GameObjects.Text;
+	private maxWinText?: Phaser.GameObjects.Text;
 	private fullscreenBtn?: Phaser.GameObjects.Image;
 
 	constructor ()
@@ -58,46 +64,157 @@ export class Preloader extends Scene
 		
 		console.log(`[Preloader] Applying asset scale: ${assetScale}x`);
 		
-		// Black background for studio loading
-		this.cameras.main.setBackgroundColor(0x000000);
+		// Background color for studio loading (#10161D to match studio screen)
+		this.cameras.main.setBackgroundColor(0x10161D);
 
-		// Always show background since we're forcing portrait mode
+		// Always show loading background, scaled to cover the entire screen
 		const background = this.add.image(
 			this.scale.width * 0.5, 
 			this.scale.height * 0.5, 
 			"loading_background"
 		).setOrigin(0.5, 0.5).setScrollFactor(0);
 		
-		// Calculate scale to cover the entire screen
 		const scaleX = this.scale.width / background.width;
 		const scaleY = this.scale.height / background.height;
 		const scale = Math.max(scaleX, scaleY);
-		
 		background.setScale(scale);
 		
 		console.log(`[Preloader] Background original size: ${background.width}x${background.height}`);
 		console.log(`[Preloader] Canvas size: ${this.scale.width}x${this.scale.height}`);
 		console.log(`[Preloader] Calculated scale: ${scale} (scaleX: ${scaleX}, scaleY: ${scaleY})`);
-		
-		
 		console.log(`[Preloader] Background dimensions: ${background.width}x${background.height}, canvas: ${this.scale.width}x${this.scale.height}`);
 		console.log(`[Preloader] Background display size: ${this.scale.width}x${this.scale.height}`);
 		console.log(`[Preloader] Background position: (${this.scale.width * 0.5}, ${this.scale.height * 0.5})`);
 
-		if (screenConfig.isPortrait) {
-		// Display studio loading screen
-		const studio = new StudioLoadingScreen(this);
-		studio.show();
-		// Schedule fade-out after minimum 3s, then reveal preloader UI if needed
-		studio.fadeOutAndDestroy(3000, 500);
+		// Persistent clock display in the top bar (matches Hustle Horse positioning), using poppins-regular
+		const clockY = this.scale.height * 0.015;
+		this.clockDisplay = new ClockDisplay(this, {
+			offsetX: -130,
+			offsetY: clockY,
+			fontSize: 16,
+			fontFamily: 'poppins-regular',
+			color: '#FFFFFF',
+			alpha: 0.5,
+			depth: 30000,
+			scale: 0.7,
+			suffixText: ' | Sugar Wonderland',
+			additionalText: 'DiJoker',
+			additionalTextOffsetX: 185,
+			additionalTextOffsetY: 0,
+			additionalTextScale: 0.7,
+			additionalTextColor: '#FFFFFF',
+			additionalTextFontSize: 16,
+			additionalTextFontFamily: 'poppins-regular'
+		});
+		this.clockDisplay.create();
 
-		// Delay revealing Preloader's own progress UI until studio fade completes
-		this.events.once('studio-fade-complete', () => {
-			// Optionally, we could reveal or update UI elements here if they were hidden
-			// For now, no-op; Preloader already shows its own progress bar
+		// Loading frame + tagline + URL and max-win text (aligned to StudioLoadingScreen positions)
+		// Use the same offsets as StudioLoadingScreen defaults so both layers line up visually
+		const loadingFrameOffsetFromCenter = 345;
+		const loadingFrame = this.add.image(
+			this.scale.width * 0.5,
+			this.scale.height * 0.5 + loadingFrameOffsetFromCenter,
+			"loading_frame_2"
+		).setOrigin(0.5, 0.5).setScrollFactor(0);
+
+		const frameScale = (Math.max(this.scale.width / loadingFrame.width, this.scale.height / loadingFrame.height)) * 0.04;
+		loadingFrame.setScale(frameScale);
+
+		// "PLAY LOUD. WIN WILD. DIJOKER STYLE"
+		// Matches StudioLoadingScreen default textOffsetY
+		const textOffsetFromCenter = 375;
+		this.taglineText = this.add.text(
+			this.scale.width * 0.5 - 5,
+			this.scale.height * 0.5 + textOffsetFromCenter,
+			'PLAY LOUD. WIN WILD. DIJOKER STYLE',
+			{
+				fontFamily: 'poppins-regular',
+				fontSize: '14px',
+				color: '#FFFFFF',
+				fontStyle: 'normal',
+				align: 'center',
+			}
+		)
+		.setOrigin(0.5, 0.5)
+		.setScrollFactor(0)
+		.setAlpha(1);
+
+		// "www.dijoker.com"
+		// Matches StudioLoadingScreen default text2OffsetY
+		const websiteOffsetFromCenter = 400;
+		this.websiteText = this.add.text(
+			this.scale.width * 0.5,
+			this.scale.height * 0.5 + websiteOffsetFromCenter,
+			'www.dijoker.com',
+			{
+				fontFamily: 'poppins-regular',
+				fontSize: '14px',
+				color: '#FFFFFF',
+				fontStyle: 'normal',
+				align: 'center',
+			}
+		)
+		.setOrigin(0.5, 0.5)
+		.setScrollFactor(0)
+		.setAlpha(1);
+
+		// "Win up to 21,000x" breathing text (reuses preloaded poppins fonts)
+		const winTextY = 145 + this.preloaderVerticalOffsetModifier;
+		this.maxWinText = this.add.text(
+			this.scale.width * 0.5,
+			this.scale.height * 0.5 + winTextY,
+			'Win up to 21,000x',
+			{
+				fontFamily: 'poppins-bold',
+				fontSize: '32px',
+				color: '#FFFFFF',
+				align: 'center',
+			}
+		)
+		.setOrigin(0.5, 0.5)
+		.setScrollFactor(0)
+		.setAlpha(1);
+
+		this.tweens.add({
+			targets: this.maxWinText,
+			scale: { from: 0.90, to: 0.95 },
+			duration: 800,
+			ease: 'Sine.easeInOut',
+			yoyo: true,
+			repeat: -1,
+			hold: 0,
+			delay: 0,
 		});
 
-			const buttonY = this.scale.height * 0.8;
+		this.maxWinText
+			.setStroke('#379557', 4)
+			.setShadow(0, 2, '#000000', 4, true, true);
+
+		if (screenConfig.isPortrait) {
+			// Studio loading screen with the same frame/text positioning as Preloader
+			this.studio = new StudioLoadingScreen(this, {
+				loadingFrameOffsetX: 0,
+				loadingFrameOffsetY: 345,
+				loadingFrameScaleModifier: 0.04,
+				text: 'PLAY LOUD. WIN WILD. DIJOKER STYLE',
+				textOffsetX: -5,
+				textOffsetY: 375,
+				textScale: 1,
+				textColor: '#FFFFFF',
+				text2: 'www.dijoker.com',
+				text2OffsetX: 0,
+				text2OffsetY: 400,
+				text2Scale: 1,
+				text2Color: '#FFFFFF',
+			});
+			this.studio.show();
+
+			// Hook for any post-fade actions if needed later
+			this.events.once('studio-fade-complete', () => {
+				// no-op for now
+			});
+
+			const buttonY = this.scale.height * 0.77;
 			
 			// Scale buttons based on quality (low quality assets need 2x scaling)
 			this.buttonBg = this.add.image(
@@ -119,14 +236,25 @@ export class Preloader extends Scene
 
 			console.log(`[Preloader] Button scaling: ${assetScale}x`);
 
-			// Add logo
+			// Game logo (position + breathing animation copied from Hustle Horse)
 			const kobi_logo = this.add.image(
 				this.scale.width * 0.5, 
-				this.scale.height * 0.189, 
+				this.scale.height * 0.185, 
 				"logo_loading"
 			).setOrigin(0.5, 0.5).setScale(0.25);
 			
 			console.log(`[Preloader] Added logo_loading at scale: ${assetScale}x`);
+
+			this.tweens.add({
+				targets: kobi_logo,
+				scale: { from: 0.25, to: 0.26 },
+				duration: 800,
+				ease: 'Sine.easeInOut',
+				yoyo: true,
+				repeat: -1,
+				hold: 0,
+				delay: 0,
+			});
 
 			this.tweens.add({
 				targets: this.buttonSpin,
@@ -135,71 +263,38 @@ export class Preloader extends Scene
 				repeat: -1,
 			});
 
-			// Progress bar below the spinning button
-			const barWidth = this.scale.width * 0.5;
-			const barHeight = Math.max(18, 30 * assetScale);
-			const barX = this.scale.width * 0.5;
-			const barY = buttonY + (this.buttonBg.displayHeight * 0.5) + Math.max(20, 24 * assetScale) + 50;
-
-			this.progressBarBg = this.add.graphics();
-			this.progressBarBg.fillStyle(0x000000, 0.5);
-			this.progressBarBg.fillRoundedRect(barX - barWidth * 0.5, barY - barHeight * 0.5, barWidth, barHeight, barHeight * 0.5);
-
-			this.progressBarFill = this.add.graphics();
-			this.progressBarFill.fillStyle(0x66D449, 1);
-			this.progressBarFill.fillRoundedRect(barX - barWidth * 0.5 + this.progressBarPadding, barY - barHeight * 0.5 + this.progressBarPadding, 0, barHeight - this.progressBarPadding * 2, (barHeight - this.progressBarPadding * 2) * 0.5);
-
-			// Save geometry for updates
-			this.progressBarX = barX;
-			this.progressBarY = barY;
-			this.progressBarWidth = barWidth;
-			this.progressBarHeight = barHeight;
-
-			this.progressText = this.add.text(barX, barY, '0%', {
-				fontFamily: 'poppins-bold',
-				fontSize: `${Math.round(18 * assetScale)}px`,
-				color: '#FFFFFF',
-			})
-			.setOrigin(0.5, 0.5)
-			.setShadow(0, 3, '#000000', 6, true, true);
-
-			// "Press Play To Continue" text (initially hidden)
-			this.pressToPlayText = this.add.text(barX, barY - (barHeight * 1), 'Press Play To Continue', {
-				fontFamily: 'Poppins-Regular',
-				fontSize: `${Math.round(22 * assetScale)}px`,
-				color: '#FFFFFF',
-				align: 'center'
-			})
-			.setOrigin(0.5, 1)
-			.setAlpha(0)
-			.setShadow(0, 3, '#000000', 6, true, true);
+			// // "Press Play To Continue" text (initially hidden), positioned above the spin button
+			// const ctaX = this.scale.width * 0.5;
+			// const ctaY = buttonY - Math.max(40, 48 * assetScale);
+			// this.pressToPlayText = this.add.text(ctaX, ctaY, 'Press Play To Continue', {
+			// 	fontFamily: 'poppins-regular',
+			// 	fontSize: `${Math.round(22 * assetScale)}px`,
+			// 	color: '#FFFFFF',
+			// 	align: 'center'
+			// })
+			// .setOrigin(0.5, 1)
+			// .setAlpha(0)
+			// .setShadow(0, 3, '#000000', 6, true, true);
 
 		}
 
-		// Set up progress event listener
-		this.load.on('progress', (progress: number) => {
-			// Update in-scene progress bar
-			if (this.progressBarFill && this.progressBarX !== undefined && this.progressBarY !== undefined && this.progressBarWidth !== undefined && this.progressBarHeight !== undefined) {
-				const innerX = this.progressBarX - this.progressBarWidth * 0.5 + this.progressBarPadding;
-				const innerY = this.progressBarY - this.progressBarHeight * 0.5 + this.progressBarPadding;
-				const innerWidth = this.progressBarWidth - this.progressBarPadding * 2;
-				const innerHeight = this.progressBarHeight - this.progressBarPadding * 2;
-				this.progressBarFill.clear();
-				this.progressBarFill.fillStyle(0x66D449, 1);
-				this.progressBarFill.fillRoundedRect(
-					innerX,
-					innerY,
-					Math.max(0.0001, innerWidth * progress),
-					innerHeight,
-					innerHeight * 0.5
-				);
-			}
-			if (this.progressText) {
-				this.progressText.setText(`${Math.round(progress * 100)}%`);
-			}
+		// Notify host page loader (if present) that Phaser boot loader can hide
+		try {
+			(window as any).hideBootLoader?.();
+		} catch {}
 
-			// Keep emitting for React overlay listeners if any
+		// Set up progress event listener (forward only to external listeners; studio/studio React handle bars)
+		this.load.on('progress', (progress: number) => {
 			EventBus.emit('progress', progress);
+			try {
+				(window as any).setBootLoaderProgress?.(0.25 + progress * 0.75);
+			} catch {}
+		});
+
+		this.load.once('complete', () => {
+			try {
+				(window as any).setBootLoaderProgress?.(1);
+			} catch {}
 		});
 		
 		EventBus.emit('current-scene-ready', this);	
@@ -236,14 +331,19 @@ export class Preloader extends Scene
 
     async create ()
     {
-        // Initialize GameAPI and get the game token
+        // Initialize GameAPI, generate token, and call backend initialize endpoint
         try {
             console.log('[Preloader] Initializing GameAPI...');
             const gameToken = await this.gameAPI.initializeGame();
             console.log('[Preloader] Game URL Token:', gameToken);
-            console.log('[Preloader] GameAPI initialized successfully!');
+
+            console.log('[Preloader] Calling backend slot initialization...');
+            const slotInitData = await this.gameAPI.initializeSlotSession();
+            console.log('[Preloader] Slot initialization data:', slotInitData);
+
+            console.log('[Preloader] GameAPI and slot session initialized successfully!');
         } catch (error) {
-            console.error('[Preloader] Failed to initialize GameAPI:', error);
+            console.error('[Preloader] Failed to initialize GameAPI or slot session:', error);
         }
 
         // Create fullscreen toggle now that assets are loaded (using shared manager)
@@ -299,7 +399,9 @@ export class Preloader extends Scene
                     console.log('[Preloader] Starting Game scene after click');
                     this.scene.start('Game', { 
                         networkManager: this.networkManager, 
-                        screenModeManager: this.screenModeManager 
+                        screenModeManager: this.screenModeManager,
+                        // Pass the same GameAPI instance so initialization data is shared
+                        gameAPI: this.gameAPI
                     });
                 }
             });
@@ -309,17 +411,26 @@ export class Preloader extends Scene
 		const fontsObj: any = (document as any).fonts;
 		if (fontsObj && typeof fontsObj.ready?.then === 'function') {
 			fontsObj.ready.then(() => {
-				this.progressText?.setFontFamily('poppins-bold');
+				this.progressText?.setFontFamily('poppins-regular');
 				this.pressToPlayText?.setFontFamily('poppins-regular');
+				this.taglineText?.setFontFamily('poppins-regular');
+				this.websiteText?.setFontFamily('poppins-regular');
+				this.maxWinText?.setFontFamily('poppins-bold');
 			}).catch(() => {
 				// Fallback: set families anyway
-				this.progressText?.setFontFamily('poppins-bold');
+				this.progressText?.setFontFamily('poppins-regular');
 				this.pressToPlayText?.setFontFamily('poppins-regular');
+				this.taglineText?.setFontFamily('poppins-regular');
+				this.websiteText?.setFontFamily('poppins-regular');
+				this.maxWinText?.setFontFamily('poppins-bold');
 			});
 		} else {
 			// Browser without document.fonts support
-			this.progressText?.setFontFamily('poppins-bold');
+			this.progressText?.setFontFamily('poppins-regular');
 			this.pressToPlayText?.setFontFamily('poppins-regular');
+			this.taglineText?.setFontFamily('poppins-regular');
+			this.websiteText?.setFontFamily('poppins-regular');
+			this.maxWinText?.setFontFamily('poppins-bold');
 		}
     }
 }

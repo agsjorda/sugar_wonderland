@@ -42,6 +42,10 @@ export class BuyFeature {
 	private backgroundImage: Phaser.GameObjects.Image;
 	private onCloseCallback?: () => void;
 	private onConfirmCallback?: () => void;
+	private scatterSpine?: any;
+	private scatterFallbackSprite?: Phaser.GameObjects.Image;
+	private scatterRetryCount: number = 0;
+	private readonly SCATTER_MAX_RETRIES: number = 5;
 
 	constructor() {
 		// Constructor for BuyFeature component
@@ -113,6 +117,8 @@ export class BuyFeature {
 		
 		// Create feature logo
 		this.createFeatureLogo(scene);
+		// Create scatter symbol animation on top of the logo
+		this.createScatterSymbolAnimation(scene);
 		
 		// Create title
 		this.createTitle(scene);
@@ -174,6 +180,153 @@ export class BuyFeature {
 		this.featureLogo = scene.add.image(screenWidth / 2, backgroundTop + 210, 'buy_feature_logo');
 		this.featureLogo.setScale(0.9); // Default scale
 		this.container.add(this.featureLogo);
+	}
+
+	/**
+	 * Create the animated scatter symbol on top of the buy feature logo.
+	 * Uses the sugar scatter Spine (`symbol_0_sugar_spine`) with its Win loop if available,
+	 * and falls back to the PNG sprite with a pulsing tween if Spine is not ready.
+	 */
+	private createScatterSymbolAnimation(scene: Scene): void {
+		// Ensure we have a logo to anchor to
+		if (!this.featureLogo) {
+			return;
+		}
+
+		const createWithSpine = () => {
+			try {
+				// Ensure Spine data is available in cache; retry a few times if needed
+				const cacheJson: any = scene.cache.json;
+				if (!cacheJson.has('symbol_0_sugar_spine')) {
+					if (this.scatterRetryCount < this.SCATTER_MAX_RETRIES) {
+						this.scatterRetryCount++;
+						console.warn(
+							`[BuyFeature] Spine json 'symbol_0_sugar_spine' not ready. Retrying (${this.scatterRetryCount}/${this.SCATTER_MAX_RETRIES})...`
+						);
+						scene.time.delayedCall(200, () => this.createScatterSymbolAnimation(scene));
+						return;
+					}
+					console.error('[BuyFeature] Spine assets for scatter still not ready after retries. Falling back to PNG.');
+					this.createScatterFallbackSprite(scene);
+					return;
+				}
+
+				const x = this.featureLogo.x;
+				// Slightly above the logo center so it appears "on top" visually
+				const y = this.featureLogo.y - this.featureLogo.displayHeight * 0;
+
+				this.scatterSpine = (scene.add as any).spine(
+					x,
+					y,
+					'symbol_0_sugar_spine',
+					'symbol_0_sugar_spine-atlas'
+				);
+
+				if (!this.scatterSpine) {
+					console.warn('[BuyFeature] Failed to create scatter Spine object, using PNG fallback.');
+					this.createScatterFallbackSprite(scene);
+					return;
+				}
+
+				this.scatterSpine.setOrigin(0.5, 0.5);
+
+				// Scale relative to the logo width so it looks good on different resolutions
+				try {
+					const targetWidth = this.featureLogo.displayWidth * 0.4;
+					const baseWidth = (this.scatterSpine.width || 1);
+					// Increase scale by 40% over the base size
+					const scale = (targetWidth / baseWidth) * 1.8;
+					this.scatterSpine.setScale(scale);
+				} catch {
+					// Safe fallback scale
+					this.scatterSpine.setScale(0.4 * 1.8);
+				}
+
+				// Bring on top of the logo
+				if (this.container) {
+					this.container.add(this.scatterSpine);
+				}
+
+				// Play continuous "win" loop for the scatter sugar symbol
+				try {
+					const symbolValue = 0;
+					const winAnimationName = `Symbol${symbolValue}_SW_Win`;
+					const state: any = this.scatterSpine.animationState;
+					if (state && typeof state.setAnimation === 'function') {
+						try { if (typeof state.clearTracks === 'function') state.clearTracks(); } catch {}
+						state.setAnimation(0, winAnimationName, true);
+						console.log(`[BuyFeature] Playing scatter Spine win loop: ${winAnimationName}`);
+					}
+				} catch (e) {
+					console.warn('[BuyFeature] Failed to start scatter Spine win animation:', e);
+				}
+			} catch (error) {
+				console.error('[BuyFeature] Error creating scatter Spine animation:', error);
+				this.createScatterFallbackSprite(scene);
+			}
+		};
+
+		// Prefer Spine when available
+		try {
+			// If spine factory is missing for some reason, go straight to PNG fallback
+			if (!(scene.add as any).spine) {
+				console.warn('[BuyFeature] scene.add.spine not available, using PNG scatter sprite.');
+				this.createScatterFallbackSprite(scene);
+				return;
+			}
+		} catch {
+			this.createScatterFallbackSprite(scene);
+			return;
+		}
+
+		createWithSpine();
+	}
+
+	/**
+	 * Create a PNG-based scatter symbol with a pulsing tween as a visual fallback.
+	 */
+	private createScatterFallbackSprite(scene: Scene): void {
+		if (this.scatterFallbackSprite || !this.featureLogo) {
+			return;
+		}
+
+		try {
+			const x = this.featureLogo.x;
+			const y = this.featureLogo.y - this.featureLogo.displayHeight * 0.1;
+
+			this.scatterFallbackSprite = scene.add.image(x, y, 'symbol_0');
+			this.scatterFallbackSprite.setOrigin(0.5, 0.5);
+
+			// Scale relative to logo width
+			try {
+				const targetWidth = this.featureLogo.displayWidth * 0.4;
+				const baseWidth = this.scatterFallbackSprite.width || 1;
+				// Increase scale by 40% over the base size
+				const scale = (targetWidth / baseWidth) * 1.4;
+				this.scatterFallbackSprite.setScale(scale);
+			} catch {
+				this.scatterFallbackSprite.setScale(0.4 * 1.4);
+			}
+
+			if (this.container) {
+				this.container.add(this.scatterFallbackSprite);
+			}
+
+			// Simple looping "win" effect using a pulsing tween
+			scene.tweens.add({
+				targets: this.scatterFallbackSprite,
+				scaleX: this.scatterFallbackSprite.scaleX * 1.08,
+				scaleY: this.scatterFallbackSprite.scaleY * 1.08,
+				duration: 600,
+				yoyo: true,
+				repeat: -1,
+				ease: 'Sine.easeInOut'
+			});
+
+			console.log('[BuyFeature] Created PNG-based scatter symbol with pulsing tween.');
+		} catch (error) {
+			console.error('[BuyFeature] Error creating scatter PNG fallback animation:', error);
+		}
 	}
 
 	private createTitle(scene: Scene): void {
@@ -562,6 +715,16 @@ export class BuyFeature {
 		this.stopContinuousDecrement();
 		this.stopContinuousIncrement();
 		
+		if (this.scatterSpine) {
+			try { this.scatterSpine.destroy(); } catch {}
+			this.scatterSpine = undefined;
+		}
+
+		if (this.scatterFallbackSprite) {
+			try { this.scatterFallbackSprite.destroy(); } catch {}
+			this.scatterFallbackSprite = undefined;
+		}
+
 		if (this.container) {
 			this.container.destroy();
 		}

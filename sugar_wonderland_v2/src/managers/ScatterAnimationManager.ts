@@ -73,6 +73,20 @@ export class ScatterAnimationManager {
     this.isAnimating = true;
     console.log('[ScatterAnimationManager] Starting scatter animation sequence - player will see scatter symbols for 1 second');
 
+    // While the scatter animation / free-spin intro is playing, make sure the
+    // SlotController's "spins left" display is completely hidden so it doesn't
+    // pop in early underneath the animations or dialogs.
+    try {
+      const gameSceneAny = this.scene as any;
+      const slotController = gameSceneAny?.slotController;
+      if (slotController && typeof slotController.suppressFreeSpinDisplay === 'function') {
+        slotController.suppressFreeSpinDisplay();
+        console.log('[ScatterAnimationManager] Suppressed SlotController free spin display for scatter animation');
+      }
+    } catch (e) {
+      console.warn('[ScatterAnimationManager] Failed to suppress SlotController free spin display at scatter start:', e);
+    }
+
     // Switch BG music to Free Spin track when scatter animation starts
     try {
       const audioMgr = (window as any).audioManager;

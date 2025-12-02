@@ -14,7 +14,7 @@ export class BonusHeader {
 	// Tracks cumulative total during bonus mode by incrementing each spin's subtotal
 	private cumulativeBonusWin: number = 0;
 	private hasStartedBonusTracking: boolean = false;
-	// Seed value from scatter trigger to start TOTAL WIN in bonus
+		// Seed value from scatter trigger to start cumulative tracking in bonus
 	private scatterBaseWin: number = 0;
 	// Track if we've already accumulated this spin's total (prevents double add with WIN_STOP)
 	private accumulatedThisSpin: boolean = false;
@@ -206,25 +206,9 @@ export class BonusHeader {
 		this.hasStartedBonusTracking = true;
 		this.justSeededWin = true; // Flag that we just seeded to prevent immediate text overrides
 		
-		// Only show the display if bonus mode is already active
-		// This prevents race conditions where seedCumulativeWin is called before isBonus is set
-		if (gameStateManager.isBonus) {
-			if (this.youWonText) {
-				this.youWonText.setText('TOTAL WIN');
-			}
-			this.showWinningsDisplay(this.cumulativeBonusWin);
-			console.log(`[BonusHeader] Seeded cumulative bonus win with scatter base: $${this.scatterBaseWin} (display shown - bonus mode active)`);
-			
-			// Clear the flag after a short delay to allow initial display to settle
-			if (this.scene) {
-				this.scene.time.delayedCall(500, () => {
-					this.justSeededWin = false;
-				});
-			}
-		} else {
-			// Store the value but don't show yet - it will be shown when bonus mode activates
-			console.log(`[BonusHeader] Seeded cumulative bonus win with scatter base: $${this.scatterBaseWin} (display deferred - bonus mode not active yet)`);
-		}
+		// For bonus mode, we only show per-tumble "YOU WON" values.
+		// Seed the cumulative tracker silently; UI will be driven by tumble events.
+		console.log(`[BonusHeader] Seeded cumulative bonus win with scatter base (tracking only): $${this.scatterBaseWin}`);
 	}
 
 	/**
@@ -419,23 +403,22 @@ export class BonusHeader {
 				if (!gameStateManager.isBonus) return;
 				const amount = Number((data as any)?.cumulativeWin ?? 0);
 				if (amount > 0) {
-					// Only keep "TOTAL WIN" during the actual initial scatter phase (just seeded)
-					// Once tumbles start happening, always change to "YOU WON" to show active wins
-					const isInitialScatterPhase = this.justSeededWin;
-					
-					if (isInitialScatterPhase && this.youWonText) {
-						// Keep "TOTAL WIN" text only during initial scatter activation (before first spin)
-						this.youWonText.setText('TOTAL WIN');
-					} else if (this.youWonText) {
-						// During tumbles, always show "YOU WON" to indicate active wins
+					// As soon as tumble wins start, we are in the "YOU WON" phase for this spin.
+					// Never show "TOTAL WIN" on tumble updates; that label is reserved for the
+					// end-of-spin cumulative summary (handled on WIN_STOP).
+					if (this.youWonText) {
 						this.youWonText.setText('YOU WON');
+					}
+					// Clear any scatter seeding guard once real tumble wins begin
+					if (this.justSeededWin) {
+						this.justSeededWin = false;
 					}
 					this.showWinningsDisplay(amount);
 				}
 			} catch {}
 		});
 
-		// Listen for tumble sequence completion (during bonus mode: show spin total as TOTAL WIN)
+		// Listen for tumble sequence completion (during bonus mode: accumulate spin total only)
 		gameEventManager.on(GameEventType.TUMBLE_SEQUENCE_DONE, (data: any) => {
 			try {
 				if (!gameStateManager.isBonus) return;
@@ -491,20 +474,13 @@ export class BonusHeader {
 					this.hasStartedBonusTracking = true;
 				}
 
-				// Accumulate the spin's total into the bonus cumulative and display TOTAL WIN as cumulative
-				// BUT: if multipliers are active, keep "YOU WON" text and show current spin win instead of cumulative
+				// Accumulate the spin's total into the bonus cumulative.
+				// The visible TOTAL WIN display is handled on WIN_STOP so that it only
+				// appears after *all* win mechanics for the spin (tumbles + multipliers)
+				// have finished, avoiding any label flicker during tumble updates.
 				if (spinWin > 0) {
 					this.cumulativeBonusWin += spinWin;
 					this.accumulatedThisSpin = true;
-					// Only change to "TOTAL WIN" if multipliers are not currently animating
-					if (!this.multipliersActive && this.youWonText) {
-						this.youWonText.setText('TOTAL WIN');
-						this.showWinningsDisplay(this.cumulativeBonusWin);
-					} else if (this.multipliersActive) {
-						// When multipliers are active, show the current spin win (not cumulative)
-						// The multiplier display will handle showing the progressive calculation
-						this.showWinningsDisplay(spinWin);
-					}
 					console.log(`[BonusHeader] TUMBLE_SEQUENCE_DONE: added spinWin=$${spinWin}, cumulativeBonusWin=$${this.cumulativeBonusWin}, multipliersActive=${this.multipliersActive}`);
 				}
 			} catch {}
@@ -595,10 +571,9 @@ export class BonusHeader {
 			this.hideWinningsDisplay();
 		});
 
-		// Listen for reels start to hide winnings display
+		// Listen for reels start to reset per-spin bonus state
 		gameEventManager.on(GameEventType.REELS_START, () => {
 			console.log('[BonusHeader] Reels started');
-			// During bonus mode, display TOTAL WIN accumulated so far at the start of the spin
 			if (gameStateManager.isBonus) {
 				// Reset per-spin accumulation flag
 				this.accumulatedThisSpin = false;
@@ -612,18 +587,26 @@ export class BonusHeader {
 					this.hasStartedBonusTracking = true;
 				}
 				const totalWinSoFar = this.cumulativeBonusWin;
-				console.log(`[BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $${totalWinSoFar}`);
-				
-				// Always set to "TOTAL WIN" at the start of each spin in bonus mode
-				if (this.youWonText) {
-					this.youWonText.setText('TOTAL WIN');
-				}
-				this.showWinningsDisplay(totalWinSoFar);
-				
+				console.log(`[BonusHeader] REELS_START (bonus): cumulative bonus win so far = $${totalWinSoFar}`);
+
 				// Clear the justSeededWin flag when first spin starts (scatter activation complete)
 				if (this.justSeededWin) {
 					this.justSeededWin = false;
 					console.log('[BonusHeader] Cleared justSeededWin flag - first bonus spin starting');
+				}
+
+				// At the start of each bonus spin, show the cumulative TOTAL WIN so far.
+				// During the spin, per-tumble updates will switch the label to "YOU WON".
+				if (totalWinSoFar > 0) {
+					if (this.youWonText) {
+						this.youWonText.setText('TOTAL WIN');
+					}
+					this.showWinningsDisplay(totalWinSoFar);
+				} else {
+					this.hideWinningsDisplay();
+					if (this.youWonText) {
+						this.youWonText.setText('YOU WON');
+					}
 				}
 			} else {
 				// Normal mode behavior: hide winnings at the start of the spin
@@ -671,13 +654,23 @@ export class BonusHeader {
 			}
 		});
 
-		// On WIN_START during bonus, show per-spin win with "YOU WON"
+		// On WIN_START during bonus, only handle non-tumble wins.
+		// For tumble-based wins, the winnings display is driven exclusively by
+		// TUMBLE_WIN_PROGRESS so that "YOU WON" appears tied to each tumble.
 		gameEventManager.on(GameEventType.WIN_START, () => {
 			if (!gameStateManager.isBonus) {
 				return;
 			}
 			const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
 			const spinData = symbolsComponent?.currentSpinData;
+
+			// If this spin has tumbles, let TUMBLE_WIN_PROGRESS handle the "YOU WON"
+			// label and values so the header updates are synchronized with tumbles.
+			if (Array.isArray(spinData?.slot?.tumbles) && spinData.slot.tumbles.length > 0) {
+				console.log('[BonusHeader] WIN_START (bonus): tumbles present - winnings display handled by TUMBLE_WIN_PROGRESS');
+				return;
+			}
+
 			let spinWin = 0;
 			
 			// Check for paylines wins
@@ -703,16 +696,12 @@ export class BonusHeader {
 			}
 		});
 
-		// On WIN_STOP during bonus, only accumulate subtotal for next REELS_START display
+		// On WIN_STOP during bonus, finalize cumulative tracking (UI stays per-tumble "YOU WON")
 		gameEventManager.on(GameEventType.WIN_STOP, () => {
 			if (!gameStateManager.isBonus) {
 				return;
 			}
-			// If this spin has already been accumulated (via TUMBLE_SEQUENCE_DONE), skip to avoid double counting
-			if (this.accumulatedThisSpin) {
-				console.log('[BonusHeader] WIN_STOP (bonus): spin already accumulated via TUMBLE_SEQUENCE_DONE, skipping');
-				return;
-			}
+
 			const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
 			const spinData = symbolsComponent?.currentSpinData;
 			
@@ -743,14 +732,24 @@ export class BonusHeader {
 					}
 				}
 			} catch {}
-			
+
+			// Initialize cumulative tracking if needed
 			if (!this.hasStartedBonusTracking) {
 				this.cumulativeBonusWin = this.scatterBaseWin || 0;
 				this.hasStartedBonusTracking = true;
 			}
-			this.cumulativeBonusWin += (spinWin || 0);
-			this.accumulatedThisSpin = true;
-			console.log(`[BonusHeader] WIN_STOP (bonus): accumulated spinWin=$${spinWin}, cumulativeBonusWin=$${this.cumulativeBonusWin}`);
+
+			// If this spin's win has not yet been accumulated (no TUMBLE_SEQUENCE_DONE or it had 0),
+			// add it now. Otherwise, keep the already-accumulated total.
+			if (!this.accumulatedThisSpin) {
+				this.cumulativeBonusWin += (spinWin || 0);
+				this.accumulatedThisSpin = true;
+			}
+
+			console.log(`[BonusHeader] WIN_STOP (bonus): finalized cumulativeBonusWin=$${this.cumulativeBonusWin} (spinWin=$${spinWin})`);
+			// Do not change label or display here; per bonus-mode UX we only show "YOU WON"
+			// per tumble via TUMBLE_WIN_PROGRESS. The cumulative total is tracked internally
+			// for potential end-of-bonus dialogs or other UI, not for the bonus header label.
 		});
 	}
 

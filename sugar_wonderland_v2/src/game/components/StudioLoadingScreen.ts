@@ -82,12 +82,11 @@ export class StudioLoadingScreen {
             // Add loading frame if texture exists
             if (this.scene.textures.exists("loading_frame")) {
                 const centerX = this.scene.scale.width * 0.5 + (this.options.loadingFrameOffsetX || 0);
-                const baseY = 315;
-                const centerY = this.scene.scale.height * 0.5 + baseY;
-                
+                // Allow vertical positioning via options; default slightly lower to match game layout
+                const frameOffsetY = this.options.loadingFrameOffsetY ?? 345;
                 const loadingFrame = this.scene.add.image(
                     centerX,
-                    centerY - 10,
+                    this.scene.scale.height * 0.5 + frameOffsetY,
                     "loading_frame"
                 ).setOrigin(0.5, 0.5).setScrollFactor(0);
 
@@ -108,7 +107,8 @@ export class StudioLoadingScreen {
             // Add text if provided
             if (this.options.text) {
                 const textX = this.scene.scale.width * 0.5 + (this.options.textOffsetX || 0);
-                const textBaseY = 345;
+                // Allow vertical positioning via options; default slightly lower to match game layout
+                const textBaseY = this.options.textOffsetY ?? 375;
                 const textY = this.scene.scale.height * 0.5 + textBaseY;
                 
                 // Base font size - 14px as specified, scaled by textScale modifier
@@ -122,7 +122,7 @@ export class StudioLoadingScreen {
                 
                 // Create text with specified styles matching CSS properties:
                 // color: rgba(255, 255, 255, 0.50)
-                // font-family: Poppins-Regular
+                // font-family: poppins-regular
                 // font-size: 14px
                 // font-style: normal
                 // font-weight: 500
@@ -132,7 +132,7 @@ export class StudioLoadingScreen {
                     textY,
                     this.options.text.toUpperCase(), // text-transform: uppercase
                     {
-                        fontFamily: 'Poppins-Regular',
+                        fontFamily: 'poppins-regular',
                         fontSize: `${fontSize}px`,
                         color: textColor,
                         fontStyle: 'normal',
@@ -153,8 +153,8 @@ export class StudioLoadingScreen {
                             originalUpdateText();
                             // Set canvas context font with weight 500
                             if (this.context) {
-                                // Format: "500 14px Poppins-Regular" (weight size family)
-                                this.context.font = `500 ${fontSize}px Poppins-Regular`;
+                                // Format: "500 14px poppins-regular" (weight size family)
+                                this.context.font = `500 ${fontSize}px poppins-regular`;
                             }
                         }.bind(textObj);
                         // Force update to apply the font weight
@@ -172,7 +172,8 @@ export class StudioLoadingScreen {
             // Add second text if provided
             if (this.options.text2) {
                 const text2X = this.scene.scale.width * 0.5 + (this.options.text2OffsetX || 0);
-                const text2BaseY = this.options.text2OffsetY || 0;
+                // Allow vertical positioning via options; default slightly lower to match game layout
+                const text2BaseY = this.options.text2OffsetY ?? 400;
                 const text2Y = this.scene.scale.height * 0.5 + text2BaseY;
                 
                 // Base font size - 14px as specified, scaled by text2Scale modifier
@@ -196,7 +197,7 @@ export class StudioLoadingScreen {
                     text2Y,
                     this.options.text2,
                     {
-                        fontFamily: 'Poppins-Regular',
+                        fontFamily: 'poppins-regular',
                         fontSize: `${fontSize}px`,
                         color: textColor,
                         fontStyle: 'normal',
@@ -218,7 +219,7 @@ export class StudioLoadingScreen {
                             // Set canvas context font with weight 500
                             if (this.context) {
                                 // Format: "500 14px poppins-regular" (weight size family)
-                                this.context.font = `500 ${fontSize}px Poppins-Regular`;
+                                this.context.font = `500 ${fontSize}px poppins-regular`;
                             }
                         }.bind(textObj);
                         // Force update to apply the font weight
@@ -232,6 +233,23 @@ export class StudioLoadingScreen {
                 this.text2 = text2;
                 console.log(`[StudioLoadingScreen] Text2 displayed: "${this.options.text2}" at (${text2X}, ${text2Y}) with font size ${fontSize}px, weight 500, and alpha ${alpha}`);
             }
+
+            // Ensure Poppins fonts are applied once web fonts are ready
+            try {
+                const fontsObj: any = (document as any).fonts;
+                if (fontsObj && typeof fontsObj.ready?.then === 'function') {
+                    fontsObj.ready.then(() => {
+                        this.text?.setFontFamily('poppins-regular');
+                        this.text2?.setFontFamily('poppins-regular');
+                    }).catch(() => {
+                        this.text?.setFontFamily('poppins-regular');
+                        this.text2?.setFontFamily('poppins-regular');
+                    });
+                } else {
+                    this.text?.setFontFamily('poppins-regular');
+                    this.text2?.setFontFamily('poppins-regular');
+                }
+            } catch {}
 
             // Time display disabled in this game (no TimeUtils helper available)
 

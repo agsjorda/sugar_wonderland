@@ -5,6 +5,7 @@ export interface ClockDisplayOptions {
     offsetX?: number;
     offsetY?: number;
     fontSize?: number;
+    fontFamily?: string;
     color?: string;
     alpha?: number;
     depth?: number;
@@ -16,6 +17,7 @@ export interface ClockDisplayOptions {
     additionalTextScale?: number; // Scale modifier for additional text
     additionalTextColor?: string; // Color for additional text
     additionalTextFontSize?: number; // Font size for additional text
+    additionalTextFontFamily?: string; // Font family for additional text
 }
 
 export class ClockDisplay {
@@ -42,6 +44,7 @@ export class ClockDisplay {
         const timeX = this.scene.scale.width * 0.5 + (this.options.offsetX || 0);
         const timeY = (this.options.offsetY || 0);
         const fontSize = this.options.fontSize || 14;
+        const fontFamily = this.options.fontFamily || 'Arial';
         const textColor = this.options.color || '#FFFFFF';
         const alpha = this.options.alpha !== undefined ? this.options.alpha : 0.50;
         const depth = this.options.depth || 30000;
@@ -56,7 +59,7 @@ export class ClockDisplay {
             timeY,
             displayText,
             {
-                fontFamily: 'Arial',
+                fontFamily: fontFamily,
                 fontSize: `${fontSize}px`,
                 color: textColor,
                 fontStyle: 'normal',
@@ -76,7 +79,7 @@ export class ClockDisplay {
                 textObj.updateText = function(this: any) {
                     originalUpdateText();
                     if (this.context) {
-                        this.context.font = `500 ${fontSize}px Arial`;
+                        this.context.font = `500 ${fontSize}px ${fontFamily}`;
                     }
                 }.bind(textObj);
                 textObj.updateText();
@@ -93,6 +96,7 @@ export class ClockDisplay {
             const additionalX = this.scene.scale.width * 0.5 + (this.options.additionalTextOffsetX || 0);
             const additionalY = (this.options.offsetY || 0) + (this.options.additionalTextOffsetY || 0);
             const additionalFontSize = this.options.additionalTextFontSize || fontSize;
+            const additionalFontFamily = this.options.additionalTextFontFamily || fontFamily;
             const additionalColor = this.options.additionalTextColor || textColor;
             const additionalScale = this.options.additionalTextScale !== undefined ? this.options.additionalTextScale : 1.0;
 
@@ -101,7 +105,7 @@ export class ClockDisplay {
                 additionalY,
                 this.options.additionalText,
                 {
-                    fontFamily: 'Arial',
+                    fontFamily: additionalFontFamily,
                     fontSize: `${additionalFontSize}px`,
                     color: additionalColor,
                     fontStyle: 'normal',
@@ -121,7 +125,7 @@ export class ClockDisplay {
                     textObj.updateText = function(this: any) {
                         originalUpdateText();
                         if (this.context) {
-                            this.context.font = `500 ${additionalFontSize}px Arial`;
+                            this.context.font = `500 ${additionalFontSize}px ${additionalFontFamily}`;
                         }
                     }.bind(textObj);
                     textObj.updateText();
