@@ -772,6 +772,12 @@ export class Game extends Scene {
 				console.log('[Game] Keeping isShowingWinDialog state for paused spin retry');
 			}
 		});
+		// Listen for free spin autoplay start to reset per-spin overlay guard during bonus
+		gameEventManager.on(GameEventType.FREE_SPIN_AUTOPLAY, () => {
+			console.log('[Game] FREE_SPIN_AUTOPLAY event received - resetting overlay guard for bonus spin');
+			this.winOverlayEnqueuedThisSpin = false;
+			this.suppressWinDialogsUntilNextSpin = false;
+		});
 
 		// Listen for autoplay start to prevent it when win dialogs are showing
 		gameEventManager.on(GameEventType.AUTO_START, (eventData: any) => {
@@ -877,8 +883,8 @@ export class Game extends Scene {
 	private checkAndShowWinDialog(payout: number, bet: number): void {
 		if (this.suppressWinDialogsUntilNextSpin) return;
 		if (this.dialogs.isCongratsShowing()) return;
-		if (gameStateManager.isBonus && gameStateManager.isBonusFinished) return;
 		const multiplier = payout / bet;
+
 		if (multiplier < 20) { try { gameStateManager.isShowingWinDialog = false; } catch {}; return; }
 		// Guard: only allow a single overlay enqueue per spin
 		if (this.winOverlayEnqueuedThisSpin) { return; }

@@ -20,11 +20,10 @@ export class WinOverlayManager {
 
   public enqueueShow(kind: WinOverlayKind, amount: number): void {
     try {
-      // If congrats is showing or bonus finished, ignore win overlays
+      // If congrats is showing, ignore win overlays
       const dialogs: any = (this.scene as any).dialogs;
       const gsm: any = (this.scene as any).gameStateManager;
       if (dialogs?.isCongratsShowing?.()) return;
-      if (gsm?.isBonus && gsm?.isBonusFinished) return;
 
       // Throttle very rapid duplicate enqueues
       const now = Date.now();
@@ -64,23 +63,10 @@ export class WinOverlayManager {
     this.isProcessing = true;
     try {
       while (this.queue.length > 0) {
-        // Respect congrats/bonus-finished before each show
+        // Respect congrats before each show
         const dialogs: any = (this.scene as any).dialogs;
         const gsm: any = (this.scene as any).gameStateManager;
-        if (dialogs?.isCongratsShowing?.() || (gsm?.isBonus && gsm?.isBonusFinished)) {
-          try {
-            if (gsm?.isBonus && gsm?.isBonusFinished) {
-              const scn: any = this.scene as any;
-              if (!dialogs?.isCongratsShowing?.()) {
-                scn.events?.emit?.('setBonusMode', false);
-                const symbols = scn.symbols;
-                if (symbols && typeof symbols.showCongratsDialogAfterDelay === 'function') {
-                  symbols.showCongratsDialogAfterDelay();
-                }
-                try { if (gsm) gsm.isBonusFinished = false; } catch {}
-              }
-            }
-          } catch {}
+        if (dialogs?.isCongratsShowing?.()) {
           this.queue.length = 0;
           try { if (this.active) await this.hideActive(); } catch {}
           break;
