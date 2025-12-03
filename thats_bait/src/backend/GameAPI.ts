@@ -3,7 +3,7 @@ import { GameData } from "../game/components/GameData";
 import { gameStateManager } from "../managers/GameStateManager";
 import { SoundEffectType } from "../managers/AudioManager";
 import { Scene } from "phaser";
-
+import { SLOT_COLUMNS, SLOT_ROWS } from "../config/GameConfig";
 
 const TOKEN_DISABLER = false;
 /**
@@ -34,7 +34,10 @@ function logUrlParameters(): void {
     }
 }
 
-
+/**
+ * Function to get the API base URL
+ * @returns The API base URL
+ */
 const getApiBaseUrl = (): string => {
     const configuredUrl = (window as any)?.APP_CONFIG?.['game-url'];
     if (typeof configuredUrl === 'string' && configuredUrl.length > 0) {
@@ -42,6 +45,198 @@ const getApiBaseUrl = (): string => {
     }
     return 'https://game-launcher.torrospins.com';
 };
+
+const MOCK_SPIN_RESPONSE: any = {
+    bet: "1",
+    slot: {
+        area: [
+            [1, 10, 6],
+            [1, 0, 7],
+            [2, 3, 0],
+            [6, 5, 4],
+            [6, 5, 3]
+        ],
+        money: [
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 25, 0],
+            [0, 25, 0]
+        ],
+        special: {
+            action: "hook-scatter",
+            position: {
+                x: 0,
+                y: 3
+            }
+        },
+        totalWin: 2100,
+        paylines: [
+            {
+                lineKey: 0,
+                symbol: 1,
+                count: 2,
+                win: 0.5
+            },
+            {
+                lineKey: 8,
+                symbol: 1,
+                count: 2,
+                win: 0.5
+            }
+        ],
+        freeSpin: {
+            count: 10,
+            win: 100,
+            items: [
+                {
+                    spinsLeft: 10,
+                    collectorCount: 2,
+                    subTotalWin: 10,
+                    area: [
+                        [6, 7, 18],
+                        [1, 7, 5],
+                        [4, 5, 5],
+                        [3, 5, 4],
+                        [18, 5, 3]
+                    ],
+                    money: [
+                        [0, 0, 0],
+                        [0, 0, 10],
+                        [0, 10, 10],
+                        [0, 10, 0],
+                        [0, 10, 0]
+                    ],
+                    payline: [
+                        {
+                            lineKey: 2,
+                            symbol: 5,
+                            count: 3,
+                            win: 1
+                        },
+                        {
+                            lineKey: 7,
+                            symbol: 5,
+                            count: 3,
+                            win: 1
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+};
+
+function normalizeArea(rawArea: any): number[][] {
+    if (!Array.isArray(rawArea) || !Array.isArray(rawArea[0])) {
+        return [];
+    }
+
+    const outer = rawArea.length;
+    const inner = Array.isArray(rawArea[0]) ? rawArea[0].length : 0;
+
+    // If the area already matches the expected dimensions (SLOT_COLUMNS x SLOT_ROWS), use it as-is
+    if (outer === SLOT_COLUMNS && inner === SLOT_ROWS) {
+        return rawArea;
+    }
+
+    // If the area is transposed (SLOT_ROWS x SLOT_COLUMNS), transpose it to match the game grid
+    if (outer === SLOT_ROWS && inner === SLOT_COLUMNS) {
+        const transposed: number[][] = [];
+        for (let c = 0; c < SLOT_COLUMNS; c++) {
+            transposed[c] = [];
+            for (let r = 0; r < SLOT_ROWS; r++) {
+                transposed[c][r] = rawArea[r][c];
+            }
+        }
+        return transposed;
+    }
+
+    console.warn(`[GameAPI] Unexpected slot.area dimensions: ${outer} x ${inner}, expected ${SLOT_COLUMNS} x ${SLOT_ROWS} or transposed. Using raw area as-is.`);
+    return rawArea;
+}
+
+function normalizeSpinResponse(raw: any, bet: number): SpinData {
+    const rawSlot = raw && raw.slot ? raw.slot : {};
+    const freespinSource = rawSlot.freespin || rawSlot.freeSpin || {};
+    const rawFreeSpinItems = Array.isArray(freespinSource.items) ? freespinSource.items : [];
+
+    const basePaylines = Array.isArray(rawSlot.paylines)
+        ? rawSlot.paylines.map((pl: any) => ({
+            lineKey: Number(pl.lineKey) || 0,
+            symbol: Number(pl.symbol) || 0,
+            count: Number(pl.count) || 0,
+            win: Number(pl.win) || 0,
+            multipliers: Array.isArray(pl.multipliers)
+                ? pl.multipliers.map((m: any) => ({
+                    symbol: Number(m.symbol) || 0,
+                    count: Number(m.count) || 0
+                }))
+                : []
+        }))
+        : [];
+
+    const freeSpinItems = rawFreeSpinItems.map((item: any) => ({
+        spinsLeft: Number(item.spinsLeft) || 0,
+        subTotalWin: Number(item.subTotalWin) || 0,
+        collectorCount: typeof item.collectorCount === 'number' ? item.collectorCount : undefined,
+        area: normalizeArea(item.area),
+        money: Array.isArray(item.money) ? item.money : undefined,
+        payline: Array.isArray(item.payline)
+            ? item.payline.map((pl: any) => ({
+                lineKey: Number(pl.lineKey) || 0,
+                symbol: Number(pl.symbol) || 0,
+                count: Number(pl.count) || 0,
+                win: Number(pl.win) || 0,
+                multipliers: Array.isArray(pl.multipliers)
+                    ? pl.multipliers.map((m: any) => ({
+                        symbol: Number(m.symbol) || 0,
+                        count: Number(m.count) || 0
+                    }))
+                    : []
+            }))
+            : []
+    }));
+
+    const freeSpinData = {
+        count: Number(freespinSource.count) || 0,
+        totalWin: typeof freespinSource.totalWin === 'number'
+            ? freespinSource.totalWin
+            : (Number(freespinSource.win) || 0),
+        items: freeSpinItems
+    };
+
+    const slotArea = normalizeArea(rawSlot.area);
+
+    const slot: any = {
+        area: slotArea,
+        paylines: basePaylines,
+        freespin: freeSpinData,
+        freeSpin: freeSpinData
+    };
+
+    if (Array.isArray(rawSlot.money)) {
+        slot.money = rawSlot.money;
+    }
+    if (typeof rawSlot.totalWin === 'number') {
+        slot.totalWin = rawSlot.totalWin;
+    }
+    if (rawSlot.special && rawSlot.special.action) {
+        slot.special = {
+            action: String(rawSlot.special.action),
+            position: rawSlot.special.position
+        };
+    }
+
+    const playerId = typeof raw.playerId === 'string' ? raw.playerId : 'local';
+    const betValue = raw.bet !== undefined ? raw.bet : bet;
+
+    return {
+        playerId,
+        bet: betValue != null ? betValue.toString() : bet.toString(),
+        slot
+    };
+}
 
 export class GameAPI {  
     gameData: GameData;
@@ -289,75 +484,89 @@ export class GameAPI {
         try {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 10000);
-            const response = await fetch(`${getApiBaseUrl()}/api/v1/slots/bet`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
-                body: JSON.stringify({
-                    action: 'spin',
-                    bet: bet.toString(),
-                    line: 1, // Try different line count
-                    isBuyFs: isBuyFs, // Force false
-                    isEnhancedBet: isEnhancedBet // Use the parameter value
-                }),
-                signal: controller.signal
-            });
-            clearTimeout(timeout);
+            let responseData: any;
+            let usedMock = false;
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                const error = new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
-                
-                // Check for token expiration
-                if (response.status === 401 || response.status === 400) {
-                    this.showTokenExpiredPopup();
-                    // Clear the invalid token
-                    localStorage.removeItem('token');
+            try {
+                const response = await fetch(`${getApiBaseUrl()}/api/v1/slots/bet`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({
+                        action: 'spin',
+                        bet: bet.toString(),
+                        line: 1, // Try different line count
+                        isBuyFs: isBuyFs, // Force false
+                        isEnhancedBet: isEnhancedBet // Use the parameter value
+                    }),
+                    signal: controller.signal
+                });
+                clearTimeout(timeout);
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    const error = new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+                    
+                    // Check for token expiration
+                    if (response.status === 401 || response.status === 400) {
+                        this.showTokenExpiredPopup();
+                        // Clear the invalid token
+                        localStorage.removeItem('token');
+                    }
+                    
+                    throw error;
                 }
-                
-                throw error;
+
+                responseData = await response.json();
+            } catch (error) {
+                clearTimeout(timeout);
+                console.warn('[GameAPI] doSpin failed, using MOCK spin response instead of live API.');
+                console.warn('[GameAPI] doSpin error:', error);
+                responseData = { ...MOCK_SPIN_RESPONSE, bet: bet.toString() };
+                usedMock = true;
             }
 
-            const responseData = await response.json();
+            const normalizedData = normalizeSpinResponse(responseData, bet);
             
             // 3. Store the spin data to SpinData.ts
             // If this response contains free spin data, save it for bonus mode
             console.log('[GameAPI] Checking response for free spin data...');
-            console.log('[GameAPI] Response has slot:', !!responseData.slot);
-            console.log('[GameAPI] Response has freespin:', !!responseData.slot?.freespin);
-            console.log('[GameAPI] Response has freespin.items:', !!responseData.slot?.freespin?.items);
-            console.log('[GameAPI] Response has freeSpin:', !!responseData.slot?.freeSpin);
-            console.log('[GameAPI] Response has freeSpin.items:', !!responseData.slot?.freeSpin?.items);
+            console.log('[GameAPI] Response has slot:', !!normalizedData.slot);
+            console.log('[GameAPI] Response has freespin:', !!normalizedData.slot?.freespin);
+            console.log('[GameAPI] Response has freespin.items:', !!normalizedData.slot?.freespin?.items && normalizedData.slot.freespin.items.length > 0);
             console.log('[GameAPI] Current isBonus state:', gameStateManager.isBonus);
             console.log('[GameAPI] Current currentSpinData has freespin:', !!this.currentSpinData?.slot?.freespin?.items);
             
-            if (responseData.slot && (responseData.slot.freespin?.items || responseData.slot.freeSpin?.items)) {
+            if (normalizedData.slot && normalizedData.slot.freespin && normalizedData.slot.freespin.items && normalizedData.slot.freespin.items.length > 0) {
                 console.log('[GameAPI] Free spin data detected in response - saving for bonus mode');
-                const items = responseData.slot.freespin?.items || responseData.slot.freeSpin?.items;
-                console.log('[GameAPI] Free spin items count:', items.length);
-                this.currentSpinData = responseData as SpinData;
+                console.log('[GameAPI] Free spin items count:', normalizedData.slot.freespin.items.length);
+                this.currentSpinData = normalizedData;
                 console.log('[GameAPI] Free spin data saved to currentSpinData');
-            } else if (gameStateManager.isBonus && this.currentSpinData && (this.currentSpinData.slot?.freespin?.items || this.currentSpinData.slot?.freeSpin?.items)) {
+            } else if (gameStateManager.isBonus && this.currentSpinData && this.currentSpinData.slot?.freespin?.items && this.currentSpinData.slot.freespin.items.length > 0) {
                 console.log('[GameAPI] Preserving original free spin data during bonus mode');
                 // Don't overwrite the original free spin data - keep it for simulation
             } else {
                 console.log('[GameAPI] No free spin data detected - storing regular response');
-                this.currentSpinData = responseData as SpinData;
+                this.currentSpinData = normalizedData;
             }
 
             console.log('🎰 ===== SERVER RESPONSE DEBUG =====');
-            console.log('📊 Full server response:', responseData);
-            console.log('🎯 Freespin data:', responseData.slot?.freespin);
-            console.log('🎯 Freespin count:', responseData.slot?.freespin?.count);
-            console.log('🎯 Freespin items:', responseData.slot?.freespin?.items);
-            console.log('🎯 Freespin items length:', responseData.slot?.freespin?.items?.length);
-            console.log('🎲 Grid symbols:', responseData.slot?.area);
-            console.log('💰 Paylines:', responseData.slot?.paylines);
+            console.log('📊 Raw server response (or mock):', responseData);
+            console.log('📊 Normalized SpinData:', normalizedData);
+            console.log('🎯 Freespin data:', normalizedData.slot?.freespin);
+            console.log('🎯 Freespin count:', normalizedData.slot?.freespin?.count);
+            console.log('🎯 Freespin items:', normalizedData.slot?.freespin?.items);
+            console.log('🎯 Freespin items length:', normalizedData.slot?.freespin?.items?.length);
+            console.log('🎲 Grid symbols:', normalizedData.slot?.area);
+            console.log('💰 Paylines:', normalizedData.slot?.paylines);
+            if (usedMock) {
+                console.warn('[GameAPI] SpinData was generated from MOCK_SPIN_RESPONSE (API is in development).');
+            }
             console.log('🎰 ===== END SERVER RESPONSE =====');
             
-            return this.currentSpinData;
+            return this.currentSpinData as SpinData;
             
         } catch (error) {
             console.error('Error in doSpin:', error);

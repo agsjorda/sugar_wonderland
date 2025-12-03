@@ -426,6 +426,13 @@ export class WinLineDrawer {
       return;
     }
 
+    try {
+      const ref: any = this.symbolsReference;
+      if (ref && typeof ref.pulseWinningSymbols === 'function') {
+        ref.pulseWinningSymbols(winningGrids);
+      }
+    } catch {}
+    
     // Neon colors - bright, vibrant colors that don't repeat
     const neonColors = [
       0x00FF41, // Neon Green

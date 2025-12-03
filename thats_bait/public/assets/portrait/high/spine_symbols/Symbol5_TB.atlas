@@ -1,7 +1,20 @@
 Symbol5_TB.webp
-size:84,84
+size:153,61
 filter:Linear,Linear
-pma:false
-scale:0.16
-Symbol2_HTBH
-bounds:2,2,80,80
+pma:true
+BUCKET TENTACLE
+bounds:80,2,16,15
+GOOP
+bounds:123,12,47,28
+rotate:90
+HANDLE BUCKET
+bounds:80,19,41,40
+Layer17-1
+bounds:2,7,76,52
+PUPIL GOOP
+bounds:123,6,4,4
+TONGUE
+bounds:98,6,12,11
+WORM BUCKET
+bounds:112,3,14,9
+rotate:90

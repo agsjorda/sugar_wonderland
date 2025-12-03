@@ -14,6 +14,9 @@ export interface BubbleParticleModifiers {
 	maskBottom?: number;
 	showMaskDebug?: boolean;
 	burstOnStart?: boolean;
+	opacity?: number;
+	opacityMin?: number;
+	opacityMax?: number;
 }
 
 interface BubbleParticle {
@@ -25,6 +28,7 @@ interface BubbleParticle {
 	size: number;
 	color: number;
 	alpha: number;
+	opacityFactor: number;
 	lifetime: number;
 	age: number;
 	riseSpeed: number;
@@ -55,6 +59,9 @@ export class BubbleParticleSystem {
 	private spawnPerSecond = 60;
 	private spawnAccumulator = 0;
 	private burstOnStart = true;
+	private opacity = 1;
+	private opacityMin = 1;
+	private opacityMax = 1;
 
 	constructor(scene: Scene, depth: number, modifiers?: BubbleParticleModifiers) {
 		this.scene = scene;
@@ -169,6 +176,24 @@ export class BubbleParticleSystem {
 		if (typeof modifiers.maskBottom === "number") this.insetBottom = Math.max(0, modifiers.maskBottom);
 		if (typeof modifiers.showMaskDebug === "boolean") this.showMaskDebug = modifiers.showMaskDebug;
 		if (typeof modifiers.burstOnStart === "boolean") this.burstOnStart = modifiers.burstOnStart;
+		if (typeof modifiers.opacity === "number") this.opacity = Math.max(0, Math.min(1, modifiers.opacity));
+		if (typeof modifiers.opacityMin === "number" || typeof modifiers.opacityMax === "number") {
+			let newMin = this.opacityMin;
+			let newMax = this.opacityMax;
+			if (typeof modifiers.opacityMin === "number") {
+				newMin = Math.max(0, Math.min(1, modifiers.opacityMin));
+			}
+			if (typeof modifiers.opacityMax === "number") {
+				newMax = Math.max(0, Math.min(1, modifiers.opacityMax));
+			}
+			if (newMax < newMin) {
+				const tmp = newMin;
+				newMin = newMax;
+				newMax = tmp;
+			}
+			this.opacityMin = newMin;
+			this.opacityMax = newMax;
+		}
 	}
 
 	private updateMask(): void {
@@ -225,6 +250,7 @@ export class BubbleParticleSystem {
 		const riseSpeed = Math.random() * (this.speedMax - this.speedMin) + this.speedMin;
 		const color = this.colors[Math.floor(Math.random() * this.colors.length)];
 		const alpha = Math.random() * 0.4 + 0.2;
+		const opacityFactor = this.opacityMin + Math.random() * (this.opacityMax - this.opacityMin);
 		const lifetime = Math.random() * (this.lifeMax - this.lifeMin) + this.lifeMin;
 		const particle: BubbleParticle = {
 			graphics,
@@ -235,6 +261,7 @@ export class BubbleParticleSystem {
 			size,
 			color,
 			alpha,
+			opacityFactor,
 			lifetime,
 			age: 0,
 			riseSpeed,
@@ -247,7 +274,7 @@ export class BubbleParticleSystem {
 	}
 
 	private drawParticle(particle: BubbleParticle): void {
-		const { graphics, x, y, size, color, alpha, isPopping, popAge, popDuration } = particle;
+		const { graphics, x, y, size, color, alpha, isPopping, popAge, popDuration, opacityFactor } = particle;
 		graphics.clear();
 		const baseRadius = size * (Math.random() * 0.6 + 0.7);
 		let popScale = 1;
@@ -258,9 +285,11 @@ export class BubbleParticleSystem {
 		const radius = baseRadius * popScale;
 		const outerW = radius * 2.4;
 		const outerH = radius * 2.4;
-		graphics.fillStyle(color, alpha * 0.20); graphics.fillEllipse(x, y, outerW, outerH);
-		graphics.lineStyle(1.5, 0xffffff, alpha * 0.8); graphics.strokeEllipse(x, y, outerW * 0.95, outerH * 0.95);
-		graphics.fillStyle(0xffffff, alpha * 0.9); graphics.fillEllipse(x - radius * 0.4, y - radius * 0.5, radius * 0.6, radius * 0.6);
+		const factor = typeof opacityFactor === "number" ? opacityFactor : 1;
+		const effectiveAlpha = alpha * this.opacity * factor;
+		graphics.fillStyle(color, effectiveAlpha * 0.20); graphics.fillEllipse(x, y, outerW, outerH);
+		graphics.lineStyle(1.5, 0xffffff, effectiveAlpha * 0.8); graphics.strokeEllipse(x, y, outerW * 0.95, outerH * 0.95);
+		graphics.fillStyle(0xffffff, effectiveAlpha * 0.9); graphics.fillEllipse(x - radius * 0.4, y - radius * 0.5, radius * 0.6, radius * 0.6);
 		graphics.lineStyle(0, 0, 0);
 		graphics.setDepth(-9);
 	}

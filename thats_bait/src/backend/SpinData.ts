@@ -15,6 +15,17 @@ export interface SpinData {
 }
 
 /**
+ * Additional special action data for a spin (e.g. hook-scatter)
+ */
+export interface SlotSpecialData {
+  action: string;
+  position?: {
+    x: number;
+    y: number;
+  };
+}
+
+/**
  * Slot data containing the game grid and win information
  */
 export interface SlotData {
@@ -29,6 +40,15 @@ export interface SlotData {
   
   /** Free spin information (camelCase - matches API response) */
   freeSpin?: FreespinData;
+
+  /** Per-position money values, same shape as area */
+  money?: number[][];
+
+  /** Total win amount for this spin */
+  totalWin?: number;
+
+  /** Special mechanic data (e.g. hook-scatter) */
+  special?: SlotSpecialData;
 }
 
 /**
@@ -48,7 +68,7 @@ export interface PaylineData {
   win: number;
   
   /** Multiplier symbols that affect this payline */
-  multipliers: MultiplierData[];
+  multipliers?: MultiplierData[];
 }
 
 /**
@@ -85,9 +105,15 @@ export interface FreespinItem {
   
   /** Win amount for this specific free spin */
   subTotalWin: number;
+
+  /** Number of collected special symbols (if provided by API) */
+  collectorCount?: number;
   
   /** 3x5 grid of symbols for this free spin (columns x rows) */
   area: number[][];
+  
+  /** Per-position money values for this free spin (if provided by API) */
+  money?: number[][];
   
   /** Array of winning paylines for this free spin */
   payline: PaylineData[];
@@ -121,7 +147,8 @@ export class SpinDataUtils {
   static getMultiplierSymbols(spinData: SpinData): number[] {
     const multiplierSymbols = new Set<number>();
     spinData.slot.paylines.forEach(payline => {
-      payline.multipliers.forEach(multiplier => {
+      const multipliers = payline.multipliers || [];
+      multipliers.forEach(multiplier => {
         multiplierSymbols.add(multiplier.symbol);
       });
     });

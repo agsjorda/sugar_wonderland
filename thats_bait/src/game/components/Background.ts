@@ -1,23 +1,38 @@
  import { Scene } from "phaser";
- import { NetworkManager } from "../../managers/NetworkManager";
- import { ScreenModeManager } from "../../managers/ScreenModeManager";
- import { AssetConfig } from "../../config/AssetConfig";
- import { WaterWavePipeline, WaterWaveVerticalPipeline } from "../pipelines/WaterWavePipeline";
- import { BubbleParticleSystem, BubbleParticleModifiers } from "./BubbleParticleSystem";
+import { NetworkManager } from "../../managers/NetworkManager";
+import { ScreenModeManager } from "../../managers/ScreenModeManager";
+import { AssetConfig } from "../../config/AssetConfig";
+import { WaterWavePipeline, WaterWaveVerticalPipeline, WaterRipplePipeline } from "../pipelines/WaterWavePipeline";
+import { BubbleParticleSystem, BubbleParticleModifiers } from "./BubbleParticleSystem";
+import { BubbleStreamSystem } from "./BubbleStreamSystem";
+import { ensureSpineFactory } from "../../utils/SpineGuard";
 
 export class Background {
  	private bgContainer!: Phaser.GameObjects.Container;
  	private networkManager: NetworkManager;
- 	private screenModeManager: ScreenModeManager;
- 	private sceneRef: Scene | null = null;
- 	private seaEdgeWidthMultiplier: number = 1.1;
+	private screenModeManager: ScreenModeManager;
+	private sceneRef: Scene | null = null;
+	private seaEdgeWidthMultiplier: number = 1.1;
 	private bubbleSystem?: BubbleParticleSystem;
+	private bubbleStreamSystems: BubbleStreamSystem[] = [];
 	private readonly SCREEN_MARGIN: number = 80;
+	private readonly bubbleStreamModifiers = [
+		{ offsetX: -195, offsetY: 90 },
+		{ offsetX: -110, offsetY: 90 },
+		{ offsetX: -35, offsetY: 90 },
+		{ offsetX: 45, offsetY: 90 },
+		{ offsetX: 120, offsetY: 90 },
+		{ offsetX: 200, offsetY: 90 },
+	];
 	private bgDepth?: Phaser.GameObjects.Image;
 	private bgSurface?: Phaser.GameObjects.Image;
 	private bgSky?: Phaser.GameObjects.Image;
+	private reelBottomSpine?: any;
+	private characterSpine?: any;
 	private depthWavePipeline?: WaterWavePipeline;
-	private surfaceWavePipeline?: WaterWavePipeline;
+	private surfaceWavePipeline?: WaterRipplePipeline;
+	private surfaceRippleElapsed: number = 0;
+	private readonly SURFACE_RIPPLE_INTERVAL_MS: number = 2000;
 	private readonly depthBackgroundModifiers = {
 		offsetX: 0,
 		offsetY: -410,
@@ -39,6 +54,16 @@ export class Background {
  		scaleXMultiplier: 1,
  		scaleYMultiplier: 1,
  	};
+	private readonly reelBottomModifiers = {
+		offsetX: 0,
+		offsetY: -112,
+		scale: 4,
+	};
+	private readonly characterModifiers = {
+		offsetX: 0,
+		offsetY: -320,
+		scale: 4,
+	};
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -69,25 +94,62 @@ export class Background {
 		// (Spine-based border is handled by `Symbols` component)
 		// Create ember/fiery particle backdrop (behind gameplay)
 		this.bubbleSystem = new BubbleParticleSystem(scene, -9, {
-			count: 15,
-			speedMin: 0.5,
-			speedMax: 1,
+			count: 5,
+			speedMin: 0.2,
+			speedMax: 0.2,
 			lifeMin: 6000,
 			lifeMax: 16000,
 			screenMargin: this.SCREEN_MARGIN,
-			spawnPerSecond: 5,
+			spawnPerSecond: 100,
 			maskLeft: 0,
 			maskRight: 0,
 			maskTop: 280,
 			maskBottom: 250,
 			showMaskDebug: false,
 			burstOnStart: false,
+			opacityMin: 0.3,
+			opacityMax: 0.7
 		});
+
+		// Create multiple vertical bubble streams (5 by default), each with its own offset
+		const baseStreamCenterX = scene.scale.width * 0.5;
+		const baseStreamCenterY = scene.scale.height * 0.5;
+		this.bubbleStreamSystems = [];
+		for (let i = 0; i < this.bubbleStreamModifiers.length; i++) {
+			const mods = this.bubbleStreamModifiers[i];
+			const streamCenterX = baseStreamCenterX + mods.offsetX;
+			const streamCenterY = baseStreamCenterY + mods.offsetY;
+			const stream = new BubbleStreamSystem(scene, {
+				x: streamCenterX,
+				y: streamCenterY,
+				depth: 878,
+				count: 100,
+				spawnPerSecond: 1.2,
+				speedMin: 10,
+				speedMax: 10,
+				opacityMin: 0.2,
+				opacityMax: 0.4,
+				maskLeft: 0,
+				maskRight: 0,
+				maskTop: 280,
+				radiusMin: 0.5,
+				radiusMax: 3,
+				maskBottom: 250,
+				showMaskDebug: false,
+			});
+			this.bubbleStreamSystems.push(stream);
+		}
 		// Drive particles using scene update events
 		scene.events.on('update', this.handleUpdate, this);
 		scene.events.once('shutdown', () => {
 			try { scene.events.off('update', this.handleUpdate, this); } catch {}
 			try { this.bubbleSystem?.destroy(); } catch {}
+			try {
+				for (const stream of this.bubbleStreamSystems) {
+					try { stream.destroy(); } catch {}
+				}
+				this.bubbleStreamSystems = [];
+			} catch {}
 		});
 		
 		// Add decorative elements
@@ -105,17 +167,7 @@ export class Background {
 			scene.scale.height * 0.9,
 			'BG-Depth'
 		).setOrigin(0.5, 0.5);
-		this.bgContainer.add(bgDepth);
 		this.bgDepth = bgDepth;
-
-		// Surface layer (between depth and sky)
-		const bgSurface = scene.add.image(
-			scene.scale.width * 0.5,
-			scene.scale.height * 0.9,
-			'BG-Surface'
-		).setOrigin(0.5, 0.5);
-		this.bgContainer.add(bgSurface);
-		this.bgSurface = bgSurface;
 
 		// Sky layer (in front, with its own offset)
 		const bgSky = scene.add.image(
@@ -123,8 +175,20 @@ export class Background {
 			scene.scale.height * 0.5,
 			'BG-Sky'
 		).setOrigin(0.5, 0.5);
-		this.bgContainer.add(bgSky);
 		this.bgSky = bgSky;
+
+		// Surface layer (between depth and sky)
+		const bgSurface = scene.add.image(
+			scene.scale.width * 0.5,
+			scene.scale.height * 0.9,
+			'BG-Surface'
+		).setOrigin(0.5, 0.5);
+		this.bgSurface = bgSurface;
+
+		// Add to container back-to-front: Sky -> Surface -> Depth
+		this.bgContainer.add(bgSky);
+		this.bgContainer.add(bgSurface);
+		this.bgContainer.add(bgDepth);
 
 		// Scale both to cover viewport
 		const scaleDepthX = scene.scale.width / bgDepth.width;
@@ -170,6 +234,8 @@ export class Background {
 			baseSkyX + this.skyBackgroundModifiers.offsetX,
 			baseSkyY + this.skyBackgroundModifiers.offsetY
 		);
+		this.createCharacterSpine(scene);
+		this.createReelBottomSpine(scene);
 
 		const seaEdgeY = scene.scale.height * 0.5;
 		const seaEdge = scene.add.image(
@@ -215,10 +281,14 @@ export class Background {
 					} catch (_getDepthErr) {}
 				}
 				if (!hasSurface) {
-					const surfaceWave = new WaterWavePipeline(scene.game, {
-						amplitude: 0.02,
-						frequency: 15.0,
-						speed: 0.9
+					const surfaceWave = new WaterRipplePipeline(scene.game, {
+						waveAmplitude: 0.0,
+						waveFrequency: .1,
+						waveSpeed: 0.9,
+						rippleAmplitude: 0.0,
+						rippleFrequency: 1.0,
+						rippleSpeed: 17.5,
+						rippleDecay: 0.2
 					});
 					pipelineManager.add('WaterWaveSurface', surfaceWave);
 					this.surfaceWavePipeline = surfaceWave;
@@ -226,7 +296,7 @@ export class Background {
 					try {
 						const existingSurface = renderer.getPipeline('WaterWaveSurface');
 						if (existingSurface) {
-							this.surfaceWavePipeline = existingSurface as WaterWavePipeline;
+							this.surfaceWavePipeline = existingSurface as WaterRipplePipeline;
 						}
 					} catch (_getSurfaceErr) {}
 				}
@@ -244,13 +314,165 @@ export class Background {
 		// bg.setScale(bg.scaleX * 1.02, bg.scaleY * 1.02);
 
 		// Add reel frame (kept as-is, initially hidden alpha)
+	}
 
+	private createCharacterSpine(scene: Scene): void {
+		const context = "[Background] createCharacterSpine";
+		try {
+			const hasFactory = ensureSpineFactory(scene, context);
+			if (!hasFactory) {
+				console.warn(`${context}: Spine factory not available; skipping Character_TB.`);
+				return;
+			}
+			const jsonCache: any = (scene.cache as any).json;
+			const hasJson = typeof jsonCache?.has === "function" && jsonCache.has("Character_TB");
+			console.log(`${context}: hasJson=${hasJson}`);
+			if (!hasJson) {
+				console.warn(`${context}: Spine JSON not found in cache for key Character_TB; ensure background assets are preloaded.`);
+				return;
+			}
+			const centerX = scene.scale.width * 0.5 + this.characterModifiers.offsetX;
+			const baseY = scene.scale.height * 0.5 + this.characterModifiers.offsetY;
+			this.characterSpine = (scene.add as any).spine(
+				centerX,
+				baseY,
+				"Character_TB",
+				"Character_TB-atlas"
+			);
+			const baseScale = (scene.scale.width / 1920) * this.characterModifiers.scale;
+			this.characterSpine.setScale(baseScale);
+			// Above background container (-10) but behind base overlay (-5) and reels/UI
+			this.characterSpine.setDepth(883);
+			if (typeof this.characterSpine.setScrollFactor === "function") {
+				this.characterSpine.setScrollFactor(0);
+			}
+			try {
+				const spineAny: any = this.characterSpine;
+				if (typeof spineAny.getBounds === "function") {
+					try { spineAny.update?.(0); } catch {}
+					const b = spineAny.getBounds();
+					const sizeX = (b?.size?.width ?? b?.size?.x ?? 0);
+					const sizeY = (b?.size?.height ?? b?.size?.y ?? 0);
+					const offX = (b?.offset?.x ?? 0);
+					const offY = (b?.offset?.y ?? 0);
+					if (sizeX > 0 && sizeY > 0) {
+						const centerWorldX = offX + sizeX * 0.5;
+						const centerWorldY = offY + sizeY * 0.5;
+						const dx = centerX - centerWorldX;
+						const dy = baseY - centerWorldY;
+						spineAny.x += dx;
+						spineAny.y += dy;
+					}
+				}
+			} catch {}
+			try {
+				const spineAny: any = this.characterSpine;
+				const animations: any[] | undefined = spineAny?.skeleton?.data?.animations;
+				let idleName: string = "animation";
+				if (Array.isArray(animations) && animations.length > 0) {
+					const preferred = ["idle", "Idle", "IDLE", "animation", "Animation"];
+					const found = preferred.find(name => animations.some(a => a && a.name === name));
+					idleName = found ?? (animations[0].name ?? idleName);
+				}
+				if (spineAny.animationState && typeof spineAny.animationState.setAnimation === "function") {
+					spineAny.animationState.setAnimation(0, idleName, true);
+				}
+				console.log(`${context}: playing idle animation '${idleName}' for Character_TB`);
+			} catch (_e) {}
+			console.log(`${context}: created Character_TB at (${centerX}, ${baseY}) scale=${baseScale}`);
+		} catch (e) {
+			console.error(`${context}: Failed to create Character_TB spine`, e);
+		}
+	}
+
+	private createReelBottomSpine(scene: Scene): void {
+		const context = "[Background] createReelBottomSpine";
+		try {
+			const hasFactory = ensureSpineFactory(scene, context);
+			if (!hasFactory) {
+				console.warn(`${context}: Spine factory not available; skipping ReelBottom_Normal_TB.`);
+				return;
+			}
+			const jsonCache: any = (scene.cache as any).json;
+			const hasJson = typeof jsonCache?.has === "function" && jsonCache.has("ReelBottom_Normal_TB");
+			console.log(`${context}: hasJson=${hasJson}`);
+			if (!hasJson) {
+				console.warn(`${context}: Spine JSON not found in cache for key ReelBottom_Normal_TB; ensure background assets are preloaded.`);
+				return;
+			}
+			const centerX = scene.scale.width * 0.5 + this.reelBottomModifiers.offsetX;
+			const baseY = scene.scale.height * 0.78 + this.reelBottomModifiers.offsetY;
+			this.reelBottomSpine = (scene.add as any).spine(
+				centerX,
+				baseY,
+				"ReelBottom_Normal_TB",
+				"ReelBottom_Normal_TB-atlas"
+			);
+			const baseScale = (scene.scale.width / 1920) * this.reelBottomModifiers.scale;
+			this.reelBottomSpine.setScale(baseScale);
+			// Place between slot background (880) and Sea-Edge (885)
+			this.reelBottomSpine.setDepth(879);
+			if (typeof this.reelBottomSpine.setScrollFactor === "function") {
+				this.reelBottomSpine.setScrollFactor(0);
+			}
+			try {
+				const spineAny: any = this.reelBottomSpine;
+				if (typeof spineAny.getBounds === "function") {
+					try { spineAny.update?.(0); } catch {}
+					const b = spineAny.getBounds();
+					const sizeX = (b?.size?.width ?? b?.size?.x ?? 0);
+					const sizeY = (b?.size?.height ?? b?.size?.y ?? 0);
+					const offX = (b?.offset?.x ?? 0);
+					const offY = (b?.offset?.y ?? 0);
+					if (sizeX > 0 && sizeY > 0) {
+						const centerWorldX = offX + sizeX * 0.5;
+						const centerWorldY = offY + sizeY * 0.5;
+						const dx = centerX - centerWorldX;
+						const dy = baseY - centerWorldY;
+						spineAny.x += dx;
+						spineAny.y += dy;
+					}
+				}
+			} catch {}
+			try {
+				const spineAny: any = this.reelBottomSpine;
+				const animations: any[] | undefined = spineAny?.skeleton?.data?.animations;
+				let idleName: string = "animation";
+				if (Array.isArray(animations) && animations.length > 0) {
+					const preferred = ["idle", "Idle", "IDLE", "animation", "Animation"];
+					const found = preferred.find(name => animations.some(a => a && a.name === name));
+					idleName = found ?? (animations[0].name ?? idleName);
+				}
+				if (spineAny.animationState && typeof spineAny.animationState.setAnimation === "function") {
+					spineAny.animationState.setAnimation(0, idleName, true);
+				}
+				console.log(`${context}: playing idle animation '${idleName}' for ReelBottom_Normal_TB`);
+			} catch (_e) {}
+			console.log(`${context}: created ReelBottom_Normal_TB at (${centerX}, ${baseY}) scale=${baseScale}`);
+		} catch (e) {
+			console.error(`${context}: Failed to create ReelBottom_Normal_TB spine`, e);
+		}
 	}
 
 	private handleUpdate(_time: number, delta: number): void {
 		if (!this.sceneRef) return;
 		if (this.bubbleSystem) {
 			this.bubbleSystem.update(delta);
+		}
+		for (const stream of this.bubbleStreamSystems) {
+			stream.update(delta);
+		}
+		if (this.surfaceWavePipeline) {
+			this.surfaceRippleElapsed += delta;
+			if (this.surfaceRippleElapsed >= this.SURFACE_RIPPLE_INTERVAL_MS) {
+				this.surfaceRippleElapsed -= this.SURFACE_RIPPLE_INTERVAL_MS;
+				this.surfaceWavePipeline.triggerRippleAt(0.5, 0.5, {
+					amplitude: 0.03,
+					frequency: 35.0,
+					speed: 17.5,
+					decay: 0.8
+				});
+			}
 		}
 	}
 
@@ -285,11 +507,37 @@ export class Background {
 		if (this.bubbleSystem) {
 			this.bubbleSystem.resize();
 		}
+		if (this.bubbleStreamSystems.length > 0) {
+			const baseStreamCenterX = scene.scale.width * 0.5;
+			const baseStreamCenterY = scene.scale.height * 0.5;
+			for (let i = 0; i < this.bubbleStreamSystems.length; i++) {
+				const mods = this.bubbleStreamModifiers[i] ?? { offsetX: 0, offsetY: 0 };
+				const streamCenterX = baseStreamCenterX + mods.offsetX;
+				const streamCenterY = baseStreamCenterY + mods.offsetY;
+				this.bubbleStreamSystems[i].setOrigin(streamCenterX, streamCenterY);
+			}
+		}
 	}
 
 	configureBubbleParticles(modifiers: BubbleParticleModifiers): void {
 		if (this.bubbleSystem) {
 			this.bubbleSystem.configure(modifiers);
+		}
+	}
+
+	updateBubbleStreamModifier(index: number, mods: { offsetX?: number; offsetY?: number }): void {
+		if (index < 0 || index >= this.bubbleStreamModifiers.length) {
+			return;
+		}
+		const entry = this.bubbleStreamModifiers[index];
+		if (typeof mods.offsetX === 'number') entry.offsetX = mods.offsetX;
+		if (typeof mods.offsetY === 'number') entry.offsetY = mods.offsetY;
+		if (this.sceneRef && this.bubbleStreamSystems[index]) {
+			const baseStreamCenterX = this.sceneRef.scale.width * 0.5;
+			const baseStreamCenterY = this.sceneRef.scale.height * 0.5;
+			const streamCenterX = baseStreamCenterX + entry.offsetX;
+			const streamCenterY = baseStreamCenterY + entry.offsetY;
+			this.bubbleStreamSystems[index].setOrigin(streamCenterX, streamCenterY);
 		}
 	}
 
@@ -369,6 +617,24 @@ export class Background {
 				baseSkyY + this.skyBackgroundModifiers.offsetY
 			);
 		}
+	}
+
+	updateReelBottomModifiers(mods: { offsetX?: number; offsetY?: number; scale?: number }): void {
+		if (typeof mods.offsetX === 'number') this.reelBottomModifiers.offsetX = mods.offsetX;
+		if (typeof mods.offsetY === 'number') this.reelBottomModifiers.offsetY = mods.offsetY;
+		if (typeof mods.scale === 'number') this.reelBottomModifiers.scale = mods.scale;
+		if (this.reelBottomSpine && this.sceneRef) {
+			const reelBaseX = this.sceneRef.scale.width * 0.5 + this.reelBottomModifiers.offsetX;
+			const reelBaseY = this.sceneRef.scale.height * 0.78 + this.reelBottomModifiers.offsetY;
+			this.reelBottomSpine.x = reelBaseX;
+			this.reelBottomSpine.y = reelBaseY;
+			const baseScale = (this.sceneRef.scale.width / 1920) * this.reelBottomModifiers.scale;
+			this.reelBottomSpine.setScale(baseScale);
+		}
+	}
+
+	getCharacterSpine(): any | undefined {
+		return this.characterSpine;
 	}
 
 	getContainer(): Phaser.GameObjects.Container {

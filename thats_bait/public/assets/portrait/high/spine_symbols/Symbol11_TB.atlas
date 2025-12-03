@@ -1,8 +1,21 @@
 Symbol11_TB.webp
-size:67,80
+size:421,247
 filter:Linear,Linear
-pma:false
-scale:0.078
-Symbol11_HTBH
-bounds:2,2,63,76
-offsets:8,2,80,80
+pma:true
+scale:0.5
+1 FISH MULTIPLIER BODY
+bounds:248,6,239,62
+offsets:0,1,239,63
+rotate:90
+1 FISH MULTIPLIER FIN
+bounds:403,202,43,16
+rotate:90
+1 FISH MULTIPLIER SHADOW
+bounds:312,7,238,89
+rotate:90
+1 FISH MULTIPLIUER PUPIL
+bounds:403,176,14,24
+offsets:0,0,15,25
+frame
+bounds:2,2,243,244
+rotate:90

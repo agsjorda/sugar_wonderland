@@ -29,6 +29,7 @@ export class AssetConfig {
 
 	getBackgroundAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix();
+		const forcedPortraitHighPrefix = `assets/portrait/high`;
 		
 		return {
 			images: {
@@ -37,8 +38,18 @@ export class AssetConfig {
 				'BG-Sky': `${prefix}/background/BG-Sky.webp`,
 				'BG-Normal-Slots': `${prefix}/background/BG-Normal-Slots.webp`,
 				'Sea-Edge': `${prefix}/background/Sea-Edge.webp`,
+				'hook': `${forcedPortraitHighPrefix}/characters/hook.webp`,
 			},
-			spine: {}
+			spine: {
+				'ReelBottom_Normal_TB': {
+					atlas: `${forcedPortraitHighPrefix}/background/ReelBottom_Normal_TB.atlas`,
+					json: `${forcedPortraitHighPrefix}/background/ReelBottom_Normal_TB.json`
+				},
+				'Character_TB': {
+					atlas: `${forcedPortraitHighPrefix}/characters/Character_TB.atlas`,
+					json: `${forcedPortraitHighPrefix}/characters/Character_TB.json`
+				}
+			}
 		};
 	}
 
@@ -91,7 +102,7 @@ export class AssetConfig {
 	// Add more asset groups as needed
 	getSymbolAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix(); // This gives us assets/{orientation}/{quality}
-		console.log(`[AssetConfig] Loading Spine-only symbol assets from assets/portrait/high/spine_symbols (no PNG sprites)`);
+		console.log(`[AssetConfig] Loading symbol assets (Spine + WEBP-only symbols) from assets/portrait/high/spine_symbols`);
 		
 		// Generate Spine symbol assets for all symbols (0-14)
 		const symbolImages: { [key: string]: string } = {};
@@ -99,7 +110,8 @@ export class AssetConfig {
 		
 		// Symbols that have TB Spine atlases/json in public/assets/portrait/high/spine_symbols
 		// All symbols 0-14 are now backed by TB Spine assets.
-		const tbSpineSymbols = new Set<number>([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+		const tbSpineSymbols = new Set<number>([0, 1, 2, 3, 4, 5, 6, 11, 12, 13, 14]);
+		const webpOnlySymbols = new Set<number>([7, 8, 9, 10]);
 		
 		const spinePrefix = `assets/portrait/high`;
 		
@@ -116,6 +128,12 @@ export class AssetConfig {
 				};
 				
 				console.log(`[AssetConfig] Symbol ${i}: spine=${atlasPath}`);
+			} else if (webpOnlySymbols.has(i)) {
+				const imageKey = `symbol_${i}`;
+				const symbolNameTB = `Symbol${i}_TB`;
+				const imagePath = `${spinePrefix}/spine_symbols/${symbolNameTB}.webp`;
+				symbolImages[imageKey] = imagePath;
+				console.log(`[AssetConfig] Symbol ${i}: image=${imagePath} (WEBP only, no Spine JSON)`);
 			} else {
 				console.log(`[AssetConfig] Symbol ${i}: spine=<none> (no TB Spine asset)`);
 			}

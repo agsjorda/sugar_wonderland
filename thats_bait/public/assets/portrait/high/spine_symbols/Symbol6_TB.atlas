@@ -1,11 +1,21 @@
 Symbol6_TB.webp
-size:130,77
+size:123,77
 filter:Linear,Linear
-pma:false
-scale:0.078
-Layer 1 copy 3
-bounds:2,2,62,73
-offsets:0,0,71,73
-Start1
-bounds:66,2,62,73
-offsets:0,0,71,73
+pma:true
+BOOT LEFT
+bounds:2,6,49,69
+FINY
+bounds:112,19,9,9
+FINY BODY
+bounds:94,6,22,16
+rotate:90
+boot right
+bounds:53,30,45,66
+offsets:1,0,46,66
+rotate:90
+tentacle1
+bounds:76,2,16,26
+tentacle2
+bounds:53,6,22,21
+offsets:0,0,23,21
+rotate:90

@@ -38,6 +38,12 @@ export class RopeCable {
 	private startProvider?: RopeAnchorProvider;
 	private endProvider?: RopeAnchorProvider;
 	private coreVisible: boolean;
+	private pinStartAnchor: boolean;
+	private pinEndAnchor: boolean;
+	private windEnabled: boolean;
+	private windAmplitude: number;
+	private windFrequency: number;
+	private windTime: number;
 
 	constructor(scene: Phaser.Scene, options: RopeCableOptions = {})
 	{
@@ -65,6 +71,12 @@ export class RopeCable {
 		this.gravity = this.options.gravity;
 		this.damping = this.options.damping;
 		this.coreVisible = this.options.coreVisible;
+		this.pinStartAnchor = true;
+		this.pinEndAnchor = true;
+		this.windEnabled = false;
+		this.windAmplitude = 0;
+		this.windFrequency = 0;
+		this.windTime = 0;
 
 		this.scene.events.on(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
 		this.scene.events.on(Phaser.Scenes.Events.DESTROY, this.destroy, this);
@@ -117,6 +129,19 @@ export class RopeCable {
 		this.render();
 	}
 
+	setPinnedEnds(pinStart: boolean, pinEnd: boolean): void
+	{
+		this.pinStartAnchor = !!pinStart;
+		this.pinEndAnchor = !!pinEnd;
+	}
+
+	setWind(enabled: boolean, amplitude: number, frequency: number): void
+	{
+		this.windEnabled = !!enabled;
+		this.windAmplitude = amplitude;
+		this.windFrequency = frequency;
+	}
+
 	update(delta: number): void
 	{
 		if (!this.startProvider || !this.endProvider) {
@@ -134,19 +159,37 @@ export class RopeCable {
 		}
 
 		// Integrate positions using Verlet.
-		for (let i = 1; i < this.ropeNodes.length - 1; i++) {
+		const lastIndex = this.ropeNodes.length - 1;
+		const useWind = this.windEnabled && this.windAmplitude !== 0 && this.windFrequency !== 0;
+		let windPhaseBase = 0;
+		if (useWind) {
+			this.windTime += dt;
+			windPhaseBase = this.windTime * this.windFrequency * Math.PI * 2;
+		}
+		for (let i = 0; i < this.ropeNodes.length; i++) {
+			const isStart = i === 0;
+			const isEnd = i === lastIndex;
+			if ((isStart && this.pinStartAnchor) || (isEnd && this.pinEndAnchor)) {
+				continue;
+			}
 			const pos = this.ropeNodes[i];
 			const prev = this.ropePrevNodes[i];
 			const velX = (pos.x - prev.x) * this.damping;
 			const velY = (pos.y - prev.y) * this.damping;
+			let windAccX = 0;
+			if (useWind) {
+				const phase = windPhaseBase + i * 0.3;
+				windAccX = Math.sin(phase) * this.windAmplitude;
+			}
 			prev.set(pos.x, pos.y);
-			pos.x += velX;
+			pos.x += velX + windAccX * dt * dt;
 			pos.y += velY + this.gravity * dt * dt;
 		}
 
 		this.pinEnds(start, end, true);
 
 		for (let iter = 0; iter < this.ropeIterations; iter++) {
+			const lastIndexInner = this.ropeNodes.length - 1;
 			for (let i = 0; i < this.ropeLengths.length; i++) {
 				const p1 = this.ropeNodes[i];
 				const p2 = this.ropeNodes[i + 1];
@@ -156,11 +199,13 @@ export class RopeCable {
 				let dist = Math.sqrt(dx * dx + dy * dy);
 				if (dist === 0) dist = 0.0001;
 				const diff = (dist - rest) / dist;
-				if (i !== 0) {
+				const isFirst = i === 0;
+				const isLast = i + 1 === lastIndexInner;
+				if (!(isFirst && this.pinStartAnchor)) {
 					p1.x += dx * diff * 0.5;
 					p1.y += dy * diff * 0.5;
 				}
-				if (i + 1 !== this.ropeNodes.length - 1) {
+				if (!(isLast && this.pinEndAnchor)) {
 					p2.x -= dx * diff * 0.5;
 					p2.y -= dy * diff * 0.5;
 				}
@@ -230,11 +275,15 @@ export class RopeCable {
 		const lastIndex = this.ropeNodes.length - 1;
 		const last = this.ropeNodes[lastIndex];
 
-		first.set(start.x, start.y);
-		last.set(end.x, end.y);
+		if (this.pinStartAnchor) {
+			first.set(start.x, start.y);
+			this.ropePrevNodes[0]?.set(first.x, first.y);
+		}
 
-		this.ropePrevNodes[0]?.set(first.x, first.y);
-		this.ropePrevNodes[lastIndex]?.set(last.x, last.y);
+		if (this.pinEndAnchor) {
+			last.set(end.x, end.y);
+			this.ropePrevNodes[lastIndex]?.set(last.x, last.y);
+		}
 
 		if (resetMiddle) {
 			for (let i = 1; i < this.ropePrevNodes.length - 1; i++) {

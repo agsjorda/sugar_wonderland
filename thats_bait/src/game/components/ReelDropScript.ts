@@ -187,7 +187,7 @@ function dropFillers(self: any, fillerCount: number, index: number, extendDurati
     return;
   }
 
-  const height = self.symbols[0][0].displayHeight + self.verticalSpacing;
+  const height = self.displayHeight + self.verticalSpacing;
   const baseTotal = fillerCount + SLOT_COLUMNS;
   const baseDropDistance = baseTotal * height + GameData.WIN_UP_HEIGHT;
   const extraMs = extendDuration ? 3000 : 0;

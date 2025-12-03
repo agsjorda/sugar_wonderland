@@ -24,13 +24,17 @@ export class Game extends Phaser.Scene {
 	private readonly endAnchor = new Phaser.Math.Vector2();
 	private readonly dragBoundsPadding = 32;
 	private readonly ropeStyle = {
-		color: 0xFFFFFF,
-		coreColor: 0x29b1ff,
+		color: 0x000000,
+		coreColor: 0x000000,
 		outlineVisible: false,
 		damping: 0.96
 	};
 	private readonly ropeDepth = Number.MAX_SAFE_INTEGER - 2;
 	private readonly ropeHandleDepth = Number.MAX_SAFE_INTEGER - 1;
+	private readonly rodTipBoneName = 'bone19';
+	private hookImage?: Phaser.GameObjects.Image;
+	private readonly hookTextureKey = 'hook';
+	private readonly hookScale = 0.20;
 
 	public readonly gameData: GameData;
 	public readonly gameAPI: GameAPI;
@@ -66,7 +70,6 @@ export class Game extends Phaser.Scene {
 		this.cameras.main.setBackgroundColor('#050d18');
 		this.createBackground();
 		this.createSlotBackground();
-		this.addBaseLabels();
 
 		const assetScale = this.networkManager.getAssetScale();
 		this.fullscreenBtn = FullScreenManager.addToggle(this, {
@@ -150,20 +153,21 @@ export class Game extends Phaser.Scene {
 
 	update(_time: number, delta: number): void {
 		this.rope?.update(delta);
-	}
-
-	private addBaseLabels(): void {
-		this.add.text(this.scale.width / 2, 60, 'That’s Bait – UI Prototype', {
-			fontFamily: 'Poppins-Bold',
-			fontSize: '32px',
-			color: '#ffffff'
-		}).setOrigin(0.5);
-
-		this.infoText = this.add.text(this.scale.width / 2, 110, 'Use the buttons below to preview the HUD layout.', {
-			fontFamily: 'Poppins-Regular',
-			fontSize: '18px',
-			color: '#9fb3c8'
-		}).setOrigin(0.5);
+		if (this.rope && this.hookImage) {
+			const points = this.rope.getPoints();
+			const count = points.length;
+			if (count > 0) {
+				const end = points[count - 1];
+				this.hookImage.setPosition(end.x, end.y);
+				if (count > 1) {
+					const prev = points[count - 2];
+					const dx = end.x - prev.x;
+					const dy = end.y - prev.y;
+					const angle = Math.atan2(dy, dx) - Math.PI * 0.5;
+					this.hookImage.setRotation(angle);
+				}
+			}
+		}
 	}
 
 	private async initializeTokenAndBalance(): Promise<void> {
@@ -227,6 +231,8 @@ export class Game extends Phaser.Scene {
 		this.startHandle?.destroy();
 		this.endHandle?.destroy();
 		this.rope?.destroy();
+		this.hookImage?.destroy();
+		this.hookImage = undefined;
 
 		this.startAnchor.set(width * 0.35, height * 0.45);
 		this.endAnchor.set(width * 0.65, height * 0.55);
@@ -235,45 +241,135 @@ export class Game extends Phaser.Scene {
 			segmentCount: 20,
 			iterations: 6,
 			gravity: 2200,
-			thickness: 8,
+			thickness: 2,
 			coreThickness: 6,
 			color: this.ropeStyle.color,
 			coreColor: this.ropeStyle.coreColor,
 			coreVisible: this.ropeStyle.outlineVisible,
 			damping: this.ropeStyle.damping,
-			depth: 5
+			depth: this.ropeDepth
 		});
 
-		this.rope.setAnchorProviders(
-			() => this.startAnchor,
-			() => this.endAnchor
-		);
+		const characterSpine = (this.background as any)?.getCharacterSpine?.();
+		const useCharacterAnchor = !!characterSpine;
+		if (useCharacterAnchor) {
+			this.rope.setPinnedEnds(true, false);
+		} else {
+			this.rope.setPinnedEnds(true, true);
+		}
+		// Gentle horizontal swaying (wind) for dangling rope/hook
+		this.rope.setWind(true, this.scale.width * 0.8, 0.35);
+		if (useCharacterAnchor) {
+			try {
+				const spineAny: any = characterSpine;
+				const skeleton: any = spineAny && spineAny.skeleton;
+				if (skeleton && Array.isArray(skeleton.bones)) {
+					const bones = skeleton.bones
+						.map((b: any) => b?.data?.name ?? b?.name)
+						.filter((n: any) => typeof n === 'string');
+				}
+			} catch {}
+		}
+
+		if (useCharacterAnchor) {
+			this.rope.setAnchorProviders(
+				() => {
+					const spine: any = (this.background as any)?.getCharacterSpine?.();
+					if (!spine) {
+						return this.startAnchor;
+					}
+					let bone: any = null;
+					try {
+						const skeleton: any = spine && spine.skeleton;
+						if (skeleton && typeof skeleton.findBone === 'function') {
+							bone = skeleton.findBone(this.rodTipBoneName);
+						}
+					} catch {}
+					if (bone) {
+						try {
+							const scaleX = typeof spine.scaleX === 'number' ? spine.scaleX : (typeof spine.scale === 'number' ? spine.scale : 1);
+							const scaleY = typeof spine.scaleY === 'number' ? spine.scaleY : (typeof spine.scale === 'number' ? spine.scale : 1);
+							const x = spine.x + bone.worldX * scaleX;
+							const y = spine.y + bone.worldY * scaleY;
+							return { x, y };
+						} catch {}
+					}
+					const fallbackOffsetX = 0;
+					const fallbackOffsetY = -50;
+					const fx = spine.x + fallbackOffsetX;
+					const fy = spine.y + fallbackOffsetY;
+					return { x: fx, y: fy };
+				},
+				() => {
+					const spine: any = (this.background as any)?.getCharacterSpine?.();
+					if (!spine) {
+						return this.endAnchor;
+					}
+					let bone: any = null;
+					try {
+						const skeleton: any = spine && spine.skeleton;
+						if (skeleton && typeof skeleton.findBone === 'function') {
+							bone = skeleton.findBone(this.rodTipBoneName);
+						}
+					} catch {}
+					if (bone) {
+						try {
+							const scaleX = typeof spine.scaleX === 'number' ? spine.scaleX : (typeof spine.scale === 'number' ? spine.scale : 1);
+							const scaleY = typeof spine.scaleY === 'number' ? spine.scaleY : (typeof spine.scale === 'number' ? spine.scale : 1);
+							const sx = spine.x + bone.worldX * scaleX;
+							const sy = spine.y + bone.worldY * scaleY;
+							const ropeVisualLength = this.scale.height * 0.09;
+							const ex = sx;
+							const ey = sy + ropeVisualLength;
+							return { x: ex, y: ey };
+						} catch {}
+					}
+					const fallbackLength = this.scale.height * 0.25;
+					const ex = spine.x;
+					const ey = spine.y + fallbackLength;
+					return { x: ex, y: ey };
+				}
+			);
+		} else {
+			this.rope.setAnchorProviders(
+				() => this.startAnchor,
+				() => this.endAnchor
+			);
+		}
 		this.applyRopeStyle();
 
-		this.startHandle = this.createHandle(
-			this.startAnchor,
-			18,
-			0x4a90e2,
-			0x0f1a3d,
-			10
-		);
+		if (!useCharacterAnchor) {
+			this.startHandle = this.createHandle(
+				this.startAnchor,
+				18,
+				0x4a90e2,
+				0x0f1a3d,
+				10
+			);
+			this.endHandle = this.createHandle(
+				this.endAnchor,
+				20,
+				0xff6a2c,
+				0xffffff,
+				12
+			);
+		} else {
+			this.startHandle = undefined;
+			this.endHandle = undefined;
+		}
 
-		this.endHandle = this.createHandle(
-			this.endAnchor,
-			20,
-			0xff6a2c,
-			0xffffff,
-			12
-		);
+		if (this.textures.exists(this.hookTextureKey) && this.rope) {
+			const points = this.rope.getPoints();
+			const end = points.length > 0 ? points[points.length - 1] : this.endAnchor;
+			const assetScale = this.networkManager.getAssetScale();
+			this.hookImage = this.add.image(end.x, end.y, this.hookTextureKey);
+			this.hookImage.setOrigin(0.5, 0);
+			this.hookImage.setScale(assetScale * this.hookScale);
+			this.hookImage.setDepth(this.ropeDepth + 1);
+		}
 	}
 
-	private createHandle(
-		anchor: Phaser.Math.Vector2,
-		radius: number,
-		fillColor: number,
-		strokeColor: number,
-		depth: number
-	): Phaser.GameObjects.Arc {
+	private createHandle(anchor: Phaser.Math.Vector2, radius: number, fillColor: number, strokeColor: number, depth: number): Phaser.GameObjects.Arc {
 		const handle = this.add.circle(anchor.x, anchor.y, radius, fillColor, 0.9)
 			.setStrokeStyle(3, strokeColor, 0.95)
 			.setDepth(this.ropeHandleDepth + depth)
@@ -310,5 +406,6 @@ export class Game extends Phaser.Scene {
 	private bringRopeToFront(): void {
 		if (this.startHandle) this.children.bringToTop(this.startHandle);
 		if (this.endHandle) this.children.bringToTop(this.endHandle);
+		if (this.hookImage) this.children.bringToTop(this.hookImage);
 	}
 }

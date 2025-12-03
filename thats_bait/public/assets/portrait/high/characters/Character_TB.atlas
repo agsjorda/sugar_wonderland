@@ -1,0 +1,62 @@
+Character_TB.webp
+size:459,269
+filter:Linear,Linear
+pma:false
+BODY
+bounds:351,133,95,98
+offsets:1,1,96,100
+bait2
+bounds:351,133,95,98
+offsets:1,1,96,100
+CHARACTER MAIN3
+bounds:2,15,142,172
+POLE main
+bounds:278,87,71,100
+offsets:2,14,74,115
+boat external
+bounds:243,233,203,34
+offsets:0,1,203,36
+boat1
+bounds:2,189,239,78
+offsets:1,1,241,79
+bucket
+bounds:410,16,39,50
+offsets:1,1,40,52
+engine
+bounds:347,2,61,64
+offsets:1,1,63,66
+eyes
+bounds:329,202,29,15
+rotate:90
+glow
+bounds:146,55,130,132
+offsets:4,25,142,172
+left arm
+bounds:243,189,84,42
+offsets:1,1,86,44
+reel
+bounds:448,183,9,84
+offsets:0,0,9,85
+reel handle
+bounds:278,58,27,67
+offsets:1,1,29,69
+rotate:90
+reel spinner
+bounds:195,22,31,82
+offsets:1,1,33,84
+rotate:90
+right arm upper
+bounds:146,2,51,47
+offsets:1,1,53,49
+rotate:90
+rope
+bounds:425,96,24,35
+offsets:1,1,26,37
+teeth
+bounds:351,68,63,72
+offsets:1,1,65,74
+rotate:90
+thruster
+bounds:279,2,54,55
+offsets:1,1,56,57
+rotate:90
