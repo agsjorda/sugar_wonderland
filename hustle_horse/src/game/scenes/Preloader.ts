@@ -293,12 +293,21 @@ export class Preloader extends Scene
 
 	async create ()
 	{
-		// Initialize GameAPI and get the game token
+		// Initialize GameAPI, generate token, and call backend initialize endpoint
 		try {
 			console.log('[Preloader] Initializing GameAPI...');
 			const gameToken = await this.gameAPI.initializeGame();
 			console.log('[Preloader] Game URL Token:', gameToken);
 			console.log('[Preloader] GameAPI initialized successfully!');
+
+			// Fetch initialization data (including any granted free spin rounds)
+			try {
+				console.log('[Preloader] Calling backend slot initialization...');
+				const slotInitData = await this.gameAPI.initializeSlotSession();
+				console.log('[Preloader] Slot initialization data:', slotInitData);
+			} catch (error) {
+				console.error('[Preloader] Failed to initialize slot session:', error);
+			}
 		} catch (error) {
 			console.error('[Preloader] Failed to initialize GameAPI:', error);
 		}
@@ -420,7 +429,9 @@ export class Preloader extends Scene
                 console.log('[Preloader] Starting Game scene after camera fade out');
                 this.scene.start('Game', {
                     networkManager: this.networkManager,
-                    screenModeManager: this.screenModeManager
+                    screenModeManager: this.screenModeManager,
+                    // Pass the same GameAPI instance so initialization data is shared
+                    gameAPI: this.gameAPI
                 });
             });
             this.cameras.main.fadeOut(500, 0, 0, 0);

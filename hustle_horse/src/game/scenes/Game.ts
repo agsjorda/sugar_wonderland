@@ -49,6 +49,7 @@ import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { TurboConfig } from '../../config/TurboConfig';
 import { WinTracker } from '../components/WinTracker';
 import { WinOverlayManager } from '../../managers/WinOverlayManager';
+import { FreeRoundManager } from '../components/FreeRoundManager';
 
 // Extend the Phaser Scene type to include the spine plugin
 export class Game extends Scene {
@@ -82,6 +83,7 @@ export class Game extends Scene {
     private epicWinOverlay!: EpicWinOverlay;
     private superWinOverlay!: SuperWinOverlay;
 	private clockDisplay!: ClockDisplay;
+	private freeRoundManager!: FreeRoundManager | null;
 	// Big_Dragon runtime adjustment controls
 	private dragon: any;
 	public dragonOffsetX: number = 135;
@@ -139,7 +141,13 @@ export class Game extends Scene {
 		this.assetConfig = new AssetConfig(this.networkManager, this.screenModeManager);
 		
 		// Initialize GameAPI
-		this.gameAPI = new GameAPI(this.gameData);
+		if (data.gameAPI) {
+			console.log('[Game] Using GameAPI instance from Preloader');
+			this.gameAPI = data.gameAPI as GameAPI;
+		} else {
+			console.log('[Game] No GameAPI instance passed from Preloader, creating a new one');
+			this.gameAPI = new GameAPI(this.gameData);
+		}
 		this.assetLoader = new AssetLoader(this.assetConfig);
 		
 		console.log(`[Game] Received managers from Preloader`);
@@ -466,6 +474,42 @@ export class Game extends Scene {
 		this.slotController.setSymbols(this.symbols); // Set symbols reference for free spin data access
 		this.slotController.setBuyFeatureReference(); // Set BuyFeature reference for bet access
 		this.slotController.create(this);
+
+		// Create initialization FreeRoundManager AFTER SlotController so it can attach to its UI.
+		try {
+			const initData = this.gameAPI.getInitializationData
+				? this.gameAPI.getInitializationData()
+				: null;
+			const initFsRemaining = this.gameAPI.getRemainingInitFreeSpins
+				? this.gameAPI.getRemainingInitFreeSpins()
+				: 0;
+			const initFsBet = this.gameAPI.getInitFreeSpinBet
+				? this.gameAPI.getInitFreeSpinBet()
+				: null;
+
+			this.freeRoundManager = new FreeRoundManager();
+			this.freeRoundManager.create(this, this.gameAPI, this.slotController);
+
+			if (initData && initData.hasFreeSpinRound && initFsRemaining > 0) {
+				console.log(
+					`[Game] Initialization indicates free spin round available (${initFsRemaining}). Enabling FreeRoundManager UI.`
+				);
+
+				// If backend provided a bet size for the free rounds, apply it to the SlotController
+				// so both the UI and the underlying base bet used for spins match the init data.
+				if (this.slotController && initFsBet && initFsBet > 0) {
+					console.log(
+						`[Game] Applying initialization free spin bet to SlotController: ${initFsBet.toFixed(2)}`
+					);
+					this.slotController.updateBetAmount(initFsBet);
+				}
+
+				this.freeRoundManager.setFreeSpins(initFsRemaining);
+				this.freeRoundManager.enableFreeSpinMode();
+			}
+		} catch (e) {
+			console.warn('[Game] Failed to create FreeRoundManager from initialization data:', e);
+		}
 		
 		// Create coin animation component
 		this.coinAnimation = new CoinAnimation(this.networkManager, this.screenModeManager);

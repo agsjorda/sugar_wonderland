@@ -108,8 +108,13 @@ export class GameStateManager {
   }
 
   public set isReelSpinning(value: boolean) {
+    // Avoid emitting duplicate REELS_START/REELS_STOP for the same state
+    if (this._isReelSpinning === value) {
+      return;
+    }
+
     this._isReelSpinning = value;
-    // Emit reel state events - these are safe because they're state changes, not circular
+    // Emit reel state events only on actual state transitions
     if (value) {
       gameEventManager.emit(GameEventType.REELS_START);
     } else {

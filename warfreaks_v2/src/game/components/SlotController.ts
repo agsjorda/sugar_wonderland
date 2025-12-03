@@ -45,6 +45,9 @@ export class SlotController {
 	// Spine animation for spin button
 	private spinButtonAnimation: any = null;
 
+	// Spine animation for free round spin button (used during initialization free rounds)
+	private freeRoundSpinButtonAnimation: any = null;
+
 	// Spine animation for autoplay button (looping when active)
 	private autoplayButtonAnimation: any = null;
 
@@ -121,6 +124,164 @@ export class SlotController {
 		}
 	}
 
+	/**
+	 * Expose the primary controllers container for other UI components (e.g., FreeRoundManager).
+	 */
+	public getPrimaryControllersContainer(): Phaser.GameObjects.Container | null {
+		return this.primaryControllers || null;
+	}
+
+	/**
+	 * Expose the main spin button image for other UI components (e.g., FreeRoundManager).
+	 */
+	public getSpinButton(): Phaser.GameObjects.Image | null {
+		return this.buttons.get('spin') || null;
+	}
+
+	/**
+	 * Expose the spin icon overlay image (if created).
+	 */
+	public getSpinIcon(): Phaser.GameObjects.Image | null {
+		return this.spinIcon;
+	}
+
+	/**
+	 * Expose the autoplay stop icon overlay image (if created).
+	 */
+	public getAutoplayStopIcon(): Phaser.GameObjects.Image | null {
+		return this.autoplayStopIcon;
+	}
+
+	/**
+	 * Disable UI controls that should not be usable during free rounds.
+	 * - Buy Feature button
+	 * - Autoplay button
+	 * - Amplify bet button
+	 * - Bet +/- buttons
+	 * - Bet background (that opens bet options)
+	 */
+	public disableControlsForFreeRounds(): void {
+		console.log('[SlotController] Disabling controls for free rounds');
+
+		// Reuse existing helpers where possible
+		this.disableBetButtons();
+		this.disableFeatureButton();
+
+		// Completely hide the Buy Feature visuals while free rounds are active so the
+		// center row can be used by the FreeRoundManager info panel instead.
+		const featureButton = this.buttons.get('feature');
+		if (featureButton) {
+			featureButton.setVisible(false);
+		}
+		if (this.featureAmountText) {
+			this.featureAmountText.setVisible(false);
+		}
+		if (this.featureDollarText) {
+			this.featureDollarText.setVisible(false);
+		}
+		if (this.featureLabelText) {
+			this.featureLabelText.setVisible(false);
+		}
+
+		// Autoplay button
+		const autoplayButton = this.buttons.get('autoplay');
+		if (autoplayButton) {
+			autoplayButton.setAlpha(0.5);
+			autoplayButton.disableInteractive();
+			console.log('[SlotController] Autoplay button disabled for free rounds');
+		}
+
+		// Amplify bet button
+		const amplifyButton = this.buttons.get('amplify');
+		if (amplifyButton) {
+			amplifyButton.setAlpha(0.5);
+			amplifyButton.disableInteractive();
+			console.log('[SlotController] Amplify bet button disabled for free rounds');
+		}
+
+		// Bet background (that opens bet options)
+		this.disableBetBackgroundInteraction('free rounds');
+	}
+
+	/**
+	 * Re-enable UI controls after free rounds end.
+	 */
+	public enableControlsAfterFreeRounds(): void {
+		console.log('[SlotController] Enabling controls after free rounds');
+
+		this.enableBetButtons();
+		this.enableFeatureButton();
+
+		// Restore Buy Feature visuals after free rounds end
+		const featureButton = this.buttons.get('feature');
+		if (featureButton) {
+			featureButton.setVisible(true);
+		}
+		if (this.featureAmountText) {
+			this.featureAmountText.setVisible(true);
+		}
+		if (this.featureDollarText) {
+			this.featureDollarText.setVisible(true);
+		}
+		if (this.featureLabelText) {
+			this.featureLabelText.setVisible(true);
+		}
+
+		const autoplayButton = this.buttons.get('autoplay');
+		if (autoplayButton) {
+			autoplayButton.setAlpha(1.0);
+			autoplayButton.setInteractive();
+			console.log('[SlotController] Autoplay button re-enabled after free rounds');
+		}
+
+		const amplifyButton = this.buttons.get('amplify');
+		if (amplifyButton) {
+			amplifyButton.setAlpha(1.0);
+			amplifyButton.setInteractive();
+			console.log('[SlotController] Amplify bet button re-enabled after free rounds');
+		}
+
+		// Re-enable bet background interaction
+		this.enableBetBackgroundInteraction();
+	}
+
+	/**
+	 * Disable interaction on the bet background that opens the bet options panel.
+	 * This is used in multiple states (free rounds, buy feature, etc.).
+	 */
+	private disableBetBackgroundInteraction(reason: string = ''): void {
+		if (!this.controllerContainer) {
+			return;
+		}
+
+		this.controllerContainer.iterate((child: any) => {
+			if (child && child.getData && child.getData('isBetBackground')) {
+				// Do NOT grey it out; just disable interaction so bet options cannot be opened.
+				child.disableInteractive();
+				const suffix = reason ? ` (${reason})` : '';
+				console.log(`[SlotController] Bet background interaction disabled${suffix}`);
+			}
+		});
+	}
+
+	/**
+	 * Re-enable interaction on the bet background that opens the bet options panel.
+	 */
+	private enableBetBackgroundInteraction(reason: string = ''): void {
+		if (!this.controllerContainer) {
+			return;
+		}
+
+		this.controllerContainer.iterate((child: any) => {
+			if (child && child.getData && child.getData('isBetBackground')) {
+				// Restore interaction only (keep original alpha as designed)
+				child.setInteractive();
+				const suffix = reason ? ` (${reason})` : '';
+				console.log(`[SlotController] Bet background interaction re-enabled${suffix}`);
+			}
+		});
+	}
+
 	preload(scene: Scene): void {
 		// Assets are now loaded centrally through AssetConfig in Preloader
 		console.log(`[SlotController] Assets loaded centrally through AssetConfig`);
@@ -184,6 +345,46 @@ export class SlotController {
 	}
 
 	/**
+	 * Helper method to center a Spine animation on the spin button.
+	 * This tries to align the visual center of the Spine bounds with the spin button center.
+	 */
+	private centerSpineOnSpinButton(spineObj: any, spinButton: Phaser.GameObjects.Image): void {
+		if (!spineObj || !spinButton) {
+			return;
+		}
+
+		try {
+			const anySpine: any = spineObj as any;
+
+			if (typeof anySpine.getBounds !== 'function') {
+				spineObj.setPosition(spinButton.x, spinButton.y);
+				return;
+			}
+
+			const bounds = anySpine.getBounds();
+			if (!bounds || !bounds.offset || !bounds.size) {
+				spineObj.setPosition(spinButton.x, spinButton.y);
+				return;
+			}
+
+			const centerX = bounds.offset.x + bounds.size.x * 0.5;
+			const centerY = bounds.offset.y + bounds.size.y * 0.5;
+
+			// SpineGameObject exposes scaleX/scaleY; fall back to scale if needed.
+			const scaleX = (spineObj.scaleX !== undefined ? spineObj.scaleX : spineObj.scale) || 1;
+			const scaleY = (spineObj.scaleY !== undefined ? spineObj.scaleY : spineObj.scale) || 1;
+
+			// Shift the local position so that the visual center of the Spine bounds
+			// is aligned with the spin button center.
+			spineObj.x = spinButton.x - centerX * scaleX;
+			spineObj.y = spinButton.y - centerY * scaleY;
+		} catch (e) {
+			console.warn('[SlotController] Failed to auto-center spin button animation:', e);
+			spineObj.setPosition(spinButton.x, spinButton.y);
+		}
+	}
+
+	/**
 	 * Create the spin button spine animation
 	 */
 	private createSpinButtonAnimation(scene: Scene, assetScale: number): void {
@@ -234,6 +435,66 @@ export class SlotController {
 			}
 
 			console.log('[SlotController] Spin button spine animation created successfully with 1.3x speed');
+
+			// ------------------------------------------------------------------
+			// Optional: create dedicated free-round spin button animation
+			// ------------------------------------------------------------------
+			// Only available as a portrait/high asset; we still attempt to load it
+			// in all modes using the fixed asset path.
+			if (scene.cache.json.has('fr_spin_button_animation')) {
+				try {
+					const spineScale = assetScale * 1.2;
+
+					this.freeRoundSpinButtonAnimation = scene.add.spine(
+						spinButton.x,
+						spinButton.y,
+						"fr_spin_button_animation",
+						"fr_spin_button_animation-atlas"
+					);
+					this.freeRoundSpinButtonAnimation.setOrigin(0.5, 0.5);
+					this.freeRoundSpinButtonAnimation.setScale(spineScale);
+					// Depth is managed by container order; keep a sensible default here.
+					this.freeRoundSpinButtonAnimation.setDepth(11);
+					this.freeRoundSpinButtonAnimation.setVisible(false);
+
+					// Center the free-round Spine animation on the spin button as well.
+					this.centerSpineOnSpinButton(this.freeRoundSpinButtonAnimation, spinButton);
+
+					// Try to automatically center the visual bounds of the Spine animation
+					// inside the spin background, so the glow/effects appear centered on
+					// the spin button.
+					try {
+						const anySpine: any = this.freeRoundSpinButtonAnimation as any;
+						if (typeof anySpine.getBounds === 'function') {
+							const bounds = anySpine.getBounds();
+							if (bounds && bounds.offset && bounds.size) {
+								const centerX = bounds.offset.x + bounds.size.x * 0.5;
+								const centerY = bounds.offset.y + bounds.size.y * 0.5;
+								this.freeRoundSpinButtonAnimation.x = spinButton.x * spineScale;
+								this.freeRoundSpinButtonAnimation.y = spinButton.y * spineScale;
+							}
+						}
+					} catch (e) {
+						console.warn('[SlotController] Failed to auto-center free-round spin animation:', e);
+					}
+
+					if (this.primaryControllers) {
+						const spinIndex = this.primaryControllers.getIndex(spinButton);
+						// Insert directly ABOVE the spin button so it renders in front
+						// of the spin background, but still below the spin icon / stop icon.
+						this.primaryControllers.addAt(this.freeRoundSpinButtonAnimation, spinIndex + 1);
+					} else {
+						this.controllerContainer.add(this.freeRoundSpinButtonAnimation);
+					}
+
+					console.log('[SlotController] Free-round spin button spine animation created successfully');
+				} catch (e) {
+					console.warn('[SlotController] Failed to create free-round spin button animation:', e);
+					this.freeRoundSpinButtonAnimation = null;
+				}
+			} else {
+				console.warn('[SlotController] fr_spin_button_animation spine assets not found in cache; free-round spin animation will be skipped');
+			}
 		} catch (error) {
 			console.error('[SlotController] Error creating Spine button animation:', error);
 		}
@@ -643,34 +904,84 @@ export class SlotController {
 	 * Play the spin button spine animation
 	 */
 	private playSpinButtonAnimation(): void {
-		if (!this.spinButtonAnimation) {
-			console.warn('[SlotController] Spin button animation not available');
+		// During initialization free-round spins, prefer the dedicated free-round
+		// animation when available. This flag is managed by FreeRoundManager.
+		const isInFreeRoundSpins =
+			(gameStateManager as any)?.isInFreeSpinRound === true;
+
+		const targetAnimation = isInFreeRoundSpins && this.freeRoundSpinButtonAnimation
+			? this.freeRoundSpinButtonAnimation
+			: this.spinButtonAnimation;
+
+		if (!targetAnimation) {
+			console.warn('[SlotController] Spin button animation not available (no default or free-round animation)');
 			return;
 		}
 
 		try {
-			// Show the animation
-			this.spinButtonAnimation.setVisible(true);
+			// Hide the non-selected animation (if any) so only one effect plays
+			if (targetAnimation === this.freeRoundSpinButtonAnimation && this.spinButtonAnimation) {
+				this.spinButtonAnimation.setVisible(false);
+			}
+			if (targetAnimation === this.spinButtonAnimation && this.freeRoundSpinButtonAnimation) {
+				this.freeRoundSpinButtonAnimation.setVisible(false);
+			}
 
+			// Show the chosen animation
+			targetAnimation.setVisible(true);
+			
 			// Play the animation following the same pattern as kobi-ass
-			// Use animationState.setAnimation like in Header.ts
-			this.spinButtonAnimation.animationState.setAnimation(0, "animation", false);
+			// Use animationState.setAnimation like in Header.ts.
+			// For the free-round button animation, the Spine animation name is
+			// "Button_Bonus_Bottom" (see Button_Bonus_VFX.json). The default
+			// spin button animation uses "animation".
+			const animationName =
+				targetAnimation === this.freeRoundSpinButtonAnimation
+					? "Button_Bonus_Bottom"
+					: "animation";
 
-			// Listen for animation completion to hide it
-			this.spinButtonAnimation.animationState.addListener({
-				complete: (entry: any) => {
-					if (entry.animation.name === "animation") {
-						this.spinButtonAnimation.setVisible(false);
+			// Start the animation and obtain the track entry so we can adjust
+			// its effective duration for the free-round Spine.
+			const trackEntry: any = targetAnimation.animationState.setAnimation(0, animationName, false);
+
+			// For the free-round Spine, stop the animation 0.5s before the end so
+			// the last few frames are not played.
+			if (targetAnimation === this.freeRoundSpinButtonAnimation && trackEntry) {
+				try {
+					const anySpine: any = targetAnimation as any;
+					const animData = anySpine?.skeleton?.data?.findAnimation?.(animationName);
+					const duration: number | undefined = animData?.duration;
+					if (typeof duration === 'number' && duration > 0.01) {
+						trackEntry.animationEnd = Math.max(0, duration - 0.01);
+						console.log(
+							`[SlotController] Free-round spin animation duration=${duration.toFixed(
+								3
+							)}s, clamped to ${trackEntry.animationEnd.toFixed(3)}s (cut last 0.5s)`
+						);
 					}
+				} catch (e) {
+					console.warn('[SlotController] Failed to clamp free-round spin animationEnd:', e);
+				}
+			}
+			
+			// Listen for animation completion to hide it
+			targetAnimation.animationState.addListener({
+				complete: (entry: any) => {
+				if (entry.animation.name === animationName) {
+						targetAnimation.setVisible(false);
+				}
 				}
 			});
-
+			
 			console.log('[SlotController] Spin button spine animation played');
 		} catch (error) {
 			console.error('[SlotController] Error playing Spine button animation:', error);
 			// Hide the animation if there's an error
 			if (this.spinButtonAnimation) {
 				this.spinButtonAnimation.setVisible(false);
+			}
+			if (this.freeRoundSpinButtonAnimation) {
+				this.freeRoundSpinButtonAnimation.setVisible(false);
 			}
 		}
 	}

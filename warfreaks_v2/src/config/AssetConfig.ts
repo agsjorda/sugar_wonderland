@@ -273,6 +273,9 @@ export class AssetConfig {
 				'long_button': `assets/controller/${screenMode}/${quality}/long_button.png`,
 				'maximize': `assets/controller/${screenMode}/${quality}/maximize.png`,
 				'minimize': `assets/controller/${screenMode}/${quality}/minimize.png`,
+				// Free round assets
+				'freeround_bg': `assets/controller/${screenMode}/${quality}/freeround_bg.png`,
+				'spin_now_button': `assets/controller/${screenMode}/${quality}/spin_now_button.png`,
 			},
 			spine: {
 				'spin_button_animation': {
@@ -295,6 +298,11 @@ export class AssetConfig {
 				'turbo_animation': {
 					atlas: `assets/controller/${screenMode}/${quality}/turbo_animation/Turbo_Spin.atlas`,
 					json: `assets/controller/${screenMode}/${quality}/turbo_animation/Turbo_Spin.json`
+				},
+				// Free round spin button animation (available only in portrait/high for now)
+				'fr_spin_button_animation': {
+					atlas: `assets/controller/portrait/high/Button_Bonus_Buttom/Button_Bonus_VFX.atlas`,
+					json: `assets/controller/portrait/high/Button_Bonus_Buttom/Button_Bonus_VFX.json`
 				}
 			}
 		};
