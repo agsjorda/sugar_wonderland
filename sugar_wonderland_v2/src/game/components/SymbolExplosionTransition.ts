@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
+import { SoundEffectType } from '../../managers/AudioManager';
 
 /**
  * SymbolExplosionTransition
@@ -14,32 +15,79 @@ import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
  *     // Transition complete
  *   });
  */
-export class SymbolExplosionTransition {
-	private scene: Scene;
-	private container: Phaser.GameObjects.Container;
-	private particles: SpineGameObject[] = [];
-	private isPlaying: boolean = false;
-	private depth: number = 22000;
+	export class SymbolExplosionTransition {
+		private scene: Scene;
+		private container: Phaser.GameObjects.Container;
+		private particles: SpineGameObject[] = [];
+		private isPlaying: boolean = false;
+		private depth: number = 22000;
+		// Invisible full-screen interaction blocker so clicks can't pass through
+		private inputBlocker: Phaser.GameObjects.Rectangle | null = null;
 
 		// Configuration
 		private defaultDuration: number = 1500; // total ms for out+hold+in
 	private defaultParticleCount: number = 80;
 
-	constructor(scene: Scene) {
-		this.scene = scene;
-		this.container = scene.add.container(0, 0);
-		this.container.setDepth(this.depth);
-		this.container.setVisible(false);
-	}
+		constructor(scene: Scene) {
+			this.scene = scene;
+			this.container = scene.add.container(0, 0);
+			this.container.setDepth(this.depth);
+			this.container.setVisible(false);
 
-	public show(): void {
-		this.container.setVisible(true);
-	}
+			// Create an invisible, full-screen interaction blocker that sits above
+			// everything else while the explosion transition is playing. This
+			// prevents any buttons or UI behind the transition from being clicked.
+			try {
+				const width = scene.scale.width;
+				const height = scene.scale.height;
 
-	public hide(): void {
-		this.container.setVisible(false);
-		this.destroyParticles();
-	}
+				this.inputBlocker = scene.add.rectangle(
+					width * 0.5,
+					height * 0.5,
+					width,
+					height,
+					0x000000,
+					0
+				);
+
+				this.inputBlocker.setScrollFactor(0);
+				this.inputBlocker.setDepth(this.depth + 10);
+				this.inputBlocker.setVisible(false);
+				this.inputBlocker.setActive(false);
+				this.inputBlocker.setName('symbolExplosionInteractionBlocker');
+
+				// Prepare input; we'll enable/disable it in show/hide.
+				this.inputBlocker.setInteractive({ useHandCursor: false });
+				this.inputBlocker.disableInteractive();
+			} catch {
+				// If anything goes wrong creating the blocker, fail silently so the
+				// transition still works (but without input blocking).
+				this.inputBlocker = null;
+			}
+		}
+
+		public show(): void {
+			this.container.setVisible(true);
+
+			// Enable the interaction blocker while the transition is visible
+			if (this.inputBlocker) {
+				this.inputBlocker.setVisible(true);
+				this.inputBlocker.setActive(true);
+				this.inputBlocker.setInteractive({ useHandCursor: false });
+			}
+		}
+
+		public hide(): void {
+			this.container.setVisible(false);
+			this.destroyParticles();
+
+			// Disable the interaction blocker once the transition is finished
+			if (this.inputBlocker) {
+				this.inputBlocker.setVisible(false);
+				this.inputBlocker.setActive(false);
+				this.inputBlocker.disableInteractive();
+			}
+		}
 
 	/**
 	 * Play the explosion transition.
@@ -56,6 +104,31 @@ export class SymbolExplosionTransition {
 		}
 		this.isPlaying = true;
 		this.show();
+
+		// Play candy transition SFX twice whenever the explosion transition starts,
+		// with a 0.5s delay between each play.
+		try {
+			const sceneAny: any = this.scene as any;
+			const audioManager =
+				(sceneAny && sceneAny.audioManager) ||
+				((window as any)?.audioManager ?? null);
+
+			if (audioManager && typeof audioManager.playSoundEffect === 'function') {
+				// First immediate play
+				audioManager.playSoundEffect(SoundEffectType.CANDY_TRANSITION);
+				// Second play after 500ms
+				this.scene.time.delayedCall(2300, () => {
+					try {
+						audioManager.playSoundEffect(SoundEffectType.CANDY_TRANSITION);
+					} catch (inner) {
+						console.warn('[SymbolExplosionTransition] Failed second candy transition SFX play:', inner);
+					}
+				});
+				console.log('[SymbolExplosionTransition] Playing candy_transition SFX twice on play()');
+			}
+		} catch (e) {
+			console.warn('[SymbolExplosionTransition] Failed to play candy transition SFX:', e);
+		}
 
 		this.destroyParticles();
 

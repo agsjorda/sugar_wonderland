@@ -256,6 +256,67 @@ export class Symbols {
     }
   }
 
+  /**
+   * Start dropping/clearing existing symbols as soon as a new spin is triggered.
+   * This is intentionally decoupled from `dropReels` so the clear phase can
+   * begin immediately at spin start (manual or autoplay), before new reels drop.
+   */
+  public startPreSpinDrop(): void {
+    if (!this.symbols || this.symbols.length === 0) {
+      console.log('[Symbols] startPreSpinDrop: no symbols to drop');
+      return;
+    }
+
+    const firstCol = this.symbols[0];
+    const numRows = Array.isArray(firstCol) ? firstCol.length : 0;
+    if (numRows === 0) {
+      console.log('[Symbols] startPreSpinDrop: symbol grid has zero rows');
+      return;
+    }
+    
+    // Ensure GameData timings are initialized before the very first drop.
+    // This mirrors the logic in processSpinDataSymbols so the first pre-spin
+    // drop does not use the tiny constructor defaults (which look "too fast").
+    const gameData = this.scene?.gameData as GameData;
+    let isTurbo = false;
+    let rowDelay = 0;
+    if (gameData) {
+      const baseDelay = DELAY_BETWEEN_SPINS; // 2500ms default
+      const adjustedDelay = gameStateManager.isTurbo
+        ? baseDelay * TurboConfig.TURBO_SPEED_MULTIPLIER
+        : baseDelay;
+      setSpeed(gameData, adjustedDelay);
+      isTurbo = !!gameData.isTurbo;
+      rowDelay = typeof (gameData as any).dropReelsDelay === 'number'
+        ? (gameData as any).dropReelsDelay
+        : 0;
+    }
+
+    const extendLastReelDrop = false;
+
+    console.log('[Symbols] Starting pre-spin drop of existing symbols', {
+      numRows,
+      isTurbo,
+      rowDelay,
+    });
+
+    // Reverse the sequence: start from bottom row to top row
+    for (let step = 0; step < numRows; step++) {
+      const actualRow = (numRows - 1) - step;
+      const isLastReel = actualRow === 0;
+      const startDelay = isTurbo ? 0 : rowDelay * step;
+
+      this.scene.time.delayedCall(startDelay, () => {
+        console.log(`[Symbols] Pre-spin dropping row ${actualRow}/${numRows - 1}`);
+        try {
+          dropPrevSymbols(this, actualRow, isLastReel && extendLastReelDrop);
+        } catch (e) {
+          console.warn('[Symbols] Error during pre-spin drop for row', actualRow, e);
+        }
+      });
+    }
+  }
+
   private onSpinDone(scene: Game) {
     gameEventManager.on(GameEventType.REELS_STOP, (data: any) => {
       console.log('[Symbols] REELS_STOP event received');
@@ -1157,6 +1218,9 @@ export class Symbols {
 
     console.log(`[Symbols] Starting scatter symbol Spine animation for ${scatterGrids.length} symbols`);
 
+    // Ensure we only trigger the scatter win "nom nom" SFX once for this sequence
+    let scatterWinNomnomPlayed: boolean = false;
+
     // Replace scatter symbols with Spine animations
     const animationPromises = scatterGrids.map(grid => {
       return new Promise<void>((resolve) => {
@@ -1467,7 +1531,8 @@ export class Symbols {
                         const base = (typeof (entry as any).timeScale === 'number' && (entry as any).timeScale > 0)
                           ? (entry as any).timeScale
                           : 1;
-                        (entry as any).timeScale = base * 1.3; // +30% speed
+                        const newScale = base * 1.3; // +30% speed
+                        (entry as any).timeScale = newScale;
                       } catch {}
                     } else {
                       // Fallback: speed up the whole state if entry not available
@@ -1475,8 +1540,30 @@ export class Symbols {
                         const baseState = (typeof state.timeScale === 'number' && state.timeScale > 0)
                           ? state.timeScale
                           : 1;
-                        state.timeScale = baseState * 1.5;
+                        const newStateScale = baseState * 1.5;
+                        state.timeScale = newStateScale;
                       } catch {}
+                    }
+
+                    // Play the scatter "nom nom" SFX once for this sequence.
+                    // Use the global game timeScale (so it respects turbo/slow-mo) but
+                    // do NOT inherit the extra per-symbol animation speed-up, to avoid
+                    // the SFX sounding too fast.
+                    if (!scatterWinNomnomPlayed) {
+                      scatterWinNomnomPlayed = true;
+                      try {
+                        const audio = (window as any)?.audioManager;
+                        if (audio && typeof audio.playSoundEffect === 'function') {
+                          const globalScale = (typeof (gameStateManager as any)?.timeScale === 'number'
+                            ? (gameStateManager as any).timeScale || 1
+                            : 1);
+                          const clampedScale = Math.max(0.5, Math.min(1.25, globalScale));
+                          audio.playSoundEffect(SoundEffectType.SCATTER_NOMNOM, clampedScale);
+                          console.log('[Symbols] Played scatter nomnom SFX with global timescale:', clampedScale);
+                        }
+                      } catch (e) {
+                        console.warn('[Symbols] Failed to play scatter nomnom SFX:', e);
+                      }
                     }
 
                     // Safety timeout: if complete never fires, still return to idle
@@ -1543,6 +1630,9 @@ export class Symbols {
     const symbolValue = 0; // Scatter symbol id
     const winAnimationName = `Symbol${symbolValue}_SW_Win`;
     const idleAnimationName = `Symbol${symbolValue}_SW_Idle`;
+
+    // Ensure we only trigger the scatter win "nom nom" SFX once for this retrigger sequence
+    let retriggerNomnomPlayed: boolean = false;
     
     // Prepare overlay container (above mask) and restore tracking
     if (!this.overlayContainer) {
@@ -1650,7 +1740,30 @@ export class Symbols {
                       state.addListener(listenerRef);
                     }
                   } catch {}
-                  try { state.setAnimation(0, winAnimationName, false); } catch {}
+                  // Start the win animation
+                  try {
+                    state.setAnimation(0, winAnimationName, false);
+                  } catch {}
+
+                  // Play the scatter "nom nom" SFX once for the retrigger sequence.
+                  // Use the global game timeScale (turbo/slow-mo) but do NOT inherit
+                  // any extra per-symbol animation speed-up, to keep SFX at a natural pace.
+                  if (!retriggerNomnomPlayed) {
+                    retriggerNomnomPlayed = true;
+                    try {
+                      const audio = (window as any)?.audioManager;
+                      if (audio && typeof audio.playSoundEffect === 'function') {
+                        const globalScale = (typeof (gameStateManager as any)?.timeScale === 'number'
+                          ? (gameStateManager as any).timeScale || 1
+                          : 1);
+                        const clampedScale = Math.max(0.5, Math.min(1.25, globalScale));
+                        audio.playSoundEffect(SoundEffectType.SCATTER_NOMNOM, clampedScale);
+                        console.log('[Symbols] Played scatter nomnom SFX (retrigger) with global timescale:', clampedScale);
+                      }
+                    } catch (e) {
+                      console.warn('[Symbols] Failed to play scatter nomnom SFX (retrigger):', e);
+                    }
+                  }
                   // Safety timeout in case 'complete' never fires
                   this.scene.time.delayedCall(2500, () => {
                     if (finished) return;
@@ -3395,6 +3508,15 @@ async function playMultiplierWinThenIdle(self: Symbols, obj: any, base: string):
     let finished = false;
     const safeResolve = () => { if (!finished) { finished = true; resolve(); } };
     const isTurbo = !!self.scene.gameData?.isTurbo;
+    // Fire dedicated multiplier trigger SFX right as the Win animation starts
+    try {
+      const audio = (window as any)?.audioManager;
+      if (audio && typeof audio.playSoundEffect === 'function' && gameStateManager.isBonus) {
+        try {
+          audio.playSoundEffect(SoundEffectType.MULTIPLIER_TRIGGER);
+        } catch {}
+      }
+    } catch {}
     try {
       const animState = obj?.animationState;
       if (!animState || !animState.setAnimation) return safeResolve();
@@ -3422,23 +3544,23 @@ async function playMultiplierWinThenIdle(self: Symbols, obj: any, base: string):
         // Compute pause time near the end of the animation (0.5s before end)
         const animData = (obj as any)?.skeleton?.data?.findAnimation?.(winAnim);
         const durationSec = typeof animData?.duration === 'number' ? animData.duration : 0;
-        const pauseDeltaSec = 0.5;
+        // In turbo mode, pause a bit closer to the end so things still feel fast
+        const pauseDeltaSec = isTurbo ? 0.25 : 0.5;
         const pauseAtSec = Math.max(0, durationSec > 0 ? Math.max(0, durationSec - pauseDeltaSec) : 0);
         const delayMs = Math.max(0, pauseAtSec * 1000);
         // Schedule the pause shortly before the end
         self.scene.time.delayedCall(delayMs, () => {
           try {
-            // In turbo mode, let the Win animation play through naturally without freezing near the end.
-            if (!isTurbo) {
-              const e = entry || (animState?.getCurrent && animState.getCurrent(0));
-              if (e) {
-                try { (e as any).timeScale = 0; } catch {}
-              } else {
-                try { (animState as any).timeScale = 0; } catch {}
-              }
-              // After pausing near the end, disable the symbol so it won't interact/animate further
-              try { disableSymbolObject(self, obj); } catch {}
+            // Always pause the Win animation briefly near the end so the multiplier
+            // appears to "freeze" before the overlay flies toward the winnings display.
+            const e = entry || (animState?.getCurrent && animState.getCurrent(0));
+            if (e) {
+              try { (e as any).timeScale = 0; } catch {}
+            } else {
+              try { (animState as any).timeScale = 0; } catch {}
             }
+            // After pausing near the end, disable the symbol so it won't interact/animate further
+            try { disableSymbolObject(self, obj); } catch {}
           } catch {}
           // Move multiplier PNG overlay toward the center of the winnings display
           try {
@@ -3792,12 +3914,6 @@ async function dropReels(self: Symbols, data: Data): Promise<void> {
   console.log('[Symbols] dropReels called with data:', data);
   console.log('[Symbols] SLOT_ROWS (config columns):', SLOT_ROWS);
 
-  // Play turbo drop sound effect at the start of reel drop sequence when in turbo mode
-  if (self.scene.gameData.isTurbo && (window as any).audioManager) {
-    (window as any).audioManager.playSoundEffect(SoundEffectType.TURBO_DROP);
-    console.log('[Symbols] Playing turbo drop sound effect at start of reel drop sequence');
-  }
-
   // Stagger reel starts at a fixed interval and let them overlap
 
   // Anticipation disabled: do not check columns for scatter, no reel extension
@@ -3806,25 +3922,32 @@ async function dropReels(self: Symbols, data: Data): Promise<void> {
 
   const reelPromises: Promise<void>[] = [];
   // Adjustable gap between clearing previous symbols and spawning new ones per row
-  const PREV_TO_NEW_DELAY_MS = (self.scene.gameData as any)?.prevToNewDelayMs ?? 400;
 
   // Determine the actual number of visible rows from the current grid.
   // This ensures we clear/drop every row even if config/constants change.
   const numRows = (self.symbols && self.symbols[0] && self.symbols[0].length)
     ? self.symbols[0].length
     : SLOT_COLUMNS;
+  const isTurbo = !!self.scene.gameData?.isTurbo;
 
   // Reverse the sequence: start from bottom row to top row
   for (let step = 0; step < numRows; step++) {
     const actualRow = (numRows - 1) - step;
     const isLastReel = actualRow === 0;
-    const startDelay = self.scene.gameData.dropReelsDelay * step;
+    // In bonus mode, add a small pre-drop delay before any new symbols start falling.
+    // Use winUpDuration so this delay is automatically affected by turbo settings.
+    const bonusPreDropDelay =
+      gameStateManager.isBonus
+        ? (self.scene.gameData.winUpDuration * 2)
+        : 0.5;
+    // In turbo mode, remove row-level stagger so all rows drop together,
+    // but still honor the bonus pre-drop delay calculated above.
+    const startDelay =
+      bonusPreDropDelay +
+      (isTurbo ? 0 : self.scene.gameData.dropReelsDelay * step);
     const p = (async () => {
       await delay(startDelay);
-      console.log(`[Symbols] Processing row ${actualRow}/${numRows - 1}`);
-      dropPrevSymbols(self, actualRow, isLastReel && extendLastReelDrop)
-      // Wait before spawning new symbols so previous ones are cleared first
-      await delay(PREV_TO_NEW_DELAY_MS);
+      console.log(`[Symbols] Processing row ${actualRow}/${numRows - 1} (new symbols only)`);
       await dropNewSymbols(self, actualRow, isLastReel && extendLastReelDrop);
     })();
     reelPromises.push(p);
@@ -3832,6 +3955,16 @@ async function dropReels(self: Symbols, data: Data): Promise<void> {
   console.log('[Symbols] Waiting for all reels to complete animation...');
   await Promise.all(reelPromises);
   console.log('[Symbols] All reels have completed animation');
+
+  // Turbo mode: play turbo drop sound effect once when all new symbols have finished dropping
+  if (isTurbo && (window as any).audioManager) {
+    try {
+      (window as any).audioManager.playSoundEffect(SoundEffectType.TURBO_DROP);
+      console.log('[Symbols] Playing turbo drop sound effect after all reels have completed (turbo mode)');
+    } catch (e) {
+      console.warn('[Symbols] Failed to play turbo drop sound effect after reel completion:', e);
+    }
+  }
 }
 
 function dropPrevSymbols(self: Symbols, index: number, extendDuration: boolean = false) {
@@ -3871,7 +4004,8 @@ function dropPrevSymbols(self: Symbols, index: number, extendDuration: boolean =
     const isTurbo = !!self.scene.gameData?.isTurbo;
     const tweens: any[] = [
       {
-        delay: STAGGER_MS * i,
+        // In turbo mode, drop all symbols at the same time (no per-column stagger)
+        delay: isTurbo ? 0 : STAGGER_MS * i,
         y: `-= ${clearHop}`,
         duration: self.scene.gameData.winUpDuration,
         ease: Phaser.Math.Easing.Circular.Out,
@@ -4023,7 +4157,8 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
       const isTurbo = !!self.scene.gameData?.isTurbo;
       const tweens: any[] = [
         {
-          delay: STAGGER_MS * col,
+          // In turbo mode, drop all symbols at the same time (no per-column stagger)
+          delay: isTurbo ? 0 : STAGGER_MS * col,
           y: `-= ${symbolHop}`,
           duration: self.scene.gameData.winUpDuration,
           ease: Phaser.Math.Easing.Circular.Out,
@@ -4031,7 +4166,8 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
         {
           y: targetY,
           duration: (self.scene.gameData.dropDuration * 0.9) + extraMs,
-          ease: Phaser.Math.Easing.Linear,
+          // In turbo mode, use a smooth decelerating ease so the drop doesn't feel rigid.
+          ease: isTurbo ? Phaser.Math.Easing.Cubic.Out : Phaser.Math.Easing.Linear,
         },
       ];
 
@@ -4208,7 +4344,7 @@ async function applyTumbles(self: Symbols, tumbles: any[]): Promise<void> {
 
     const currentTumbleIndex = tumbleIndex;
     await applySingleTumble(self, tumble, () => {
-      // As soon as the first win animation completes in this tumble, emit progress with cumulative including this tumble
+      // As soon as the first win animation *starts* in this tumble, emit progress with cumulative including this tumble
       try {
         cumulativeWin += tumbleTotal;
         if (cumulativeWin > 0) {
@@ -4493,7 +4629,7 @@ async function applySingleTumble(self: Symbols, tumble: any, onFirstWinComplete?
   // Animate removal: for high-count sugar symbols (1..9), play SW_Win before destroy; otherwise fade out
   const removalPromises: Promise<void>[] = [];
   const STAGGER_MS = 50; // match drop sequence stagger (shortened)
-  // Track first win animation completion notification
+  // Track first win animation notification (we now trigger on animation start for better SFX sync)
   let firstWinNotified = false;
   function notifyFirstWinIfNeeded() {
     if (!firstWinNotified) {
@@ -4540,8 +4676,6 @@ async function applySingleTumble(self: Symbols, tumble: any, onFirstWinComplete?
                           if (!entry || entry.animation?.name !== winAnim) return;
                         } catch {}
                         if (completed) return; completed = true;
-                        // First win animation just finished
-                        notifyFirstWinIfNeeded();
                         try { destroySymbolOverlays(obj); } catch {}
                         try { obj.destroy(); } catch {}
                         self.symbols[col][row] = null as any;
@@ -4554,6 +4688,8 @@ async function applySingleTumble(self: Symbols, tumble: any, onFirstWinComplete?
                     obj.animationState.addListener(listener);
                   }
                   obj.animationState.setAnimation(0, winAnim, false);
+                  // First win animation just started – notify once so header + SFX sync with visuals
+                  notifyFirstWinIfNeeded();
                   // Scale up by 30% after 0.5s
                   scheduleScaleUp(self, obj, 500);
                   // Safety timeout in case complete isn't fired
@@ -4679,13 +4815,26 @@ async function applySingleTumble(self: Symbols, tumble: any, onFirstWinComplete?
       compressPromises.push(new Promise<void>((resolve) => {
         try {
           const tweenTargetsMove: any = getSymbolTweenTargets(obj);
+          const isTurbo = !!self.scene.gameData?.isTurbo;
+          const baseDuration = self.scene.gameData.dropDuration;
+          // Use a slightly shorter duration in turbo, but long enough for easing
+          // to be visible so the motion doesn't feel rigid.
+          const compressionDuration = isTurbo
+            ? Math.max(160, baseDuration * 0.6)
+            : baseDuration;
+          const baseDelayMultiplier = (self.scene?.gameData?.compressionDelayMultiplier ?? 1);
+          const colDelay = STAGGER_MS * col * baseDelayMultiplier;
+          // In turbo, keep some stagger but reduce it so columns still feel snappy.
+          const delay = isTurbo ? colDelay * 0.4 : colDelay;
           self.scene.tweens.add({
             targets: tweenTargetsMove,
             y: targetY,
-            delay: STAGGER_MS * col * (self.scene?.gameData?.compressionDelayMultiplier ?? 1),
-            duration: self.scene.gameData.dropDuration,
-            // In turbo mode, avoid extra bouncy easing and move linearly
-            ease: self.scene.gameData?.isTurbo ? Phaser.Math.Easing.Linear : Phaser.Math.Easing.Bounce.Out,
+            delay,
+            duration: compressionDuration,
+            // In turbo mode, keep motion snappy but smoothly decelerating
+            ease: self.scene.gameData?.isTurbo
+              ? Phaser.Math.Easing.Cubic.Out
+              : Phaser.Math.Easing.Bounce.Out,
             onComplete: () => resolve(),
           });
         } catch { resolve(); }
@@ -5095,10 +5244,20 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
             if (!hasPlayedWinSfx) {
               const audio = (window as any)?.audioManager;
               if (audio && typeof audio.playSoundEffect === 'function') {
-                const sfx = hasWildcardInWin ? SoundEffectType.WILD_MULTI : SoundEffectType.HIT_WIN;
+                // During bonus mode, wins that include multiplier symbols (wildcards)
+                // should use the dedicated bomb SFX. In base game, keep existing
+                // wild-multi vs normal hit behavior.
+                let sfx: SoundEffectType = SoundEffectType.HIT_WIN;
+                if (hasWildcardInWin) {
+                  if (gameStateManager.isBonus) {
+                    sfx = SoundEffectType.MULTIPLIER_TRIGGER;
+                  } else {
+                    sfx = SoundEffectType.WILD_MULTI;
+                  }
+                }
                 audio.playSoundEffect(sfx);
                 hasPlayedWinSfx = true;
-                // If this spin triggered scatter, chain play scatter_ka after hit/wildmulti
+                // If this spin triggered scatter, chain play scatter_sw after hit/wildmulti
                 try {
                   if (gameStateManager.isScatter) {
                     // short chain delay to ensure ordering

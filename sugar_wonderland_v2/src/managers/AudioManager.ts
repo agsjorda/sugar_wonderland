@@ -10,10 +10,14 @@ export enum SoundEffectType {
 	SPIN = 'spin',
 	REEL_DROP = 'reeldrop',
 	TURBO_DROP = 'turbodrop',
+	CANDY_TRANSITION = 'candy_transition',
+	// Scatter win "nom nom" SFX (Symbol0 win animation)
+	SCATTER_NOMNOM = 'scatter_nomnom',
 	WHEEL_SPIN = 'wheelspin',
 	MENU_CLICK = 'menu_click',
 	HIT_WIN = 'hitwin',
 	WILD_MULTI = 'wildmulti',
+	MULTIPLIER_TRIGGER = 'multitrigger',
 	SCATTER = 'scatter',
 	ANTICIPATION = 'anticipation',
 	WIN_LINE_1 = 'winline_1',
@@ -85,6 +89,7 @@ export class AudioManager {
 		this.scene.load.audio('click_sw', 'assets/sounds/click_sw.ogg');
 		this.scene.load.audio('reeldrop_ka', 'assets/sounds/SFX/reeldrop_ka.ogg');
 		this.scene.load.audio('turbodrop_ka', 'assets/sounds/SFX/turbodrop_ka.ogg');
+		this.scene.load.audio('nomnom_sw', 'assets/sounds/SFX/nomnom_sw.ogg');
 		this.scene.load.audio('coin_throw_ka', 'assets/sounds/SFX/coin_throw_ka.ogg');
 		this.scene.load.audio('coin_drop_ka', 'assets/sounds/SFX/coin_drop_ka.ogg');
 		
@@ -152,6 +157,18 @@ export class AudioManager {
 			});
 			this.sfxInstances.set(SoundEffectType.TURBO_DROP, turboDropSfx);
 			console.log('[AudioManager] Turbo drop sound effect instance created');
+
+			// Candy explosion transition SFX (SymbolExplosionTransition)
+			try {
+				const candyTransition = this.scene.sound.add('candy_transition_sw', {
+					volume: this.sfxVolume,
+					loop: false
+				});
+				this.sfxInstances.set(SoundEffectType.CANDY_TRANSITION, candyTransition);
+				console.log('[AudioManager] Candy transition SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create candy_transition_sw SFX instance:', e);
+			}
 
 			// Create wheel spin sound effect instance
 			const wheelSpinSfx = this.scene.sound.add('wheelspin_ka', {
@@ -223,13 +240,31 @@ export class AudioManager {
 				console.warn('[AudioManager] Failed to create wildmulti_ka SFX instance:', e);
 			}
 
+			// Create multiplier trigger / bomb SFX instance (bonus-mode multipliers)
+			try {
+				const bombSfx = this.scene.sound.add('bomb_sw', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.MULTIPLIER_TRIGGER, bombSfx);
+				console.log('[AudioManager] Multiplier trigger (bomb_sw) SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create bomb_sw SFX instance:', e);
+			}
+
 			// Create scatter SFX instance
 			try {
-				const scatter = this.scene.sound.add('scatter_ka', { volume: this.sfxVolume, loop: false });
+				const scatter = this.scene.sound.add('scatter_sw', { volume: this.sfxVolume, loop: false });
 				this.sfxInstances.set(SoundEffectType.SCATTER, scatter);
 				console.log('[AudioManager] Scatter SFX instance created');
 			} catch (e) {
-				console.warn('[AudioManager] Failed to create scatter_ka SFX instance:', e);
+				console.warn('[AudioManager] Failed to create scatter_sw SFX instance:', e);
+			}
+
+			// Create scatter win "nom nom" SFX instance
+			try {
+				const scatterNomnom = this.scene.sound.add('nomnom_sw', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.SCATTER_NOMNOM, scatterNomnom);
+				console.log('[AudioManager] Scatter nomnom SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create nomnom_sw SFX instance:', e);
 			}
 
 			// Create anticipation SFX instance (looping)
@@ -748,7 +783,7 @@ export class AudioManager {
 	/**
 	 * Play a sound effect
 	 */
-	playSoundEffect(sfxType: SoundEffectType): void {
+	playSoundEffect(sfxType: SoundEffectType, rate?: number): void {
 		if (this.isMuted) {
 			console.log('[AudioManager] Audio is muted, skipping sound effect');
 			return;
@@ -760,6 +795,18 @@ export class AudioManager {
 		const sfx = this.sfxInstances.get(sfxType);
 		if (sfx) {
 			try {
+				// Apply optional playback rate/timeScale if supported
+				if (typeof rate === 'number' && rate > 0) {
+					try {
+						if ('setRate' in sfx && typeof (sfx as any).setRate === 'function') {
+							(sfx as any).setRate(rate);
+						} else if ('rate' in (sfx as any)) {
+							(sfx as any).rate = rate;
+						}
+					} catch (e) {
+						console.warn('[AudioManager] Failed to apply playback rate to SFX:', e);
+					}
+				}
 				// Ensure looping SFX restarts if needed
 				if (sfxType === SoundEffectType.ANTICIPATION && sfx.isPlaying) {
 					sfx.stop();

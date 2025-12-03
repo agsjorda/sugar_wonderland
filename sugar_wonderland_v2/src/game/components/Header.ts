@@ -85,6 +85,8 @@ export class Header {
 			strokeThickness: 3
 		}).setOrigin(0.5, 0.5).setDepth(602); // Above cloud middle (601) and symbols (600)
 		// Don't add to container - add directly to scene so depth works correctly
+		// Start hidden by default; will be shown only when there is an actual win.
+		this.youWonText.setVisible(false);
 
 		// Line 2: amount value
 		this.amountText = scene.add.text(x, y + 18, '$ 0.00', {
@@ -95,6 +97,8 @@ export class Header {
 			strokeThickness: 3
 		}).setOrigin(0.5, 0.5).setDepth(602); // Above cloud middle (601) and symbols (600)
 		// Don't add to container - add directly to scene so depth works correctly
+		// Start hidden by default; will be shown only when there is an actual win.
+		this.amountText.setVisible(false);
 	}
 
 	resize(scene: Scene): void {

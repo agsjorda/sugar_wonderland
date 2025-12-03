@@ -526,14 +526,12 @@ export class FreeRoundManager {
 
 	/**
 	 * Compute the final total win to display on the completion panel.
-	 * Prefer the accumulated actual wins when available; otherwise fall back
-	 * to the rough estimate based on bet x initialFreeSpins.
+	 * This should always reflect the **actual** accumulated wins from the
+	 * initialization freeround session. If the player had no wins at all,
+	 * this will correctly return 0 instead of an estimated value.
 	 */
 	private getFinalFreeRoundTotalWin(): number {
-		if (this.accumulatedFreeRoundWin > 0) {
-			return this.accumulatedFreeRoundWin;
-		}
-		return this.estimateFreeRoundTotalWin();
+		return this.accumulatedFreeRoundWin;
 	}
 
 	/**

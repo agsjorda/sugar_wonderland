@@ -3330,51 +3330,30 @@ export class SlotController {
 		console.log(`[SlotController] GameData memory address:`, gameData.toString());
 
 		if (gameData.isTurbo) {
-			// Apply turbo speed (4x faster = 0.25x duration)
+			// Apply turbo speed to the UI GameData only.
+			// Scene GameData (used by Symbols) will be synchronized separately via
+			// forceApplyTurboToSceneGameData to avoid double-scaling.
 			const originalWinUp = gameData.winUpDuration;
 			const originalDrop = gameData.dropDuration;
 			const originalDelay = gameData.dropReelsDelay;
 			const originalDuration = gameData.dropReelsDuration;
 			
-			gameData.winUpDuration = gameData.winUpDuration * TurboConfig.TURBO_SPEED_MULTIPLIER;
-			gameData.dropDuration = gameData.dropDuration * TurboConfig.TURBO_SPEED_MULTIPLIER;
-			gameData.dropReelsDelay = gameData.dropReelsDelay * TurboConfig.TURBO_SPEED_MULTIPLIER;
-			gameData.dropReelsDuration = gameData.dropReelsDuration * TurboConfig.TURBO_SPEED_MULTIPLIER;
+			gameData.winUpDuration = gameData.winUpDuration * TurboConfig.TURBO_DURATION_MULTIPLIER;
+			gameData.dropDuration = gameData.dropDuration * TurboConfig.TURBO_DURATION_MULTIPLIER;
+			gameData.dropReelsDelay = gameData.dropReelsDelay * TurboConfig.TURBO_DELAY_MULTIPLIER;
+			gameData.dropReelsDuration = gameData.dropReelsDuration * TurboConfig.TURBO_DURATION_MULTIPLIER;
+			(gameData as any).compressionDelayMultiplier = TurboConfig.TURBO_DELAY_MULTIPLIER;
 			
 			console.log(`[SlotController] Turbo speed applied to winline animations (4x faster):`);
 			console.log(`  winUpDuration: ${originalWinUp} -> ${gameData.winUpDuration}`);
 			console.log(`  dropDuration: ${originalDrop} -> ${gameData.dropDuration}`);
 			console.log(`  dropReelsDelay: ${originalDelay} -> ${gameData.dropReelsDelay}`);
 			console.log(`  dropReelsDuration: ${originalDuration} -> ${gameData.dropReelsDuration}`);
-			
-			// Verify the changes were applied
-			console.log(`[SlotController] Verification - Current GameData values:`);
-			console.log(`  winUpDuration: ${gameData.winUpDuration}`);
-			console.log(`  dropDuration: ${gameData.dropDuration}`);
-			console.log(`  dropReelsDelay: ${gameData.dropReelsDelay}`);
-			console.log(`  dropReelsDuration: ${gameData.dropReelsDuration}`);
-			
-			// Also check if the scene's GameData is the same reference
-			if (this.scene && (this.scene as any).gameData) {
-				const sceneGameData = (this.scene as any).gameData;
-				console.log(`[SlotController] Scene GameData reference:`, sceneGameData);
-				console.log(`[SlotController] Scene GameData memory address:`, sceneGameData.toString());
-				console.log(`[SlotController] Are references the same?`, gameData === sceneGameData);
-				
-				if (gameData !== sceneGameData) {
-					console.warn(`[SlotController] WARNING: Different GameData references! Applying turbo to scene GameData as well.`);
-					// Apply turbo to scene GameData as well
-					sceneGameData.winUpDuration = sceneGameData.winUpDuration * TurboConfig.TURBO_SPEED_MULTIPLIER;
-					sceneGameData.dropDuration = sceneGameData.dropDuration * TurboConfig.TURBO_SPEED_MULTIPLIER;
-					sceneGameData.dropReelsDelay = sceneGameData.dropReelsDelay * TurboConfig.TURBO_SPEED_MULTIPLIER;
-					sceneGameData.dropReelsDuration = sceneGameData.dropReelsDuration * TurboConfig.TURBO_SPEED_MULTIPLIER;
-					console.log(`[SlotController] Turbo also applied to scene GameData`);
-				}
-			}
 		} else {
 			// Reset to normal speed by calling setSpeed with the original delay
 			const originalDelay = 2500; // This should match Data.DELAY_BETWEEN_SPINS
 			setSpeed(gameData, originalDelay);
+			(gameData as any).compressionDelayMultiplier = 1;
 			console.log('[SlotController] Normal speed restored for winline animations');
 		}
 	}
@@ -3760,6 +3739,18 @@ public updateAutoplayButtonState(): void {
 			return;
 		}
 
+		// Start clearing/dropping existing symbols immediately at spin start
+		try {
+			const gameScene: any = this.scene as any;
+			const symbolsComponent = gameScene?.symbols;
+			if (symbolsComponent && typeof symbolsComponent.startPreSpinDrop === 'function') {
+				console.log('[SlotController] Triggering pre-spin symbol drop');
+				symbolsComponent.startPreSpinDrop();
+			}
+		} catch (e) {
+			console.warn('[SlotController] Failed to start pre-spin symbol drop:', e);
+		}
+
 		// Play spin sound effect
 		if ((window as any).audioManager) {
 			(window as any).audioManager.playSoundEffect(SoundEffectType.SPIN);
@@ -3964,6 +3955,19 @@ public updateAutoplayButtonState(): void {
 			this.updateBalanceAmount(newBalance);
 			console.log(`[SlotController] Balance deducted: $${currentBalance.toFixed(2)} -> $${newBalance.toFixed(2)}`);
 			
+			// Trigger pre-spin symbol drop so previous symbols are cleared before
+			// the buy feature spin result applies new symbols.
+			try {
+				const gameScene: any = this.scene as any;
+				const symbolsComponent = gameScene?.symbols;
+				if (symbolsComponent && typeof symbolsComponent.startPreSpinDrop === 'function') {
+					console.log('[SlotController] Triggering pre-spin symbol drop for buy feature spin');
+					symbolsComponent.startPreSpinDrop();
+				}
+			} catch (e) {
+				console.warn('[SlotController] Failed to start pre-spin symbol drop for buy feature spin:', e);
+			}
+
 			// Call doSpin with buy feature parameters
 			console.log('[SlotController] Calling doSpin for buy feature...');
 			const spinData = await this.gameAPI.doSpin(buyFeatureBet, true, false); // isBuyFs: true, isEnhancedBet: false
@@ -4264,6 +4268,19 @@ public updateAutoplayButtonState(): void {
 		gameEventManager.on(GameEventType.FREE_SPIN_AUTOPLAY, async () => {
 			console.log('[SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation');
 			
+			// Drop/clear previous symbols at the start of each free spin in bonus mode,
+			// same as we do for normal spins and buy feature spins.
+			try {
+				const gameScene: any = this.scene as any;
+				const symbolsComponent = gameScene?.symbols;
+				if (symbolsComponent && typeof symbolsComponent.startPreSpinDrop === 'function') {
+					console.log('[SlotController] Triggering pre-spin symbol drop for FREE_SPIN_AUTOPLAY');
+					symbolsComponent.startPreSpinDrop();
+				}
+			} catch (e) {
+				console.warn('[SlotController] Failed to start pre-spin symbol drop for FREE_SPIN_AUTOPLAY:', e);
+			}
+			
 			// Apply turbo mode to game data and winlines (same as normal autoplay)
 			this.forceApplyTurboToSceneGameData();
 			this.applyTurboToWinlineAnimations();
@@ -4554,7 +4571,6 @@ public updateAutoplayButtonState(): void {
 			console.warn('[SlotController] Scene or scene GameData not available');
 			return;
 		}
-
 		const sceneGameData = (this.scene as any).gameData;
 		const gameData = this.getGameData();
 		
@@ -4562,11 +4578,12 @@ public updateAutoplayButtonState(): void {
 			if (gameData.isTurbo) {
 				console.log('[SlotController] Force applying turbo to scene GameData');
 				
-				// Apply turbo speed to scene GameData
-				sceneGameData.winUpDuration = sceneGameData.winUpDuration * TurboConfig.TURBO_SPEED_MULTIPLIER;
-				sceneGameData.dropDuration = sceneGameData.dropDuration * TurboConfig.TURBO_SPEED_MULTIPLIER;
-				sceneGameData.dropReelsDelay = sceneGameData.dropReelsDelay * TurboConfig.TURBO_SPEED_MULTIPLIER;
-				sceneGameData.dropReelsDuration = sceneGameData.dropReelsDuration * TurboConfig.TURBO_SPEED_MULTIPLIER;
+				// Sync scene GameData from UI GameData, then apply turbo multipliers once
+				sceneGameData.winUpDuration = gameData.winUpDuration * TurboConfig.TURBO_DURATION_MULTIPLIER;
+				sceneGameData.dropDuration = gameData.dropDuration * TurboConfig.TURBO_DURATION_MULTIPLIER;
+				sceneGameData.dropReelsDelay = gameData.dropReelsDelay * TurboConfig.TURBO_DELAY_MULTIPLIER;
+				sceneGameData.dropReelsDuration = gameData.dropReelsDuration * TurboConfig.TURBO_DURATION_MULTIPLIER;
+				(sceneGameData as any).compressionDelayMultiplier = TurboConfig.TURBO_DELAY_MULTIPLIER;
 				
 				console.log(`[SlotController] Scene GameData turbo applied:`);
 				console.log(`  winUpDuration: ${sceneGameData.winUpDuration}`);
@@ -4579,6 +4596,7 @@ public updateAutoplayButtonState(): void {
 				// Reset to normal speed by calling setSpeed with the original delay
 				const originalDelay = 2500; // This should match Data.DELAY_BETWEEN_SPINS
 				setSpeed(sceneGameData, originalDelay);
+				(sceneGameData as any).compressionDelayMultiplier = 1;
 				
 				console.log(`[SlotController] Scene GameData reset to normal speed:`);
 				console.log(`  winUpDuration: ${sceneGameData.winUpDuration}`);

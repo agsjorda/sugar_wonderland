@@ -14,7 +14,7 @@ export const MULTIPLIER_SYMBOLS: number[] = [10,11,12,13,14,15,16,17,18,19,20,21
 export const ALL_SYMBOLS: number[] = [...SCATTER_SYMBOL, ...NORMAL_SYMBOLS, ...MULTIPLIER_SYMBOLS];
 
 // Timing Configuration
-export const DELAY_BETWEEN_SPINS: number = 2500;
+export const DELAY_BETWEEN_SPINS: number = 3000;
 // Ratio for time between column starts relative to DELAY_BETWEEN_SPINS
 export const DROP_REEL_START_INTERVAL_RATIO: number = 0.08;
 

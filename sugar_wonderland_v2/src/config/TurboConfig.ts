@@ -20,13 +20,14 @@
 export class TurboConfig {
     // Main turbo speed multiplier (4x faster = 0.25x duration)
     // Change this value to affect ALL turbo-affected functions
-    public static readonly TURBO_SPEED_MULTIPLIER: number = 0.15;
+    // Previously 0.15 (~6.67x faster); raised slightly to 0.25 to soften turbo speed.
+    public static readonly TURBO_SPEED_MULTIPLIER: number = 0.7;
     
     // Turbo delay multiplier for spin timing
-    public static readonly TURBO_DELAY_MULTIPLIER: number = 0.15;
+    public static readonly TURBO_DELAY_MULTIPLIER: number = 0.7;
     
     // Turbo duration multiplier for animations
-    public static readonly TURBO_DURATION_MULTIPLIER: number = 0.15;
+    public static readonly TURBO_DURATION_MULTIPLIER: number = 0.7;
     
     // Winline animation speed multiplier (4x faster = 4.0x speed)
     public static readonly WINLINE_ANIMATION_SPEED_MULTIPLIER: number = 4.0;
@@ -38,7 +39,7 @@ export class TurboConfig {
     
     // Get the delay multiplier specifically
     public static getDelayMultiplier(isTurbo: boolean): number {
-        return isTurbo ? this.TURBO_DELAY_MULTIPLIER : 1.0;
+        return isTurbo ? this.TURBO_DELAY_MULTIPLIER : 0.7;
     }
     
     // Get the duration multiplier specifically

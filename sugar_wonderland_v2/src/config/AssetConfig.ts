@@ -500,11 +500,15 @@ export class AssetConfig {
 				'click_sw': 'assets/sounds/click_sw.ogg',
 				'mainbg_ka': 'assets/sounds/BG/mainbg_sw.ogg',
 				'bonusbg_ka': 'assets/sounds/BG/bonusbg_sw.ogg',
-				'freespinbg_ka': 'assets/sounds/Wins/freespin_ka.ogg',
+				'freespinbg_ka': 'assets/sounds/BG/freespinbg_sw.ogg',
 				'ambience_ka': 'assets/sounds/SFX/ambience_ka.ogg',
 				'spinb_ka': 'assets/sounds/SFX/spinb_ka.ogg',
 				'reeldrop_ka': 'assets/sounds/SFX/reeldrop_sw.ogg',
 				'turbodrop_ka': 'assets/sounds/SFX/turbodrop_sw.ogg',
+				// Candy explosion transition SFX (used by SymbolExplosionTransition)
+				'candy_transition_sw': 'assets/sounds/SFX/candy_transition.ogg',
+				// Scatter win "nom nom" SFX – played when scatter win animation runs
+				'nomnom_sw': 'assets/sounds/SFX/nomnom_sw.ogg',
 				'wheelspin_ka': 'assets/sounds/SFX/wheelspin_ka.ogg',
 				'coin_throw_ka': 'assets/sounds/SFX/coin_throw_ka.ogg',
 				'coin_drop_ka': 'assets/sounds/SFX/coin_drop_ka.ogg',
@@ -512,7 +516,9 @@ export class AssetConfig {
 				'hitwin_ka': 'assets/sounds/SFX/hitwin_ka.ogg',
 				// Wild multi SFX
 				'wildmulti_ka': 'assets/sounds/SFX/wildmulti_ka.ogg',
-				'scatter_ka': 'assets/sounds/SFX/scatter_sw.ogg',
+				// Multiplier trigger / bomb SFX (bonus-mode multipliers)
+				'bomb_sw': 'assets/sounds/SFX/bomb_sw.ogg',
+				'scatter_sw': 'assets/sounds/SFX/scatter_sw.ogg',
 				'anticipation_ka': 'assets/sounds/SFX/anticipation_ka.ogg',
 				// Winline SFX
 				'winline_1_ka': 'assets/sounds/SFX/winline_1_ka.ogg',
