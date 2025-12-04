@@ -104,6 +104,17 @@ export class SlotController {
 		this.setupAutoplayEventListeners();
 	}
 
+	private showOutOfBalancePopup(message?: string): void {
+		const scene = this.scene as Scene | null;
+		if (!scene) return;
+		import('./OutOfBalancePopup').then(module => {
+			const Popup = module.OutOfBalancePopup;
+			const popup = new Popup(scene);
+			if (message) popup.updateMessage(message);
+			popup.show();
+		}).catch(() => {});
+	}
+
 	/**
 	 * Set the symbols component reference
 	 * This allows the SlotController to access free spin data from the Symbols component
@@ -2163,18 +2174,28 @@ export class SlotController {
 				}
 			}
 
-			// If scatter bonus just triggered or bonus mode is active, keep buttons disabled
-			if (gameStateManager.isScatter || gameStateManager.isBonus) {
-				console.log('[SlotController] Scatter/Bonus active - keeping buttons disabled on REELS_STOP');
-				return;
-			}
+		// If scatter bonus just triggered or bonus mode is active, keep buttons disabled
+		if (gameStateManager.isScatter || gameStateManager.isBonus) {
+			console.log('[SlotController] Scatter/Bonus active - keeping buttons disabled on REELS_STOP');
+			return;
+		}
 
-			// Check if free spin autoplay is active - if so, don't re-enable buttons
-			const symbolsComponent = (this.scene as any).symbols;
-			if (symbolsComponent && typeof symbolsComponent.isFreeSpinAutoplayActive === 'function' && symbolsComponent.isFreeSpinAutoplayActive()) {
-				console.log('[SlotController] Free spin autoplay is active - keeping buttons disabled');
-				return;
-			}
+		// If we are in initialization free-round mode, keep autoplay/bet controls
+		// disabled/greyed-out for the duration of the free rounds. Only the spin
+		// button should be re-enabled between spins.
+		const gsmAny: any = gameStateManager as any;
+		if (gsmAny.isInFreeSpinRound === true) {
+			this.enableSpinButton();
+			console.log('[SlotController] Initialization free-round mode active - re-enabled spin only on REELS_STOP');
+			return;
+		}
+
+		// Check if free spin autoplay is active - if so, don't re-enable buttons
+		const symbolsComponent = (this.scene as any).symbols;
+		if (symbolsComponent && typeof symbolsComponent.isFreeSpinAutoplayActive === 'function' && symbolsComponent.isFreeSpinAutoplayActive()) {
+			console.log('[SlotController] Free spin autoplay is active - keeping buttons disabled');
+			return;
+		}
 
 			// Note: autoplaySpinsRemaining is decremented in WIN_STOP handler after win processing
 
@@ -2284,12 +2305,21 @@ export class SlotController {
 			this.hideAutoplaySpinsRemainingText();
 			console.log('[SlotController] Autoplay spin count hidden');
 
-			// Re-enable spin button, autoplay button, bet buttons, and feature button
+		// Re-enable spin button, autoplay button, bet buttons, and feature button
+		// Check if we're in initialization free-round mode
+		const gsmAny: any = gameStateManager as any;
+		if (gsmAny.isInFreeSpinRound === true) {
+			// During initialization free rounds, only re-enable spin button
+			this.enableSpinButton();
+			console.log('[SlotController] AUTO_STOP during initialization free rounds - re-enabled spin only');
+		} else {
+			// Normal case: re-enable all controls
 			this.enableSpinButton();
 			this.enableAutoplayButton();
 			this.enableBetButtons();
 			this.enableFeatureButton();
 			this.enableAmplifyButton();
+		}
 			// Show and resume spin icon after autoplay stops, hide stop icon
 			if (this.spinIcon) {
 				this.spinIcon.setVisible(true);
@@ -3469,6 +3499,27 @@ export class SlotController {
 			return;
 		}
 
+		// Guard: ensure sufficient balance before proceeding
+		try {
+			const currentBalance = this.getBalanceAmount();
+			const currentBet = this.getBaseBetAmount() || 0;
+			const gd = this.getGameData();
+			const totalBetToCharge = gd && gd.isEnhancedBet ? currentBet * 1.25 : currentBet;
+			if (currentBalance < totalBetToCharge) {
+				console.error(`[SlotController] Insufficient balance for spin: $${currentBalance} < $${totalBetToCharge}`);
+				if (this.autoplaySpinsRemaining > 0 || this.gameData?.isAutoPlaying || gameStateManager.isAutoPlaying) {
+					this.stopAutoplay();
+				}
+				this.showOutOfBalancePopup();
+				this.enableSpinButton();
+				this.enableAutoplayButton();
+				this.enableBetButtons();
+				this.enableFeatureButton();
+				this.enableAmplifyButton();
+				return;
+			}
+		} catch {}
+
 		// Play spin sound effect
 		if ((window as any).audioManager) {
 			(window as any).audioManager.playSoundEffect(gameStateManager.isBonus ? SoundEffectType.BONUS_SPIN : SoundEffectType.SPIN);
@@ -3635,15 +3686,15 @@ export class SlotController {
 			// Check if player has enough balance
 			const currentBalance = this.getBalanceAmount();
 			if (currentBalance < calculatedPrice) {
-				console.error(`[SlotController] Insufficient balance: $${currentBalance.toFixed(2)} < $${calculatedPrice.toFixed(2)}`);
-				// Re-enable controls since purchase cannot proceed
-				this.enableSpinButton();
-				this.enableAutoplayButton();
-				this.enableFeatureButton();
-				this.enableBetButtons();
-				this.enableAmplifyButton();
-				// TODO: Show insufficient balance message to user
-				return;
+			console.error(`[SlotController] Insufficient balance: $${currentBalance.toFixed(2)} < $${calculatedPrice.toFixed(2)}`);
+			// Re-enable controls since purchase cannot proceed
+			this.enableSpinButton();
+			this.enableAutoplayButton();
+			this.enableFeatureButton();
+			this.enableBetButtons();
+			this.enableAmplifyButton();
+			this.showOutOfBalancePopup();
+			return;
 			}
 
 			// Deduct the calculated price from balance (frontend only)
@@ -3743,6 +3794,9 @@ export class SlotController {
 
 			// Update the balance display
 			this.updateBalanceAmount(newBalance);
+			if (newBalance <= 0) {
+				this.showOutOfBalancePopup();
+			}
 
 			console.log('[SlotController] ✅ Balance updated from server successfully');
 
@@ -3781,7 +3835,12 @@ export class SlotController {
 				// Allow feature button to be enabled again (now that bonus is off)
 				this.canEnableFeatureButton = true;
 				// Re-enable buy feature only after bonus is fully deactivated
-				this.enableFeatureButton();
+				// Check if we're in initialization free-round mode
+				const gsmAny: any = gameStateManager as any;
+				if (gsmAny.isInFreeSpinRound !== true) {
+					// Only enable feature button if not in initialization free rounds
+					this.enableFeatureButton();
+				}
 			}
 		});
 

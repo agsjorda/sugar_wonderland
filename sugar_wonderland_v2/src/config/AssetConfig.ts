@@ -502,7 +502,7 @@ export class AssetConfig {
 				'bonusbg_ka': 'assets/sounds/BG/bonusbg_sw.ogg',
 				'freespinbg_ka': 'assets/sounds/BG/freespinbg_sw.ogg',
 				'ambience_ka': 'assets/sounds/SFX/ambience_ka.ogg',
-				'spinb_ka': 'assets/sounds/SFX/spinb_ka.ogg',
+				'spinb_ka': 'assets/sounds/SFX/spin_sw.ogg',
 				'reeldrop_ka': 'assets/sounds/SFX/reeldrop_sw.ogg',
 				'turbodrop_ka': 'assets/sounds/SFX/turbodrop_sw.ogg',
 				// Candy explosion transition SFX (used by SymbolExplosionTransition)

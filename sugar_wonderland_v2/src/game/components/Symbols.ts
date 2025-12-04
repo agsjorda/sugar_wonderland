@@ -4343,7 +4343,7 @@ async function applyTumbles(self: Symbols, tumbles: any[]): Promise<void> {
     } catch {}
 
     const currentTumbleIndex = tumbleIndex;
-    await applySingleTumble(self, tumble, () => {
+    await applySingleTumble(self, tumble, currentTumbleIndex, () => {
       // As soon as the first win animation *starts* in this tumble, emit progress with cumulative including this tumble
       try {
         cumulativeWin += tumbleTotal;
@@ -4355,10 +4355,8 @@ async function applyTumbles(self: Symbols, tumbles: any[]): Promise<void> {
       try {
         const am = (window as any)?.audioManager;
         if (am && typeof am.playSymbolWinByTumble === 'function') {
-          // Optionally respect turbo: skip in turbo to match other SFX policy
-          if (!self.scene.gameData.isTurbo) {
-            am.playSymbolWinByTumble(currentTumbleIndex);
-          }
+          console.log(`[Symbols] Calling playSymbolWinByTumble with tumble index: ${currentTumbleIndex}`);
+          am.playSymbolWinByTumble(currentTumbleIndex);
         }
       } catch {}
     });
@@ -4368,7 +4366,7 @@ async function applyTumbles(self: Symbols, tumbles: any[]): Promise<void> {
   } catch {}
 }
 
-async function applySingleTumble(self: Symbols, tumble: any, onFirstWinComplete?: (tumbleTotal: number) => void): Promise<void> {
+async function applySingleTumble(self: Symbols, tumble: any, tumbleIndex: number, onFirstWinComplete?: (tumbleTotal: number) => void): Promise<void> {
   const outs = (tumble?.symbols?.out || []) as Array<{ symbol: number; count: number }>;
   const ins = (tumble?.symbols?.in || []) as number[][]; // per real column (x index)
 
@@ -4634,6 +4632,7 @@ async function applySingleTumble(self: Symbols, tumble: any, onFirstWinComplete?
   function notifyFirstWinIfNeeded() {
     if (!firstWinNotified) {
       firstWinNotified = true;
+      console.log(`[Symbols] notifyFirstWinIfNeeded called for tumble index: ${tumbleIndex} (first win animation started)`);
       try {
         // Compute tumble total similarly here for safety
         let tumbleTotal = 0;
@@ -4650,6 +4649,8 @@ async function applySingleTumble(self: Symbols, tumble: any, onFirstWinComplete?
           onFirstWinComplete(tumbleTotal);
         }
       } catch {}
+    } else {
+      console.log(`[Symbols] notifyFirstWinIfNeeded called again for tumble index: ${tumbleIndex} (already notified, skipping)`);
     }
   }
   for (let col = 0; col < numCols; col++) {
@@ -4688,6 +4689,8 @@ async function applySingleTumble(self: Symbols, tumble: any, onFirstWinComplete?
                     obj.animationState.addListener(listener);
                   }
                   obj.animationState.setAnimation(0, winAnim, false);
+                  // Log the tumble index when win animation starts
+                  console.log(`[Symbols] Playing win animation "${winAnim}" for tumble index: ${tumbleIndex}`);
                   // First win animation just started – notify once so header + SFX sync with visuals
                   notifyFirstWinIfNeeded();
                   // Scale up by 30% after 0.5s
@@ -4968,7 +4971,15 @@ async function applySingleTumble(self: Symbols, tumble: any, onFirstWinComplete?
               const last = tweensArr[tweensArr.length - 1];
               const prevOnComplete = last.onComplete;
               last.onComplete = () => {
-                try { if (prevOnComplete) prevOnComplete(); } catch {}
+                try { 
+                  if (prevOnComplete) prevOnComplete(); 
+                  // Play tumble sound for every symbol dropped after compression in turbo mode
+                  if ((window as any).audioManager) {
+                    (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
+                  }
+                } catch (e) {
+                  console.warn('[Symbols] Error playing reel drop sound in turbo mode:', e);
+                }
                 resolve();
               };
             }
@@ -5078,7 +5089,15 @@ async function applySingleTumble(self: Symbols, tumble: any, onFirstWinComplete?
               const last = tweensArr[tweensArr.length - 1];
               const prevOnComplete = last.onComplete;
               last.onComplete = () => {
-                try { if (prevOnComplete) prevOnComplete(); } catch {}
+                try { 
+                  if (prevOnComplete) prevOnComplete(); 
+                  // Play tumble sound for every symbol dropped after compression in turbo mode
+                  if ((window as any).audioManager) {
+                    (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
+                  }
+                } catch (e) {
+                  console.warn('[Symbols] Error playing reel drop sound in turbo mode:', e);
+                }
                 resolve();
               };
             }

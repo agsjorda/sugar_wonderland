@@ -5,15 +5,15 @@ export class TokenExpiredPopup extends GameObjects.Container {
     private messageText: GameObjects.Text;
     private buttonImage: GameObjects.Image;
     private buttonText: GameObjects.Text;
-    private backgroundColor: number = 0x000000;
-    private backgroundAlpha: number = 0.4;
-    private cornerRadius: number = 20;
-    private buttonOffsetY: number = 130;
-    private buttonScale: number = 0.8;
-    private buttonWidth: number = 364;
-    private buttonHeight: number = 62;
-    private animationDuration: number = 300;
-    private overlay: Phaser.GameObjects.Graphics;
+    private backgroundColor: number = 0x000000; // Black
+    private backgroundAlpha: number = 0.4; // Default opacity (0.6 = 60%)
+    private cornerRadius: number = 20; // Default corner radius
+    private buttonOffsetY: number = 130; // Vertical offset from center
+    private buttonScale: number = 0.8; // Scale factor for the button
+    private buttonWidth: number = 364; // Base width of the button
+    private buttonHeight: number = 62; // Base height of the button
+    private animationDuration: number = 300; // Animation duration in milliseconds
+    private overlay: Phaser.GameObjects.Graphics; // Full-screen overlay
     
     constructor(scene: Scene, x: number = 0, y: number = 0, options: { 
         opacity?: number,
@@ -26,6 +26,7 @@ export class TokenExpiredPopup extends GameObjects.Container {
         super(scene, x, y);
         this.scene = scene;
         
+        // Create overlay first (behind everything else)
         this.overlay = new GameObjects.Graphics(scene);
         this.overlay.fillStyle(options.overlayColor || 0x000000, options.overlayAlpha !== undefined ? 
             Phaser.Math.Clamp(options.overlayAlpha, 0, 1) : 0.35);
@@ -36,8 +37,11 @@ export class TokenExpiredPopup extends GameObjects.Container {
             Phaser.Geom.Rectangle.Contains
         );
         this.overlay.visible = false;
+        
+        // Add overlay to scene (but not to this container yet)
         scene.add.existing(this.overlay);
         
+        // Apply custom options if provided
         if (options.opacity !== undefined) {
             this.backgroundAlpha = Phaser.Math.Clamp(options.opacity, 0, 1);
         }
@@ -51,9 +55,11 @@ export class TokenExpiredPopup extends GameObjects.Container {
             this.buttonScale = Phaser.Math.Clamp(options.buttonScale, 0.1, 2);
         }
         
+        // Create a graphics object for the rounded rectangle background
         this.background = new Phaser.GameObjects.Graphics(scene);
         this.drawBackground();
         
+        // Create message text
         this.messageText = new GameObjects.Text(
             scene,
             0,
@@ -69,11 +75,13 @@ export class TokenExpiredPopup extends GameObjects.Container {
         );
         this.messageText.setOrigin(0.5);
         
+        // Calculate button position and size
         const buttonX = 0;
         const buttonY = this.buttonOffsetY;
         const scaledWidth = this.buttonWidth * this.buttonScale;
         const scaledHeight = this.buttonHeight * this.buttonScale;
         
+        // Create button background using the same image as BuyFeature
         this.buttonImage = new GameObjects.Image(
             scene,
             buttonX,
@@ -84,6 +92,7 @@ export class TokenExpiredPopup extends GameObjects.Container {
         this.buttonImage.setDisplaySize(scaledWidth, scaledHeight);
         this.buttonImage.setScale(this.buttonScale);
         
+        // Button text - matching BuyFeature style
         this.buttonText = new GameObjects.Text(
             scene,
             buttonX,
@@ -98,45 +107,62 @@ export class TokenExpiredPopup extends GameObjects.Container {
         );
         this.buttonText.setOrigin(0.5);
         
+        // Make the button interactive
         this.buttonImage.setInteractive({ useHandCursor: true });
         this.buttonImage.on('pointerdown', () => {
+            // Play sound effect if available
             if ((window as any).audioManager) {
                 (window as any).audioManager.playSoundEffect('button_fx');
             }
             window.location.reload();
         });
         
+        // Add hover effect
         this.buttonImage.on('pointerover', () => {
-            this.buttonImage.setTint(0xcccccc);
+            this.buttonImage.setTint(0xcccccc); // Slight tint on hover
         });
         
         this.buttonImage.on('pointerout', () => {
-            this.buttonImage.clearTint();
+            this.buttonImage.clearTint(); // Clear tint when not hovering
         });
         
+        // Add all elements to container
         this.add([this.background, this.messageText, this.buttonImage, this.buttonText]);
+        
+        // Center the container
         this.setPosition(scene.scale.width / 2, scene.scale.height / 2);
+        
+        // Start hidden
         this.setVisible(false);
+        
+        // Add to scene
         scene.add.existing(this);
     }
     
+    /**
+     * Show the popup with a smooth animation
+     */
     public show(): void {
+        // Show overlay first
         this.overlay.setVisible(true);
-        this.overlay.setDepth(9999);
+        this.overlay.setDepth(9999); // Just below the popup
         
+        // Set initial state for animation
         this.setVisible(true);
-        this.setDepth(10000);
+        this.setDepth(10000); // Ensure it's on top of the overlay
         this.setScale(0.5);
         this.setAlpha(0);
         
+        // Create a fade-in and pop-up effect
         this.scene.tweens.add({
             targets: this,
             scaleX: 1,
             scaleY: 1,
             alpha: 1,
             duration: this.animationDuration,
-            ease: 'Back.Out',
+            ease: 'Back.Out', // Bouncy effect
             onStart: () => {
+                // Play a sound effect if available
                 if ((window as any).audioManager) {
                     (window as any).audioManager.playSoundEffect('popup_open');
                 }
@@ -144,14 +170,18 @@ export class TokenExpiredPopup extends GameObjects.Container {
         });
     }
     
+    /**
+     * Hide the popup with a smooth animation
+     * @param callback - Optional callback when hide animation completes
+     */
     public hide(callback?: () => void): void {
         this.scene.tweens.add({
             targets: this,
             scaleX: 0.5,
             scaleY: 0.5,
             alpha: 0,
-            duration: this.animationDuration * 0.8,
-            ease: 'Back.In',
+            duration: this.animationDuration * 0.8, // Slightly faster than show
+            ease: 'Back.In', // Slight ease in
             onComplete: () => {
                 this.setVisible(false);
                 this.overlay.setVisible(false);
@@ -164,47 +194,82 @@ export class TokenExpiredPopup extends GameObjects.Container {
         this.messageText.setText(message);
     }
     
+    /**
+     * Update the background opacity
+     * @param opacity - Opacity value between 0 (fully transparent) and 1 (fully opaque)
+     */
+    public setBackgroundOpacity(opacity: number): void {
+        this.backgroundAlpha = Phaser.Math.Clamp(opacity, 0, 1);
+        this.drawBackground();
+    }
+    
+    /**
+     * Redraw the background with current settings
+     */
     private drawBackground(): void {
         const width = this.scene.scale.width * 0.8;
         const height = this.scene.scale.height * 0.4;
         
         this.background.clear();
         this.background.fillStyle(this.backgroundColor, this.backgroundAlpha);
+        
+        // Draw rounded rectangle
         this.background.fillRoundedRect(
-            -width / 2,
-            -height / 2,
-            width,
-            height,
-            this.cornerRadius
+            -width / 2,  // x
+            -height / 2, // y
+            width,       // width
+            height,      // height
+            this.cornerRadius // radius
         );
     }
     
+    /**
+     * Update the background color
+     * @param color - Color value (e.g., 0x000000 for black)
+     */
     public setBackgroundColor(color: number): void {
         this.backgroundColor = color;
         this.drawBackground();
     }
     
+    /**
+     * Set the corner radius of the background
+     * @param radius - The radius of the corners in pixels
+     */
     public setCornerRadius(radius: number): void {
         this.cornerRadius = Math.max(0, radius);
         this.drawBackground();
     }
     
+    /**
+     * Set the vertical offset of the button from the center of the popup
+     * @param offsetY - Vertical offset in pixels (positive = down, negative = up)
+     */
     public setButtonOffsetY(offsetY: number): void {
         this.buttonOffsetY = offsetY;
         this.buttonImage.setY(offsetY);
         this.buttonText.setY(offsetY);
     }
     
+    /**
+     * Set the scale of the button
+     * @param scale - Scale factor (0.1 to 2)
+     */
     public setButtonScale(scale: number): void {
         this.buttonScale = Phaser.Math.Clamp(scale, 0.1, 2);
         const scaledWidth = this.buttonWidth * this.buttonScale;
         const scaledHeight = this.buttonHeight * this.buttonScale;
         this.buttonImage.setDisplaySize(scaledWidth, scaledHeight);
         this.buttonImage.setScale(this.buttonScale);
+        
+        // Adjust font size based on scale
         const fontSize = Math.max(16, 24 * this.buttonScale);
         this.buttonText.setFontSize(`${fontSize}px`);
     }
     
+    /**
+     * Clean up the popup and its overlay
+     */
     public destroy(fromScene?: boolean): void {
         if (this.overlay) {
             this.overlay.destroy();

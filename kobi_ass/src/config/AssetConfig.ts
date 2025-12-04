@@ -216,11 +216,20 @@ export class AssetConfig {
 				'long_button': `assets/controller/${screenMode}/${quality}/long_button.png`,
 				'maximize': `assets/controller/${screenMode}/${quality}/maximize.png`,
 				'minimize': `assets/controller/${screenMode}/${quality}/minimize.png`,
+				'spin_now_button': `assets/controller/${screenMode}/${quality}/spin_now_button.png`,
+				'freeround_bg': `assets/controller/${screenMode}/${quality}/freeround_bg.png`,
 			},
 			spine: {
 				'spin_button_animation': {
 					atlas: `assets/controller/${screenMode}/${quality}/spin_button_anim/spin_button_anim.atlas`,
 					json: `assets/controller/${screenMode}/${quality}/spin_button_anim/spin_button_anim.json`
+				},
+				// Free-round specific spin button animation (portrait/high only asset)
+				// Used instead of the normal spin_button_animation while in initialization
+				// free-round spins mode.
+				'fr_spin_button_animation': {
+					atlas: `assets/controller/portrait/high/Button_Bonus_Buttom/Button_Bonus_VFX.atlas`,
+					json: `assets/controller/portrait/high/Button_Bonus_Buttom/Button_Bonus_VFX.json`
 				},
 				'button_animation_idle': {
 					atlas: `assets/controller/${screenMode}/${quality}/button_animation_idle/button_animation_idle.atlas`,

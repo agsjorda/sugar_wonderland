@@ -2709,18 +2709,28 @@ setBuyFeatureBetAmount(amount: number): void {
 				}
 			}
 			
-			// If scatter/bonus mode is active, keep buttons disabled
-			if (gameStateManager.isScatter || gameStateManager.isBonus) {
-				console.log('[SlotController] Bonus active - keeping buttons disabled on REELS_STOP');
-				return;
-			}
-			
-			// Check if free spin autoplay is active - if so, don't re-enable buttons
-			const symbolsComponent = (this.scene as any).symbols;
-			if (symbolsComponent && typeof symbolsComponent.isFreeSpinAutoplayActive === 'function' && symbolsComponent.isFreeSpinAutoplayActive()) {
-				console.log('[SlotController] Free spin autoplay is active - keeping buttons disabled');
-				return;
-			}
+		// If scatter/bonus mode is active, keep buttons disabled
+		if (gameStateManager.isScatter || gameStateManager.isBonus) {
+			console.log('[SlotController] Bonus active - keeping buttons disabled on REELS_STOP');
+			return;
+		}
+
+		// If we are in initialization free-round mode, keep autoplay/bet controls
+		// disabled/greyed-out for the duration of the free rounds. Only the spin
+		// button should be re-enabled between spins.
+		const gsmAny: any = gameStateManager as any;
+		if (gsmAny.isInFreeSpinRound === true) {
+			this.enableSpinButton();
+			console.log('[SlotController] Initialization free-round mode active - re-enabled spin only on REELS_STOP');
+			return;
+		}
+		
+		// Check if free spin autoplay is active - if so, don't re-enable buttons
+		const symbolsComponent = (this.scene as any).symbols;
+		if (symbolsComponent && typeof symbolsComponent.isFreeSpinAutoplayActive === 'function' && symbolsComponent.isFreeSpinAutoplayActive()) {
+			console.log('[SlotController] Free spin autoplay is active - keeping buttons disabled');
+			return;
+		}
 			
 			// Note: autoplaySpinsRemaining is now decremented before each autoplay spin in performAutoplaySpin
 			// Note: AUTO_STOP is emitted when spins reach 0
@@ -2828,11 +2838,20 @@ setBuyFeatureBetAmount(amount: number): void {
 				this.disableFeatureButton();
 				this.disableAmplifyButton();
 			} else {
-				this.enableSpinButton();
-				this.enableAutoplayButton();
-				this.enableBetButtons();
-				this.enableFeatureButton();
-				this.enableAmplifyButton();
+				// Check if we're in initialization free-round mode
+				const gsmAny: any = gameStateManager as any;
+				if (gsmAny.isInFreeSpinRound === true) {
+					// During initialization free rounds, only re-enable spin button
+					this.enableSpinButton();
+					console.log('[SlotController] AUTO_STOP during initialization free rounds - re-enabled spin only');
+				} else {
+					// Normal case: re-enable all controls
+					this.enableSpinButton();
+					this.enableAutoplayButton();
+					this.enableBetButtons();
+					this.enableFeatureButton();
+					this.enableAmplifyButton();
+				}
 			}
 			// Update spin icons depending on whether controls are enabled
 			if (this.autoplayStopIcon) {
@@ -4426,7 +4445,9 @@ public updateAutoplayButtonState(): void {
 			const buyFeatureBet = this.buyFeature.getCurrentBetAmount();
 			const calculatedPrice = buyFeatureBet * 100; // Same multiplier as BuyFeature uses
 			
-			// Do NOT sync main BET with Buy Feature selection to keep them independent
+			// Update main BET to match the buy feature selection
+			this.updateBetAmount(buyFeatureBet);
+			console.log(`[SlotController] Main bet updated to: $${buyFeatureBet.toFixed(2)}`);
 			
 			console.log(`[SlotController] Buy feature bet: $${buyFeatureBet.toFixed(2)}, calculated price: $${calculatedPrice.toFixed(2)}`);
 			
@@ -4558,17 +4579,26 @@ public updateAutoplayButtonState(): void {
 					console.log('[SlotController] Bonus mode ended - clearing pending free spins data');
 					this.pendingFreeSpinsData = null;
 				}
-				// Allow feature button to be enabled again (now that bonus is off)
-				this.canEnableFeatureButton = true;
-				// Re-enable buy feature only after bonus is fully deactivated
-				this.enableFeatureButton();
-				// Ensure all primary controls are interactive again when returning to base game
-				try {
+			// Allow feature button to be enabled again (now that bonus is off)
+			this.canEnableFeatureButton = true;
+			// Re-enable buy feature only after bonus is fully deactivated
+			this.enableFeatureButton();
+			// Ensure all primary controls are interactive again when returning to base game
+			try {
+				// Check if we're in initialization free-round mode
+				const gsmAny: any = gameStateManager as any;
+				if (gsmAny.isInFreeSpinRound === true) {
+					// During initialization free rounds, only re-enable spin button
+					this.enableSpinButton();
+					console.log('[SlotController] Bonus ended during initialization free rounds - re-enabled spin only');
+				} else {
+					// Normal case: re-enable all controls
 					this.enableSpinButton();
 					this.enableAutoplayButton();
 					this.enableBetButtons();
 					this.enableAmplifyButton();
 					this.enableTurboButton();
+				}
 					// Restore turbo visual state to current setting
 					const gd = this.getGameData();
 					if (gd) {
@@ -4653,12 +4683,21 @@ public updateAutoplayButtonState(): void {
 				gameStateManager.isScatter = false;
 				if (!gameStateManager.isBonus) {
 					this.showPrimaryController();
-					this.enableSpinButton();
-					this.enableAutoplayButton();
-					this.enableBetButtons();
-					this.enableAmplifyButton();
-					this.enableTurboButton();
-					this.enableFeatureButton();
+					// Check if we're in initialization free-round mode
+					const gsmAny: any = gameStateManager as any;
+					if (gsmAny.isInFreeSpinRound === true) {
+						// During initialization free rounds, only re-enable spin button
+						this.enableSpinButton();
+						console.log('[SlotController] Scatter completed during initialization free rounds - re-enabled spin only');
+					} else {
+						// Normal case: re-enable all controls
+						this.enableSpinButton();
+						this.enableAutoplayButton();
+						this.enableBetButtons();
+						this.enableAmplifyButton();
+						this.enableTurboButton();
+						this.enableFeatureButton();
+					}
 					this.updateAutoplayButtonState && this.updateAutoplayButtonState();
 					// Re-apply turbo settings after scatter flow in case they were affected by animations
 					this.forceApplyTurboToSceneGameData();

@@ -111,6 +111,17 @@ export class SlotController {
 		this.setupAutoplayEventListeners();
 	}
 
+	private showOutOfBalancePopup(message?: string): void {
+		const scene = this.scene as Scene | null;
+		if (!scene) return;
+		import('./OutOfBalancePopup').then(module => {
+			const Popup = module.OutOfBalancePopup;
+			const popup = new Popup(scene);
+			if (message) popup.updateMessage(message);
+			popup.show();
+		}).catch(() => {});
+	}
+
 	/**
 	 * Expose the primary controllers container so external UI (e.g., FreeRoundManager)
 	 * can align itself within the same coordinate space as the spin button.
@@ -3739,6 +3750,27 @@ public updateAutoplayButtonState(): void {
 			return;
 		}
 
+		// Guard: ensure sufficient balance before proceeding
+		try {
+			const currentBalance = this.getBalanceAmount();
+			const currentBet = this.getBaseBetAmount() || 0;
+			const gd = this.getGameData();
+			const totalBetToCharge = gd && gd.isEnhancedBet ? currentBet * 1.25 : currentBet;
+			if (currentBalance < totalBetToCharge) {
+				console.error(`[SlotController] Insufficient balance for spin: $${currentBalance} < $${totalBetToCharge}`);
+				if (this.autoplaySpinsRemaining > 0 || this.gameData?.isAutoPlaying || gameStateManager.isAutoPlaying) {
+					this.stopAutoplay();
+				}
+				this.showOutOfBalancePopup();
+				this.enableSpinButton();
+				this.enableAutoplayButton();
+				this.enableBetButtons();
+				this.enableFeatureButton();
+				this.enableAmplifyButton();
+				return;
+			}
+		} catch {}
+
 		// Start clearing/dropping existing symbols immediately at spin start
 		try {
 			const gameScene: any = this.scene as any;
@@ -3938,16 +3970,16 @@ public updateAutoplayButtonState(): void {
 			// Check if player has enough balance
 			const currentBalance = this.getBalanceAmount();
 			if (currentBalance < calculatedPrice) {
-				console.error(`[SlotController] Insufficient balance: $${currentBalance.toFixed(2)} < $${calculatedPrice.toFixed(2)}`);
-				// Re-enable controls since purchase cannot proceed
-				this.enableSpinButton();
-				this.enableAutoplayButton();
-				this.enableFeatureButton();
-				this.enableBetButtons();
-				this.enableAmplifyButton();
-				this.enableBetBackgroundInteraction('buy feature insufficient balance');
-				// TODO: Show insufficient balance message to user
-				return;
+			console.error(`[SlotController] Insufficient balance: $${currentBalance.toFixed(2)} < $${calculatedPrice.toFixed(2)}`);
+			// Re-enable controls since purchase cannot proceed
+			this.enableSpinButton();
+			this.enableAutoplayButton();
+			this.enableFeatureButton();
+			this.enableBetButtons();
+			this.enableAmplifyButton();
+			this.enableBetBackgroundInteraction('buy feature insufficient balance');
+			this.showOutOfBalancePopup();
+			return;
 			}
 			
 			// Deduct the calculated price from balance (frontend only)
@@ -4061,6 +4093,9 @@ public updateAutoplayButtonState(): void {
 			
 			// Update the balance display
 			this.updateBalanceAmount(newBalance);
+			if (newBalance <= 0) {
+				this.showOutOfBalancePopup();
+			}
 			
 			console.log('[SlotController] ✅ Balance updated from server successfully');
 			

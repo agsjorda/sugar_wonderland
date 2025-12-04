@@ -186,7 +186,7 @@ export class Preloader extends Scene
 			const winText = this.add.text(
 				this.scale.width * 0.5,
 				this.scale.height * 0.5 + winTextY,
-				'Win up to 21,000x',
+				'Win up to 6,750x',
 				{
 					fontFamily: 'Poppins-Bold, Poppins-Regular, Arial, sans-serif',
 					fontSize: '35px',

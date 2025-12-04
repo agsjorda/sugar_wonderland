@@ -342,6 +342,7 @@ export class AudioManager {
 		if (clamped === 2) pick = SoundEffectType.SYMBOL_WIN_2;
 		else if (clamped === 3) pick = SoundEffectType.SYMBOL_WIN_3;
 		else if (clamped >= 4) pick = SoundEffectType.SYMBOL_WIN_1;
+		console.log(`[AudioManager] playSymbolWinByTumble: tumbleIndex=${tumbleIndex}, clamped=${clamped}, playing=${pick}`);
 		this.playSoundEffect(pick);
 	}
 

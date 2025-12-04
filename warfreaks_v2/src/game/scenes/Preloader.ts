@@ -40,6 +40,8 @@ export class Preloader extends Scene
 
 	private studioLoadingScreen?: StudioLoadingScreen;
 	private preloaderLogoSpine?: SpineGameObject;
+	private assetsLoaded: boolean = false;
+	private backendInitialized: boolean = false;
 
 	constructor ()
 	{
@@ -115,8 +117,7 @@ export class Preloader extends Scene
 				text2Color: '#FFFFFF'
 		});
 		this.studioLoadingScreen.show();
-		// Schedule fade-out after minimum 3s, then reveal preloader UI if needed
-		this.studioLoadingScreen.bedazzle(3000, 500);
+		// Note: bedazzle will be called after assets + backend are ready
 
 		// Delay revealing Preloader's own progress UI until studio fade completes
 		this.events.once('studio-fade-complete', () => {
@@ -157,6 +158,11 @@ export class Preloader extends Scene
 
 		// Set up progress event listener
 		this.load.on('progress', (progress: number) => {
+			// Update studio loading screen progress bar
+			if (this.studioLoadingScreen) {
+				this.studioLoadingScreen.updateProgress(progress);
+			}
+
 			// Update in-scene progress bar
 			if (this.progressBarFill && this.progressBarX !== undefined && this.progressBarY !== undefined && this.progressBarWidth !== undefined && this.progressBarHeight !== undefined) {
 				const innerX = this.progressBarX - this.progressBarWidth * 0.5 + this.progressBarPadding;
@@ -179,6 +185,13 @@ export class Preloader extends Scene
 
 			// Keep emitting for React overlay listeners if any
 			EventBus.emit('progress', progress);
+		});
+
+		// Set up complete event listener to mark assets as loaded
+		this.load.on('complete', () => {
+			console.log('[Preloader] All assets loaded');
+			this.assetsLoaded = true;
+			this.checkReadyToTransition();
 		});
 		
 		EventBus.emit('current-scene-ready', this);	
@@ -230,6 +243,10 @@ export class Preloader extends Scene
         } catch (error) {
             console.error('[Preloader] Failed to initialize GameAPI or slot session:', error);
         }
+
+        // Mark backend as initialized
+        this.backendInitialized = true;
+        this.checkReadyToTransition();
 
         // Create fullscreen toggle now that assets are loaded (using shared manager)
         const assetScale = this.networkManager.getAssetScale();
@@ -446,6 +463,22 @@ export class Preloader extends Scene
 			this.preloaderLogoSpine = spine;
 		} catch (e) {
 			console.warn('[Preloader] Failed to create preloader logo spine:', e);
+		}
+	}
+
+	private checkReadyToTransition()
+	{
+		// Only proceed if both assets and backend are ready
+		if (!this.assetsLoaded || !this.backendInitialized) {
+			console.log(`[Preloader] Waiting for completion... Assets: ${this.assetsLoaded}, Backend: ${this.backendInitialized}`);
+			return;
+		}
+
+		console.log('[Preloader] All assets and backend ready! Transitioning studio loading screen...');
+
+		// Trigger studio loading screen fade-out with minimum 3s visible time
+		if (this.studioLoadingScreen) {
+			this.studioLoadingScreen.bedazzle(3000, 500);
 		}
 	}
 }

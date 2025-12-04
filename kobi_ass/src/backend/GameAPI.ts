@@ -41,12 +41,41 @@ const getApiBaseUrl = (): string => {
 
 };
 
+/**
+ * Free spin round data structure returned by backend initialization endpoint
+ */
+export interface FreeSpinRoundItem {
+    bet: string;
+    totalFreeSpin: number;
+    usedFreeSpin: number;
+    remainingFreeSpin: number;
+}
+
+/**
+ * Slot initialization data returned by the /api/v1/slots/initialize endpoint
+ */
+export interface SlotInitializeData {
+    hasFreeSpinRound: boolean;
+    freeSpinRound?: FreeSpinRoundItem[];
+}
+
+/**
+ * Response wrapper for slot initialization (some backends wrap data in a 'data' field)
+ */
+export interface SlotInitializeResponse {
+    data: SlotInitializeData;
+}
+
 export class GameAPI {  
     gameData: GameData;
     exitURL: string = '';
     private currentSpinData: SpinData | null = null;
     private isFirstSpin: boolean = false; // Flag to track first spin
     private currentFreeSpinIndex: number = 0; // Track current free spin item index
+    // Initialization data handling (mirrors Hustle Horse pattern)
+    private initializationData: SlotInitializeData | null = null; // Cached initialization response
+    private remainingInitFreeSpins: number = 0; // Free spin rounds from initialization still available
+    private initFreeSpinBet: number | null = null; // Bet size associated with initialization free spins
     
     constructor(gameData: GameData) {
         this.gameData = gameData;
@@ -150,6 +179,82 @@ export class GameAPI {
         }
     }
 
+    /**
+     * Call the backend game initialization endpoint.
+     * This should be called once at the very start of the game after the token is available.
+     * The response is cached so it can be reused by the Game scene (for FreeRoundManager, etc.).
+     */
+    public async initializeSlotSession(): Promise<SlotInitializeData> {
+        const token =
+            localStorage.getItem('token') ||
+            sessionStorage.getItem('token') ||
+            '';
+
+        if (!token) {
+            throw new Error('No game token available. Please initialize the game first.');
+        }
+
+        const apiUrl = `${getApiBaseUrl()}/api/v1/slots/initialize`;
+
+        try {
+            console.log('[GameAPI] Calling slots initialize endpoint...', apiUrl);
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+            }
+
+            const raw = await response.json();
+            const payload: SlotInitializeData = (raw && raw.data) ? raw.data : raw;
+
+             // // TEST OVERRIDE: force free spin round for local testing with new format.
+            // // Remove or comment this block out for production.
+            // payload.hasFreeSpinRound = true;
+            // payload.freeSpinRound = [
+            //     {
+            //         bet: '10.00',
+            //         totalFreeSpin: 2,
+            //         usedFreeSpin: 0,
+            //         remainingFreeSpin: 2
+            //     }
+            // ];
+
+            // Cache the initialization data for later retrieval
+            this.initializationData = payload;
+            
+            // Initialize remaining free spin rounds from init data (if provided)
+            if (payload.hasFreeSpinRound && payload.freeSpinRound && payload.freeSpinRound.length > 0) {
+                const firstRound = payload.freeSpinRound[0];
+                this.remainingInitFreeSpins = firstRound.remainingFreeSpin;
+                this.initFreeSpinBet = parseFloat(firstRound.bet);
+                console.log('[GameAPI] Initialization data indicates free spin round:', {
+                    remaining: this.remainingInitFreeSpins,
+                    bet: this.initFreeSpinBet
+                });
+            } else {
+                this.remainingInitFreeSpins = 0;
+                this.initFreeSpinBet = null;
+                console.log('[GameAPI] No free spin round in initialization data');
+            }
+
+            return payload;
+        } catch (error) {
+            console.error('[GameAPI] Failed to initialize slot session:', error);
+            // Return default initialization data on error
+            return {
+                hasFreeSpinRound: false
+            };
+        }
+    }
+
     public async gameLauncher(): Promise<void> {
         try {
             localStorage.removeItem('token');
@@ -246,6 +351,16 @@ export class GameAPI {
         }
         
         try {
+            // Determine whether this spin should be treated as a free spin round from initialization.
+            // The actual remaining‑spins counter is managed by FreeRoundManager (UI) and/or the backend.
+            // Here we ONLY tag the request with isFs=true when the global "init free round" mode is active.
+            let isFs = false;
+            const gsmAny: any = gameStateManager as any;
+            if (!isBuyFs && !isEnhancedBet && gsmAny?.isInFreeSpinRound === true && !gameStateManager.isBonus) {
+                isFs = true;
+                console.log('[GameAPI] Marking spin as initialization free spin (isFs=true)');
+            }
+
             const response = await fetch(`${getApiBaseUrl()}/api/v1/slots/bet`, {
                 method: 'POST',
                 headers: {
@@ -255,9 +370,11 @@ export class GameAPI {
                 body: JSON.stringify({
                     action: 'spin',
                     bet: bet.toString(),
-                    line: 1, // Try different line count
-                    isBuyFs: isBuyFs, // Force false
-                    isEnhancedBet: isEnhancedBet // Use the parameter value
+                    line: 1,
+                    isBuyFs: isBuyFs,
+                    isEnhancedBet: isEnhancedBet,
+                    // Mark whether this spin is using a free spin round granted at initialization
+                    isFs: isFs
                 })
             });
 
@@ -318,15 +435,22 @@ export class GameAPI {
         }
     }
 
+    /**
+     * Show token expired popup to the user
+     */
     private showTokenExpiredPopup(): void {
         try {
+            // Find the game scene using phaserGame (as set in main.ts line 140)
             const gameScene = (window as any).phaserGame?.scene?.getScene('Game');
             if (gameScene) {
+                // Import dynamically to avoid circular dependency
                 import('../game/components/TokenExpiredPopup').then(module => {
                     const TokenExpiredPopup = module.TokenExpiredPopup;
                     const popup = new TokenExpiredPopup(gameScene as any);
                     popup.show();
-                }).catch(() => {});
+                }).catch(() => {
+                    console.warn('Failed to load TokenExpiredPopup module');
+                });
             } else {
                 console.error('Game scene not found. Cannot show token expired popup.');
             }
@@ -335,9 +459,18 @@ export class GameAPI {
         }
     }
 
+    /**
+     * Check if an error is related to token expiration
+     */
     private isTokenExpiredError(error: any): boolean {
-        const msg = (error?.message || '').toLowerCase();
-        return msg.includes('token') || msg.includes('expired') || msg.includes('unauthorized') || msg.includes('401') || msg.includes('400');
+        const errorMessage = error?.message?.toLowerCase() || '';
+        return (
+            errorMessage.includes('token') || 
+            errorMessage.includes('expired') || 
+            errorMessage.includes('unauthorized') ||
+            errorMessage.includes('401') ||
+            errorMessage.includes('400')
+        );
     }
 
     /**
@@ -497,5 +630,40 @@ export class GameAPI {
         
         const data = await response.json();
         return data;
+    }
+
+    /**
+     * Get the cached initialization data from the backend initialize endpoint.
+     * Returns null if initializeSlotSession() has not been called yet.
+     */
+    public getInitializationData(): SlotInitializeData | null {
+        return this.initializationData;
+    }
+
+    /**
+     * Get the remaining initialization free spins count.
+     * Returns 0 if no initialization free spins are available.
+     */
+    public getRemainingInitFreeSpins(): number {
+        return this.remainingInitFreeSpins;
+    }
+
+    /**
+     * Get the bet size associated with initialization free spins.
+     * Returns null if no initialization free spins are available.
+     */
+    public getInitFreeSpinBet(): number | null {
+        return this.initFreeSpinBet;
+    }
+
+    /**
+     * Decrement the remaining initialization free spins count.
+     * Should be called after each initialization free spin is consumed.
+     */
+    public decrementInitFreeSpins(): void {
+        if (this.remainingInitFreeSpins > 0) {
+            this.remainingInitFreeSpins--;
+            console.log('[GameAPI] Decremented initialization free spins, remaining:', this.remainingInitFreeSpins);
+        }
     }
 }   

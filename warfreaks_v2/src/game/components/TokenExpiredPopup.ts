@@ -204,10 +204,6 @@ export class TokenExpiredPopup extends GameObjects.Container {
     }
     
     /**
-     * Update the background color
-     * @param color - Color value (e.g., 0x000000 for black)
-     */
-    /**
      * Redraw the background with current settings
      */
     private drawBackground(): void {
@@ -249,10 +245,6 @@ export class TokenExpiredPopup extends GameObjects.Container {
      * Set the vertical offset of the button from the center of the popup
      * @param offsetY - Vertical offset in pixels (positive = down, negative = up)
      */
-    /**
-     * Set the vertical offset of the button from the center of the popup
-     * @param offsetY - Vertical offset in pixels (positive = down, negative = up)
-     */
     public setButtonOffsetY(offsetY: number): void {
         this.buttonOffsetY = offsetY;
         this.buttonImage.setY(offsetY);
@@ -285,3 +277,4 @@ export class TokenExpiredPopup extends GameObjects.Container {
         super.destroy(fromScene);
     }
 }
+

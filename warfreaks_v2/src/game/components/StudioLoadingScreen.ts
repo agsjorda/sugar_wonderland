@@ -391,35 +391,30 @@ export class StudioLoadingScreen {
             this.progressBarFill.fillRoundedRect(innerX, innerY, 0, innerHeight, innerHeight * 0.5);
             this.container.add(this.progressBarFill);
 
-            // Time-driven progress fill over 3 seconds (independent of loader progress)
-            const counter = { p: 0 } as any;
-            this.scene.tweens.add({
-                targets: counter,
-                p: 1,
-                duration: 3000,
-                ease: 'Linear',
-                onUpdate: () => {
-                    if (this.progressBarFill && this.progressBarX !== undefined && this.progressBarY !== undefined && this.progressBarWidth !== undefined && this.progressBarHeight !== undefined) {
-                        // Use the stored bar coordinates
-                        const fillX = this.progressBarX - this.progressBarWidth * 0.5 + this.progressBarPadding;
-                        const fillY = this.progressBarY - this.progressBarHeight * 0.5 + this.progressBarPadding;
-                        const fillWidth = this.progressBarWidth - this.progressBarPadding * 2;
-                        const fillHeight = this.progressBarHeight - this.progressBarPadding * 2;
-                        const progress = Math.max(0, Math.min(1, counter.p));
-                        this.progressBarFill.clear();
-                        this.progressBarFill.fillStyle(0x37DB6E, 1);
-                        this.progressBarFill.fillRoundedRect(
-                            fillX,
-                            fillY,
-                            Math.max(0.0001, fillWidth * progress),
-                            fillHeight,
-                            fillHeight * 0.5
-                        );
-                    }
-                }
-            });
+            // Initial progress bar fill (will be updated by updateProgress method)
+            this.updateProgress(0);
         } catch (e) {
             console.warn('[StudioLoadingScreen] Failed to display spine:', e);
+        }
+    }
+
+    public updateProgress(progress: number): void {
+        if (this.progressBarFill && this.progressBarX !== undefined && this.progressBarY !== undefined && this.progressBarWidth !== undefined && this.progressBarHeight !== undefined) {
+            // Use the stored bar coordinates
+            const fillX = this.progressBarX - this.progressBarWidth * 0.5 + this.progressBarPadding;
+            const fillY = this.progressBarY - this.progressBarHeight * 0.5 + this.progressBarPadding;
+            const fillWidth = this.progressBarWidth - this.progressBarPadding * 2;
+            const fillHeight = this.progressBarHeight - this.progressBarPadding * 2;
+            const clampedProgress = Math.max(0, Math.min(1, progress));
+            this.progressBarFill.clear();
+            this.progressBarFill.fillStyle(0x37DB6E, 1);
+            this.progressBarFill.fillRoundedRect(
+                fillX,
+                fillY,
+                Math.max(0.0001, fillWidth * clampedProgress),
+                fillHeight,
+                fillHeight * 0.5
+            );
         }
     }
 
