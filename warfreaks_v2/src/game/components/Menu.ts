@@ -1,8 +1,9 @@
-import { Scene, GameObjects, Tweens } from 'phaser';
+import { Scene, GameObjects } from 'phaser';
 import { Geom } from 'phaser';
 import { GameData } from '../components/GameData';
 import { AudioManager, SoundEffectType } from '../../managers/AudioManager';
 import { GameAPI } from '../../backend/GameAPI';
+import { HelpScreen } from './MenuTabs/HelpScreen';
 
 interface ButtonBase {
     isButton: boolean;
@@ -16,6 +17,7 @@ interface GameScene extends Scene {
     gameData: GameData;
     audioManager: AudioManager;
     gameAPI: GameAPI;
+    getCurrentBetAmount?: () => number;
 }
 
 export class Menu {
@@ -30,8 +32,9 @@ export class Menu {
     private scene: GameScene;
     public settingsOnly: boolean = false;
 
-    private topPadding = 20;
     private padding = 20;
+    // Top padding for the whole menu panel so the in‑game clock remains visible
+    private menuTopPadding: number = 20;
     private contentWidth = 1200;
     private viewWidth = 1329;
     private yPosition = 0;
@@ -47,6 +50,9 @@ export class Menu {
     private historyContent: GameObjects.Container;
     private settingsContent: GameObjects.Container;
     private activeTabIndex: number = 0;
+
+    // Help screen
+    private helpScreen?: HelpScreen;
 
     // History pagination state
     private historyCurrentPage: number = 1;
@@ -164,7 +170,7 @@ export class Menu {
         bg.on('pointerup', () => {});
         menuContainer.add(bg);
 
-        // Create menu panel - full screen
+        // Create menu panel - full screen background; top padding only affects tabs/content
         const panelWidth = this.width;
         const panelHeight = this.height;
         const panelX = 0;
@@ -186,7 +192,6 @@ export class Menu {
         // Create tabs with different widths
         const tabHeight = 61;
         const smallTabScale = 0.5; // X tab will be half the width of normal tabs
-        const tabsTopPadding = this.topPadding; // Space above tabs for the clock display
 
         // Determine which tabs to show
         const baseIcons: string[] = this.settingsOnly
@@ -218,8 +223,8 @@ export class Menu {
         const tabContainers: ButtonContainer[] = [];
 
         tabConfigs.forEach((tabConfig, index) => {
-            // Position each tab container with a top padding so the clock has space above
-            const tabContainer = scene.add.container(tabConfig.x, tabsTopPadding) as ButtonContainer;
+            // Position tabs lower on screen to leave room for the clock at the top
+            const tabContainer = scene.add.container(tabConfig.x, this.menuTopPadding) as ButtonContainer;
             
             // Tab background
             const tabBg = scene.add.graphics();
@@ -309,15 +314,20 @@ export class Menu {
         this.switchTab(scene, tabContainers, 0, tabConfigs);
 
         // Create content area with mask to prevent overlap with tabs
-        const contentAreaY = tabsTopPadding + tabHeight + 20; // Keep 20px gap below tabs
-        const contentAreaHeight = panelHeight - tabHeight - 40 - tabsTopPadding;
-        const contentArea = scene.add.container(20, contentAreaY);
-        contentArea.setSize(panelWidth - 40, contentAreaHeight);
+        // Position is offset by menuTopPadding so tab content sits below the clock area
+        const contentArea = scene.add.container(20, this.menuTopPadding + tabHeight + 20);
+        contentArea.setSize(
+            panelWidth - 40,
+       panelHeight - this.menuTopPadding - tabHeight - 40
+        );
         
-        // Create mask for content area to prevent overlap with tabs (start just below tabs)
+        // Create mask for content area to prevent overlap with tabs
         const contentMask = scene.add.graphics();
         contentMask.fillStyle(0xffffff);
-        contentMask.fillRect(0, tabsTopPadding + tabHeight, panelWidth, panelHeight - (tabsTopPadding + tabHeight));
+        // Mask starts just under the tabs, including the top menu padding
+        const maskTop = this.menuTopPadding + (tabHeight - 1);
+        const maskHeight = panelHeight - maskTop;
+        contentMask.fillRect(0, maskTop, panelWidth, maskHeight);
         const geometryMask = contentMask.createGeometryMask();
         contentArea.setMask(geometryMask);
         contentMask.setVisible(false); // Hide the mask graphics
@@ -351,7 +361,24 @@ export class Menu {
         this.contentArea.add(this.settingsContent);
         
         // Initialize content for each tab
-        this.setupScrollableRulesContent(scene);
+        // Help / Rules content is delegated to HelpScreen
+        const resolveBetAmount = scene.getCurrentBetAmount?.bind(scene) ?? (() => 1);
+        this.helpScreen = new HelpScreen(
+            scene,
+            this.contentArea,
+            this.rulesContent,
+            {
+                titleStyle: this.titleStyle,
+                header1Style: this.header1Style,
+                header2Style: this.header2Style,
+                content1Style: this.content1Style,
+                contentHeader1Style: this.contentHeader1Style,
+                textStyle: this.textStyle,
+            },
+            () => this.isVisible,
+            resolveBetAmount
+        );
+        this.helpScreen.build();
         this.historyCurrentPage = 1;
         this.historyPageLimit = 11;
         this.showHistoryContent(scene, this.historyCurrentPage, this.historyPageLimit);
@@ -501,18 +528,12 @@ export class Menu {
             loader.destroy();
             this.historyIsLoading = false;
         }
-        console.log('History API Response:', result);
+        console.log(result);
 
-        // Update pagination state - check multiple possible metadata formats
-        this.historyCurrentPage = result?.meta?.page ?? result?.page ?? result?.meta?.currentPage ?? page;
-        this.historyTotalPages = result?.meta?.pageCount ?? result?.totalPages ?? result?.meta?.totalPages ?? result?.meta?.total ?? 1;
+        // Update pagination state
+        this.historyCurrentPage = result?.meta?.page ?? page;
+        this.historyTotalPages = result?.meta?.pageCount ?? 1;
         this.historyPageLimit = limit;
-        
-        console.log('Pagination State:', {
-            currentPage: this.historyCurrentPage,
-            totalPages: this.historyTotalPages,
-            limit: this.historyPageLimit
-        });
         
         // Display headers centered per column (only once)
         const columnCenters = this.getHistoryColumnCenters(scene);
@@ -540,10 +561,10 @@ export class Menu {
         let contentY = 100;
         const rowsContainer = this.historyRowsContainer as GameObjects.Container;
         result.data?.forEach((v?:any)=>{
-            spinDate = this.formatISOToDMYHM(v.createdAt);
+            spinDate = this.formatISOToDMYHM(v.created_at);
             currency = v.currency == ''?'usd':v.currency;
-            bet = v.bet;
-            win = v.win;
+            bet = v.total_bet;
+            win = v.total_win;
 
             contentY += 30;
             // Create row centered per column
@@ -1032,10 +1053,7 @@ export class Menu {
 
     public showMenu(scene: GameScene): void {        
         this.settingsOnly = false;
-        // Ensure only one instance exists by destroying any previous menu
-        if (this.menuContainer) {
-            this.destroyMenu(scene);
-        }
+
         const container = this.createMenu(scene);
 
         container.setVisible(true);
@@ -1078,19 +1096,7 @@ export class Menu {
         this.isDraggingSFX = false;
     }
 
-    private destroyMenu(scene: GameScene): void {
-        // Hide and cleanup listeners first
-        this.hideMenu(scene);
-        // Destroy existing container to free resources
-        if (this.menuContainer) {
-            this.menuContainer.destroy(true);
-            this.menuContainer = undefined;
-        }
-        this.panel = undefined as any;
-    }
-
-
-
+    
     private addContent(scene: GameScene, _text: string, _type: string, _wordWrap: boolean = false, _wordWrapWidth: number = 0): void {
         if (_type === 'title') {
             const content = scene.add.text((this.textHorizontalPadding ?? this.padding / 2), this.yPosition, _text, this.titleStyle as Phaser.Types.GameObjects.Text.TextStyle);

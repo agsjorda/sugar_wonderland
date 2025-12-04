@@ -273,6 +273,9 @@ export class AssetConfig {
 		const prefix = this.getAssetPrefix();
 		// Build images map
 		const images: { [key: string]: string } = {
+			'helpscreen_0': `${prefix}/help_screen/helpscreen_0.webp`,
+			'helpscreen_1': `${prefix}/help_screen/helpscreen_1.webp`,
+			'helpscreen_2': `${prefix}/help_screen/helpscreen_2.webp`,
 			// HowToPlay images
 			'howToPlay1': `${prefix}/help_screen/HowToPlay1.png`,
 			'howToPlay1Mobile': `${prefix}/help_screen/HowToPlay1Mobile.png`,

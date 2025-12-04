@@ -1495,6 +1495,22 @@ export class Game extends Scene {
 		console.log('- showAutoplayOptions(count, bet, balance?) - Show Autoplay Options panel');
 	}
 
+	public getCurrentBetAmount(): number {
+		if (this.slotController) {
+			const betText = this.slotController.getBetAmountText?.();
+			const parsedBet = betText ? parseFloat(betText) : Number.NaN;
+			if (!Number.isNaN(parsedBet) && parsedBet > 0) {
+				return parsedBet;
+			}
+
+			const baseBet = this.slotController.getBaseBetAmount?.();
+			if (typeof baseBet === 'number' && baseBet > 0) {
+				return baseBet;
+			}
+		}
+		return 1;
+	}
+
 	changeScene() {
 		// Scene change logic if needed
 	}

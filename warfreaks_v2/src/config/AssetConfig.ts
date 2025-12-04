@@ -361,6 +361,9 @@ export class AssetConfig {
 		
 		return {
 			images: {
+				'helpscreen_0': `${prefix}/help_screen/helpscreen_0.webp`,
+				'helpscreen_1': `${prefix}/help_screen/helpscreen_1.webp`,
+				'helpscreen_2': `${prefix}/help_screen/helpscreen_2.webp`,
 				// HowToPlay images
 				'howToPlay1': `${prefix}/help_screen/HowToPlay1.webp	`,
 				'howToPlay1Mobile': `${prefix}/help_screen/HowToPlay1Mobile.webp`,

@@ -3,6 +3,7 @@ import { Geom } from 'phaser';
 import { GameData } from '../components/GameData';
 import { AudioManager, SoundEffectType } from '../../managers/AudioManager';
 import { GameAPI } from '../../backend/GameAPI';
+import { HelpScreen } from './MenuTabs/HelpScreen';
 
 // Adjustable configuration driving the entire menu layout and visuals
 interface MenuOptions {
@@ -101,6 +102,7 @@ interface GameScene extends Scene {
     gameData: GameData;
     audioManager: AudioManager;
     gameAPI: GameAPI;
+    getCurrentBetAmount?: () => number;
 }
 
 export class Menu {
@@ -116,6 +118,8 @@ export class Menu {
     public settingsOnly: boolean = false;
 
     private padding = 20;
+    // Top padding for the whole menu panel so the in‑game clock remains visible
+    private menuTopPadding: number = 20;
     private contentWidth = 1200;
     private viewWidth = 1329;
     private yPosition = 0;
@@ -137,6 +141,9 @@ export class Menu {
     private historyContent!: GameObjects.Container;
     private settingsContent!: GameObjects.Container;
     private activeTabIndex: number = 0;
+
+    // Help screen
+    private helpScreen?: HelpScreen;
 
     // History pagination state
     private historyCurrentPage: number = 1;
@@ -280,7 +287,8 @@ export class Menu {
         const tabContainers: ButtonContainer[] = [];
 
         tabConfigs.forEach((tabConfig, index) => {
-            const tabContainer = scene.add.container(tabConfig.x, 0) as ButtonContainer;
+            // Position tabs lower on screen to leave room for the clock at the top
+            const tabContainer = scene.add.container(tabConfig.x, this.menuTopPadding) as ButtonContainer;
             
             // Tab background
             const tabBg = scene.add.graphics();
@@ -358,7 +366,7 @@ export class Menu {
 
             // Tab click handler
             tabContainer.on('pointerup', () => {
-                scene.audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+                scene.audioManager.playSoundEffect(SoundEffectType.MENU_CLICK);
                 this.switchTab(scene, tabContainers, index, tabConfigs);
             });
 
@@ -370,13 +378,20 @@ export class Menu {
         this.switchTab(scene, tabContainers, 0, tabConfigs);
 
         // Create content area with mask to prevent overlap with tabs
-        const contentArea = scene.add.container(20, tabHeight + 20);
-        contentArea.setSize(panelWidth - 40, panelHeight - tabHeight - 40);
+        // Position is offset by menuTopPadding so tab content sits below the clock area
+        const contentArea = scene.add.container(20, this.menuTopPadding + tabHeight + 20);
+        contentArea.setSize(
+            panelWidth - 40,
+       panelHeight - this.menuTopPadding - tabHeight - 40
+        );
         
         // Create mask for content area to prevent overlap with tabs
         const contentMask = scene.add.graphics();
         contentMask.fillStyle(0xffffff);
-        contentMask.fillRect(0, 60, panelWidth, panelHeight);
+        // Mask starts just under the tabs, including the top menu padding
+        const maskTop = this.menuTopPadding + (tabHeight - 1);
+        const maskHeight = panelHeight - maskTop;
+        contentMask.fillRect(0, maskTop, panelWidth, maskHeight);
         const geometryMask = contentMask.createGeometryMask();
         contentArea.setMask(geometryMask);
         contentMask.setVisible(false); // Hide the mask graphics
@@ -410,7 +425,24 @@ export class Menu {
         this.contentArea.add(this.settingsContent);
         
         // Initialize content for each tab
-        this.setupScrollableRulesContent(scene);
+        // Help / Rules content is delegated to HelpScreen
+        const resolveBetAmount = scene.getCurrentBetAmount?.bind(scene) ?? (() => 1);
+        this.helpScreen = new HelpScreen(
+            scene,
+            this.contentArea,
+            this.rulesContent,
+            {
+                titleStyle: this.titleStyle,
+                header1Style: this.header1Style,
+                header2Style: this.header2Style,
+                content1Style: this.content1Style,
+                contentHeader1Style: this.contentHeader1Style,
+                textStyle: this.textStyle,
+            },
+            () => this.isVisible,
+            resolveBetAmount
+        );
+        this.helpScreen.build();
         this.historyCurrentPage = 1;
         this.historyPageLimit = 11;
         this.showHistoryContent(scene, this.historyCurrentPage, this.historyPageLimit);
@@ -425,31 +457,6 @@ export class Menu {
         this.rulesContent.setVisible(false);
         this.historyContent.setVisible(false);
         this.settingsContent.setVisible(false);
-    }
-
-    private setupScrollableRulesContent(scene: GameScene): void {
-        // Create scroll view container
-        this.scrollView = scene.add.container(0, 0);
-        this.contentContainer = scene.add.container(0, 0);
-        this.scrollView.add(this.contentContainer);
-        
-        // Create mask for scrolling
-        const maskGraphics = scene.add.graphics();
-        maskGraphics.fillStyle(0xffffff);
-        maskGraphics.fillRect(0, 0, this.contentArea.width, this.contentArea.height);
-        this.mask = maskGraphics.createGeometryMask();
-        this.scrollView.setMask(this.mask);
-        // Make the mask graphics invisible (it's only used for the mask, not for display)
-        maskGraphics.setVisible(false);
-        
-        // Create the rules content
-        this.createHelpScreenContent(scene, this.rulesContent);
-        
-        // Add scroll view to rules content
-        this.rulesContent.add(this.scrollView);
-        
-        // Enable scrolling
-        this.enableScrolling(scene);
     }
 
     private switchTab(scene: GameScene, tabContainers: ButtonContainer[], activeIndex: number, tabConfigs: any[]): void {
@@ -724,7 +731,7 @@ export class Menu {
                 btn.setInteractive({ useHandCursor: true });
                 btn.on('pointerup', () => {
                     if (this.historyIsLoading) { return; }
-                    scene.audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+                    scene.audioManager.playSoundEffect(SoundEffectType.MENU_CLICK);
                     // Disable all pagination buttons during load
                     contentArea.iterate((child: Phaser.GameObjects.GameObject) => {
                         const img = child as Phaser.GameObjects.Image;
@@ -852,7 +859,7 @@ export class Menu {
         const musicToggleArea = scene.add.zone(toggleX, startY + 70 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
         musicToggleArea.setInteractive();
         musicToggleArea.on('pointerdown', () => {
-            scene.audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+            scene.audioManager.playSoundEffect(SoundEffectType.MENU_CLICK);
             musicOn = !musicOn;
             scene.audioManager.setVolume(musicOn ? 1 : 0);
             drawToggle(musicToggleBg, musicToggleCircle, toggleX, startY + 70, musicOn);
@@ -878,7 +885,7 @@ export class Menu {
         const sfxToggleArea = scene.add.zone(toggleX, startY + 170 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
         sfxToggleArea.setInteractive();
         sfxToggleArea.on('pointerdown', () => {
-            scene.audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+            scene.audioManager.playSoundEffect(SoundEffectType.MENU_CLICK);
             sfxOn = !sfxOn;
             scene.audioManager.setSfxVolume(sfxOn ? 1 : 0);
             drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 170, sfxOn);
@@ -899,7 +906,7 @@ export class Menu {
         const skipToggleArea = scene.add.zone(toggleX, skipLabelY + 2 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
         skipToggleArea.setInteractive();
         skipToggleArea.on('pointerdown', () => {
-            scene.audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+            scene.audioManager.playSoundEffect(SoundEffectType.MENU_CLICK);
             skipOn = !skipOn;
             drawToggle(skipToggleBg, skipToggleCircle, toggleX, skipLabelY + 2, skipOn);
         });
