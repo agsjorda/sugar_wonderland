@@ -1501,7 +1501,7 @@ export class SlotController {
 		this.balanceAmountText = scene.add.text(
 			balanceX + balanceValueOffset,
 			balanceY + 8,
-			'200,000.00',
+			'0',
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color

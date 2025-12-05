@@ -244,20 +244,20 @@ export class GameAPI {
             // Force initialization data to always report 2 free spin rounds.
             // Remove or comment out this block for production.
             // ------------------------------------------------------------------
-            try {
-                console.log('[GameAPI] TEMP OVERRIDE: Forcing initialization free spin round to 2 spins');
-                payload.hasFreeSpinRound = true;
-                payload.freeSpinRound = [
-                    {
-                        bet: '10.00',
-                        totalFreeSpin: 5,
-                        usedFreeSpin: 0,
-                        remainingFreeSpin: 5
-                    }
-                ];
-            } catch (overrideError) {
-                console.warn('[GameAPI] TEMP OVERRIDE failed to apply:', overrideError);
-            }
+            // try {
+            //     console.log('[GameAPI] TEMP OVERRIDE: Forcing initialization free spin round to 2 spins');
+            //     payload.hasFreeSpinRound = true;
+            //     payload.freeSpinRound = [
+            //         {
+            //             bet: '10.00',
+            //             totalFreeSpin: 5,
+            //             usedFreeSpin: 0,
+            //             remainingFreeSpin: 5
+            //         }
+            //     ];
+            // } catch (overrideError) {
+            //     console.warn('[GameAPI] TEMP OVERRIDE failed to apply:', overrideError);
+            // }
 
             // Cache the initialization data for later retrieval
             this.initializationData = payload;
