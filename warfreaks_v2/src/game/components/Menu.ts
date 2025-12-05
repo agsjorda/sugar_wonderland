@@ -528,12 +528,18 @@ export class Menu {
             loader.destroy();
             this.historyIsLoading = false;
         }
-        console.log(result);
+        console.log('History API Response:', result);
 
-        // Update pagination state
-        this.historyCurrentPage = result?.meta?.page ?? page;
-        this.historyTotalPages = result?.meta?.pageCount ?? 1;
+        // Update pagination state - check multiple possible metadata formats
+        this.historyCurrentPage = result?.meta?.page ?? result?.page ?? result?.meta?.currentPage ?? page;
+        this.historyTotalPages = result?.meta?.pageCount ?? result?.totalPages ?? result?.meta?.totalPages ?? result?.meta?.total ?? 1;
         this.historyPageLimit = limit;
+        
+        console.log('Pagination State:', {
+            currentPage: this.historyCurrentPage,
+            totalPages: this.historyTotalPages,
+            limit: this.historyPageLimit
+        });
         
         // Display headers centered per column (only once)
         const columnCenters = this.getHistoryColumnCenters(scene);
@@ -561,10 +567,10 @@ export class Menu {
         let contentY = 100;
         const rowsContainer = this.historyRowsContainer as GameObjects.Container;
         result.data?.forEach((v?:any)=>{
-            spinDate = this.formatISOToDMYHM(v.created_at);
+            spinDate = this.formatISOToDMYHM(v.createdAt);
             currency = v.currency == ''?'usd':v.currency;
-            bet = v.total_bet;
-            win = v.total_win;
+            bet = v.bet;
+            win = v.win;
 
             contentY += 30;
             // Create row centered per column

@@ -672,6 +672,7 @@ export class SlotController {
 	public enableControlsAfterFreeRounds(): void {
 		console.log('[SlotController] Enabling controls after initialization free rounds');
 
+		this.enableSpinButton();
 		this.enableBetButtons();
 		this.enableFeatureButton();
 
@@ -4264,13 +4265,19 @@ public updateAutoplayButtonState(): void {
 				const currentBet = this.getBaseBetAmount() || 10;
 				const gameData = this.getGameData();
 				const isEnhancedBet = gameData ? gameData.isEnhancedBet : false;
-				spinData = await this.gameAPI.doSpin(currentBet, false, isEnhancedBet);
+				
+				// Check if this is an initialization free spin
+				const isInitFreeRound = (gameStateManager as any)?.isInFreeSpinRound === true;
+				spinData = await this.gameAPI.doSpin(currentBet, false, isEnhancedBet, isInitFreeRound);
 				console.log('[SlotController] Spin data:', spinData);
 			}
 
 			// Display comprehensive spin data information
 			if (!spinData) {
-				console.error('[SlotController] No spin data available after spin attempt');
+				console.log('[SlotController] No spin data received - free spins may have ended, stopping spin');
+				// Re-enable the spin button and exit early
+				gameStateManager.isReelSpinning = false;
+				this.enableSpinButton();
 				return;
 			}
 			console.log('[SlotController] 🎰 ===== SPIN DATA RECEIVED =====');

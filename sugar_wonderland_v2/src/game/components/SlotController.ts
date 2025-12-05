@@ -12,6 +12,7 @@ import { BuyFeature } from './BuyFeature';
 import { Symbols } from './Symbols';
 import { SoundEffectType } from '../../managers/AudioManager';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
+import { LoadingSpinner } from './LoadingSpinner';
 
 export class SlotController {
 	private controllerContainer: Phaser.GameObjects.Container;
@@ -65,6 +66,9 @@ export class SlotController {
 	// Guard to ensure we decrement autoplay counter once per spin at REELS_START
 	private hasDecrementedAutoplayForCurrentSpin: boolean = false;
 	
+	// Loading spinner for when API requests take > 2 seconds (after symbols clear)
+	private loadingSpinner: LoadingSpinner | null = null;
+	
 	// When true, prevent the free spin display from being shown (e.g., after congrats)
 	private freeSpinDisplaySuppressed: boolean = false;
 	
@@ -109,6 +113,45 @@ export class SlotController {
 		
 		// Listen for autoplay state changes
 		this.setupAutoplayEventListeners();
+	}
+
+	/**
+	 * Initialize the loading spinner
+	 * Should be called after the scene and symbols are set up
+	 */
+	private initializeLoadingSpinner(): void {
+		if (!this.scene) {
+			console.warn('[SlotController] Cannot initialize spinner - scene not set');
+			return;
+		}
+
+		// Get the center position of the symbols grid
+		const centerX = this.scene.scale.width * 0.5 - 5;
+		const centerY = this.scene.scale.height * 0.445;
+
+		this.loadingSpinner = new LoadingSpinner(this.scene, centerX, centerY);
+		console.log('[SlotController] Loading spinner initialized');
+	}
+
+	/**
+	 * Start the spinner timer (shows spinner after 2 seconds if still loading)
+	 * Delayed to allow previous symbols to clear before showing
+	 */
+	private startSpinnerTimer(): void {
+		if (!this.loadingSpinner) {
+			return;
+		}
+		this.loadingSpinner.startDelayedShow();
+	}
+
+	/**
+	 * Hide the spinner (call when data is received)
+	 */
+	private hideSpinner(): void {
+		if (!this.loadingSpinner) {
+			return;
+		}
+		this.loadingSpinner.hide();
 	}
 
 	private showOutOfBalancePopup(message?: string): void {
@@ -208,6 +251,7 @@ export class SlotController {
 	public enableControlsAfterFreeRounds(): void {
 		console.log('[SlotController] Enabling controls after free rounds');
 
+		this.enableSpinButton();
 		this.enableBetButtons();
 		this.enableFeatureButton();
 
@@ -306,6 +350,14 @@ export class SlotController {
 	public setSymbols(symbols: Symbols): void {
 		this.symbols = symbols;
 		console.log('[SlotController] Symbols component reference set');
+		
+		// Update loading spinner position at center of symbols grid
+		if (this.loadingSpinner && this.scene) {
+			const centerX = this.scene.scale.width * 0.5 - 5;
+			const centerY = this.scene.scale.height * 0.445; // Same as symbols center
+			this.loadingSpinner.updatePosition(centerX, centerY);
+			console.log('[SlotController] Loading spinner position updated to symbols center');
+		}
 	}
 
 	/**
@@ -329,6 +381,11 @@ export class SlotController {
 		
 		// Store scene reference for event listening
 		this.scene = scene;
+		
+		// Initialize loading spinner at center of symbols grid
+		const centerX = scene.scale.width * 0.5 - 5;
+		const centerY = scene.scale.height * 0.445;
+		this.loadingSpinner = new LoadingSpinner(scene, centerX, centerY);
 		
 		// Get GameData from the scene
 		if (scene.scene.key === 'Game') {
@@ -3801,10 +3858,16 @@ public updateAutoplayButtonState(): void {
 		try {
 			let spinData: SpinData;
 
+			// Start spinner timer - show spinner if fetch takes longer than 2 seconds (after symbols clear)
+			this.startSpinnerTimer();
+
 			// Check if we're in bonus mode and use free spin simulation
 			if (gameStateManager.isBonus) {
 				console.log('[SlotController] In bonus mode - using free spin simulation...');
 				spinData = await this.gameAPI.simulateFreeSpin();
+				
+				// Hide spinner immediately after receiving data
+				this.hideSpinner();
 				
 				// Update free spin display directly from spinData.freeSpin.items[].spinsLeft
 				const serverSpinsLeft = this.computeDisplaySpinsLeft(spinData);
@@ -3843,8 +3906,24 @@ public updateAutoplayButtonState(): void {
 				const currentBet = this.getBaseBetAmount() || 10;
 				const gameData = this.getGameData();
 				const isEnhancedBet = gameData ? gameData.isEnhancedBet : false;
-				spinData = await this.gameAPI.doSpin(currentBet, false, isEnhancedBet);
+				
+				// Check if this is an initialization free spin
+				const isInitFreeRound = inInitFreeRoundContext;
+				spinData = await this.gameAPI.doSpin(currentBet, false, isEnhancedBet, isInitFreeRound);
+				
+				// Hide spinner immediately after receiving data
+				this.hideSpinner();
+				
 				console.log('[SlotController] Spin data:', spinData);
+				
+				// If spinData is null, it means the free spins have ended (422 error handled gracefully)
+				if (!spinData) {
+					console.log('[SlotController] No spin data received - free spins have ended, creating dummy spin with initial symbols');
+					
+					// Create a dummy SpinData with initial symbols so reels drop naturally
+					spinData = this.createDummySpinDataWithInitialSymbols(currentBet);
+					console.log('[SlotController] Created dummy spin data with initial symbols:', spinData);
+				}
 			}
 
 			// Display comprehensive spin data information
@@ -4830,5 +4909,54 @@ public updateAutoplayButtonState(): void {
 			const assetScale = this.networkManager.getAssetScale();
 			this.createTurboButtonAnimation(this.scene, assetScale);
 		}
+	}
+
+	/**
+	 * Create a dummy SpinData with initial symbols (same as game start)
+	 * Used when 422 error occurs to allow reels to drop naturally
+	 */
+	private createDummySpinDataWithInitialSymbols(bet: number): any {
+		console.log('[SlotController] Creating dummy spin data with initial symbols');
+		
+		// Initial symbols from Symbols.ts createInitialSymbols() - row-major format
+		const initialRowMajor = [
+			[0, 1, 3, 1, 0, 2],
+			[1, 5, 2, 5, 2, 4],
+			[2, 5, 5, 1, 5, 3],
+			[3, 4, 1, 2, 4, 1],
+			[4, 2, 0, 3, 1, 5],
+		];
+		
+		// Convert to column-major format [col][row] for SpinData
+		const rowCount = initialRowMajor.length;      // 5
+		const colCount = initialRowMajor[0].length;   // 6
+		const columnMajor: number[][] = [];
+		
+		for (let col = 0; col < colCount; col++) {
+			const column: number[] = [];
+			for (let row = 0; row < rowCount; row++) {
+				column.push(initialRowMajor[row][col]);
+			}
+			columnMajor.push(column);
+		}
+		
+		// Create dummy SpinData with no wins
+		const dummySpinData = {
+			playerId: 'dummy',
+			bet: bet.toString(),
+			slot: {
+				area: columnMajor,
+				paylines: [],
+				tumbles: [],
+				freespin: {
+					count: 0,
+					totalWin: 0,
+					items: []
+				}
+			}
+		};
+		
+		console.log('[SlotController] Dummy spin data created with area:', columnMajor);
+		return dummySpinData;
 	}
 }

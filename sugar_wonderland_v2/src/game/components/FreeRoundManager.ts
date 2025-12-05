@@ -270,6 +270,19 @@ export class FreeRoundManager {
 			this.setFreeSpins(remaining);
 		});
 
+		// Listen for fsCount updates from backend (when isFs: true is posted)
+		// This will update the remaining free spins display with the value from the server
+		gameEventManager.on(GameEventType.FREEROUND_COUNT_UPDATE, (data: any) => {
+			const fsCount = typeof data === 'number' ? data : (data?.fsCount ?? data);
+			if (typeof fsCount === 'number') {
+				console.log('[FreeRoundManager] Received FREEROUND_COUNT_UPDATE from backend:', fsCount);
+				this.remainingFreeSpins = fsCount;
+				this.setFreeSpins(fsCount);
+			} else {
+				console.warn('[FreeRoundManager] Invalid fsCount received:', data);
+			}
+		});
+
 		// Track wins during initialization freeround autoplay so the completion panel
 		// can show the actual accumulated total win.
 		this.setupFreeRoundWinTracking();
@@ -612,13 +625,20 @@ export class FreeRoundManager {
 	 * For manual initialization free rounds (no autoplay), decrement the remaining
 	 * free spin count once per spin start while we are in the dedicated
 	 * free-round context.
+	 * 
+	 * NOTE: Manual decrement is now DISABLED. The backend provides the fsCount
+	 * in the response (when isFs: true), and we listen for FREEROUND_COUNT_UPDATE
+	 * event to update the display instead.
 	 */
 	private setupManualFreeRoundSpinConsumption(): void {
-		// Decrement when reels start spinning for a new free round; by this time
-		// the backend response has been received and Symbols are about to animate.
+		// DISABLED: Backend now provides fsCount in response, so no manual decrement needed
+		// The FREEROUND_COUNT_UPDATE event handler (set up in create()) will update
+		// the remaining free spins display with the value from the server.
+		console.log('[FreeRoundManager] Manual spin consumption disabled - using backend fsCount instead');
+		
+		// Legacy code commented out:
+		/*
 		gameEventManager.on(GameEventType.REELS_START, () => {
-			// Only consume spins while a free-round session started from this
-			// manager is actively being tracked.
 			if (!this.trackingFreeRoundAutoplay) {
 				return;
 			}
@@ -627,12 +647,10 @@ export class FreeRoundManager {
 				return;
 			}
 
-			// Guard against bonus-mode free spins; those are handled elsewhere.
 			if (gameStateManager.isBonus) {
 				return;
 			}
 
-			// Require that we are explicitly in the initialization free-spin round.
 			const gsmAny: any = gameStateManager as any;
 			if (gsmAny.isInFreeSpinRound !== true) {
 				return;
@@ -645,6 +663,7 @@ export class FreeRoundManager {
 			this.remainingFreeSpins -= 1;
 			this.setFreeSpins(this.remainingFreeSpins);
 		});
+		*/
 	}
 
 	/**

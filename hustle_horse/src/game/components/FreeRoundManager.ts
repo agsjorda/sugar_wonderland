@@ -159,6 +159,19 @@ export class FreeRoundManager {
     this.setupFreeRoundWinTracking();
     this.setupManualFreeRoundSpinConsumption();
 
+    // Listen for fsCount updates from backend (when isFs: true is posted)
+    // This will update the remaining free spins display with the value from the server
+    gameEventManager.on(GameEventType.FREEROUND_COUNT_UPDATE, (data: any) => {
+      const fsCount = typeof data === 'number' ? data : (data?.fsCount ?? data);
+      if (typeof fsCount === 'number') {
+        console.log('[FreeRoundManager] Received FREEROUND_COUNT_UPDATE from backend:', fsCount);
+        this.remainingFreeSpins = fsCount;
+        this.setFreeSpins(fsCount);
+      } else {
+        console.warn('[FreeRoundManager] Invalid fsCount received:', data);
+      }
+    });
+
     const shouldUseFreeSpin =
       !!this.initializationData &&
       this.initializationData.hasFreeSpinRound &&
@@ -409,7 +422,23 @@ export class FreeRoundManager {
   /**
    * For manual initialization free rounds, decrement the remaining count once per spin start.
    */
+  /**
+   * For manual initialization free rounds (no autoplay), decrement the remaining
+   * free spin count once per spin start while we are in the dedicated
+   * free-round context.
+   * 
+   * NOTE: Manual decrement is now DISABLED. The backend provides the fsCount
+   * in the response (when isFs: true), and we listen for FREEROUND_COUNT_UPDATE
+   * event to update the display instead.
+   */
   private setupManualFreeRoundSpinConsumption(): void {
+    // DISABLED: Backend now provides fsCount in response, so no manual decrement needed
+    // The FREEROUND_COUNT_UPDATE event handler (set up in create()) will update
+    // the remaining free spins display with the value from the server.
+    console.log('[FreeRoundManager] Manual spin consumption disabled - using backend fsCount instead');
+    
+    // Legacy code commented out:
+    /*
     gameEventManager.on(GameEventType.REELS_START, () => {
       if (!this.trackingFreeRoundSession) {
         return;
@@ -433,6 +462,7 @@ export class FreeRoundManager {
       this.remainingFreeSpins -= 1;
       this.setFreeSpins(this.remainingFreeSpins);
     });
+    */
   }
 
   private calculateTotalWinFromTumbles(tumbles: any[]): number {

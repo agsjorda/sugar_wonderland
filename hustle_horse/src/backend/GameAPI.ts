@@ -74,6 +74,22 @@ export interface SlotInitializeResponse {
     data: SlotInitializeData;
 }
 
+/**
+ * History item interface representing a single game history entry
+ */
+export interface HistoryItem {
+    id: number;
+    roundId: string;
+    type: 'free_spin' | 'normal';
+    gameId: string;
+    gameName: string;
+    currency: string;
+    bet: string;
+    win: string;
+    jackpotWin: string;
+    createdAt: string;
+}
+
 export class GameAPI {  
     gameData: GameData;
     exitURL: string = '';
@@ -228,20 +244,20 @@ export class GameAPI {
             // Force initialization data to always report 2 free spin rounds.
             // Remove or comment out this block for production.
             // ------------------------------------------------------------------
-            // try {
-            //     console.log('[GameAPI] TEMP OVERRIDE: Forcing initialization free spin round to 2 spins');
-            //     payload.hasFreeSpinRound = true;
-            //     payload.freeSpinRound = [
-            //         {
-            //             bet: '10.00',
-            //             totalFreeSpin: 5,
-            //             usedFreeSpin: 0,
-            //             remainingFreeSpin: 5
-            //         }
-            //     ];
-            // } catch (overrideError) {
-            //     console.warn('[GameAPI] TEMP OVERRIDE failed to apply:', overrideError);
-            // }
+            try {
+                console.log('[GameAPI] TEMP OVERRIDE: Forcing initialization free spin round to 2 spins');
+                payload.hasFreeSpinRound = true;
+                payload.freeSpinRound = [
+                    {
+                        bet: '10.00',
+                        totalFreeSpin: 5,
+                        usedFreeSpin: 0,
+                        remainingFreeSpin: 5
+                    }
+                ];
+            } catch (overrideError) {
+                console.warn('[GameAPI] TEMP OVERRIDE failed to apply:', overrideError);
+            }
 
             // Cache the initialization data for later retrieval
             this.initializationData = payload;
@@ -454,7 +470,7 @@ export class GameAPI {
         );
     }
 
-    public async doSpin(bet: number, isBuyFs: boolean, isEnhancedBet: boolean): Promise<SpinData> {
+    public async doSpin(bet: number, isBuyFs: boolean, isEnhancedBet: boolean, isFs: boolean = false): Promise<SpinData> {
         const token = localStorage.getItem('token');
         if (!token) {
             this.showTokenExpiredPopup();
@@ -465,7 +481,7 @@ export class GameAPI {
             // Determine whether this spin should be treated as a free spin round from initialization.
             // The actual remaining‑spins counter is managed by FreeRoundManager (UI) and/or the backend.
             // Here we ONLY tag the request with isFs=true when the global "init free round" mode is active.
-            let isFs = false;
+            // Override isFs if we're in initialization free spin round mode
             const gsmAny: any = gameStateManager as any;
             if (!isBuyFs && !isEnhancedBet && gsmAny?.isInFreeSpinRound === true && !gameStateManager.isBonus) {
                 isFs = true;
@@ -495,6 +511,34 @@ export class GameAPI {
 
             if (!response.ok) {
                 const errorText = await response.text();
+                
+                // Special handling for 422 "No valid freespins available" during free spin rounds
+                // This means the free spins have ended, so we should treat it as a graceful completion
+                if (response.status === 422 && isFs && errorText.includes('No valid freespins available')) {
+                    console.log('[GameAPI] 422 error: No valid freespins available - ending free spin round gracefully');
+                    
+                    // Clear the isInFreeSpinRound flag
+                    import('../managers/GameStateManager').then(module => {
+                        const { gameStateManager } = module;
+                        (gameStateManager as any).isInFreeSpinRound = false;
+                        console.log('[GameAPI] Cleared isInFreeSpinRound flag');
+                    }).catch(err => {
+                        console.warn('[GameAPI] Failed to clear isInFreeSpinRound flag:', err);
+                    });
+                    
+                    // Emit event to update the FreeRoundManager with count 0 to trigger completion
+                    import('../event/EventManager').then(module => {
+                        const { gameEventManager, GameEventType } = module;
+                        gameEventManager.emit(GameEventType.FREEROUND_COUNT_UPDATE, 0 as any);
+                        console.log('[GameAPI] Emitted FREEROUND_COUNT_UPDATE event with count 0 to end free round');
+                    }).catch(err => {
+                        console.warn('[GameAPI] Failed to emit FREEROUND_COUNT_UPDATE event:', err);
+                    });
+                    
+                    // Return null to signal that no spin data is available (free spins ended)
+                    return null as any;
+                }
+                
                 const error = new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
                 
                 // Check for token expiration
@@ -508,6 +552,21 @@ export class GameAPI {
             }
 
             const responseData = await response.json();
+            
+            // If this spin was a free spin (isFs === true), check for fsCount in response
+            // and emit an event to update the FreeRoundManager display
+            if (isFs && typeof responseData.fsCount === 'number') {
+                console.log('[GameAPI] Free spin response received with fsCount:', responseData.fsCount);
+                // Import gameEventManager dynamically to emit the event
+                import('../event/EventManager').then(module => {
+                    const { gameEventManager, GameEventType } = module;
+                    // Emit event with the fsCount from backend
+                    gameEventManager.emit(GameEventType.FREEROUND_COUNT_UPDATE, responseData.fsCount);
+                    console.log('[GameAPI] Emitted FREEROUND_COUNT_UPDATE event with count:', responseData.fsCount);
+                }).catch(err => {
+                    console.warn('[GameAPI] Failed to emit FREEROUND_COUNT_UPDATE event:', err);
+                });
+            }
             
             // 3. Store the spin data to SpinData.ts
             // If this response contains free spin data, save it for bonus mode
