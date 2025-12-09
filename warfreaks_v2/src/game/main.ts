@@ -8,44 +8,47 @@ import { SpinePlugin } from '@esotericsoftware/spine-phaser-v3';
 //  Find out more information about the Game Config at:
 //  https://docs.phaser.io/api-documentation/typedef/types-core#gameconfig
 const config: Phaser.Types.Core.GameConfig = {
-	type: Phaser.WEBGL,
-	width: 428,
-	height: 926,
-	parent: 'game-container',
-	backgroundColor: 'transparent',
-	scale: {
-		mode: Phaser.Scale.FIT,
-		autoCenter: Phaser.Scale.CENTER_BOTH
-	},
-	physics: {
-		default: 'arcade',
-		arcade: {
-			gravity: { x: 0, y: 1000 },
-			debug: false
-		}
-	},
-	scene: [
-		// TestBed,
-		Boot,
-		Preloader,
-		MainGame,
-	],
-	plugins: {
+    type: Phaser.WEBGL,
+    width: 428,
+    height: 926,
+    parent: 'game-container',
+    backgroundColor: 'transparent',
+		scale: {
+			mode: Phaser.Scale.FIT,
+			autoCenter: Phaser.Scale.CENTER_BOTH
+		},
+		fps: {
+			target: 30,
+			min: 1,
+			forceSetTimeOut: false
+		},
+    physics: {
+        default: 'arcade',
+        arcade: {
+            gravity: { x: 0, y: 1000 },
+            debug: false
+        }
+    },
+    scene: [
+        Boot,
+        Preloader,
+        MainGame,
+    ],
+    plugins: {
 		scene: [
 			{
-				key: 'SpinePlugin',
+				key: 'spine.SpinePlugin',
 				plugin: SpinePlugin,
 				mapping: 'spine'
 			}
 		]
 	},
-	render: {
-		// Enable full antialiasing / smoothing for WebGL-rendered sprites
+    render: {
 		antialias: true,
-		antialiasGL: true,
-		pixelArt: false,
-		mipmapFilter: 'LINEAR',
-	}
+		clearBeforeRender: false,
+		powerPreference: 'high-performance',
+	},
+    
 };
 
 const StartGame = (parent: string) => {

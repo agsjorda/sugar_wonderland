@@ -21,6 +21,7 @@ export class GameStateManager {
   private _isShowingWinDialog: boolean = false;
   private _scatterIndex: number = 0;
   private _isBonusFinished: boolean = false;
+  private _lastRecordedFrameRate: number = 0;
 
   private constructor() {
     this.initializeEventListeners();
@@ -91,6 +92,7 @@ export class GameStateManager {
   public get isShowingWinDialog(): boolean { return this._isShowingWinDialog; }
   public get scatterIndex(): number { return this._scatterIndex; }
   public get isBonusFinished(): boolean { return this._isBonusFinished; }
+  public get lastRecordedFrameRate(): number { return this._lastRecordedFrameRate; }
 
   // Setters for state properties (with event emission where appropriate)
   public set timeScale(value: number) {
@@ -160,6 +162,10 @@ export class GameStateManager {
     this._isBonusFinished = value;
   }
 
+  public set lastRecordedFrameRate(value: number) {
+    this._lastRecordedFrameRate = value;
+  }
+
   /**
    * Start a spin
    */
@@ -205,6 +211,7 @@ export class GameStateManager {
     this._isShowingWinDialog = false;
     this._scatterIndex = 0;
     this._isBonusFinished = false;
+    this._lastRecordedFrameRate = 0;
   }
 
   /**
@@ -223,7 +230,8 @@ export class GameStateManager {
       isShowingWinlines: this._isShowingWinlines,
       isShowingWinDialog: this._isShowingWinDialog,
       scatterIndex: this._scatterIndex,
-      isBonusFinished: this._isBonusFinished
+      isBonusFinished: this._isBonusFinished,
+      lastRecordedFrameRate: this._lastRecordedFrameRate
     };
   }
 }

@@ -178,27 +178,44 @@ export class AssetConfig {
 		const symbolCount: number = 10
 
 		for (let i = 0; i < symbolCount; i++) {
-			const isScatter = i === 0;
-			const isHighPaying = i >= 1 && i <= 5;
-
 			// PNG sprites for normal display
 			const spriteKey = `symbol_${i}`;
 			const spritePath = `${prefix}/symbols/symbol_${i}.webp`;
 			symbolImages[spriteKey] = spritePath;
-
-			// Spine animations for hit effects
-			const spineKey = `Symbol${i}_WF`;
-			const symbolName = isScatter ? 'Symbol_0_WF' : `Symbol_${isHighPaying ? 'HP' : 'LP'}_256`;
-			const atlasPath = `${prefix}/symbols/Animations/${symbolName}.atlas`;
-			const jsonPath = `${prefix}/symbols/Animations/${symbolName}.json`;
-
-			console.log('[AssetConfig] Loading symbol spine:', spineKey, symbolName, atlasPath, jsonPath);
-			
-			symbolSpine[spineKey] = {
-				atlas: atlasPath,
-				json: jsonPath
-			};
 		}
+
+		const highPayingSpineKey = `Symbol_HP_WF`;
+		const highPayingSymbolName = `Symbol_HP_256`;
+		const highPayingAtlasPath = `${prefix}/symbols/Animations/${highPayingSymbolName}.atlas`;
+		const highPayingJsonPath = `${prefix}/symbols/Animations/${highPayingSymbolName}.json`;
+
+		symbolSpine[highPayingSpineKey] = {
+			atlas: highPayingAtlasPath,
+			json: highPayingJsonPath
+		};
+
+		const lowPayingSpineKey = `Symbol_LP_WF`;
+		const lowPayingSymbolName = `Symbol_LP_256`;
+		const lowPayingAtlasPath = `${prefix}/symbols/Animations/${lowPayingSymbolName}.atlas`;
+		const lowPayingJsonPath = `${prefix}/symbols/Animations/${lowPayingSymbolName}.json`;
+
+		symbolSpine[lowPayingSpineKey] = {
+			atlas: lowPayingAtlasPath,
+			json: lowPayingJsonPath
+		};
+
+		// Spine animations for hit effects
+		const scatterSpineKey = `Symbol0_WF`;
+		const scatterSymbolName = 'Symbol_0_WF';
+		const scatterAtlasPath = `${prefix}/symbols/Animations/${scatterSymbolName}.atlas`;
+		const scatterJsonPath = `${prefix}/symbols/Animations/${scatterSymbolName}.json`;
+
+		console.log('[AssetConfig] Loading symbol spine:', scatterSpineKey, scatterSymbolName, scatterAtlasPath, scatterJsonPath);
+		
+		symbolSpine[scatterSpineKey] = {
+			atlas: scatterAtlasPath,
+			json: scatterJsonPath
+		};
 		
 		// Drop multiplier symbol animations for hit effects
 		const wholeMultiplierSpineKey = `multiplier_WF`;

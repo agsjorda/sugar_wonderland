@@ -16,7 +16,7 @@ const SYMBOL_PAYOUTS: Record<number, [number, number, number]> = {
     9: [2.0, 0.75, 0.25],
 };
 
-const SCATTER_PAYOUTS: [number, number, number] = [100.0, 10.0, 3.0];
+const SCATTER_PAYOUTS: [number, number, number] = [100.0, 5.0, 3.0];
 const SCATTER_COUNTS = ['6', '5', '4'] as const;
 const SCATTER_DESCRIPTIONS = [
     'This is the SCATTER symbol.',

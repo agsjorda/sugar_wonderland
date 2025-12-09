@@ -70,13 +70,16 @@ export class Game extends Scene
 	private scatterAnticipation: ScatterAnticipation;
 	private winTrackerRow?: Phaser.GameObjects.Container;
 	private freeRoundManager: FreeRoundManager | null = null;
+
+	private frameRateAccumulatorMs: number = 0;
+	private frameCountAccumulator: number = 0;
 	
 	// Note: Payout data now calculated directly from paylines in WIN_STOP handler
 	// Track whether this spin has winlines to animate
 	private hasWinlinesThisSpin: boolean = false;
 	
 	// Queue for wins that occur while a dialog is already showing
-	private winQueue: Array<{ payout: number; bet: number; multiplier: number }> = [];
+	private winQueue: Array<{ payout: number; bet: number; }> = [];
 	private suppressWinDialogsUntilNextSpin: boolean = false;
 
 	public gameData: GameData;
@@ -196,8 +199,8 @@ export class Game extends Scene
 		this.background.create(this);
 
 		// Create ember particles above background image but below everything else by parenting into background container
-		this.emberParticleSystem = new EmberParticleSystem();
-		this.emberParticleSystem.create(this, this.gameStateManager, this.background.getContainer());
+		// this.emberParticleSystem = new EmberParticleSystem();
+		// this.emberParticleSystem.create(this, this.gameStateManager, this.background.getContainer());
 		
 		// Create spinner using the managers
 		this.spinner = new Spinner(this.networkManager, this.screenModeManager);
@@ -509,26 +512,26 @@ export class Game extends Scene
 			if (this.symbols && this.symbols.currentSpinData) {
 				console.log('[Game] WIN_STOP: Found current spin data, calculating total win from paylines');
 				
-				// Calculate total win from SpinData (handles base + freespins)
-				// const totalWin = this.calculateTotalWinFromPaylines(spinData);
-				// const betAmount = parseFloat(spinData.bet);
-				// const totalWin = this.symbols.currentSpinData.slot?.totalWin ?? 0;
-				const slotData = this.symbols.currentSpinData.slot;
-				const totalWin = !gameStateManager.isBonus
-					? slotData.totalWin ?? 0
-					: slotData.freespin?.items[this.gameAPI.getCurrentFreeSpinIndex() - 1]?.totalWin ?? 0;
-				
-				const multiplierThisSpin = !gameStateManager.isBonus
-					? slotData.tumbles?.multiplier?.total ?? 0
-					: slotData.freespin?.items[this.gameAPI.getCurrentFreeSpinIndex() - 1]?.tumble?.multiplier ?? 0;
+				const slotData = data.spinData.slot;
+				console.log('[Game] WIN_STOP: Slot data: ', slotData);
 
-				const betAmount = parseFloat(this.symbols.currentSpinData.bet);
+				let totalWin = 0;
+				if(gameStateManager.isScatter)
+					totalWin = SpinDataUtils.getScatterSpinWins(data.spinData);
+				else if(gameStateManager.isBonus)
+					totalWin = SpinDataUtils.getBonusSpinWins(data.spinData, this.gameAPI.getCurrentFreeSpinIndex() - 1);
+				else
+					totalWin = data.spinData.slot.totalWin;
 
-				console.log(`[Game] WIN_STOP: Total win calculated: $${totalWin}, bet: $${betAmount}, multiplier: ${multiplierThisSpin}`);
+				const betAmount = parseFloat(data.spinData.bet);
+
+				console.log(`[Game] WIN_STOP: Total win calculated: $${totalWin}, bet: $${betAmount}`);
 				
 				if (totalWin > 0) {
 					// Note: Win dialog threshold check moved to Symbols component for earlier detection
-					this.checkAndShowWinDialog(totalWin, betAmount, multiplierThisSpin);
+					console.log('[Game] WIN_STOP: Showing win dialog');
+					this.checkAndShowWinDialog(totalWin, betAmount);
+					console.log('[Game] WIN_STOP: Win dialog shown');
 				} else {
 					console.log('[Game] WIN_STOP: No wins detected from paylines');
 				}
@@ -659,8 +662,8 @@ export class Game extends Scene
 		console.log(`[Game] showWinTrackerForSpinData: `, spinData);
 
 		const outResult = gameStateManager.isBonus ? 
-		spinData.slot?.freespin?.items[this.gameAPI.getCurrentFreeSpinIndex() - 1]?.tumble?.items[this.gameAPI.getCurrentTumbleIndex()]?.symbols?.out: 
-		spinData.slot?.tumbles?.items[this.gameAPI.getCurrentTumbleIndex()]?.symbols?.out;
+		spinData.slot?.freespin?.items[this.gameAPI.getCurrentFreeSpinIndex() - 1]?.tumble?.items[this.gameAPI.getCurrentTumbleIndex() - 1]?.symbols?.out: 
+		spinData.slot?.tumbles?.items[this.gameAPI.getCurrentTumbleIndex() - 1]?.symbols?.out;
 
 		if (!outResult.length) {
 			console.log('[Game] No winning symbols in tumble item - skipping WinTracker display');
@@ -825,7 +828,7 @@ export class Game extends Scene
 	/**
 	 * Check if payout reaches win dialog thresholds and show appropriate dialog
 	 */
-	private checkAndShowWinDialog(payout: number, bet: number, multiplier: number): void {
+	private checkAndShowWinDialog(payout: number, bet: number): void {
 		console.log(`[Game] checkAndShowWinDialog started`);
 		// Suppress win dialogs if we're transitioning out of bonus back to base
 		if (this.suppressWinDialogsUntilNextSpin) {
@@ -841,33 +844,35 @@ export class Game extends Scene
 		if (this.dialogs.isDialogShowing()) {
 			console.log('[Game] Dialog already showing, skipping win dialog for this payout');
 			// Add to queue if dialog is already showing
-			this.winQueue.push({ payout: payout, bet: bet, multiplier: multiplier });
+			this.winQueue.push({ payout: payout, bet: bet });
 			console.log(`[Game] Added to win queue. Queue length: ${this.winQueue.length}`);
 			return;
 		}
+
+		const winRatio = payout / bet;
 		
-		console.log(`[Game] Win detected - Payout: $${payout}, Bet: $${bet}, Multiplier: ${multiplier}x`);
+		console.log(`[Game] Win detected - Payout: $${payout}, Bet: $${bet}`);
 		
 		// Only show dialogs for wins that are at least the bigWinThreshold (e.g. 20x the bet size)
-		if (multiplier < this.gameData.bigWinThreshold) {
-			console.log(`[Game] Win below threshold - No dialog shown for ${multiplier.toFixed(2)}x multiplier`);
+		if (winRatio < this.gameData.bigWinThreshold) {
+			console.log(`[Game] Win below threshold - No dialog shown for ${winRatio.toFixed(2)}x multiplier`);
 			// Clear the win dialog state since no dialog was shown
 			gameStateManager.isShowingWinDialog = false;
 			return;
 		}
 
 		// Determine which win dialog to show based on multiplier thresholds
-		if (multiplier >= this.gameData.superWinThreshold) { // 60x
-			console.log(`[Game] Large Win! Showing LargeW_KA dialog for ${multiplier.toFixed(2)}x multiplier`);
+		if (winRatio >= this.gameData.superWinThreshold) { // 60x
+			console.log(`[Game] Large Win! Showing LargeW_KA dialog for ${winRatio.toFixed(2)}x multiplier`);
 			this.dialogs.showSuperWin(this, { winAmount: payout });
-		} else if (multiplier >= this.gameData.epicWinThreshold) { // 45x
-			console.log(`[Game] Super Win! Showing superw_wf dialog for ${multiplier.toFixed(2)}x multiplier`);
+		} else if (winRatio >= this.gameData.epicWinThreshold) { // 45x
+			console.log(`[Game] Super Win! Showing superw_wf dialog for ${winRatio.toFixed(2)}x multiplier`);
 			this.dialogs.showEpicWin(this, { winAmount: payout });
-		} else if (multiplier >= this.gameData.megaWinThreshold) { // 30x
-			console.log(`[Game] Medium Win! Showing MediumW_KA dialog for ${multiplier.toFixed(2)}x multiplier`);
+		} else if (winRatio >= this.gameData.megaWinThreshold) { // 30x
+			console.log(`[Game] Medium Win! Showing MediumW_KA dialog for ${winRatio.toFixed(2)}x multiplier`);
 			this.dialogs.showMegaWin(this, { winAmount: payout });
-		} else if (multiplier >= this.gameData.bigWinThreshold) { // 20x
-			console.log(`[Game] Small Win! Showing SmallW_KA dialog for ${multiplier.toFixed(2)}x multiplier`);
+		} else if (winRatio >= this.gameData.bigWinThreshold) { // 20x
+			console.log(`[Game] Small Win! Showing SmallW_KA dialog for ${winRatio.toFixed(2)}x multiplier`);
 			this.dialogs.showBigWin(this, { winAmount: payout });
 		}
 		
@@ -906,7 +911,7 @@ export class Game extends Scene
 		const nextWin = this.winQueue.shift();
 		if (nextWin) {
 			console.log(`[Game] Processing next win from queue: $${nextWin.payout} on $${nextWin.bet} bet. Queue remaining: ${this.winQueue.length}`);
-			this.checkAndShowWinDialog(nextWin.payout, nextWin.bet, nextWin.multiplier);
+			this.checkAndShowWinDialog(nextWin.payout, nextWin.bet);
 		}
 	}
 
@@ -1427,8 +1432,27 @@ export class Game extends Scene
 	}
 
 	update(time: number, delta: number) {
-		this.emberParticleSystem.update(this, time, delta);
+		// this.emberParticleSystem.update(this, time, delta);
 		// Game state manager handles its own updates through event listeners
+
+		// Track and record average frame rate every 2 seconds for debugging
+		this.frameRateAccumulatorMs += delta;
+		this.frameCountAccumulator++;
+
+		if (this.frameRateAccumulatorMs >= 2000) {
+			const seconds = this.frameRateAccumulatorMs / 1000;
+			const averageFps = seconds > 0 ? this.frameCountAccumulator / seconds : 0;
+
+			// Update global game state manager
+			this.gameStateManager.lastRecordedFrameRate = averageFps;
+			console.log(
+				`[Game] lastRecordedFrameRate updated: ${averageFps.toFixed(2)} FPS`
+			);
+
+			// Reset accumulators for next window
+			this.frameRateAccumulatorMs = 0;
+			this.frameCountAccumulator = 0;
+		}
 	}
 
 	shutdown() {

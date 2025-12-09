@@ -41,3 +41,9 @@ export const MULTIPLIER_VALUE_REFERENCE: { [key: number]: number } = {
   23: 250,
   24: 500,
 };
+
+export const SCATTER_VALUE_MAPPING: { [key: number]: number } = {
+  4: 3,
+  5: 5,
+  6: 100,
+};

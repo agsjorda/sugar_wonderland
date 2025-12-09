@@ -820,7 +820,13 @@ export class Menu {
         musicToggleArea.setInteractive();
         musicToggleArea.on('pointerdown', () => {
             musicOn = !musicOn;
-            scene.audioManager.setVolume(musicOn ? 1 : 0);
+            
+            if(!musicOn)
+                scene.audioManager.cacheMusicVolume();
+            else
+                scene.audioManager.restoreMusicVolume();
+
+            scene.audioManager.setVolume(musicOn ? scene.audioManager.getVolume() : 0);
             drawToggle(musicToggleBg, musicToggleCircle, toggleX, startY + 70, musicOn);
             updateSliders();
         });
@@ -845,7 +851,13 @@ export class Menu {
         sfxToggleArea.setInteractive();
         sfxToggleArea.on('pointerdown', () => {
             sfxOn = !sfxOn;
-            scene.audioManager.setSfxVolume(sfxOn ? 1 : 0);
+
+            if(!sfxOn)
+                scene.audioManager.cacheSfxVolume();
+            else
+                scene.audioManager.restoreSfxVolume();
+            
+            scene.audioManager.setSfxVolume(sfxOn ? scene.audioManager.getSfxVolume() : 0);
             drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 170, sfxOn);
             updateSliders();
         });

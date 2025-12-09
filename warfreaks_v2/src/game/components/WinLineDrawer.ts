@@ -958,36 +958,6 @@ export class WinLineDrawer {
     const lineKey = payline.lineKey;
     const count = payline.count;
     
-    // Get the winline pattern for this lineKey
-    if (lineKey < 0 || lineKey >= Data.WINLINES.length) {
-      console.warn(`[WinLineDrawer] Invalid lineKey: ${lineKey}`);
-      return [];
-    }
-    
-    const winline = Data.WINLINES[lineKey];
-    
-    // Get all positions in the winline pattern (where winline[y][x] === 1)
-    const winlinePositions: { x: number, y: number }[] = [];
-    for (let x = 0; x < winline[0].length; x++) {
-      for (let y = 0; y < winline.length; y++) {
-        if (winline[y][x] === 1) {
-          winlinePositions.push({ x, y });
-        }
-      }
-    }
-    
-    // Sort positions by x coordinate to get left-to-right order
-    winlinePositions.sort((a, b) => a.x - b.x);
-    
-    // Take only the first 'count' positions as winning symbols
-    const winningPositions = winlinePositions.slice(0, count);
-    
-    // Add the winning positions to the result
-    for (const pos of winningPositions) {
-      const symbolAtPosition = spinData.slot.area[pos.y][pos.x];
-      winningGrids.push(new Grid(pos.x, pos.y, symbolAtPosition));
-    }
-    
     return winningGrids;
   }
 
@@ -995,23 +965,8 @@ export class WinLineDrawer {
    * Get complete winline pattern grids for continuity
    */
   private getCompleteWinlineGrids(winlineIndex: number): Grid[] {
-    if (winlineIndex < 0 || winlineIndex >= Data.WINLINES.length) {
-      console.warn(`[WinLineDrawer] Invalid winline index: ${winlineIndex}`);
-      return [];
-    }
-
-    const winline = Data.WINLINES[winlineIndex];
     const completeGrids: Grid[] = [];
-
-    // Extract all positions where the winline has a 1 (complete pattern)
-    for (let x = 0; x < winline[0].length; x++) {
-      for (let y = 0; y < winline.length; y++) {
-        if (winline[y][x] === 1) {
-          // Create a dummy grid for positioning (symbol value doesn't matter for line drawing)
-          completeGrids.push(new Grid(x, y, 0));
-        }
-      }
-    }
+    
     return completeGrids;
   }
 

@@ -1889,6 +1889,10 @@ export class SlotController {
 	}
 
 	updateBetAmount(betAmount: number): void {
+		// Track the previous base bet so we can detect real bet changes
+		const previousBaseBet = this.baseBetAmount;
+
+		
 		if (this.betAmountText) {
 			this.betAmountText.setText(betAmount.toFixed(2));
 
@@ -1906,8 +1910,14 @@ export class SlotController {
 		// Update base bet amount when changed externally (not by amplify bet)
 		if (!this.isInternalBetChange) {
 			this.baseBetAmount = betAmount;
-			// Reset amplify bet state when bet amount is changed externally
-			this.resetAmplifyBetOnBetChange();
+			
+			// If the new base bet is the same as before, this is likely a server echo
+			// or harmless re-sync – do NOT treat it as a bet change that should
+			// cancel Enhanced/Amplify Bet.
+			if (previousBaseBet !== betAmount) {
+				// Reset amplify bet state only when the base bet actually changes
+				this.resetAmplifyBetOnBetChange();
+			}
 		}
 	}
 
@@ -3098,6 +3108,41 @@ export class SlotController {
 	}
 
 	/**
+	 * Ensure the displayed bet amount matches the current amplify/enhanced bet state.
+	 * This is especially important around spin/autoplay, where external bet syncs
+	 * might have reset the text back to the base bet while amplify is still ON.
+	 */
+	private syncDisplayedBetWithAmplifyStateFromBase(): void {
+		const gameData = this.getGameData();
+		if (!this.betAmountText || !gameData) {
+			return;
+		}
+
+		// Use the stored base bet as the single source of truth
+		const baseBet = this.getBaseBetAmount() || 0;
+		const isEnhanced = !!gameData.isEnhancedBet;
+		const displayBet = isEnhanced ? baseBet * 1.25 : baseBet;
+
+		this.betAmountText.setText(displayBet.toFixed(2));
+
+		// Keep the "$" position aligned with the updated text
+		if (this.betDollarText) {
+			const betX = this.betAmountText.x;
+			const betY = this.betAmountText.y;
+			this.betDollarText.setPosition(betX - (this.betAmountText.width / 2) - 5, betY);
+		}
+
+		// Keep Buy Feature price in sync with the base bet (method already handles enhanced bet)
+		this.updateFeatureAmountFromCurrentBet();
+
+		console.log('[SlotController] Synced displayed bet with amplify state from base bet', {
+			baseBet,
+			isEnhanced,
+			displayBet
+		});
+	}
+
+	/**
 	 * Reset amplify bet state when bet amount is changed externally
 	 */
 	private resetAmplifyBetOnBetChange(): void {
@@ -3520,6 +3565,24 @@ export class SlotController {
 				return;
 			}
 		} catch {}
+
+		// Before charging the bet and sending the spin, make sure the displayed bet
+		// amount reflects the current amplify/enhanced bet state. This avoids cases
+		// where external bet syncs (e.g., server echoes or autoplay setup) reset the
+		// text back to the base bet while amplify is still logically ON.
+		this.syncDisplayedBetWithAmplifyStateFromBase();
+
+		// Start clearing/dropping existing symbols immediately at spin start
+		try {
+			const gameScene: any = this.scene as any;
+			const symbolsComponent = gameScene?.symbols;
+			if (symbolsComponent && typeof symbolsComponent.startPreSpinDrop === 'function') {
+				console.log('[SlotController] Triggering pre-spin symbol drop');
+				symbolsComponent.startPreSpinDrop();
+			}
+		} catch (e) {
+			console.warn('[SlotController] Failed to start pre-spin symbol drop:', e);
+		}
 
 		// Play spin sound effect
 		if ((window as any).audioManager) {

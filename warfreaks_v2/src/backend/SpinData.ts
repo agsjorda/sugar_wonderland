@@ -3,6 +3,9 @@
  * This matches the JSON structure returned by the game API
  */
 
+import { AnyMxRecord } from "dns";
+import { gameStateManager } from "../managers/GameStateManager";
+
 export interface SpinData {
   /** Player ID for the current session */
   playerId: string;
@@ -314,5 +317,22 @@ export class SpinDataUtils {
     const betAmount = parseFloat(spinData.bet);
     if (betAmount === 0) return 0;
     return this.getTotalWin(spinData) / betAmount;
+  }
+
+  static getTotalWinFromFreeSpin(spinData: any) : number {
+    const freespin = spinData.slot.freespin || spinData.slot.freeSpin;
+    if (!freespin) return 0;
+    return freespin.items.reduce((sum: number, item: any) => sum + (item.totalWin || 0), 0);
+  }
+
+  static getScatterSpinWins(spinData: any) : number {
+    const totalWin = spinData.slot.totalWin;
+    const freeSpinWin = this.getTotalWinFromFreeSpin(spinData);
+    return totalWin - freeSpinWin;
+  }
+
+  static getBonusSpinWins(spinData: any, freeSpinIndex: number) : number {
+    const freeSpinWin = spinData.slot.freespin.items[freeSpinIndex]?.totalWin ?? 0;
+    return freeSpinWin;
   }
 }

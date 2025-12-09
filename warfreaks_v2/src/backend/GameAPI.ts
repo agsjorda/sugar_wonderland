@@ -238,17 +238,17 @@ export class GameAPI {
             const raw = await response.json();
             const payload: SlotInitializeData = (raw && raw.data) ? raw.data : raw;
 
-             // // TEST OVERRIDE: force free spin round for local testing with new format.
-            // // Remove or comment this block out for production.
-            // payload.hasFreeSpinRound = true;
-            // payload.freeSpinRound = [
-            //     {
-            //         bet: '10.00',
-            //         totalFreeSpin: 5,
-            //         usedFreeSpin: 0,
-            //         remainingFreeSpin: 5
-            //     }
-            // ];
+             // TEST OVERRIDE: force free spin round for local testing with new format.
+            // Remove or comment this block out for production.
+            payload.hasFreeSpinRound = false;
+            payload.freeSpinRound = [
+                {
+                    bet: '10.00',
+                    totalFreeSpin: 5,
+                    usedFreeSpin: 0,
+                    remainingFreeSpin: 5
+                }
+            ];
 
             // Cache the initialization data for later retrieval
             this.initializationData = payload;

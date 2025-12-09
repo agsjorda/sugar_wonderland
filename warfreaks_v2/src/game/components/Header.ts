@@ -148,24 +148,24 @@ export class Header {
 
 	private createWinBarText(scene: Scene, x: number, y: number): void {
 		// Line 1: "YOU WON"
-		this.youWonText = scene.add.text(x, y - 8, 'YOU WON', {
-			fontSize: '14px',
+		this.youWonText = scene.add.text(x, y - 10, 'YOU WON', {
+			fontSize: '12px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
 		}).setOrigin(0.5, 0.5).setDepth(11); // Higher depth than win bar
 		this.headerContainer.add(this.youWonText);
 
 		// Line 2: "$ 0.00" with bold formatting (base winnings / expression prefix)
-		this.amountText = scene.add.text(x, y + 7, '$ 0.00', {
-			fontSize: '18px',
+		this.amountText = scene.add.text(x, y + 6, '$ 0.00', {
+			fontSize: '20px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
 		}).setOrigin(0.5, 0.5).setDepth(11); // Higher depth than win bar
 		this.headerContainer.add(this.amountText);
 
 		// Separate text object for the total winnings part (shown in green)
-		this.amountTotalText = scene.add.text(x, y + 7, '', {
-			fontSize: '18px',
+		this.amountTotalText = scene.add.text(x, y + 6, '', {
+			fontSize: '20px',
 			color: '#00ff00',
 			fontFamily: 'Poppins-Bold'
 		}).setOrigin(0, 0.5).setDepth(11);
@@ -258,9 +258,9 @@ export class Header {
 			const symbolsComponent = (this.headerContainer.scene as any).symbols;
 			if(symbolsComponent && symbolsComponent.currentSpinData) {
 				const spinData = symbolsComponent.currentSpinData;
-				const winnings = spinData?.slot?.tumbles?.items[this.scene.gameAPI.getCurrentTumbleIndex()]?.win || 0;
+				const winnings = spinData?.slot?.tumbles?.items[this.scene.gameAPI.getCurrentTumbleIndex() - 1]?.win || 0;
 
-				console.log(`[Header] Current winnings: ${winnings} ${this.scene.gameAPI.getCurrentTumbleIndex()}`);
+				console.log(`[Header] Current winnings: ${winnings} ${this.scene.gameAPI.getCurrentTumbleIndex() - 1}`);
 				
 				const updateDelay = 700 * (gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1);
 				this.scene.time.delayedCall(updateDelay, () => {

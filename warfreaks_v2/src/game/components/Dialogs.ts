@@ -10,6 +10,7 @@ import { FlashTransition } from './FlashTransition';
 import { WinTracker } from './WinTracker';
 import { AUTO_SPIN_WIN_DIALOG_TIMEOUT, BONUS_WIN_DIALOG_DELAY_MS } from '../../config/GameConfig';
 import { TurboConfig } from '../../config/TurboConfig';
+import { SoundEffectType } from '../../managers/AudioManager';
 
 export interface DialogConfig {
 	//type: 'confetti_KA' | 'congrats_wf' | 'Explosion_AK' | 'FreeSpinDialog_KA' | 'largeW_KA' | 'LargeW_KA' | 'MediumW_KA' | 'SmallW_KA' | 'superw_wf';
@@ -240,13 +241,13 @@ export class Dialogs {
 				const type = (this.currentDialogType || '').toLowerCase();
                 if (type === 'freespindialog') {
                     // Use congrats_wf for the FreeSpin dialog per request
-                    audioManager.playSoundEffect('dialog_congrats');
+                    audioManager.playSoundEffect(SoundEffectType.DIALOG_CONGRATS);
                     // Duck background music similar to win dialogs
                     if (typeof audioManager.duckBackground === 'function') {
                         audioManager.duckBackground(0.3);
                     }
-                } else if (type === 'congrats_wf') {
-					audioManager.playSoundEffect('dialog_congrats');
+                } else if (type === 'congratulations') {
+                    audioManager.playSoundEffect(SoundEffectType.DIALOG_CONGRATS);
                     if (typeof audioManager.duckBackground === 'function') {
                         audioManager.duckBackground(0.3);
                     }

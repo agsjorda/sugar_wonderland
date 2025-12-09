@@ -179,24 +179,24 @@ export class BonusHeader {
 
 	private createWinBarText(scene: Scene, x: number, y: number): void {
 		// Line 1: "YOU WON"
-		this.youWonText = scene.add.text(x, y - 8, 'YOU WON', {
-			fontSize: '14px',
+		this.youWonText = scene.add.text(x, y - 10, 'YOU WON', {
+			fontSize: '12px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
 		}).setOrigin(0.5, 0.5).setDepth(11); // Higher depth than win bar
 		this.bonusHeaderContainer.add(this.youWonText);
 
 		// Line 2: "$ 0.00" with bold formatting
-		this.amountText = scene.add.text(x, y + 7, '$ 999,999,999,999.00', {
-			fontSize: '18px',
+		this.amountText = scene.add.text(x, y + 6, '$ 999,999,999,999.00', {
+			fontSize: '20px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
 		}).setOrigin(0.5, 0.5).setDepth(11); // Higher depth than win bar
 		this.bonusHeaderContainer.add(this.amountText);
 
 		// Separate text object for the total winnings part (shown in green)
-		this.amountTotalText = scene.add.text(x, y + 7, '', {
-			fontSize: '18px',
+		this.amountTotalText = scene.add.text(x, y + 6, '', {
+			fontSize: '20px',
 			color: '#00ff00',
 			fontFamily: 'Poppins-Bold'
 		}).setOrigin(0, 0.5).setDepth(11);
@@ -466,6 +466,8 @@ export class BonusHeader {
 			if (gameStateManager.isBonus) {
 				console.log('[BonusHeader] Bonus active – keeping total winnings on screen');
 
+				this.updateCurrentWinnings();
+
 				if (this.currentWinnings > 0) {
 					this.updateDisplayTextToTotalWin(this.currentWinnings);
 				}
@@ -494,7 +496,7 @@ export class BonusHeader {
 			const freespinItem = spinData?.slot?.freespin?.items?.[fsIndex];
 
 			// Base winnings for the CURRENT tumble (before multiplier is applied)
-			const baseWinnings = freespinItem?.tumble?.items[this.scene.gameAPI.getCurrentTumbleIndex()].win ?? 0;
+			const baseWinnings = freespinItem?.tumble?.items[this.scene.gameAPI.getCurrentTumbleIndex() - 1].win ?? 0;
 
 			// On win start, track just the current tumble's base winnings
 			this.currentBaseWinnings += baseWinnings;
@@ -529,13 +531,18 @@ export class BonusHeader {
 
 			// If there is no multiplier for the current tumble, skip showing the
 			// multiplier equation here to avoid using a stale/incorrect value.
-			if (currentTumbleMultiplier <= 0) {
+			if (currentTumbleMultiplier > 0) {
 				console.log('[BonusHeader] REELS_STOP: no current free-spin tumble multiplier, skipping equation display');
 				return;
 			}
 
+			if(this.currentMultiplier <= 0) {
+				console.log('[BonusHeader] REELS_STOP: no current multiplier, skipping equation display');
+				return;
+			}
 
 			if (this.currentBaseWinnings <= 0) {
+				console.log('[BonusHeader] REELS_STOP: no current base winnings, skipping equation display');
 				return;
 			}
 
@@ -550,7 +557,24 @@ export class BonusHeader {
 				`${formattedBaseWinnings}  x  ${this.currentMultiplier}  =  `,
 				formattedMultipliedWinnings
 			);
+
+			if(gameStateManager.isBonusFinished)
+			{
+				this.updateCurrentWinnings();
+
+				this.scene.time.delayedCall(1000, () => {
+					this.updateDisplayTextToTotalWin(this.currentWinnings);
+				});
+			}
 		});
+	}
+
+	private updateCurrentWinnings(): void {
+		if(this.currentBaseWinnings > 0)
+		{
+			this.currentWinnings += this.currentBaseWinnings * Math.max(1, this.currentMultiplier);
+			this.currentBaseWinnings = 0;
+		}
 	}
 
 	private resetBonusDisplayState(): void {

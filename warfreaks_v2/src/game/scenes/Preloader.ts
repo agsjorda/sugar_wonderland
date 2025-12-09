@@ -223,6 +223,10 @@ export class Preloader extends Scene
 		this.assetLoader.loadMenuAssets(this);
 		this.assetLoader.loadHelpScreenAssets(this);
 		
+		// Start lazy loading audio assets (non-blocking - won't wait for completion)
+		console.log(`[Preloader] Starting lazy audio loading...`);
+		this.startLazyAudioLoading();
+		
 		console.log(`[Preloader] Loading assets for Preloader and Game scenes`);
 	}
 
@@ -463,6 +467,26 @@ export class Preloader extends Scene
 			this.preloaderLogoSpine = spine;
 		} catch (e) {
 			console.warn('[Preloader] Failed to create preloader logo spine:', e);
+		}
+	}
+
+	private startLazyAudioLoading()
+	{
+		// Start loading audio assets in the background without blocking
+		// Audio will be available when ready, and Game scene will check readiness before playing
+		const audioAssets = this.assetConfig.getAudioAssets();
+		if (audioAssets.audio) {
+			Object.entries(audioAssets.audio).forEach(([key, path]) => {
+				try {
+					this.load.audio(key, path);
+					console.log(`[Preloader] Queued audio for lazy loading: ${key}`);
+				} catch (e) {
+					console.warn(`[Preloader] Failed to queue audio ${key}:`, e);
+				}
+			});
+			// Start loading audio in the background (non-blocking)
+			this.load.start();
+			console.log(`[Preloader] Started lazy loading ${Object.keys(audioAssets.audio).length} audio files`);
 		}
 	}
 

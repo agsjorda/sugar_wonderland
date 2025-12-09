@@ -57,9 +57,12 @@ export enum SoundEffectType {
 export class AudioManager {
 	private scene: Phaser.Scene;
 	private currentMusic: MusicType | null = null;
-	private musicVolume: number = 0.75;
-	private sfxVolume: number = 0.4;
+	private musicVolume: number = 0.2;
+	private sfxVolume: number = 0.2;
 	private ambientVolume: number = 0.3; // Volume for ambient audio layer
+	private cachedMusicVolume: number = 0.2;
+	private cachedSfxVolume: number = 0.2;
+	private cachedAmbientVolume: number = 0.3;
 	private isMuted: boolean = false;
 	private musicInstances: Map<MusicType, Phaser.Sound.BaseSound> = new Map();
 	private sfxInstances: Map<SoundEffectType, Phaser.Sound.BaseSound> = new Map();
@@ -74,6 +77,128 @@ export class AudioManager {
 	constructor(scene: Phaser.Scene) {
 		this.scene = scene;
 		console.log('[AudioManager] AudioManager initialized');
+	}
+
+	/**
+	 * Check if an audio key is loaded and ready
+	 */
+	private isAudioReady(key: string): boolean {
+		try {
+			return this.scene.cache.audio.has(key);
+		} catch (e) {
+			return false;
+		}
+	}
+
+	/**
+	 * Try to create audio instances for any newly loaded audio files
+	 */
+	tryCreateInstancesForReadyAudio(): void {
+		// Try to create instances for music that's now ready
+		if (!this.musicInstances.has(MusicType.MAIN) && this.isAudioReady('mainbg_wf')) {
+			try {
+				const mainMusic = this.scene.sound.add('mainbg_wf', {
+					volume: this.musicVolume,
+					loop: true
+				});
+				this.musicInstances.set(MusicType.MAIN, mainMusic);
+				console.log('[AudioManager] Main background music instance created (lazy loaded)');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create main background music instance:', e);
+			}
+		}
+
+		if (!this.musicInstances.has(MusicType.BONUS) && this.isAudioReady('bonusbg_wf')) {
+			try {
+				const bonusMusic = this.scene.sound.add('bonusbg_wf', {
+					volume: this.musicVolume,
+					loop: true
+				});
+				this.musicInstances.set(MusicType.BONUS, bonusMusic);
+				console.log('[AudioManager] Bonus background music instance created (lazy loaded)');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create bonus background music instance:', e);
+			}
+		}
+
+		if (!this.musicInstances.has(MusicType.FREE_SPIN) && this.isAudioReady('freespinbg_ka')) {
+			try {
+				const freespinMusic = this.scene.sound.add('freespinbg_ka', {
+					volume: this.musicVolume,
+					loop: true
+				});
+				this.musicInstances.set(MusicType.FREE_SPIN, freespinMusic);
+				console.log('[AudioManager] Free spin background music instance created (lazy loaded)');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create free spin background music instance:', e);
+			}
+		}
+
+		// Try to create ambient audio if ready
+		if (!this.ambientInstance && this.isAudioReady('ambience_ka')) {
+			try {
+				this.ambientInstance = this.scene.sound.add('ambience_ka', {
+					volume: this.ambientVolume,
+					loop: true
+				});
+				console.log('[AudioManager] Ambient audio instance created (lazy loaded)');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create ambient audio instance:', e);
+			}
+		}
+
+		// Try to create SFX instances for commonly used sounds
+		this.tryCreateSfxInstance(SoundEffectType.SPIN, 'spin_wf');
+		this.tryCreateSfxInstance(SoundEffectType.MENU_CLICK, 'click_wf');
+		this.tryCreateSfxInstance(SoundEffectType.REEL_DROP, 'reeldrop_wf');
+		this.tryCreateSfxInstance(SoundEffectType.TURBO_REEL_DROP, 'turbodrop_wf');
+		this.tryCreateSfxInstance(SoundEffectType.SCATTER, 'scatter');
+		this.tryCreateSfxInstance(SoundEffectType.WIN_BIG, 'bigw_wf');
+		this.tryCreateSfxInstance(SoundEffectType.WIN_MEGA, 'megaw_wf');
+		this.tryCreateSfxInstance(SoundEffectType.WIN_SUPER, 'superw_wf');
+		this.tryCreateSfxInstance(SoundEffectType.WIN_EPIC, 'epicw_wf');
+		this.tryCreateSfxInstance(SoundEffectType.DIALOG_FREESPIN, 'freespin_wf');
+		this.tryCreateSfxInstance(SoundEffectType.DIALOG_CONGRATS, 'congrats_wf');
+
+		// Try to create optional SFX instances
+		this.tryCreateSfxInstance(SoundEffectType.ARGUN, 'argun_wf', true, 0.01);
+		this.tryCreateSfxInstance(SoundEffectType.EXPLOSION, 'explosion_wf');
+		this.tryCreateSfxInstance(SoundEffectType.BONUS_EXPLOSION, 'bonus_explosion_wf');
+		this.tryCreateSfxInstance(SoundEffectType.MULTIPLIER_ADDED, 'multiplier_added_wf');
+		this.tryCreateSfxInstance(SoundEffectType.HIT_WIN_2, 'hit_win_2_wf');
+		this.tryCreateSfxInstance(SoundEffectType.HIT_WIN_ALT, 'hit_win_wf');
+		this.tryCreateSfxInstance(SoundEffectType.MISSILE, 'missile_wf');
+		this.tryCreateSfxInstance(SoundEffectType.MULTI, 'multi_wf');
+		this.tryCreateSfxInstance(SoundEffectType.NUKE, 'nuke_wf');
+		this.tryCreateSfxInstance(SoundEffectType.BONUS_SPIN, 'spin2_wf');
+		this.tryCreateSfxInstance(SoundEffectType.UB_WIN, 'ub_wf');
+		this.tryCreateSfxInstance(SoundEffectType.MAXW_END, 'maxw_end_wf');
+		this.tryCreateSfxInstance(SoundEffectType.MAXW, 'maxw_wf');
+		this.tryCreateSfxInstance(SoundEffectType.TWIN1, 'twin1_wf');
+		this.tryCreateSfxInstance(SoundEffectType.TWIN2, 'twin2_wf');
+		this.tryCreateSfxInstance(SoundEffectType.TWIN3, 'twin3_wf');
+		this.tryCreateSfxInstance(SoundEffectType.TWIN4, 'twin4_wf');
+		this.tryCreateSfxInstance(SoundEffectType.TWINHEAVEN1, 'twinheaven1_wf');
+		this.tryCreateSfxInstance(SoundEffectType.TWINHEAVEN2, 'twinheaven2_wf');
+		this.tryCreateSfxInstance(SoundEffectType.TWINHEAVEN3, 'twinheaven3_wf');
+		this.tryCreateSfxInstance(SoundEffectType.TWINHEAVEN4, 'twinheaven4_wf');
+		this.tryCreateSfxInstance(SoundEffectType.BONUS_REEL_DROP, 'reeldrop2_wf');
+		this.tryCreateSfxInstance(SoundEffectType.BONUS_TURBO_REEL_DROP, 'turbo2_wf');
+	}
+
+	/**
+	 * Try to create an SFX instance if the audio is ready and instance doesn't exist
+	 */
+	private tryCreateSfxInstance(type: SoundEffectType, key: string, loop: boolean = false, volumeMultiplier: number = 1): void {
+		if (!this.sfxInstances.has(type) && this.isAudioReady(key)) {
+			try {
+				const sfx = this.scene.sound.add(key, { volume: this.sfxVolume * volumeMultiplier, loop });
+				this.sfxInstances.set(type, sfx);
+				console.log(`[AudioManager] ${key} SFX instance created (lazy loaded, multiplier=${volumeMultiplier})`);
+			} catch (e) {
+				console.warn(`[AudioManager] Failed to create ${key} SFX instance:`, e);
+			}
+		}
 	}
 
 	/**
@@ -105,11 +230,20 @@ export class AudioManager {
 
 	/**
 	 * Create music and sound effect instances after loading
+	 * Now handles lazy loading - only creates instances for audio that's ready
 	 */
 	createMusicInstances(): void {
-		console.log('[AudioManager] Creating audio instances...');
+		console.log('[AudioManager] Creating audio instances (checking readiness)...');
+		
+		// Try to create instances for any ready audio
+		this.tryCreateInstancesForReadyAudio();
 
 		const addOptionalSfx = (type: SoundEffectType, key: string, loop: boolean = false, volumeMultiplier: number = 1) => {
+			// Only create if audio is ready
+			if (!this.isAudioReady(key)) {
+				console.log(`[AudioManager] ${key} not ready yet, skipping instance creation`);
+				return;
+			}
 			try {
 				const sfx = this.scene.sound.add(key, { volume: this.sfxVolume * volumeMultiplier, loop });
 				this.sfxInstances.set(type, sfx);
@@ -119,147 +253,181 @@ export class AudioManager {
 			}
 		};
 
-		// Create main background music
-		try {
-			const mainMusic = this.scene.sound.add('mainbg_wf', {
-				volume: this.musicVolume,
-				loop: true
-			});
-			this.musicInstances.set(MusicType.MAIN, mainMusic);
-			console.log('[AudioManager] Main background music instance created');
-		} catch (e) {
-			console.warn('[AudioManager] Failed to create main background music instance:', e);
+		// Create main background music (if ready)
+		if (this.isAudioReady('mainbg_wf')) {
+			try {
+				const mainMusic = this.scene.sound.add('mainbg_wf', {
+					volume: this.musicVolume,
+					loop: true
+				});
+				this.musicInstances.set(MusicType.MAIN, mainMusic);
+				console.log('[AudioManager] Main background music instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create main background music instance:', e);
+			}
+		} else {
+			console.log('[AudioManager] Main background music not ready yet');
 		}
 
-		// Create bonus background music
-		try {
-			const bonusMusic = this.scene.sound.add('bonusbg_wf', {
-				volume: this.musicVolume,
-				loop: true
-			});
-			this.musicInstances.set(MusicType.BONUS, bonusMusic);
-			console.log('[AudioManager] Bonus background music instance created');
-		} catch (e) {
-			console.warn('[AudioManager] Failed to create bonus background music instance:', e);
+		// Create bonus background music (if ready)
+		if (this.isAudioReady('bonusbg_wf')) {
+			try {
+				const bonusMusic = this.scene.sound.add('bonusbg_wf', {
+					volume: this.musicVolume,
+					loop: true
+				});
+				this.musicInstances.set(MusicType.BONUS, bonusMusic);
+				console.log('[AudioManager] Bonus background music instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create bonus background music instance:', e);
+			}
+		} else {
+			console.log('[AudioManager] Bonus background music not ready yet');
 		}
 
-		// Create free spin background music
-		try {
-			const freespinMusic = this.scene.sound.add('freespinbg_ka', {
-				volume: this.musicVolume,
-				loop: true
-			});
-			this.musicInstances.set(MusicType.FREE_SPIN, freespinMusic);
-			console.log('[AudioManager] Free spin background music instance created');
-		} catch (e) {
-			console.warn('[AudioManager] Failed to create free spin background music instance:', e);
+		// Create free spin background music (if ready)
+		if (this.isAudioReady('freespinbg_ka')) {
+			try {
+				const freespinMusic = this.scene.sound.add('freespinbg_ka', {
+					volume: this.musicVolume,
+					loop: true
+				});
+				this.musicInstances.set(MusicType.FREE_SPIN, freespinMusic);
+				console.log('[AudioManager] Free spin background music instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create free spin background music instance:', e);
+			}
+		} else {
+			console.log('[AudioManager] Free spin background music not ready yet');
 		}
 
-		// Create sound effect instances
-		try {
-			const spinSfx = this.scene.sound.add('spin_wf', {
-				volume: this.sfxVolume,
-				loop: false
-			});
-			this.sfxInstances.set(SoundEffectType.SPIN, spinSfx);
-			console.log('[AudioManager] Spin sound effect instance created');
-		} catch (e) {
-			console.warn('[AudioManager] Failed to create spinb_ka SFX instance:', e);
+		// Create sound effect instances (only if ready)
+		if (this.isAudioReady('spin_wf')) {
+			try {
+				const spinSfx = this.scene.sound.add('spin_wf', {
+					volume: this.sfxVolume,
+					loop: false
+				});
+				this.sfxInstances.set(SoundEffectType.SPIN, spinSfx);
+				console.log('[AudioManager] Spin sound effect instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create spin_wf SFX instance:', e);
+			}
 		}
 
 		// Menu click SFX
-		try {
-			const clickSfx = this.scene.sound.add('click_wf', { volume: this.sfxVolume, loop: false });
-			this.sfxInstances.set(SoundEffectType.MENU_CLICK, clickSfx);
-			console.log('[AudioManager] Menu click SFX instance created');
-		} catch (e) {
-			console.warn('[AudioManager] Failed to create click_wf SFX instance:', e);
+		if (this.isAudioReady('click_wf')) {
+			try {
+				const clickSfx = this.scene.sound.add('click_wf', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.MENU_CLICK, clickSfx);
+				console.log('[AudioManager] Menu click SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create click_wf SFX instance:', e);
+			}
 		}
 
-		try {
-			const reelDropSfx = this.scene.sound.add('reeldrop_wf', {
-				volume: this.sfxVolume,
-				loop: false
-			});
-			this.sfxInstances.set(SoundEffectType.REEL_DROP, reelDropSfx);
-			console.log('[AudioManager] Reel drop sound effect instance created');
-		} catch (e) {
-			console.warn('[AudioManager] Failed to create reeldrop_wf SFX instance:', e);
+		if (this.isAudioReady('reeldrop_wf')) {
+			try {
+				const reelDropSfx = this.scene.sound.add('reeldrop_wf', {
+					volume: this.sfxVolume,
+					loop: false
+				});
+				this.sfxInstances.set(SoundEffectType.REEL_DROP, reelDropSfx);
+				console.log('[AudioManager] Reel drop sound effect instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create reeldrop_wf SFX instance:', e);
+			}
 		}
 
-		try {
-			const turboDropSfx = this.scene.sound.add('turbodrop_wf', {
-				volume: this.sfxVolume,
-				loop: false
-			});
-			this.sfxInstances.set(SoundEffectType.TURBO_REEL_DROP, turboDropSfx);
-			console.log('[AudioManager] Turbo drop sound effect instance created');
-		} catch (e) {
-			console.warn('[AudioManager] Failed to create turbodrop_wf SFX instance:', e);
+		if (this.isAudioReady('turbodrop_wf')) {
+			try {
+				const turboDropSfx = this.scene.sound.add('turbodrop_wf', {
+					volume: this.sfxVolume,
+					loop: false
+				});
+				this.sfxInstances.set(SoundEffectType.TURBO_REEL_DROP, turboDropSfx);
+				console.log('[AudioManager] Turbo drop sound effect instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create turbodrop_wf SFX instance:', e);
+			}
 		}
 
 		// Create scatter SFX instance
-		try {
-			const scatter = this.scene.sound.add('scatter', { volume: this.sfxVolume, loop: false });
-			this.sfxInstances.set(SoundEffectType.SCATTER, scatter);
-			console.log('[AudioManager] Scatter SFX instance created');
-		} catch (e) {
-			console.warn('[AudioManager] Failed to create scatter_ka SFX instance:', e);
+		if (this.isAudioReady('scatter')) {
+			try {
+				const scatter = this.scene.sound.add('scatter', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.SCATTER, scatter);
+				console.log('[AudioManager] Scatter SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create scatter SFX instance:', e);
+			}
 		}
 
 		// Create win dialog SFX instances
-		try {
-			const bigWinSfx = this.scene.sound.add('bigw_wf', { volume: this.sfxVolume, loop: false });
-			this.sfxInstances.set(SoundEffectType.WIN_BIG, bigWinSfx);
-			console.log('[AudioManager] Big win SFX instance created');
-		} catch (e) {
-			console.warn('[AudioManager] Failed to create bigw_wf SFX instance:', e);
+		if (this.isAudioReady('bigw_wf')) {
+			try {
+				const bigWinSfx = this.scene.sound.add('bigw_wf', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.WIN_BIG, bigWinSfx);
+				console.log('[AudioManager] Big win SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create bigw_wf SFX instance:', e);
+			}
 		}
 
-		try {
-			const megaWinSfx = this.scene.sound.add('megaw_wf', { volume: this.sfxVolume, loop: false });
-			this.sfxInstances.set(SoundEffectType.WIN_MEGA, megaWinSfx);
-			console.log('[AudioManager] Mega win SFX instance created');
-		} catch (e) {
-			console.warn('[AudioManager] Failed to create megaw_wf SFX instance:', e);
+		if (this.isAudioReady('megaw_wf')) {
+			try {
+				const megaWinSfx = this.scene.sound.add('megaw_wf', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.WIN_MEGA, megaWinSfx);
+				console.log('[AudioManager] Mega win SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create megaw_wf SFX instance:', e);
+			}
 		}
 
-		try {
-			const superWinSfx = this.scene.sound.add('superw_wf', { volume: this.sfxVolume, loop: false });
-			this.sfxInstances.set(SoundEffectType.WIN_SUPER, superWinSfx);
-			console.log('[AudioManager] Super win SFX instance created');
-		} catch (e) {
-			console.warn('[AudioManager] Failed to create superw_wf SFX instance:', e);
+		if (this.isAudioReady('superw_wf')) {
+			try {
+				const superWinSfx = this.scene.sound.add('superw_wf', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.WIN_SUPER, superWinSfx);
+				console.log('[AudioManager] Super win SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create superw_wf SFX instance:', e);
+			}
 		}
 
-		try {
-			const epicWinSfx = this.scene.sound.add('epicw_wf', { volume: this.sfxVolume, loop: false });
-			this.sfxInstances.set(SoundEffectType.WIN_EPIC, epicWinSfx);
-			console.log('[AudioManager] Epic win SFX instance created');
-		} catch (e) {
-			console.warn('[AudioManager] Failed to create epicw_wf SFX instance:', e);
+		if (this.isAudioReady('epicw_wf')) {
+			try {
+				const epicWinSfx = this.scene.sound.add('epicw_wf', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.WIN_EPIC, epicWinSfx);
+				console.log('[AudioManager] Epic win SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create epicw_wf SFX instance:', e);
+			}
 		}
 
 		// Create dialog-specific SFX instances
-		try {
-			const freeSpinDlg = this.scene.sound.add('freespin_wf', { volume: this.sfxVolume, loop: false });
-			this.sfxInstances.set(SoundEffectType.DIALOG_FREESPIN, freeSpinDlg);
-			console.log('[AudioManager] Free spin dialog SFX instance created');
-		} catch (e) {
-			console.warn('[AudioManager] Failed to create freespin_wf SFX instance:', e);
+		if (this.isAudioReady('freespin_wf')) {
+			try {
+				const freeSpinDlg = this.scene.sound.add('freespin_wf', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.DIALOG_FREESPIN, freeSpinDlg);
+				console.log('[AudioManager] Free spin dialog SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create freespin_wf SFX instance:', e);
+			}
 		}
 
-		try {
-			const congratsDlg = this.scene.sound.add('congrats_wf', { volume: this.sfxVolume, loop: false });
-			this.sfxInstances.set(SoundEffectType.DIALOG_CONGRATS, congratsDlg);
-			console.log('[AudioManager] Congrats dialog SFX instance created');
-		} catch (e) {
-			console.warn('[AudioManager] Failed to create congrats_wf SFX instance:', e);
+		if (this.isAudioReady('congrats_wf')) {
+			try {
+				const congratsDlg = this.scene.sound.add('congrats_wf', { volume: this.sfxVolume, loop: false });
+				this.sfxInstances.set(SoundEffectType.DIALOG_CONGRATS, congratsDlg);
+				console.log('[AudioManager] Congrats dialog SFX instance created');
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create congrats_wf SFX instance:', e);
+			}
 		}
 
 		// Create instances for unused-but-available SFX and win audio keys from AssetConfig
 		// ARGUN SFX is intentionally quieter (50% of base SFX volume)
-		addOptionalSfx(SoundEffectType.ARGUN, 'argun_wf', true);
+		addOptionalSfx(SoundEffectType.ARGUN, 'argun_wf', true, 0.01);
 		addOptionalSfx(SoundEffectType.EXPLOSION, 'explosion_wf');
 		addOptionalSfx(SoundEffectType.BONUS_EXPLOSION, 'bonus_explosion_wf');
 		addOptionalSfx(SoundEffectType.MULTIPLIER_ADDED, 'multiplier_added_wf');
@@ -394,6 +562,9 @@ export class AudioManager {
 			return;
 		}
 
+		// Try to create instances for any newly loaded audio
+		this.tryCreateInstancesForReadyAudio();
+
 		// Stop current music if playing
 		this.stopCurrentMusic();
 
@@ -408,7 +579,8 @@ export class AudioManager {
 				console.error(`[AudioManager] Error playing ${musicType} music:`, error);
 			}
 		} else {
-			console.warn(`[AudioManager] Music instance not found for type: ${musicType}`);
+			// Audio might not be ready yet - log but don't error
+			console.log(`[AudioManager] Music instance not ready yet for type: ${musicType} (will play when ready)`);
 		}
 	}
 
@@ -762,6 +934,9 @@ export class AudioManager {
 			return;
 		}
 
+		// Try to create instances for any newly loaded audio
+		this.tryCreateInstancesForReadyAudio();
+
 		console.log(`[AudioManager] Attempting to play ${sfxType} sound effect`);
 		console.log(`[AudioManager] Available SFX instances:`, Array.from(this.sfxInstances.keys()));
 		
@@ -782,7 +957,8 @@ export class AudioManager {
 				console.error(`[AudioManager] Error playing ${sfxType} sound effect:`, error);
 			}
 		} else {
-			console.warn(`[AudioManager] Sound effect instance not found for type: ${sfxType}`);
+			// Audio might not be ready yet - log but don't error
+			console.log(`[AudioManager] Sound effect instance not ready yet for type: ${sfxType} (will play when ready)`);
 		}
 	}
 
@@ -951,6 +1127,30 @@ export class AudioManager {
 		});
 		
 		console.log(`[AudioManager] Sound effect volume set to: ${this.sfxVolume}`);
+	}
+
+	cacheSfxVolume(): void {
+		this.cachedSfxVolume = this.sfxVolume;
+	}
+
+	cacheMusicVolume(): void {
+		this.cachedMusicVolume = this.musicVolume;
+	}
+
+	cacheAmbientVolume(): void {
+		this.cachedAmbientVolume = this.ambientVolume;
+	}
+
+	restoreSfxVolume(): void {
+		this.sfxVolume = this.cachedSfxVolume;
+	}
+	
+	restoreMusicVolume(): void {
+		this.musicVolume = this.cachedMusicVolume;
+	}
+	
+	restoreAmbientVolume(): void {
+		this.ambientVolume = this.cachedAmbientVolume;
 	}
 
 	/**
