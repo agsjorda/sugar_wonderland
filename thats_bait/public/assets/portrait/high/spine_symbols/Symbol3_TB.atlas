@@ -1,34 +1,38 @@
 Symbol3_TB.webp
-size:203,62
+size:677,204
 filter:Linear,Linear
 pma:true
-EYE SOCKET
-bounds:169,42,18,16
+scale:0.2
+symbol3 body
+bounds:2,2,200,275
 rotate:90
-FIN BLUE REEL
-bounds:167,6,19,21
-FIN BLUE REEL RIGHT
-bounds:169,29,11,13
+symbol3 eye stalk
+bounds:573,28,59,53
 rotate:90
-HANDLE FISH
-bounds:79,8,52,64
+symbol3 fin 1
+bounds:566,130,69,72
+symbol3 fin 2
+bounds:628,3,33,41
+symbol3 handle
+bounds:637,160,38,42
+symbol3 hook
+bounds:628,46,36,42
+symbol3 line
+bounds:279,3,6,168
 rotate:90
-HOOK REEL
-bounds:188,2,12,14
-PUPIL BLUE REEL
-bounds:184,34,5,6
-REEL BLUE BODY
-bounds:2,5,55,75
+symbol3 mouth
+bounds:492,3,79,84
+symbol3 pole
+bounds:279,31,171,211
 rotate:90
-REEL BLUE MOUTH
-bounds:145,3,20,24
-REEL HANDLE FISH
-bounds:187,46,13,14
-REEL HANDLE WOOD FISH
-bounds:188,18,13,14
-REEL LINE BLUE
-bounds:79,2,4,46
+symbol3 pupil
+bounds:316,20,9,9
+symbol3 reel
+bounds:566,89,41,39
+symbol3 stick
+bounds:492,89,113,72
 rotate:90
-ROD FISH
-bounds:145,29,31,22
-rotate:90
+symbol3 teeth 1
+bounds:609,90,44,38
+symbol3 teeth 2
+bounds:279,11,35,18

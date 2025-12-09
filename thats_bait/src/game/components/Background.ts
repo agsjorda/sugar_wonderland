@@ -33,12 +33,26 @@ export class Background {
 	private surfaceWavePipeline?: WaterRipplePipeline;
 	private surfaceRippleElapsed: number = 0;
 	private readonly SURFACE_RIPPLE_INTERVAL_MS: number = 2000;
+	private enableAutoSurfaceRipple: boolean = false;
+	private lastHookSurfaceContact: boolean = false;
+	private surfaceRippleModifiers = {
+		amplitude: 0.035,
+		frequency: 35.0,
+		speed: 17.5,
+		decay: 0.8,
+	};
+	private seaEdgeWavePipeline?: WaterWaveVerticalPipeline;
+	private seaEdgeBaseWaveAmplitude: number = 0.015;
+	private seaEdgeWaveAmplitude: number = 0.015;
+	private readonly SEA_EDGE_WAVE_AMPLITUDE_MULTIPLIER: number = 3.0;
+	private readonly SEA_EDGE_WAVE_IMPULSE: number = 0.02;
+	private readonly SEA_EDGE_WAVE_DECAY_PER_SECOND: number = 1.5;
 	private readonly depthBackgroundModifiers = {
 		offsetX: 0,
-		offsetY: -410,
+		offsetY: -325,
 		scale: 1,
- 		scaleXMultiplier: 1,
- 		scaleYMultiplier: 0.8,
+ 		scaleXMultiplier: 0.8,
+ 		scaleYMultiplier: 0.5,
  	};
  	private readonly surfaceBackgroundModifiers = {
  		offsetX: 0,
@@ -60,9 +74,9 @@ export class Background {
 		scale: 4,
 	};
 	private readonly characterModifiers = {
-		offsetX: 0,
-		offsetY: -320,
-		scale: 4,
+		offsetX: -50,
+		offsetY: -345,
+		scale: 0.65,
 	};
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
@@ -108,7 +122,9 @@ export class Background {
 			showMaskDebug: false,
 			burstOnStart: false,
 			opacityMin: 0.3,
-			opacityMax: 0.7
+			opacityMax: 0.7,
+			textureKey: 'bubble',
+			imageScale: 0.01,
 		});
 
 		// Create multiple vertical bubble streams (5 by default), each with its own offset
@@ -136,6 +152,8 @@ export class Background {
 				radiusMax: 3,
 				maskBottom: 250,
 				showMaskDebug: false,
+				textureKey: 'bubble',
+				imageScale: 0.005,
 			});
 			this.bubbleStreamSystems.push(stream);
 		}
@@ -247,7 +265,7 @@ export class Background {
 		const seaEdgeScale = seaEdgeScaleBase * assetScale;
 		seaEdge.setScale(seaEdgeScale * this.seaEdgeWidthMultiplier, seaEdgeScale);
 		// Place Sea-Edge above the reel slot background (depth 880) but below controller UI (900)
-		seaEdge.setDepth(885);
+		seaEdge.setDepth(892);
 
 		const renderer: any = scene.game.renderer;
 		const pipelineManager: any = renderer && renderer.pipelines;
@@ -258,11 +276,22 @@ export class Background {
 				const hasDepth = store && typeof store.has === 'function' && store.has('WaterWaveDepth');
 				const hasSurface = store && typeof store.has === 'function' && store.has('WaterWaveSurface');
 				if (!hasVerticalEdge) {
-					pipelineManager.add('WaterWaveVerticalSeaEdge', new WaterWaveVerticalPipeline(scene.game, {
-						amplitude: 0.015,
+					const seaEdgePipeline = new WaterWaveVerticalPipeline(scene.game, {
+						amplitude: this.seaEdgeBaseWaveAmplitude,
 						frequency: 15.0,
 						speed: 6
-					}));
+					});
+					pipelineManager.add('WaterWaveVerticalSeaEdge', seaEdgePipeline);
+					this.seaEdgeWavePipeline = seaEdgePipeline;
+					this.seaEdgeWaveAmplitude = this.seaEdgeBaseWaveAmplitude;
+				} else if (renderer && typeof renderer.getPipeline === 'function') {
+					try {
+						const existingSeaEdge = renderer.getPipeline('WaterWaveVerticalSeaEdge');
+						if (existingSeaEdge) {
+							this.seaEdgeWavePipeline = existingSeaEdge as WaterWaveVerticalPipeline;
+							this.seaEdgeWaveAmplitude = this.seaEdgeBaseWaveAmplitude;
+						}
+					} catch (_getVerticalEdgeErr) {}
 				}
 				if (!hasDepth) {
 					const depthWave = new WaterWavePipeline(scene.game, {
@@ -282,9 +311,9 @@ export class Background {
 				}
 				if (!hasSurface) {
 					const surfaceWave = new WaterRipplePipeline(scene.game, {
-						waveAmplitude: 0.0,
-						waveFrequency: .1,
-						waveSpeed: 0.9,
+						waveAmplitude: 0.015,
+						waveFrequency: .2,
+						waveSpeed: 1.5,
 						rippleAmplitude: 0.0,
 						rippleFrequency: 1.0,
 						rippleSpeed: 17.5,
@@ -368,9 +397,9 @@ export class Background {
 			try {
 				const spineAny: any = this.characterSpine;
 				const animations: any[] | undefined = spineAny?.skeleton?.data?.animations;
-				let idleName: string = "animation";
+				let idleName: string = "Character_TB_idle";
 				if (Array.isArray(animations) && animations.length > 0) {
-					const preferred = ["idle", "Idle", "IDLE", "animation", "Animation"];
+					const preferred = ["Character_TB_idle", "idle", "Idle", "IDLE", "animation", "Animation"];
 					const found = preferred.find(name => animations.some(a => a && a.name === name));
 					idleName = found ?? (animations[0].name ?? idleName);
 				}
@@ -462,7 +491,7 @@ export class Background {
 		for (const stream of this.bubbleStreamSystems) {
 			stream.update(delta);
 		}
-		if (this.surfaceWavePipeline) {
+		if (this.surfaceWavePipeline && this.enableAutoSurfaceRipple) {
 			this.surfaceRippleElapsed += delta;
 			if (this.surfaceRippleElapsed >= this.SURFACE_RIPPLE_INTERVAL_MS) {
 				this.surfaceRippleElapsed -= this.SURFACE_RIPPLE_INTERVAL_MS;
@@ -474,6 +503,69 @@ export class Background {
 				});
 			}
 		}
+		if (this.seaEdgeWavePipeline) {
+			const baseAmp = this.seaEdgeBaseWaveAmplitude;
+			if (this.seaEdgeWaveAmplitude > baseAmp) {
+				const dtSeconds = delta * 0.001;
+				const diff = this.seaEdgeWaveAmplitude - baseAmp;
+				const decayFactor = Math.exp(-this.SEA_EDGE_WAVE_DECAY_PER_SECOND * dtSeconds);
+				this.seaEdgeWaveAmplitude = baseAmp + diff * decayFactor;
+				this.seaEdgeWavePipeline.setAmplitude(this.seaEdgeWaveAmplitude);
+			}
+		}
+	}
+
+	public updateHookSurfaceInteraction(hookX: number, hookY: number): void {
+		if (!this.bgSurface || !this.surfaceWavePipeline || !this.sceneRef) {
+			this.lastHookSurfaceContact = false;
+			return;
+		}
+
+		const w = this.bgSurface.displayWidth;
+		const h = this.bgSurface.displayHeight;
+		if (w <= 0 || h <= 0) {
+			this.lastHookSurfaceContact = false;
+			return;
+		}
+
+		const left = this.bgSurface.x - w * 0.5;
+		const top = this.bgSurface.y - h * 0.5;
+		const right = left + w;
+		const bottom = top + h;
+
+		const insideX = hookX >= left && hookX <= right;
+		const contactBand = 10;
+		const inContact = insideX && hookY >= bottom && hookY <= bottom + contactBand;
+
+		if (inContact && !this.lastHookSurfaceContact) {
+			const normX = (hookX - left) / w;
+			const normY = (hookY - top) / h;
+			const cfg = this.surfaceRippleModifiers;
+			this.surfaceWavePipeline.triggerRippleAt(normX, normY, {
+				amplitude: cfg.amplitude,
+				frequency: cfg.frequency,
+				speed: cfg.speed,
+				decay: cfg.decay
+			});
+			if (this.seaEdgeWavePipeline) {
+				const baseAmp = this.seaEdgeBaseWaveAmplitude;
+				const maxAmp = baseAmp * this.SEA_EDGE_WAVE_AMPLITUDE_MULTIPLIER;
+				this.seaEdgeWaveAmplitude = Math.min(
+					maxAmp,
+					this.seaEdgeWaveAmplitude + this.SEA_EDGE_WAVE_IMPULSE
+				);
+				this.seaEdgeWavePipeline.setAmplitude(this.seaEdgeWaveAmplitude);
+			}
+		}
+
+		this.lastHookSurfaceContact = inContact;
+	}
+
+	public updateSurfaceRippleModifiers(mods: { amplitude?: number; frequency?: number; speed?: number; decay?: number }): void {
+		if (typeof mods.amplitude === 'number') this.surfaceRippleModifiers.amplitude = mods.amplitude;
+		if (typeof mods.frequency === 'number') this.surfaceRippleModifiers.frequency = mods.frequency;
+		if (typeof mods.speed === 'number') this.surfaceRippleModifiers.speed = mods.speed;
+		if (typeof mods.decay === 'number') this.surfaceRippleModifiers.decay = mods.decay;
 	}
 
 	updateSurfaceBackgroundModifiers(mods: { offsetX?: number; offsetY?: number; scale?: number; scaleXMultiplier?: number; scaleYMultiplier?: number }): void {

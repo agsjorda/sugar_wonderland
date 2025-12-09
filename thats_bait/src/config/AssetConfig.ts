@@ -38,6 +38,7 @@ export class AssetConfig {
 				'BG-Sky': `${prefix}/background/BG-Sky.webp`,
 				'BG-Normal-Slots': `${prefix}/background/BG-Normal-Slots.webp`,
 				'Sea-Edge': `${prefix}/background/Sea-Edge.webp`,
+				'bubble': `${forcedPortraitHighPrefix}/background/bubble.webp`,
 				'hook': `${forcedPortraitHighPrefix}/characters/hook.webp`,
 			},
 			spine: {
@@ -114,11 +115,15 @@ export class AssetConfig {
 		const webpOnlySymbols = new Set<number>([7, 8, 9, 10]);
 		
 		const spinePrefix = `assets/portrait/high`;
+		const symbolImagePrefix = `${spinePrefix}/symbols`;
 		
 		for (let i = 0; i <= 14; i++) {
+			const symbolNameTB = `Symbol${i}_TB`;
+			const imageKey = `symbol_${i}`;
+			const imagePath = `${symbolImagePrefix}/${symbolNameTB}.webp`;
+			symbolImages[imageKey] = imagePath;
 			if (tbSpineSymbols.has(i)) {
 				const spineKey = `symbol_${i}_spine`;
-				const symbolNameTB = `Symbol${i}_TB`;
 				const atlasPath = `${spinePrefix}/spine_symbols/${symbolNameTB}.atlas`;
 				const jsonPath = `${spinePrefix}/spine_symbols/${symbolNameTB}.json`;
 				
@@ -127,15 +132,11 @@ export class AssetConfig {
 					json: jsonPath
 				};
 				
-				console.log(`[AssetConfig] Symbol ${i}: spine=${atlasPath}`);
+				console.log(`[AssetConfig] Symbol ${i}: spine=${atlasPath}, image=${imagePath}`);
 			} else if (webpOnlySymbols.has(i)) {
-				const imageKey = `symbol_${i}`;
-				const symbolNameTB = `Symbol${i}_TB`;
-				const imagePath = `${spinePrefix}/spine_symbols/${symbolNameTB}.webp`;
-				symbolImages[imageKey] = imagePath;
 				console.log(`[AssetConfig] Symbol ${i}: image=${imagePath} (WEBP only, no Spine JSON)`);
 			} else {
-				console.log(`[AssetConfig] Symbol ${i}: spine=<none> (no TB Spine asset)`);
+				console.log(`[AssetConfig] Symbol ${i}: image=${imagePath} (no TB Spine asset)`);
 			}
 		}
 		

@@ -1,21 +1,30 @@
 Symbol1_TB.webp
-size:69,123
+size:396,241
 filter:Linear,Linear
 pma:true
-BODY-1-1
-bounds:2,2,81,65
+scale:0.2
+symbol1 body
+bounds:2,2,284,237
+symbol1 eye 1
+bounds:346,124,44,43
 rotate:90
-EYES BANGUS
-bounds:23,85,25,20
-FIN
-bounds:2,92,16,19
-offsets:47,0,63,19
+symbol1 eye 2
+bounds:288,2,50,55
 rotate:90
-FIN 1
-bounds:14,110,26,11
-MOUTH
-bounds:42,107,21,14
-PUPIL 1
-bounds:2,117,4,4
-PUPIL 2
-bounds:8,117,4,4
+symbol1 fin 1
+bounds:288,54,92,32
+symbol1 fin 2
+bounds:288,170,62,69
+symbol1 mouth
+bounds:288,88,80,56
+rotate:90
+symbol1 pupil 1
+bounds:352,171,7,7
+symbol1 pupil 2
+bounds:346,88,6,7
+rotate:90
+symbol1 teeth 1
+bounds:346,96,48,26
+symbol1 teeth 2
+bounds:352,180,59,27
+rotate:90

@@ -21,10 +21,13 @@ export interface BubbleStreamConfig {
 	maskTop?: number;
 	maskBottom?: number;
 	showMaskDebug?: boolean;
+	textureKey?: string;
+	imageScale?: number;
 }
 
 interface StreamBubble {
-	graphics: Phaser.GameObjects.Graphics;
+	graphics?: Phaser.GameObjects.Graphics;
+	image?: Phaser.GameObjects.Image;
 	offset: number; // vertical offset in pixels from the origin
 	phase: number;
 	amplitude: number;
@@ -54,6 +57,8 @@ export class BubbleStreamSystem {
 	private opacityMin = 0.4;
 	private opacityMax = 1.0;
 	private baseColor = 0x8fd3ff;
+	private textureKey?: string;
+	private imageScale: number = 1;
 
 	// Height of the full train, used for wrapping
 	private streamLength = 0;
@@ -121,6 +126,12 @@ export class BubbleStreamSystem {
 			const tmp = this.radiusMin;
 			this.radiusMin = this.radiusMax;
 			this.radiusMax = tmp;
+		}
+		if (typeof config.textureKey === "string" && config.textureKey.trim().length > 0) {
+			this.textureKey = config.textureKey.trim();
+		}
+		if (typeof config.imageScale === "number") {
+			this.imageScale = config.imageScale;
 		}
 
 		// Optional mask configuration
@@ -258,7 +269,8 @@ export class BubbleStreamSystem {
 
 	destroy(): void {
 		for (const bubble of this.bubbles) {
-			try { bubble.graphics.destroy(); } catch {}
+			try { bubble.graphics?.destroy(); } catch {}
+			try { bubble.image?.destroy(); } catch {}
 		}
 		this.bubbles = [];
 		try { this.container.destroy(true); } catch {}
@@ -268,7 +280,8 @@ export class BubbleStreamSystem {
 
 	private rebuildBubbles(): void {
 		for (const bubble of this.bubbles) {
-			try { bubble.graphics.destroy(); } catch {}
+			try { bubble.graphics?.destroy(); } catch {}
+			try { bubble.image?.destroy(); } catch {}
 		}
 		this.bubbles = [];
 
@@ -286,23 +299,44 @@ export class BubbleStreamSystem {
 	}
 
 	private createBubble(offset: number, index: number): StreamBubble {
-		const graphics = this.scene.add.graphics();
-		this.container.add(graphics);
+		let graphics: Phaser.GameObjects.Graphics | undefined;
+		let image: Phaser.GameObjects.Image | undefined;
+		const useImage = this.textureKey && this.scene.textures.exists(this.textureKey);
+		if (useImage) {
+			image = this.scene.add.image(this.originX, this.originY, this.textureKey!);
+			this.container.add(image);
+			image.setOrigin(0.5, 0.5);
+		} else {
+			graphics = this.scene.add.graphics();
+			this.container.add(graphics);
+		}
 		// Randomize phase and amplitude per bubble to make zigzag unique
 		const phase = Math.random() * Math.PI * 2;
 		const amplitude = this.horizontalAmplitude * (0.5 + Math.random());
 		const radius = this.radiusMin + Math.random() * (this.radiusMax - this.radiusMin);
 		const opacity = this.opacityMin + Math.random() * (this.opacityMax - this.opacityMin);
-		return { graphics, offset, phase, amplitude, radius, opacity };
+		return { graphics, image, offset, phase, amplitude, radius, opacity };
 	}
 
 	private drawBubble(bubble: StreamBubble, x: number, y: number): void {
-		const { graphics, radius, opacity } = bubble;
+		const { graphics, image, radius, opacity } = bubble;
+		const alpha = opacity;
+		if (image) {
+			const baseScale = this.imageScale > 0 ? this.imageScale : 1;
+			const radiusFactor = radius / Math.max(1, this.radiusMin);
+			const finalScale = baseScale * radiusFactor;
+			image.setPosition(x, y);
+			image.setScale(finalScale);
+			image.setAlpha(alpha);
+			return;
+		}
+		if (!graphics) {
+			return;
+		}
 		graphics.clear();
 
 		const outerW = radius * 2.4;
 		const outerH = radius * 2.4;
-		const alpha = opacity;
 
 		graphics.fillStyle(this.baseColor, alpha * 0.20);
 		graphics.fillEllipse(x, y, outerW, outerH);

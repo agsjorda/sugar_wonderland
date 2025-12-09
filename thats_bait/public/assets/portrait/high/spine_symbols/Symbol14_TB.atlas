@@ -1,25 +1,25 @@
 Symbol14_TB.webp
-size:625,252
+size:1247,492
 filter:Linear,Linear
 pma:true
-scale:0.5
 4 FISH MULTIPLIER
-bounds:423,6,244,99
+bounds:849,2,488,197
 rotate:90
 4 FISH MULTIPLIER SHADOW
-bounds:247,15,235,174
+bounds:499,21,469,348
 rotate:90
 4 MULTIPLIER CRYSTAL
-bounds:524,105,145,99
-offsets:0,43,171,142
+bounds:1048,200,290,197
+offsets:0,87,342,284
 rotate:90
 4 MULTIPLIER FIN
-bounds:524,29,74,57
+bounds:1048,50,148,114
 rotate:90
 4 MULTIPLIER FIN 2
-bounds:583,47,36,56
+bounds:1164,86,71,112
 4 MULTIPLIER PUPIL
-bounds:247,2,11,20
-rotate:90
+bounds:1048,9,21,39
+offsets:0,0,21,40
 frame gold
-bounds:2,2,243,248
+bounds:2,4,486,495
+rotate:90

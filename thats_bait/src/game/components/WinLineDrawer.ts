@@ -5,7 +5,7 @@ import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { TurboConfig } from '../../config/TurboConfig';
 import { SpinData, PaylineData } from '../../backend/SpinData';
-import { WILDCARD_SYMBOLS } from '../../config/GameConfig';
+import { MULTIPLIER_SYMBOLS } from '../../config/GameConfig';
 
 
 export class WinLineDrawer {

@@ -1,20 +1,17 @@
 Symbol5_TB.webp
-size:153,61
+size:102,173
 filter:Linear,Linear
-pma:true
-BUCKET TENTACLE
-bounds:80,2,16,15
-GOOP
-bounds:123,12,47,28
+pma:false
+scale:0.2
+1 FISH MULTIPLIER BODY
+bounds:2,138,96,25
+1 FISH MULTIPLIER FIN
+bounds:2,165,17,6
+1 FISH MULTIPLIER SHADOW
+bounds:2,101,95,35
+1 FISH MULTIPLIUER PUPIL
+bounds:21,165,6,10
 rotate:90
-HANDLE BUCKET
-bounds:80,19,41,40
-Layer17-1
-bounds:2,7,76,52
-PUPIL GOOP
-bounds:123,6,4,4
-TONGUE
-bounds:98,6,12,11
-WORM BUCKET
-bounds:112,3,14,9
+frame
+bounds:2,2,97,98
 rotate:90

@@ -313,6 +313,38 @@ export class Preloader extends Scene
 
 	async create ()
 	{
+		// Patch Symbol1 Spine JSON to fix case-mismatched slot names before any spines are instantiated
+		try {
+			const jsonCache: any = (this.cache as any).json;
+			const spineKey = 'symbol_1_spine';
+			if (jsonCache?.has?.(spineKey)) {
+				const data: any = jsonCache.get(spineKey);
+				const slots: any[] = Array.isArray(data?.slots) ? data.slots : [];
+				const defaultSkin: any = data?.skins?.default;
+				if (defaultSkin && slots.length > 0) {
+					const slotNameMap: Record<string, string> = {};
+					for (const s of slots) {
+						if (s && typeof s.name === 'string') {
+							slotNameMap[s.name.toLowerCase()] = s.name;
+						}
+					}
+					for (const key of Object.keys(defaultSkin)) {
+						if (!slotNameMap[key]) {
+							const lower = key.toLowerCase();
+							const canonical = slotNameMap[lower];
+							if (canonical && !defaultSkin[canonical]) {
+								defaultSkin[canonical] = defaultSkin[key];
+								delete defaultSkin[key];
+							}
+						}
+					}
+					console.log('[Preloader] Patched Symbol1_TB spine JSON slot keys (case normalization)');
+				}
+			}
+		} catch (e) {
+			console.warn('[Preloader] Failed to patch Symbol1_TB spine JSON:', e);
+		}
+
 		// Initialize GameAPI and get the game token
 		try {
 			console.log('[Preloader] Initializing GameAPI...');

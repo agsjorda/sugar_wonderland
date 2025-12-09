@@ -956,10 +956,11 @@ export class SlotController {
 			}
 			console.log('[SlotController] Spin button clicked');
 			// Ensure symbols container is restored for the new spin
-			try { this.symbols?.restoreSymbolsAboveReelBg?.(); } catch {}
+			try { (this.symbols as any)?.restoreSymbolsAboveReelBg?.(); } catch {}
 			if ((window as any).audioManager) {
 				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
 			}
+			try { this.scene?.events.emit('flashAllSymbolsNow'); } catch {}
 			// Block spin during scatter anticipation/transition to overlay
 			if (gameStateManager.isScatter) {
 				console.log('[SlotController] Spin blocked - scatter transition/animation in progress');
@@ -1285,7 +1286,7 @@ export class SlotController {
 		this.balanceAmountText = scene.add.text(
 			balanceX + balanceValueOffset,
 			balanceY + 8,
-			'0',
+			'200,000.00',
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color
@@ -2305,6 +2306,7 @@ setBuyFeatureBetAmount(amount: number): void {
 			// For manual spins, disable spin. Keep enabled during autoplay to allow stopping autoplay
 			if (!gameStateManager.isAutoPlaying) {
 				this.disableSpinButton();
+				this.disableAutoplayButton();
 			}
 			
 			// Play the spin button spine animation for all spins (manual and autoplay)
@@ -2351,7 +2353,7 @@ setBuyFeatureBetAmount(amount: number): void {
 		gameEventManager.on(GameEventType.REELS_STOP, () => {
 			console.log('[SlotController] Reels stopped event received - updating spin button state');
 			// Single decrement per spinId at REELS_STOP
-			if (gameStateManager.isAutoPlaying && this.autoplaySpinsRemaining > 0 && !this.hasDecrementedAutoplayForCurrentSpin) {
+			if (false && gameStateManager.isAutoPlaying && this.autoplaySpinsRemaining > 0 && !this.hasDecrementedAutoplayForCurrentSpin) {
 				if (this.lastDecrementSpinId !== this.currentSpinId) {
 					this.autoplaySpinsRemaining = Math.max(0, this.autoplaySpinsRemaining - 1);
 					this.updateAutoplaySpinsRemainingText(this.autoplaySpinsRemaining);
@@ -2901,6 +2903,46 @@ setBuyFeatureBetAmount(amount: number): void {
 	 * Perform a single autoplay spin
 	 */
 	private async performAutoplaySpin(): Promise<void> {
+		console.log('[SlotController] performAutoplaySpin called');
+		// Guard: if stopping autoplay or no spins remaining, do nothing
+		if (this.isStoppingAutoplay || this.autoplaySpinsRemaining <= 0) {
+			console.log('[SlotController] performAutoplaySpin aborted - isStoppingAutoplay or no spins remaining', {
+				isStoppingAutoplay: this.isStoppingAutoplay,
+				autoplaySpinsRemaining: this.autoplaySpinsRemaining
+			});
+			return;
+		}
+		// Guard: do not start a new autoplay spin while reels are already spinning
+		if (gameStateManager.isReelSpinning) {
+			console.log('[SlotController] performAutoplaySpin aborted - reels already spinning');
+			return;
+		}
+		// Guard: block autoplay spins when win dialog is showing
+		if (gameStateManager.isShowingWinDialog) {
+			console.log('[SlotController] performAutoplaySpin blocked - win dialog is showing');
+			return;
+		}
+		// Guard: skip autoplay during scatter/bonus transitions
+		if (gameStateManager.isScatter || gameStateManager.isBonus) {
+			console.log('[SlotController] performAutoplaySpin blocked - scatter or bonus active');
+			return;
+		}
+		// Guard: delay autoplay while hook-scatter event is active
+		if (gameStateManager.isHookScatterActive) {
+			console.log('[SlotController] performAutoplaySpin blocked - hook-scatter event active, rescheduling');
+			this.scheduleNextAutoplaySpin(200);
+			return;
+		}
+		// Decrement autoplay counter once per spin before starting
+		this.autoplaySpinsRemaining = Math.max(0, this.autoplaySpinsRemaining - 1);
+		this.updateAutoplaySpinsRemainingText(this.autoplaySpinsRemaining);
+		this.bounceAutoplaySpinsRemainingText();
+		console.log(`[SlotController] Autoplay spin starting - spins remaining after decrement: ${this.autoplaySpinsRemaining}`);
+		// Ensure global autoplay flags are set
+		if (this.gameData) {
+			this.gameData.isAutoPlaying = true;
+		}
+		gameStateManager.isAutoPlaying = true;
 		// Play spin button animations
 		this.playSpinButtonAnimation();
 		this.rotateSpinButton();
@@ -2908,13 +2950,13 @@ setBuyFeatureBetAmount(amount: number): void {
 		// Play autoplay button animation once per spin
 		this.playAutoplayAnimation();
 		
-		// Removed pulsing of autoplay spins remaining text during autoplay
+		try {
+			// Use the centralized spin handler
+			await this.handleSpin();
+		} catch (error) {
+			console.error('[SlotController] Error during performAutoplaySpin handleSpin call:', error);
+		}
 		
-		// Use the centralized spin handler
-		await this.handleSpin();
-		
-		// Note: autoplaySpinsRemaining is decremented in REELS_STOP handler
-		// This ensures the counter is decremented after the spin is fully processed
 		console.log(`[SlotController] Autoplay spin initiated, spins remaining: ${this.autoplaySpinsRemaining}`);
 	}
 
@@ -3377,57 +3419,9 @@ setBuyFeatureBetAmount(amount: number): void {
 		}
 
 		console.log(`[SlotController] Applying turbo speed modifications - isTurbo: ${gameData.isTurbo}`);
-		console.log(`[SlotController] Current GameData reference:`, gameData);
-		console.log(`[SlotController] GameData memory address:`, gameData.toString());
-
-		if (gameData.isTurbo) {
-			// Apply turbo speed (4x faster = 0.25x duration)
-			const originalWinUp = gameData.winUpDuration;
-			const originalDrop = gameData.dropDuration;
-			const originalDelay = gameData.dropReelsDelay;
-			const originalDuration = gameData.dropReelsDuration;
-			
-			gameData.winUpDuration = gameData.winUpDuration * TurboConfig.TURBO_SPEED_MULTIPLIER;
-			gameData.dropDuration = gameData.dropDuration * TurboConfig.TURBO_SPEED_MULTIPLIER;
-			gameData.dropReelsDelay = gameData.dropReelsDelay * TurboConfig.TURBO_SPEED_MULTIPLIER;
-			gameData.dropReelsDuration = gameData.dropReelsDuration * TurboConfig.TURBO_SPEED_MULTIPLIER;
-			
-			console.log(`[SlotController] Turbo speed applied to winline animations (4x faster):`);
-			console.log(`  winUpDuration: ${originalWinUp} -> ${gameData.winUpDuration}`);
-			console.log(`  dropDuration: ${originalDrop} -> ${gameData.dropDuration}`);
-			console.log(`  dropReelsDelay: ${originalDelay} -> ${gameData.dropReelsDelay}`);
-			console.log(`  dropReelsDuration: ${originalDuration} -> ${gameData.dropReelsDuration}`);
-			
-			// Verify the changes were applied
-			console.log(`[SlotController] Verification - Current GameData values:`);
-			console.log(`  winUpDuration: ${gameData.winUpDuration}`);
-			console.log(`  dropDuration: ${gameData.dropDuration}`);
-			console.log(`  dropReelsDelay: ${gameData.dropReelsDelay}`);
-			console.log(`  dropReelsDuration: ${gameData.dropReelsDuration}`);
-			
-			// Also check if the scene's GameData is the same reference
-			if (this.scene && (this.scene as any).gameData) {
-				const sceneGameData = (this.scene as any).gameData;
-				console.log(`[SlotController] Scene GameData reference:`, sceneGameData);
-				console.log(`[SlotController] Scene GameData memory address:`, sceneGameData.toString());
-				console.log(`[SlotController] Are references the same?`, gameData === sceneGameData);
-				
-				if (gameData !== sceneGameData) {
-					console.warn(`[SlotController] WARNING: Different GameData references! Applying turbo to scene GameData as well.`);
-					// Apply turbo to scene GameData as well
-					sceneGameData.winUpDuration = sceneGameData.winUpDuration * TurboConfig.TURBO_SPEED_MULTIPLIER;
-					sceneGameData.dropDuration = sceneGameData.dropDuration * TurboConfig.TURBO_SPEED_MULTIPLIER;
-					sceneGameData.dropReelsDelay = sceneGameData.dropReelsDelay * TurboConfig.TURBO_SPEED_MULTIPLIER;
-					sceneGameData.dropReelsDuration = sceneGameData.dropReelsDuration * TurboConfig.TURBO_SPEED_MULTIPLIER;
-					console.log(`[SlotController] Turbo also applied to scene GameData`);
-				}
-			}
-		} else {
-			// Reset to normal speed by calling setSpeed with the original delay
-			const originalDelay = 2500; // This should match Data.DELAY_BETWEEN_SPINS
-			setSpeed(gameData, originalDelay);
-			console.log('[SlotController] Normal speed restored for winline animations');
-		}
+		// Timing for drops/winlines is now based on adjustedDelay computed in Symbols
+		// and TurboConfig-driven consumers (e.g. WinLineDrawer). No direct scaling
+		// of GameData durations is performed here to avoid double-application.
 	}
 
 	/**
@@ -3774,15 +3768,21 @@ public updateAutoplayButtonState(): void {
 	}
 
 	/**
-	 * Update the free spin number display
-	 * In bonus mode, decrement the display value by 1 for frontend only
-	 */
-    // Removed legacy text-based updateFreeSpinNumber (replaced by digit sprites)
-
-	/**
 	 * Handle spin logic - either normal API call or free spin simulation
 	 */
 	private async handleSpin(): Promise<void> {
+		// Pre-spin cleanup: stop any active winline animations and reset symbols
+		try {
+			const scene: any = this.scene as any;
+			const symbolsComponent: any = this.symbols || scene?.symbols;
+			if (symbolsComponent) {
+				try { symbolsComponent.pruneOrphanSymbolsInContainer?.(); } catch {}
+				try { symbolsComponent.beginSpinPhase?.(); } catch {}
+				try { symbolsComponent.clearWinLines?.(); } catch {}
+				try { symbolsComponent.winLineDrawer?.forceEmitWinStopIfNeeded?.(); } catch {}
+			}
+		} catch {}
+
 		// Ensure game token exists; if missing, initialize before spinning
 		try {
 			if (typeof localStorage !== 'undefined' && !localStorage.getItem('token') && this.gameAPI?.initializeGame) {
@@ -3834,7 +3834,6 @@ public updateAutoplayButtonState(): void {
 
 			// Check if we're in bonus mode and use free spin simulation
 			if (gameStateManager.isBonus) {
-				// Guard: ensure valid free spin data exists and there are remaining spins; otherwise fall back to normal spin
 				const current = this.gameAPI.getCurrentSpinData();
 				const fs = current?.slot?.freespin || current?.slot?.freeSpin;
 				const hasFsItems = Array.isArray(fs?.items) && fs!.items.length > 0;
@@ -3848,38 +3847,34 @@ public updateAutoplayButtonState(): void {
 					spinData = await this.gameAPI.simulateFreeSpin();
 					
 					// Update free spin display with remaining count from Symbols component
-					const gameScene = this.scene as any; // Cast to access symbols property
-					if (gameScene.symbols && gameScene.symbols.freeSpinAutoplaySpinsRemaining !== undefined) {
+					const gameScene = this.scene as any;
+					if (gameScene?.symbols && gameScene.symbols.freeSpinAutoplaySpinsRemaining !== undefined) {
 						this.updateFreeSpinNumber(gameScene.symbols.freeSpinAutoplaySpinsRemaining);
 						console.log(`[SlotController] Updated free spin display to ${gameScene.symbols.freeSpinAutoplaySpinsRemaining} remaining`);
 						
 						// Check if there are any more free spins available
 						const hasMoreFreeSpins = spinData.slot.freespin.items.some((item: any) => item.spinsLeft > 0);
 						if (!hasMoreFreeSpins) {
-							// No more free spins - end bonus mode
 							console.log('[SlotController] No more free spins available - ending bonus mode');
 							gameStateManager.isBonus = false;
 							gameStateManager.isBonusFinished = true;
-							// Emit event to show primary controller and hide bonus components
 							if (this.scene) {
 								this.scene.events.emit('setBonusMode', false);
 							}
 						}
 					} else {
-						// No more free spins - end bonus mode
 						console.log('[SlotController] No more free spins - ending bonus mode');
 						gameStateManager.isBonus = false;
 						gameStateManager.isBonusFinished = true;
-						// Emit event to show primary controller and hide bonus components
 						if (this.scene) {
 							this.scene.events.emit('setBonusMode', false);
 						}
 					}
 				}
 			}
+
 			if (!spinData) {
 				console.log('[SlotController] Normal mode - calling GameAPI.doSpin...');
-				// Use base bet amount for API calls (without amplify bet increase)
 				const currentBet = this.getBaseBetAmount() || 10;
 				const gameData = this.getGameData();
 				const isEnhancedBet = gameData ? gameData.isEnhancedBet : false;
@@ -3887,21 +3882,21 @@ public updateAutoplayButtonState(): void {
 				console.log('[SlotController] Spin data:', spinData);
 			}
 
-			// Display comprehensive spin data information
 			if (!spinData) {
 				console.error('[SlotController] No spin data available after spin attempt');
 				return;
 			}
-			console.log('[SlotController] 🎰 ===== SPIN DATA RECEIVED =====');
-			console.log('[SlotController] 📊 Basic Info:');
+
+			console.log('[SlotController] ===== SPIN DATA RECEIVED =====');
+			console.log('[SlotController] Basic Info:');
 			console.log('  - Player ID:', spinData.playerId);
 			console.log('  - Bet Amount:', spinData.bet);
 			console.log('  - Total Win:', SpinDataUtils.getTotalWin(spinData));
 			console.log('  - Has Wins:', SpinDataUtils.hasWins(spinData));
 			console.log('  - Has Free Spins:', SpinDataUtils.hasFreeSpins(spinData));
 			console.log('  - Win Multiplier:', SpinDataUtils.getWinMultiplier(spinData));
-			
-			console.log('[SlotController] 🎯 Grid Layout (3x5):');
+
+			console.log('[SlotController] Grid Layout (3x5):');
 			if (spinData.slot?.area) {
 				for (let row = 0; row < spinData.slot.area.length; row++) {
 					console.log(`  Row ${row}: [${spinData.slot.area[row].join(', ')}]`);
@@ -3909,8 +3904,8 @@ public updateAutoplayButtonState(): void {
 			} else {
 				console.log('  No area data available');
 			}
-			
-			console.log('[SlotController] 💎 Paylines:');
+
+			console.log('[SlotController] Paylines:');
 			if (spinData.slot?.paylines && spinData.slot.paylines.length > 0) {
 				spinData.slot.paylines.forEach((payline, index) => {
 					console.log(`  Payline ${index}:`, {
@@ -3924,8 +3919,8 @@ public updateAutoplayButtonState(): void {
 			} else {
 				console.log('  No paylines data available');
 			}
-			
-			console.log('[SlotController] 🎁 Free Spins Info:');
+
+			console.log('[SlotController] Free Spins Info:');
 			if (spinData.slot?.freespin) {
 				console.log(`  - Count: ${spinData.slot.freespin.count}`);
 				console.log(`  - Total Win: ${spinData.slot.freespin.totalWin}`);
@@ -3933,16 +3928,13 @@ public updateAutoplayButtonState(): void {
 			} else {
 				console.log('  No free spins data available');
 			}
-			
-			console.log('[SlotController] 🎰 ===== END SPIN DATA =====');
-			
-			// Emit the spin data response event
-			gameEventManager.emit(GameEventType.SPIN_DATA_RESPONSE, {
-				spinData: spinData
-			});
 
+			console.log('[SlotController] ===== END SPIN DATA =====');
+
+			// Emit the spin data response event
+			gameEventManager.emit(GameEventType.SPIN_DATA_RESPONSE, { spinData });
 		} catch (error) {
-			console.error('[SlotController] ❌ Spin failed:', error);
+			console.error('[SlotController] Spin failed:', error);
 			// Fallback: if free spin simulation failed due to no data, try a normal spin
 			try {
 				if (gameStateManager.isBonus) {
@@ -3956,7 +3948,7 @@ public updateAutoplayButtonState(): void {
 				gameEventManager.emit(GameEventType.SPIN_DATA_RESPONSE, { spinData: fallbackSpinData });
 				return;
 			} catch (fallbackError) {
-				console.error('[SlotController] ❌ Fallback normal spin failed:', fallbackError);
+				console.error('[SlotController] Fallback normal spin failed:', fallbackError);
 				// Offline/dev fallback: generate a local spin and emit SPIN_DATA_RESPONSE
 				try {
 					const generator = new SymbolGenerator();
@@ -4294,9 +4286,8 @@ public updateAutoplayButtonState(): void {
 		// Listen for free spin autoplay events
 		gameEventManager.on(GameEventType.FREE_SPIN_AUTOPLAY, async () => {
 			console.log('[SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation');
-			// Trigger same white overlay flash for bonus spins
-			// Ensure symbols are above background at the immediate start of the free spin
 			try {
+				this.scene?.events.emit('flashAllSymbolsNow');
 				const symbolsComponent = (this.scene as any)?.symbols;
 				if (symbolsComponent) {
 					try { symbolsComponent.restoreSymbolsAboveReelBg?.(); } catch {}
@@ -4339,8 +4330,8 @@ public updateAutoplayButtonState(): void {
 						console.log(`[SlotController] Updated free spin display to ${gameScene.symbols.freeSpinAutoplaySpinsRemaining} remaining`);
 						
 						// Check if there are any more free spins available
-						const freespinData = spinData.slot?.freespin || spinData.slot?.freeSpin;
-						const hasMoreFreeSpins = freespinData?.items?.some(item => item.spinsLeft > 0);
+						const freespinData2 = spinData.slot?.freespin || spinData.slot?.freeSpin;
+						const hasMoreFreeSpins = freespinData2?.items?.some((item: any) => item.spinsLeft > 0);
 						if (!hasMoreFreeSpins) {
 							// No more free spins - end bonus mode
 							console.log('[SlotController] No more free spins available - ending bonus mode');
@@ -4361,13 +4352,13 @@ public updateAutoplayButtonState(): void {
 							this.scene.events.emit('setBonusMode', false);
 						}
 					}
-
+					
 					// Process the spin data directly for free spin autoplay
 					if (this.scene && (this.scene as any).symbols) {
-						const symbolsComponent = (this.scene as any).symbols;
-						if (symbolsComponent && typeof symbolsComponent.processSpinData === 'function') {
+						const symbolsComponent2 = (this.scene as any).symbols;
+						if (symbolsComponent2 && typeof symbolsComponent2.processSpinData === 'function') {
 							console.log('[SlotController] Processing free spin data directly via symbols component');
-							symbolsComponent.processSpinData(spinData);
+							symbolsComponent2.processSpinData(spinData);
 						} else {
 							console.log('[SlotController] Symbols component not available, falling back to SPIN_DATA_RESPONSE');
 							gameEventManager.emit(GameEventType.SPIN_DATA_RESPONSE, {
@@ -4380,20 +4371,11 @@ public updateAutoplayButtonState(): void {
 							spinData: spinData
 						});
 					}
-
 				} catch (error) {
 					console.error('[SlotController] Free spin simulation failed:', error);
 				}
 			} else {
 				console.warn('[SlotController] Not in bonus mode or GameAPI not available for free spin autoplay');
-			}
-		});
-
-		// Listen for scatter bonus activation to reset free spin index
-		this.scene.events.on('scatterBonusActivated', () => {
-			console.log('[SlotController] Scatter bonus activated - resetting free spin index');
-			if (this.gameAPI) {
-				this.gameAPI.resetFreeSpinIndex();
 			}
 		});
 
@@ -4560,6 +4542,29 @@ public updateAutoplayButtonState(): void {
 		return `Spin Button: ${isEnabled ? 'ENABLED' : 'DISABLED'} | isReelSpinning: ${gameStateManager.isReelSpinning} | isAutoPlaying: ${gameData.isAutoPlaying}`;
 	}
 
+	public setExternalControlLock(isLocked: boolean): void {
+		if (isLocked) {
+			try { this.disableSpinButton(); } catch {}
+			try { this.disableAutoplayButton(); } catch {}
+			try { this.disableBetButtons(); } catch {}
+			try { this.disableFeatureButton(); } catch {}
+			try { this.disableAmplifyButton(); } catch {}
+			try { this.disableTurboButton(); } catch {}
+		} else {
+			try { this.enableSpinButton(); } catch {}
+			try { this.enableAutoplayButton(); } catch {}
+			try { this.enableBetButtons(); } catch {}
+			try { this.enableFeatureButton(); } catch {}
+			try { this.enableAmplifyButton(); } catch {}
+			try { this.enableTurboButton(); } catch {}
+			try {
+				if (this.updateAutoplayButtonState) {
+					this.updateAutoplayButtonState();
+				}
+			} catch {}
+		}
+	}
+
 	/**
 	 * Get current GameData animation timing values for debugging
 	 */
@@ -4568,7 +4573,6 @@ public updateAutoplayButtonState(): void {
 		if (!gameData) {
 			return 'GameData not available';
 		}
-		
 		return `GameData Animation Values: winUpDuration=${gameData.winUpDuration}, dropDuration=${gameData.dropDuration}, dropReelsDelay=${gameData.dropReelsDelay}, dropReelsDuration=${gameData.dropReelsDuration}, isTurbo=${gameData.isTurbo}`;
 	}
 
@@ -4585,27 +4589,10 @@ public updateAutoplayButtonState(): void {
 		const gameData = this.getGameData();
 		
 		if (gameData) {
-			if (gameData.isTurbo) {
-				console.log('[SlotController] Force applying turbo to scene GameData');
-				
-				// Apply turbo speed to scene GameData
-				sceneGameData.winUpDuration = sceneGameData.winUpDuration * TurboConfig.TURBO_SPEED_MULTIPLIER;
-				sceneGameData.dropDuration = sceneGameData.dropDuration * TurboConfig.TURBO_SPEED_MULTIPLIER;
-				sceneGameData.dropReelsDelay = sceneGameData.dropReelsDelay * TurboConfig.TURBO_SPEED_MULTIPLIER;
-				sceneGameData.dropReelsDuration = sceneGameData.dropReelsDuration * TurboConfig.TURBO_SPEED_MULTIPLIER;
-				
-				console.log(`[SlotController] Scene GameData turbo applied:`);
-				console.log(`  winUpDuration: ${sceneGameData.winUpDuration}`);
-				console.log(`  dropDuration: ${sceneGameData.dropDuration}`);
-				console.log(`  dropReelsDelay: ${sceneGameData.dropReelsDelay}`);
-				console.log(`  dropReelsDuration: ${sceneGameData.dropReelsDuration}`);
-			} else {
+			if (!gameData.isTurbo) {
 				console.log('[SlotController] Resetting scene GameData to normal speed');
-				
-				// Reset to normal speed by calling setSpeed with the original delay
 				const originalDelay = 2500; // This should match Data.DELAY_BETWEEN_SPINS
 				setSpeed(sceneGameData, originalDelay);
-				
 				console.log(`[SlotController] Scene GameData reset to normal speed:`);
 				console.log(`  winUpDuration: ${sceneGameData.winUpDuration}`);
 				console.log(`  dropDuration: ${sceneGameData.dropDuration}`);

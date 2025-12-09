@@ -17,10 +17,13 @@ export interface BubbleParticleModifiers {
 	opacity?: number;
 	opacityMin?: number;
 	opacityMax?: number;
+	textureKey?: string;
+	imageScale?: number;
 }
 
 interface BubbleParticle {
-	graphics: Phaser.GameObjects.Graphics;
+	graphics?: Phaser.GameObjects.Graphics;
+	image?: Phaser.GameObjects.Image;
 	x: number;
 	y: number;
 	vx: number;
@@ -62,6 +65,8 @@ export class BubbleParticleSystem {
 	private opacity = 1;
 	private opacityMin = 1;
 	private opacityMax = 1;
+	private textureKey?: string;
+	private imageScale: number = 1;
 
 	constructor(scene: Scene, depth: number, modifiers?: BubbleParticleModifiers) {
 		this.scene = scene;
@@ -92,13 +97,15 @@ export class BubbleParticleSystem {
 				p.alpha = Math.max(0, 1 - t);
 				this.drawParticle(p);
 				if (t >= 1) {
-					try { p.graphics.destroy(); } catch {}
+					try { p.graphics?.destroy(); } catch {}
+					try { p.image?.destroy(); } catch {}
 					this.particles.splice(i, 1);
 				}
 				continue;
 			}
 			if (p.age > p.lifetime) {
-				try { p.graphics.destroy(); } catch {}
+				try { p.graphics?.destroy(); } catch {}
+				try { p.image?.destroy(); } catch {}
 				this.particles.splice(i, 1);
 				continue;
 			}
@@ -149,7 +156,8 @@ export class BubbleParticleSystem {
 
 	destroy(): void {
 		for (const p of this.particles) {
-			try { p.graphics.destroy(); } catch {}
+			try { p.graphics?.destroy(); } catch {}
+			try { p.image?.destroy(); } catch {}
 		}
 		this.particles = [];
 		try { this.container.destroy(true); } catch {}
@@ -193,6 +201,12 @@ export class BubbleParticleSystem {
 			}
 			this.opacityMin = newMin;
 			this.opacityMax = newMax;
+		}
+		if (typeof modifiers.textureKey === "string" && modifiers.textureKey.trim().length > 0) {
+			this.textureKey = modifiers.textureKey.trim();
+		}
+		if (typeof modifiers.imageScale === "number") {
+			this.imageScale = modifiers.imageScale;
 		}
 	}
 
@@ -238,8 +252,6 @@ export class BubbleParticleSystem {
 	}
 
 	private spawnOne(screenWidth: number, screenHeight: number): void {
-		const graphics = this.scene.add.graphics();
-		this.container.add(graphics);
 		const maskLeft = this.insetLeft;
 		const maskRight = screenWidth - this.insetRight;
 		const maskBottom = screenHeight - this.insetBottom;
@@ -252,8 +264,21 @@ export class BubbleParticleSystem {
 		const alpha = Math.random() * 0.4 + 0.2;
 		const opacityFactor = this.opacityMin + Math.random() * (this.opacityMax - this.opacityMin);
 		const lifetime = Math.random() * (this.lifeMax - this.lifeMin) + this.lifeMin;
+		let graphics: Phaser.GameObjects.Graphics | undefined;
+		let image: Phaser.GameObjects.Image | undefined;
+		const useImage = this.textureKey && this.scene.textures.exists(this.textureKey);
+		if (useImage) {
+			image = this.scene.add.image(x, y, this.textureKey!);
+			this.container.add(image);
+			image.setOrigin(0.5, 0.5);
+			image.setDepth(-9);
+		} else {
+			graphics = this.scene.add.graphics();
+			this.container.add(graphics);
+		}
 		const particle: BubbleParticle = {
 			graphics,
+			image,
 			x,
 			y,
 			vx: 0,
@@ -274,19 +299,31 @@ export class BubbleParticleSystem {
 	}
 
 	private drawParticle(particle: BubbleParticle): void {
-		const { graphics, x, y, size, color, alpha, isPopping, popAge, popDuration, opacityFactor } = particle;
-		graphics.clear();
-		const baseRadius = size * (Math.random() * 0.6 + 0.7);
+		const { graphics, image, x, y, size, color, alpha, isPopping, popAge, popDuration, opacityFactor } = particle;
 		let popScale = 1;
 		if (isPopping && popDuration > 0) {
 			const t = Math.min(1, popAge / popDuration);
 			popScale = 1 + t * 0.8;
 		}
+		const factor = typeof opacityFactor === "number" ? opacityFactor : 1;
+		const effectiveAlpha = alpha * this.opacity * factor;
+		if (image) {
+			const baseScale = this.imageScale > 0 ? this.imageScale : 1;
+			const sizeFactor = 0.8 + (size - 2.0) * 0.15;
+			const finalScale = baseScale * sizeFactor * popScale;
+			image.setPosition(x, y);
+			image.setScale(finalScale);
+			image.setAlpha(effectiveAlpha);
+			return;
+		}
+		if (!graphics) {
+			return;
+		}
+		graphics.clear();
+		const baseRadius = size * (Math.random() * 0.6 + 0.7);
 		const radius = baseRadius * popScale;
 		const outerW = radius * 2.4;
 		const outerH = radius * 2.4;
-		const factor = typeof opacityFactor === "number" ? opacityFactor : 1;
-		const effectiveAlpha = alpha * this.opacity * factor;
 		graphics.fillStyle(color, effectiveAlpha * 0.20); graphics.fillEllipse(x, y, outerW, outerH);
 		graphics.lineStyle(1.5, 0xffffff, effectiveAlpha * 0.8); graphics.strokeEllipse(x, y, outerW * 0.95, outerH * 0.95);
 		graphics.fillStyle(0xffffff, effectiveAlpha * 0.9); graphics.fillEllipse(x - radius * 0.4, y - radius * 0.5, radius * 0.6, radius * 0.6);

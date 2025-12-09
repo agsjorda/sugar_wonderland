@@ -4,7 +4,7 @@ import {
   SLOT_ROWS, 
   SCATTER_SYMBOL, 
   NORMAL_SYMBOLS, 
-  WILDCARD_SYMBOLS, 
+  MULTIPLIER_SYMBOLS, 
   ALL_SYMBOLS, 
   SCATTER_MULTIPLIERS, 
   DELAY_BETWEEN_SPINS,
@@ -16,7 +16,7 @@ export class Data {
   public static SLOT_ROWS: number = SLOT_ROWS;
   public static SCATTER: number[] = SCATTER_SYMBOL;
   public static NORMAL_SYMBOLS: number[] = NORMAL_SYMBOLS;
-  public static WILDCARDS: number[] = WILDCARD_SYMBOLS;
+  public static WILDCARDS: number[] = MULTIPLIER_SYMBOLS;
   public static ALL_SYMBOLS: number[] = ALL_SYMBOLS;
   public static SCATTER_MULTIPLIERS: number[] = SCATTER_MULTIPLIERS;
   public static DELAY_BETWEEN_SPINS: number = DELAY_BETWEEN_SPINS;

@@ -1,29 +1,28 @@
 Symbol13_TB.webp
-size:516,249
+size:493,1018
 filter:Linear,Linear
 pma:true
-scale:0.5
 3 FISH MULTIPLIER BODY
-bounds:364,2,245,84
-offsets:0,0,245,89
-rotate:90
+bounds:2,719,489,167
+offsets:0,0,490,178
 3 FISH MULTIPLIER CRYSTAL
-bounds:450,113,134,64
-offsets:62,20,196,84
-rotate:90
+bounds:209,888,267,128
+offsets:124,40,391,168
 3 FISH MULTIPLIER FIN BACK
-bounds:450,23,27,30
-offsets:0,0,27,31
+bounds:35,964,52,59
+offsets:1,1,54,61
+rotate:90
 3 FISH MULTIPLIER PUPIL
-bounds:450,5,8,16
-offsets:0,0,9,17
+bounds:2,1001,15,31
+offsets:1,1,17,33
+rotate:90
 3 FISH MULTIPLIER SHADOW
-bounds:247,7,240,115
-offsets:0,0,241,115
-rotate:90
+bounds:2,488,479,229
+offsets:1,1,482,230
 3 FISH MULTIPLIER fin
-bounds:450,55,56,46
-offsets:0,0,89,46
-rotate:90
+bounds:96,926,111,90
+offsets:1,1,177,92
 frame
-bounds:2,3,243,244
+bounds:2,2,484,486
+offsets:1,1,486,488
+rotate:90

@@ -21,6 +21,7 @@ export class GameStateManager {
   private _isShowingWinDialog: boolean = false;
   private _scatterIndex: number = 0;
   private _isBonusFinished: boolean = false;
+  private _isHookScatterActive: boolean = false;
 
   private constructor() {
     this.initializeEventListeners();
@@ -91,6 +92,7 @@ export class GameStateManager {
   public get isShowingWinDialog(): boolean { return this._isShowingWinDialog; }
   public get scatterIndex(): number { return this._scatterIndex; }
   public get isBonusFinished(): boolean { return this._isBonusFinished; }
+  public get isHookScatterActive(): boolean { return this._isHookScatterActive; }
 
   // Setters for state properties (with event emission where appropriate)
   public set timeScale(value: number) {
@@ -158,6 +160,10 @@ export class GameStateManager {
       console.log(`[GameStateManager] isBonusFinished re-set to same value: ${value}`);
     }
     this._isBonusFinished = value;
+  }
+
+  public set isHookScatterActive(value: boolean) {
+    this._isHookScatterActive = value;
   }
 
   /**

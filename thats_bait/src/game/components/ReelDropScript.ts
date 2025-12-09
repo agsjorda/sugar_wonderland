@@ -45,7 +45,10 @@ export async function runDropReels(self: any, data: Data, fillerCount: number): 
     dropFillers(self, fillerCount, row, isLastReel && extendLastReelDrop);
     const reelPromise = dropNewSymbols(self, fillerCount, row, isLastReel && extendLastReelDrop);
     reelCompletionPromises.push(reelPromise);
-    await delay(self.scene.gameData.dropReelsDelay);
+    const delayMs = self.scene.gameData?.dropReelsDelay ?? 0;
+    if (delayMs > 0) {
+      await delay(delayMs);
+    }
   }
 
   // Wait for all reel animations to complete
@@ -152,13 +155,6 @@ function dropPrevSymbols(self: any, fillerCount: number, index: number, extendDu
       console.warn(`[ReelDropScript] dropPrevSymbols: skipping invalid row ${i} or index ${index}`);
       continue;
     }
-    try {
-      const stickyPrev: Array<{ col: number; row: number; symbol: number }> = (self as any)["prevStickyMultiplierPositions"] || [];
-      const isSticky = gameStateManager.isBonus && stickyPrev.some(p => p.col === i && p.row === index);
-      if (isSticky) {
-        continue;
-      }
-    } catch {}
 
     self.scene.tweens.chain({
       targets: self.symbols[i][index],
@@ -216,30 +212,38 @@ function dropFillers(self: any, fillerCount: number, index: number, extendDurati
     const canCreateSpine = !!hasSpineJson && !!(self.scene.add as any)?.spine;
 
     if (canCreateSpine) {
-      symbol = (self.scene.add as any).spine(x, y, spineKey, atlasKey);
-      symbol.setOrigin(0.5, 0.5);
-      try { symbol.skeleton.setToSetupPose(); symbol.update(0); } catch {}
-      const baseScale = self.getIdleSpineSymbolScale(randSymbol);
-      self.centerAndFitSpine(symbol, x, y, self.displayWidth, self.displayHeight, baseScale, self.getIdleSymbolNudge(randSymbol));
       try {
-        const m = self.getSpineScaleMultiplier(randSymbol) * self.getIdleScaleMultiplier(randSymbol);
-        if (m !== 1) symbol.setScale(symbol.scaleX * m, symbol.scaleY * m);
-      } catch {}
-      // Prefer idle-like animation
-      let idleAnim = `Symbol${randSymbol}_HTBH_idle`;
-      try {
-        const cachedJson: any = (self.scene.cache.json as any).get(spineKey);
-        const anims = cachedJson?.animations ? Object.keys(cachedJson.animations) : [];
-        if (!anims.includes(idleAnim)) {
-          const win = `Symbol${randSymbol}_HTBH_win`;
-          const hit = `Symbol${randSymbol}_HTBH_hit`;
-          if (anims.includes(win)) idleAnim = win;
-          else if (anims.includes(hit)) idleAnim = hit;
-          else if (anims.length > 0) idleAnim = anims[0];
-        }
-      } catch {}
-      try { symbol.animationState.setAnimation(0, idleAnim, true); } catch {}
-    } else {
+        symbol = (self.scene.add as any).spine(x, y, spineKey, atlasKey);
+        symbol.setOrigin(0.5, 0.5);
+        try { symbol.skeleton.setToSetupPose(); symbol.update(0); } catch {}
+        const baseScale = self.getIdleSpineSymbolScale(randSymbol);
+        self.centerAndFitSpine(symbol, x, y, self.displayWidth, self.displayHeight, baseScale, self.getIdleSymbolNudge(randSymbol));
+        try {
+          const m = self.getSpineScaleMultiplier(randSymbol) * self.getIdleScaleMultiplier(randSymbol);
+          if (m !== 1) symbol.setScale(symbol.scaleX * m, symbol.scaleY * m);
+        } catch {}
+        // Prefer idle-like animation
+        let idleAnim = `Symbol${randSymbol}_TB_idle`;
+        try {
+          const cachedJson: any = (self.scene.cache.json as any).get(spineKey);
+          const anims = cachedJson?.animations ? Object.keys(cachedJson.animations) : [];
+          if (!anims.includes(idleAnim)) {
+            const win = `Symbol${randSymbol}_TB_win`;
+            const hit = `Symbol${randSymbol}_TB_hit`;
+            if (anims.includes(win)) idleAnim = win;
+            else if (anims.includes(hit)) idleAnim = hit;
+            else if (anims.length > 0) idleAnim = anims[0];
+          }
+        } catch {}
+        try { symbol.animationState.setAnimation(0, idleAnim, true); } catch {}
+      } catch (e) {
+        console.warn(`[ReelDropScript] Failed to create Spine filler symbol ${randSymbol}:`, e);
+        symbol = null as any;
+      }
+    }
+
+    // If Spine symbol creation is not possible or failed, fall back to PNG/WEBP where available
+    if (!symbol) {
       const spriteKey = "symbol_" + randSymbol;
       if (self.scene.textures.exists(spriteKey)) {
         symbol = self.scene.add.sprite(x, y, spriteKey);
@@ -337,86 +341,6 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
 
     for (let col = 0; col < self.newSymbols.length; col++) {
       let symbol = self.newSymbols[col][index];
-
-      try {
-        const stickyPrev: Array<{ col: number; row: number; symbol: number }> = (self as any)["prevStickyMultiplierPositions"] || [];
-        const isSticky = gameStateManager.isBonus && stickyPrev.some(p => p.col === col && p.row === index);
-        if (isSticky) {
-          try {
-            const center = (self as any).getCellCenter(col, index);
-            if (symbol) {
-              symbol.x = center.x;
-              symbol.y = center.y;
-            }
-          } catch {}
-          completedAnimations++;
-          if (completedAnimations === totalAnimations) {
-            self.triggerIdleAnimationsForNewReel(index);
-            try {
-              const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
-              if (isAnticipation && index === 2) {
-                if (self.overlayRect) {
-                  if (self.baseOverlayRect) {
-                    self.scene.tweens.add({
-                      targets: self.baseOverlayRect,
-                      alpha: 0,
-                      duration: 300,
-                      ease: "Cubic.easeOut"
-                    });
-                  }
-                  self.overlayRect.setAlpha(0);
-                  self.overlayRect.setVisible(true);
-                  self.scene.tweens.add({
-                    targets: self.overlayRect,
-                    alpha: 0.85,
-                    duration: 500,
-                    ease: "Cubic.easeOut"
-                  });
-                }
-                const sa = (self.scene as any)?.scatterAnticipation;
-                if (sa && typeof sa.show === "function") { sa.show(); }
-                const sa2 = (self.scene as any)?.scatterAnticipation2;
-                if (sa2 && typeof sa2.show === "function") { sa2.show(); }
-                console.log("[ReelDropScript] Scatter anticipation shown after 3rd reel drop");
-              }
-            } catch {}
-            try {
-              const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
-              if (isAnticipation && index === (SLOT_ROWS - 1)) {
-                const sa = (self.scene as any)?.scatterAnticipation;
-                if (sa && typeof sa.hide === "function") { sa.hide(); }
-                const sa2 = (self.scene as any)?.scatterAnticipation2;
-                if (sa2 && typeof sa.hide === "function") { sa2.hide(); }
-                if (self.overlayRect) {
-                  self.scene.tweens.add({
-                    targets: self.overlayRect,
-                    alpha: 0,
-                    duration: 300,
-                    ease: "Cubic.easeIn",
-                    onComplete: () => {
-                      try { self.overlayRect.setVisible(false); } catch {}
-                    }
-                  });
-                  if (self.baseOverlayRect) {
-                    self.baseOverlayRect.setAlpha(0);
-                    self.baseOverlayRect.setVisible(true);
-                    self.scene.tweens.add({
-                      targets: self.baseOverlayRect,
-                      alpha: 0.2,
-                      duration: 300,
-                      ease: "Cubic.easeOut"
-                    });
-                  }
-                }
-                console.log("[ReelDropScript] Scatter anticipation hidden after last reel drop");
-                (self.scene as any).__isScatterAnticipationActive = false;
-              }
-            } catch {}
-            resolve();
-          }
-          continue;
-        }
-      } catch {}
 
       // If symbol is null/undefined, treat it as an instantly completed animation and skip tweens
       if (!symbol) {

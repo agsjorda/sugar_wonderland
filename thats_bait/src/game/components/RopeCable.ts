@@ -44,6 +44,9 @@ export class RopeCable {
 	private windAmplitude: number;
 	private windFrequency: number;
 	private windTime: number;
+	private curveAmount: number;
+	private curveFrequency: number;
+	private curveAmplitude: number;
 
 	constructor(scene: Phaser.Scene, options: RopeCableOptions = {})
 	{
@@ -77,6 +80,9 @@ export class RopeCable {
 		this.windAmplitude = 0;
 		this.windFrequency = 0;
 		this.windTime = 0;
+		this.curveAmount = 0;
+		this.curveFrequency = 1.5;
+		this.curveAmplitude = 40;
 
 		this.scene.events.on(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
 		this.scene.events.on(Phaser.Scenes.Events.DESTROY, this.destroy, this);
@@ -140,6 +146,17 @@ export class RopeCable {
 		this.windEnabled = !!enabled;
 		this.windAmplitude = amplitude;
 		this.windFrequency = frequency;
+	}
+
+	setCurveAmount(amount: number): void
+	{
+		this.curveAmount = Phaser.Math.Clamp(amount, 0, 1);
+	}
+
+	setCurveProfile(amplitude: number, frequency: number): void
+	{
+		this.curveAmplitude = Math.max(0, amplitude);
+		this.curveFrequency = frequency;
 	}
 
 	update(delta: number): void
@@ -221,6 +238,30 @@ export class RopeCable {
 		return this.ropeNodes.map(node => node.clone());
 	}
 
+	getRenderedPoints(): Phaser.Math.Vector2[]
+	{
+		if (!this.ropeNodes.length) {
+			return [];
+		}
+		const lastIndex = this.ropeNodes.length - 1;
+		const useCurve = this.curveAmount > 0 && lastIndex >= 2;
+		const result: Phaser.Math.Vector2[] = [];
+		for (let i = 0; i < this.ropeNodes.length; i++) {
+			const base = this.ropeNodes[i];
+			let drawX = base.x;
+			let drawY = base.y;
+			if (useCurve) {
+				const t = i / lastIndex;
+				const sine = Math.sin(t * Math.PI);
+				const amplitude = this.curveAmplitude * this.curveAmount;
+				const offset = sine * amplitude;
+				drawY += offset;
+			}
+			result.push(new Phaser.Math.Vector2(drawX, drawY));
+		}
+		return result;
+	}
+
 	resetNodes(): void
 	{
 		if (!this.startProvider || !this.endProvider) {
@@ -297,22 +338,48 @@ export class RopeCable {
 		if (!this.ropeNodes.length) {
 			return;
 		}
+		const lastIndex = this.ropeNodes.length - 1;
+		const useCurve = this.curveAmount > 0 && lastIndex >= 2;
 		this.ropeGraphics.clear();
 		this.ropeGraphics.lineStyle(this.options.thickness, this.options.color, 1);
 		this.ropeGraphics.beginPath();
-		this.ropeGraphics.moveTo(this.ropeNodes[0].x, this.ropeNodes[0].y);
-		for (let i = 1; i < this.ropeNodes.length; i++) {
-			const pt = this.ropeNodes[i];
-			this.ropeGraphics.lineTo(pt.x, pt.y);
+		for (let i = 0; i < this.ropeNodes.length; i++) {
+			const base = this.ropeNodes[i];
+			let drawX = base.x;
+			let drawY = base.y;
+			if (useCurve) {
+				const t = i / lastIndex;
+				const sine = Math.sin(t * Math.PI);
+				const amplitude = this.curveAmplitude * this.curveAmount;
+				const offset = sine * amplitude;
+				drawY += offset;
+			}
+			if (i === 0) {
+				this.ropeGraphics.moveTo(drawX, drawY);
+			} else {
+				this.ropeGraphics.lineTo(drawX, drawY);
+			}
 		}
 		this.ropeGraphics.strokePath();
 		if (this.coreVisible && this.options.coreThickness > 0) {
 			this.ropeGraphics.lineStyle(this.options.coreThickness, this.options.coreColor, 0.4);
 			this.ropeGraphics.beginPath();
-			this.ropeGraphics.moveTo(this.ropeNodes[0].x, this.ropeNodes[0].y);
-			for (let i = 1; i < this.ropeNodes.length; i++) {
-				const pt = this.ropeNodes[i];
-				this.ropeGraphics.lineTo(pt.x, pt.y);
+			for (let i = 0; i < this.ropeNodes.length; i++) {
+				const base = this.ropeNodes[i];
+				let drawX = base.x;
+				let drawY = base.y;
+				if (useCurve) {
+					const t = i / lastIndex;
+					const sine = Math.sin(t * Math.PI);
+					const amplitude = this.curveAmplitude * this.curveAmount;
+					const offset = sine * amplitude;
+					drawY += offset;
+				}
+				if (i === 0) {
+					this.ropeGraphics.moveTo(drawX, drawY);
+				} else {
+					this.ropeGraphics.lineTo(drawX, drawY);
+				}
 			}
 			this.ropeGraphics.strokePath();
 		}

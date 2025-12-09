@@ -1,62 +1,85 @@
 Character_TB.webp
-size:459,269
+size:1586,269
 filter:Linear,Linear
-pma:false
+pma:true
+scale:0.33
+BADZOOKS HANDLE
+bounds:1493,69,64,70
+rotate:90
+BADZOOKS HOSE
+bounds:1223,25,61,89
+BADZOOKS MOUTH
+bounds:791,8,69,90
+offsets:97,112,166,202
+BADZOOKS RIM
+bounds:633,3,54,95
+BADZOOKS-1
+bounds:498,100,320,167
+offsets:6,0,326,167
 BODY
-bounds:351,133,95,98
-offsets:1,1,96,100
-bait2
-bounds:351,133,95,98
-offsets:1,1,96,100
-CHARACTER MAIN3
-bounds:2,15,142,172
+bounds:141,73,185,194
+BODY PANTS
+bounds:328,86,168,181
+BYENAMITE 1
+bounds:862,3,100,55
+rotate:90
+BYENAMITE 2
+bounds:1028,6,108,38
+rotate:90
+BYENAMITE 3
+bounds:569,2,96,62
+rotate:90
+BYENAMITE 4
+bounds:1068,6,108,28
+rotate:90
+BYENAMITE 5
+bounds:1098,8,106,46
+rotate:90
+BYENAMITE 6
+bounds:1286,29,77,85
+EYES CHAR
+bounds:1223,2,21,21
+EYES CHAR 2
+bounds:1270,3,20,18
+rotate:90
 POLE main
-bounds:278,87,71,100
-offsets:2,14,74,115
+bounds:2,71,137,196
+offsets:9,36,146,232
 boat external
-bounds:243,233,203,34
-offsets:0,1,203,36
+bounds:2,2,397,67
 boat1
-bounds:2,189,239,78
-offsets:1,1,241,79
+bounds:883,116,472,151
 bucket
-bounds:410,16,39,50
-offsets:1,1,40,52
+bounds:1146,16,75,98
 engine
-bounds:347,2,61,64
-offsets:1,1,63,66
-eyes
-bounds:329,202,29,15
+bounds:1365,4,119,126
 rotate:90
-glow
-bounds:146,55,130,132
-offsets:4,25,142,172
+handle
+bounds:820,105,61,162
+head-1
+bounds:1357,125,123,142
+offsets:0,3,123,145
 left arm
-bounds:243,189,84,42
-offsets:1,1,86,44
-reel
-bounds:448,183,9,84
-offsets:0,0,9,85
+bounds:401,3,166,81
+offsets:0,0,166,83
 reel handle
-bounds:278,58,27,67
-offsets:1,1,29,69
-rotate:90
+bounds:1290,11,34,16
 reel spinner
-bounds:195,22,31,82
-offsets:1,1,33,84
+bounds:345,75,9,31
 rotate:90
+right arm
+bounds:1482,135,48,132
 right arm upper
-bounds:146,2,51,47
-offsets:1,1,53,49
-rotate:90
+bounds:689,6,100,92
 rope
-bounds:425,96,24,35
-offsets:1,1,26,37
+bounds:1532,159,47,69
+offsets:0,0,48,69
 teeth
-bounds:351,68,63,72
-offsets:1,1,65,74
-rotate:90
+bounds:1532,230,52,37
+offsets:51,28,123,142
+tentacle
+bounds:1246,3,22,20
 thruster
-bounds:279,2,54,55
-offsets:1,1,56,57
-rotate:90
+bounds:919,5,107,109
+worm
+bounds:328,73,15,11

@@ -12,6 +12,7 @@ import { SLOT_ROWS, SLOT_COLUMNS, DELAY_BETWEEN_SPINS } from '../../config/GameC
 import { SoundEffectType } from '../../managers/AudioManager';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { runDropReels, applySkipReelTweaks } from './ReelDropScript';
+import { handleHookScatterHighlight } from './HookScatterHighlighter';
 
 export class Symbols {
   
@@ -40,6 +41,7 @@ export class Symbols {
   private baseOverlayBorderLower?: any;
   private hasEmittedScatterWinStart: boolean = false;
   public currentSpinData: any = null; // Store current spin data for access by other components
+  private hasPendingHookScatter: boolean = false;
   
   
 
@@ -64,48 +66,44 @@ export class Symbols {
   // Skip-drop state
   private skipReelDropsActive: boolean = false;
 
-
-
-  // Configuration for Spine symbol scales - adjust these values manually
-  private spineSymbolScales: { [key: number]: number } = {
-    0:  0.185,   // Symbol0_HTBH (scatter) scale
-    1:  0.075,  // Symbol1_HTBH scale
-    2:  0.070,  // Symbol2_HTBH scale
-    3:  0.130,  // Symbol3_HTBH scale
-    4:  0.085,  // Symbol4_HTBH scale
-    5:  0.180,  // Symbol5_HTBH scale
-    6:  0.085,  // Symbol6_HTBH scale
-    7:  0.070,  // Symbol7_HTBH scale
-    8:  0.070,  // Symbol8_HTBH scale
-    9:  0.070,  // Symbol9_HTBH scale
-    10: 0.070,  // Symbol10_HTBH scale
-    11: 0.070,  // Symbol11_HTBH scale
-    12: 0.173,  // Symbol12_HTBH (wildcard x2) scale
-    13: 0.173,  // Symbol13_HTBH (wildcard x3) scale
-    14: 0.173  // Symbol14_HTBH (wildcard x4) scale
-  };
-  
   // Configuration for Spine symbol scales in idle animations - adjust these values manually
   private idleSpineSymbolScales: { [key: number]: number } = {
-    0:  0.165,   // Symbol0_HTBH (scatter) idle scale
-    1:  0.070,  // Symbol1_HTBH idle scale
-    2:  0.065,  // Symbol2_HTBH idle scale
-    3:  0.130,  // Symbol3_HTBH idle scale
-    4:  0.070,  // Symbol4_HTBH idle scale
-    5:  0.175,  // Symbol5_HTBH idle scale
-    6:  0.075,  // Symbol6_HTBH idle scale
-    7:  0.070,  // Symbol7_HTBH idle scale
-    8:  0.070,  // Symbol8_HTBH idle scale
-    9:  0.070,  // Symbol9_HTBH idle scale
-    10: 0.070,  // Symbol10_HTBH idle scale
-    11: 0.070,  // Symbol11_HTBH idle scale
-    12: 0.153,  // Symbol12_HTBH (wildcard x2) idle scale
-    13: 0.153,  // Symbol13_HTBH (wildcard x3) idle scale
-    14: 0.153   // Symbol14_HTBH (wildcard x4) idle scale
+    0:  0.065,   
+    1:  0.060, 
+    2:  0.060, 
+    3:  0.060, 
+    4:  0.050,  
+    5:  0.090,
+    6:  0.060,
+    7:  0.060,
+    8:  0.060,
+    9:  0.060, 
+    10: 0.060, 
+    11: 0.060,
+    12: 0.060,
+    13: 0.060,
+    14: 0.060
   };
-  
-  private idleScaleMultipliers: { [key: number]: number } = {};
-  private spineScaleMultipliers: { [key: number]: number } = {};
+
+  // Optional override scales for winning-symbol Spine animations (per symbol).
+  // When not specified for a given symbol, win animations fall back to idle scales.
+  private winSpineSymbolScales: { [key: number]: number } = {
+    0:  0.085,   
+    1:  0.180, 
+    2:  0.080, 
+    3:  0.080, 
+    4:  0.180,  
+    5:  0.090,
+    6:  0.080,
+    7:  0.080,
+    8:  0.080,
+    9:  0.080, 
+    10: 0.080, 
+    11: 0.080,
+    12: 0.080,
+    13: 0.080,
+    14: 0.080
+  };
 
   // Store current symbol data for reset purposes
   public currentSymbolData: number[][] | null = null;
@@ -132,49 +130,6 @@ export class Symbols {
     this.symbolDetector = new SymbolDetector();
   }
 
-  public fadeOutAllReelVisuals(durationMs: number = 250): void {
-    try {
-      if (this.container) {
-        this.scene.tweens.killTweensOf(this.container);
-        this.scene.tweens.add({ targets: this.container, alpha: 0, duration: durationMs, ease: 'Cubic.easeOut', onComplete: () => { try { this.container?.setVisible(false); } catch {} } });
-      }
-      if (this.scatterForegroundContainer) {
-        this.scene.tweens.killTweensOf(this.scatterForegroundContainer);
-        this.scene.tweens.add({ targets: this.scatterForegroundContainer, alpha: 0, duration: durationMs, ease: 'Cubic.easeOut', onComplete: () => { try { this.scatterForegroundContainer?.setVisible(false); } catch {} } });
-      }
-      try {
-        if (this.symbols) {
-          for (let c = 0; c < this.symbols.length; c++) {
-            const col = this.symbols[c];
-            if (!Array.isArray(col)) continue;
-            for (let r = 0; r < col.length; r++) {
-              const obj: any = col[r];
-              if (!obj) continue;
-              const p = (obj as any).parentContainer as Phaser.GameObjects.Container | undefined;
-              if (p !== this.container && p !== this.scatterForegroundContainer) {
-                try { this.scene.tweens.killTweensOf(obj); } catch {}
-                try { this.scene.tweens.add({ targets: obj, alpha: 0, duration: durationMs, ease: 'Cubic.easeOut', onComplete: () => { try { obj.setVisible?.(false); } catch {} } }); } catch {}
-              }
-            }
-          }
-        }
-      } catch {}
-      try {
-        if (this.overlayRect) {
-          this.scene.tweens.killTweensOf(this.overlayRect);
-          this.scene.tweens.add({ targets: this.overlayRect, alpha: 0, duration: durationMs, ease: 'Cubic.easeIn', onComplete: () => { try { this.overlayRect?.setVisible(false); } catch {} } });
-        }
-      } catch {}
-      try {
-        if (this.baseOverlayRect) {
-          this.scene.tweens.killTweensOf(this.baseOverlayRect);
-          this.baseOverlayRect.setVisible(true);
-          this.scene.tweens.add({ targets: this.baseOverlayRect, alpha: 0, duration: durationMs, ease: 'Cubic.easeIn', onComplete: () => { try { this.baseOverlayRect?.setVisible(false); } catch {} } });
-        }
-      } catch {}
-      try { this.scene.time.delayedCall(Math.max(0, durationMs + 50), () => { try { this.clearWinLines(); } catch {} }); } catch {}
-    } catch {}
-  }
 
   public requestSkipReelDrops(): void {
     try {
@@ -285,7 +240,6 @@ export class Symbols {
     return nudges[symbolValue];
   }
 
-  /** Win animation nudges (used for win/hit animations, sticky wilds, etc.) */
   public getWinSymbolNudge(symbolValue: number): { x: number; y: number } | undefined {
     const nudges: { [k: number]: { x: number; y: number } } = {
       // Provide separate offsets for win/hit animations if their bounds differ
@@ -296,112 +250,6 @@ export class Symbols {
     return nudges[symbolValue];
   }
 
-  public createScatterOverlay(): void {
-    try {
-      if (this.scatterOverlay) {
-        this.scatterOverlay.destroy();
-      }
-      
-      const bounds = this.getSymbolGridBounds();
-      const padding = 110; // Extra padding around the grid
-      
-      this.scatterOverlay = this.scene.add.graphics();
-      this.scatterOverlay.fillStyle(0x000000, 0.7); // 80% opacity black
-      
-      this.scatterOverlay.fillRect(
-        bounds.x - padding,
-        bounds.y - padding,
-        bounds.width + padding * 2,
-        bounds.height + padding * 2
-      );
-      
-      this.scatterOverlay.setDepth(29000); // Just below scatter anticipation (30000)
-      this.scatterOverlay.setAlpha(0); // Start transparent
-      this.scene.add.existing(this.scatterOverlay);
-    } catch (error) {
-      console.error('[Symbols] Error creating scatter overlay:', error);
-    }
-  }
-
-  public showScatterOverlay(): void {
-    try {
-      if (!this.scatterOverlay) {
-        this.createScatterOverlay();
-      }
-      
-      if (this.scatterOverlay) {
-        this.scene.tweens.add({
-          targets: this.scatterOverlay,
-          alpha: 1,
-          duration: 500,
-          ease: 'Cubic.easeOut'
-        });
-      }
-    } catch (error) {
-      console.error('[Symbols] Error showing scatter overlay:', error);
-    }
-  }
-
-  public hideScatterOverlay(): void {
-    try {
-      if (!this.scatterOverlay) return;
-      
-      this.scene.tweens.add({
-        targets: this.scatterOverlay,
-        alpha: 0,
-        duration: 300,
-        ease: 'Cubic.easeIn',
-        onComplete: () => {
-          try {
-            if (this.scatterOverlay) {
-              this.scatterOverlay.destroy();
-              this.scatterOverlay = null;
-            }
-          } catch (error) {
-            console.error('[Symbols] Error in scatter overlay hide complete:', error);
-          }
-        }
-      });
-    } catch (error) {
-      console.error('[Symbols] Error hiding scatter overlay:', error);
-    }
-  }
-
-  private createBaseOverlayRect(): void {
-    try {
-      if (this.baseOverlayRect) {
-        this.baseOverlayRect.destroy();
-      }
-      this.baseOverlayRect = this.scene.add.graphics();
-
-      // Draw legacy base overlay fully transparent so only reel background is visible
-      this.baseOverlayRect.fillStyle(0xE5E5E5, 0.0);
-      const gridBounds = this.getSymbolGridBounds();
-
-      const padL = this.baseOverlayPaddingLeft;
-      const padR = this.baseOverlayPaddingRight;
-      const padT = this.baseOverlayPaddingTop;
-      const padB = this.baseOverlayPaddingBottom;
-      this.baseOverlayRect.fillRect(
-        gridBounds.x - padL,
-        gridBounds.y - padT,
-        gridBounds.width + padL + padR,
-        gridBounds.height + padT + padB
-      );
-      // Scene-level depth to sit between background (at -10) and symbols (0)
-      this.baseOverlayRect.setDepth(-5);
-      // Keep base overlay hidden by default; it can be faded in by overlay effects when needed
-      this.baseOverlayRect.setVisible(false);
-      console.log('[Symbols] Base light grey grid background created (hidden)');
-      // Destroy any existing borders and do not recreate them (no top/bottom border images in this project)
-      try { this.baseOverlayBorderUpper?.destroy?.(); } catch {}
-      try { this.baseOverlayBorderLower?.destroy?.(); } catch {}
-      this.baseOverlayBorderUpper = undefined;
-      this.baseOverlayBorderLower = undefined;
-    } catch (e) {
-      console.warn('[Symbols] Failed to create base grid background:', e);
-    }
-  }
 
   public create(scene: Game) {
     this.scene = scene;
@@ -417,7 +265,6 @@ export class Symbols {
     // Flash handling is centralized via beginSpinPhase; listener set in setupSpinEventListener
     
     // Create a persistent light grey, semi-transparent background behind the symbol grid
-    this.createBaseOverlayRect();
 
     // Listen for a full free spin reset request (after congrats/bonus end)
     try {
@@ -527,103 +374,6 @@ export class Symbols {
     } catch {}
   }
   
-  /**
-   * Speed up active tweens for all objects in the symbol grid containers
-   */
-  private accelerateActiveSymbolTweens(timeScale: number): void {
-    try {
-      const accel = (obj: any) => {
-        try {
-          const tweens = this.scene.tweens.getTweensOf(obj) as any[];
-          if (Array.isArray(tweens)) {
-            for (const t of tweens) {
-              try { (t as any).timeScale = Math.max(1, timeScale); } catch {}
-            }
-          }
-        } catch {}
-      };
-      // Existing symbols
-      try {
-        if (this.symbols) {
-          for (let c = 0; c < this.symbols.length; c++) {
-            const col = this.symbols[c];
-            if (!Array.isArray(col)) continue;
-            for (let r = 0; r < col.length; r++) {
-              const obj = col[r];
-              if (obj) accel(obj);
-            }
-          }
-        }
-      } catch {}
-      // New symbols currently dropping
-      try {
-        if (this.newSymbols) {
-          for (let c = 0; c < this.newSymbols.length; c++) {
-            const col = this.newSymbols[c];
-            if (!Array.isArray(col)) continue;
-            for (let r = 0; r < col.length; r++) {
-              const obj = col[r];
-              if (obj) accel(obj);
-            }
-          }
-        }
-      } catch {}
-      // Any filler/new objects inside the primary symbols container
-      try {
-        const list: any[] = (this.container as any)?.list || [];
-        for (const child of list) accel(child);
-      } catch {}
-      // Foreground scatter container (anticipation overlays)
-      try {
-        const list: any[] = (this.scatterForegroundContainer as any)?.list || [];
-        for (const child of list) accel(child);
-      } catch {}
-      // Overlays
-      try { if (this.overlayRect) accel(this.overlayRect); } catch {}
-      try { if (this.baseOverlayRect) accel(this.baseOverlayRect); } catch {}
-    } catch {}
-  }
-
-  private pruneOrphanSymbolsInContainer(): void {
-    try {
-      if (!this.container) return;
-      const keep = new Set<any>();
-      try {
-        if (this.symbols) {
-          for (let c = 0; c < this.symbols.length; c++) {
-            const col = this.symbols[c];
-            if (!Array.isArray(col)) continue;
-            for (let r = 0; r < col.length; r++) {
-              const obj = col[r];
-              if (obj) keep.add(obj);
-            }
-          }
-        }
-      } catch {}
-      try {
-        if (this.newSymbols) {
-          for (let c = 0; c < this.newSymbols.length; c++) {
-            const col = this.newSymbols[c];
-            if (!Array.isArray(col)) continue;
-            for (let r = 0; r < col.length; r++) {
-              const obj = col[r];
-              if (obj) keep.add(obj);
-            }
-          }
-        }
-      } catch {}
-      const list: any[] = (this.container as any)?.list || [];
-      for (const child of list) {
-        if (!keep.has(child)) {
-          try {
-            (this.container as any).remove(child, true);
-          } catch {
-            try { (child as any).destroy?.(); } catch {}
-          }
-        }
-      }
-    } catch {}
-  }
 
   private setupSpinEventListener() {
     // Listen for spin events to reset any lingering Spine symbols
@@ -637,17 +387,43 @@ export class Symbols {
         console.log('[Symbols] Manual spins are still allowed to proceed');
         return;
       }
-      try { this.pruneOrphanSymbolsInContainer(); } catch {}
+      this.ensureCleanSymbolState();
       this.beginSpinPhase();
-      try { this.ensureCleanSymbolState(); } catch {}
-      try { this.resetAllSymbolsToIdle(); } catch {}
     });
+
     
     // Listen for winline completion to resume autoplay and end win phase
     gameEventManager.on(GameEventType.WIN_STOP, () => {
       console.log('[Symbols] WIN_STOP event received - resuming autoplay');
       console.log('[Symbols] freeSpinAutoplayWaitingForWinlines:', this.freeSpinAutoplayWaitingForWinlines);
       console.log('[Symbols] freeSpinAutoplayActive:', this.freeSpinAutoplayActive);
+      
+      // If this spin has a hook-scatter special pending, run it now after winlines
+      // and disable/clear any remaining winline visuals to avoid overlap.
+      try {
+        const spinData = this.currentSpinData;
+        let hasHookScatter = false;
+        try {
+          const special = spinData && spinData.slot && spinData.slot.special ? spinData.slot.special : null;
+          if (special && special.action === 'hook-scatter' && special.position) {
+            hasHookScatter = true;
+          }
+        } catch {}
+
+        if (this.hasPendingHookScatter && hasHookScatter) {
+          this.hasPendingHookScatter = false;
+          try {
+            if (this.winLineDrawer) {
+              this.winLineDrawer.stopLooping();
+              this.winLineDrawer.clearLines();
+            }
+          } catch {}
+          try {
+            // Trigger hook-scatter highlight AFTER winlines complete
+            handleHookScatterHighlight(this as any, spinData);
+          } catch {}
+        }
+      } catch {}
       
       // Handle free spin autoplay waiting for winlines
       this.handleFreeSpinAutoplayWinStop();
@@ -691,43 +467,6 @@ export class Symbols {
       }
     });
 
-  }
-
-  public ensureCleanSymbolState(): void {
-    if (!this.symbols || this.symbols.length === 0) {
-      return;
-    }
-    
-    console.log('[Symbols] Ensuring clean symbol state for spin (Spine-only mode)');
-    let processedCount = 0;
-
-    // In the new flow we keep Spine symbols as-is and simply halt motion/FX
-    for (let col = 0; col < this.symbols.length; col++) {
-      for (let row = 0; row < this.symbols[col].length; row++) {
-        const symbol: any = this.symbols[col][row];
-        if (!symbol) {
-          continue;
-        }
-
-        try { this.scene?.tweens?.killTweensOf?.(symbol); } catch {}
-
-        // If this is a Spine object, clear its tracks so it can be safely re-animated
-        try {
-          const st = symbol.animationState;
-          if (st) {
-            try { st.clearTracks?.(); } catch {}
-            try { st.setEmptyAnimation?.(0, 0); } catch {}
-            try { st.timeScale = 1; } catch {}
-          }
-        } catch {}
-
-        processedCount++;
-      }
-    }
-
-    if (processedCount > 0) {
-      console.log(`[Symbols] Cleaned state for ${processedCount} symbols before spin`);
-    }
   }
 
   
@@ -801,7 +540,6 @@ export class Symbols {
           try { this.ensureScatterSymbolsVisible(); } catch {}
         }
         // Rebuild simple PNG borders (no dragon or spine borders) based on current bounds
-        try { this.createBaseOverlayRect(); } catch {}
       } catch {}
     });
 
@@ -851,45 +589,124 @@ export class Symbols {
   /**
    * Get the configured scale for a specific symbol's Spine animation
    */
-  public getSpineSymbolScale(symbolValue: number): number {
-    return this.spineSymbolScales[symbolValue] || 0.6; // Default scale if not configured
-  }
-
   public getIdleSpineSymbolScale(symbolValue: number): number {
     const v = this.idleSpineSymbolScales[symbolValue];
     if (typeof v === 'number') return v;
-    return this.getSpineSymbolScale(symbolValue);
+    return 0.6;
   }
-
+  
+  public getWinSpineSymbolScale(symbolValue: number): number {
+    const v = this.winSpineSymbolScales[symbolValue];
+    if (typeof v === 'number' && v > 0) return v;
+    return this.getIdleSpineSymbolScale(symbolValue);
+  }
+  
   public getIdleScaleMultiplier(symbolValue: number): number {
-    const v = this.idleScaleMultipliers[symbolValue];
-    return (typeof v === 'number' && v > 0) ? v : 1;
+    // Multiplier disabled: rely solely on idleSpineSymbolScales for idle size
+    return 1;
   }
 
   public getSpineScaleMultiplier(symbolValue: number): number {
-    const v = this.spineScaleMultipliers[symbolValue];
-    return (typeof v === 'number' && v > 0) ? v : 1;
+    // Multiplier disabled: rely solely on idle/win scales for size
+    return 1;
   }
 
   // Auto-fit a Spine instance to the target cell size, with a safe fallback scale
   public getFittedSpineScale(spine: any, targetWidth: number, targetHeight: number, fallbackScale: number): number {
     try {
+      // Prefer explicit configured scale when provided so all states (idle, spin, win, fillers)
+      // share the same visual size per symbol.
+      if (typeof fallbackScale === 'number' && fallbackScale > 0) {
+        return fallbackScale;
+      }
       const bounds = spine?.getBounds?.();
       const bw = (bounds?.size?.width ?? bounds?.size?.x ?? 0);
       const bh = (bounds?.size?.height ?? bounds?.size?.y ?? 0);
       if (bw > 0 && bh > 0) {
         const sx = targetWidth / bw;
         const sy = targetHeight / bh;
-        // Slight padding to avoid touching borders
         return Math.min(sx, sy) * 0.95;
       }
     } catch {}
     return fallbackScale;
   }
 
+  public ensureCleanSymbolState(): void {
+    console.log('[Symbols] ensureCleanSymbolState called');
+
+    if (!this.symbols || this.symbols.length === 0) {
+      console.warn('[Symbols] ensureCleanSymbolState: symbols grid is empty');
+      return;
+    }
+
+    if (!this.currentSymbolData) {
+      console.warn('[Symbols] ensureCleanSymbolState: currentSymbolData is null – cannot map PNG symbols');
+      return;
+    }
+
+    let convertedCount = 0;
+    let spineCount = 0;
+    let missingTextureCount = 0;
+
+    for (let col = 0; col < this.symbols.length; col++) {
+      for (let row = 0; row < this.symbols[col].length; row++) {
+        const symbol = this.symbols[col][row];
+
+        if (symbol && (symbol as any).animationState) {
+          spineCount++;
+          try {
+            const symbolValue = this.currentSymbolData[col]?.[row];
+            if (symbolValue === undefined || symbolValue === null) {
+              console.warn(`[Symbols] ensureCleanSymbolState: missing symbolValue for cell [${col}][${row}]`);
+              continue;
+            }
+
+            const x = symbol.x;
+            const y = symbol.y;
+            const spriteKey = "symbol_" + symbolValue;
+
+            if (!this.scene.textures.exists(spriteKey)) {
+              missingTextureCount++;
+              try {
+                const allKeys = this.scene.textures.getTextureKeys?.() || [];
+                const symbolKeys = allKeys.filter((k: string) => k.startsWith('symbol_'));
+                console.warn(`[Symbols] ensureCleanSymbolState: texture '${spriteKey}' does not exist. Available symbol keys:`, symbolKeys);
+              } catch {}
+              continue;
+            }
+
+            const home = (symbol as any).__pngHome as { x: number; y: number } | undefined;
+            const px = home && typeof home.x === "number" ? home.x : x;
+            const py = home && typeof home.y === "number" ? home.y : y;
+
+            try { this.container.remove(symbol); } catch {}
+            try { symbol.destroy(); } catch {}
+
+            const pngSprite = this.scene.add.sprite(px, py, spriteKey);
+            pngSprite.displayWidth = this.displayWidth;
+            pngSprite.displayHeight = this.displayHeight;
+            try { (pngSprite as any).__pngHome = { x: px, y: py }; } catch {}
+            try { (pngSprite as any).__pngSize = { w: this.displayWidth, h: this.displayHeight }; } catch {}
+
+            this.container.add(pngSprite);
+            this.symbols[col][row] = pngSprite;
+            convertedCount++;
+          } catch (e) {
+            console.warn('[Symbols] ensureCleanSymbolState: error converting Spine symbol to PNG at', { col, row }, e);
+          }
+        }
+      }
+    }
+
+    console.log(`[Symbols] ensureCleanSymbolState summary: spineCount=${spineCount}, converted=${convertedCount}, missingTextures=${missingTextureCount}`);
+    if (convertedCount > 0) {
+      console.log(`[Symbols] Converted ${convertedCount} Spine symbols back to PNG/WEBP for spin`);
+    }
+  }
+
   // Resolve the best animation name for a given symbol value based on cached Spine JSON
-  private resolveSymbolAnimName(spineKey: string, symbolValue: number): string {
-    const base = `Symbol${symbolValue}_HTBH`;
+  public resolveSymbolAnimName(spineKey: string, symbolValue: number): string {
+    const base = `Symbol${symbolValue}_TB`;
     const prefer = `${base}_win`;
     const fallback = `${base}_hit`;
     try {
@@ -907,80 +724,7 @@ export class Symbols {
    * This works with the symbols that are currently being dropped (newSymbols)
    */
   public triggerIdleAnimationsForNewReel(reelIndex: number): void {
-    console.log(`[Symbols] Triggering _idle animations for NEW reel ${reelIndex}`);
-    
-    if (!this.newSymbols || !this.newSymbols[0] || reelIndex >= this.newSymbols[0].length) {
-      console.warn(`[Symbols] Invalid new reel index ${reelIndex} or new symbols not ready`);
-      return;
-    }
-
-    // Get winning positions from scene data
-    let currentWinningPositions: Set<string> | undefined;
-    try {
-      const sceneData = (this.scene as any)?.currentWinningPositions;
-      if (sceneData) {
-        currentWinningPositions = sceneData;
-      }
-    } catch {}
-
-    // Process each column for this specific reel
-    for (let col = 0; col < this.newSymbols.length; col++) {
-      const symbol = this.newSymbols[col][reelIndex];
-      if (!symbol) continue;
-      // Skip if this position is part of a winning combination
-      if (currentWinningPositions && currentWinningPositions.has(`${col}_${reelIndex}`)) {
-        console.log(`[Symbols] Skipping winning symbol at (${reelIndex}, ${col}) from idle animation`);
-        continue;
-      }
-
-      try {
-        // Get symbol value from current data
-        const symbolValue = (this.scene as any)?.currentSymbolData?.[col]?.[reelIndex];
-        if (typeof symbolValue !== 'number') continue;
-
-        const spineKey = `symbol_${symbolValue}_spine`;
-        const spineAtlasKey = spineKey + '-atlas';
-        const symbolName = `Symbol${symbolValue}_HTBH`;
-        let idleAnim = `${symbolName}_idle`;
-
-        // Resolve available animation
-        try {
-          const cachedJson: any = (this.scene.cache.json as any).get(spineKey);
-          const anims = cachedJson?.animations ? Object.keys(cachedJson.animations) : [];
-          if (!anims.includes(idleAnim)) {
-            const preferWin = `${symbolName}_win`;
-            const fallbackHit = `${symbolName}_hit`;
-            if (anims.includes(preferWin)) idleAnim = preferWin;
-            else if (anims.includes(fallbackHit)) idleAnim = fallbackHit;
-            else if (anims.length > 0) idleAnim = anims[0];
-          }
-        } catch {}
-
-        const isSpine = !!(symbol as any).animationState;
-
-        // Store current position and display size from the existing object
-        const x = symbol.x;
-        const y = symbol.y;
-        const displayWidth = symbol.displayWidth;
-        const displayHeight = symbol.displayHeight;
-
-        let target: any = symbol;
-
-        // If this is still a PNG, skip idle Spine animation
-        if (!isSpine) {
-          console.log(`[Symbols] Skipping idle Spine animation for PNG/WEBP symbol ${symbolValue} at (${reelIndex}, ${col})`);
-          continue;
-        }
-
-        // At this point target is a Spine symbol – set idle animation (loop)
-        try { target.animationState.setAnimation(0, idleAnim, true); } catch {}
-        // Re-center on next tick to compensate for bounds changes after animation starts
-        this.reCenterSpineNextTick(target, x, y, this.getIdleSymbolNudge(symbolValue));
-        console.log(`[Symbols] Set NEW symbol at (${reelIndex}, ${col}) to idle animation: ${idleAnim}`);
-      } catch (e) {
-        console.warn(`[Symbols] Failed to set idle Spine on NEW symbol at (${reelIndex}, ${col}):`, e);
-      }
-    }
+    this.applyIdleAnimationsForReelGrid(this.newSymbols, reelIndex, undefined, true);
   }
 
   /**
@@ -988,10 +732,15 @@ export class Symbols {
    * Excludes winning symbols from getting idle animations
    */
   public triggerIdleAnimationsForReel(reelIndex: number, winningPositions?: Set<string>): void {
-    console.log(`[Symbols] Triggering _idle animations for reel ${reelIndex}`);
-    
-    if (!this.symbols || !this.symbols[0] || reelIndex >= this.symbols[0].length) {
-      console.warn(`[Symbols] Invalid reel index ${reelIndex} or symbols not ready`);
+    this.applyIdleAnimationsForReelGrid(this.symbols, reelIndex, winningPositions, false);
+  }
+
+  private applyIdleAnimationsForReelGrid(grid: any[][] | undefined, reelIndex: number, winningPositions: Set<string> | undefined, isNew: boolean): void {
+    const label = isNew ? 'NEW ' : '';
+    console.log(`[Symbols] Triggering _idle animations for ${label}reel ${reelIndex}`);
+
+    if (!grid || !grid[0] || reelIndex >= grid[0].length) {
+      console.warn(`[Symbols] Invalid ${isNew ? 'new ' : ''}reel index ${reelIndex} or symbols not ready`);
       return;
     }
 
@@ -1007,8 +756,8 @@ export class Symbols {
     }
 
     // Process each column for this specific reel
-    for (let col = 0; col < this.symbols.length; col++) {
-      const symbol = this.symbols[col][reelIndex];
+    for (let col = 0; col < grid.length; col++) {
+      const symbol = grid[col][reelIndex];
       if (!symbol) continue;
 
       // Skip if this position is part of a winning combination
@@ -1023,8 +772,7 @@ export class Symbols {
         if (typeof symbolValue !== 'number') continue;
 
         const spineKey = `symbol_${symbolValue}_spine`;
-        const spineAtlasKey = spineKey + '-atlas';
-        const symbolName = `Symbol${symbolValue}_HTBH`;
+        const symbolName = `Symbol${symbolValue}_TB`;
         let idleAnim = `${symbolName}_idle`;
 
         // Resolve available animation
@@ -1060,9 +808,9 @@ export class Symbols {
         try { target.animationState.setAnimation(0, idleAnim, true); } catch {}
         // Re-center on next tick to compensate for bounds changes after animation starts
         this.reCenterSpineNextTick(target, x, y, this.getIdleSymbolNudge(symbolValue));
-        console.log(`[Symbols] Set symbol at (${reelIndex}, ${col}) to idle animation: ${idleAnim}`);
+        console.log(`[Symbols] Set ${label.toLowerCase()}symbol at (${reelIndex}, ${col}) to idle animation: ${idleAnim}`);
       } catch (e) {
-        console.warn(`[Symbols] Failed to set idle Spine on symbol at (${reelIndex}, ${col}):`, e);
+        console.warn(`[Symbols] Failed to set idle Spine on ${label.toLowerCase()}symbol at (${reelIndex}, ${col}):`, e);
       }
     }
   }
@@ -1079,6 +827,8 @@ export class Symbols {
       }
     } catch {}
   }
+
+
 
   /**
    * Manually trigger win line drawing (for testing)
@@ -1110,33 +860,6 @@ export class Symbols {
     const hasOverlay = this.overlayRect && this.overlayRect.visible;
     
     return hasWinLines || (hasOverlay ?? false);
-  }
-
-  /**
-   * Start the scatter animation sequence (called after win dialog closes or immediately if no dialog)
-   */
-  public startScatterAnimationSequence(mockData: any): void {
-    console.log('[Symbols] Starting scatter animation sequence');
-    
-    // Reset winning symbols spine animations back to PNG after scatter symbol animations
-    this.fadeOutAllReelVisuals(300);
-    
-    // Hide winnings display when scatter animation starts
-    const header = (this.scene as any).header;
-    if (header && typeof header.hideWinningsDisplay === 'function') {
-      console.log('[Symbols] Hiding winnings display for scatter animation');
-      header.hideWinningsDisplay();
-    } else {
-      console.warn('[Symbols] Header not available or hideWinningsDisplay method not found');
-    }
-    
-    // Then trigger the scatter animation sequence (spinner, dialog, etc.)
-    if (this.scatterAnimationManager) {
-      console.log('[Symbols] Starting scatter animation sequence');
-      this.scatterAnimationManager.playScatterAnimation(mockData);
-    } else {
-      console.warn('[Symbols] ScatterAnimationManager not available');
-    }
   }
 
   /**
@@ -1172,7 +895,7 @@ export class Symbols {
             const symbolValue = 0; // Symbol 0 is scatter
             const spineKey = `symbol_${symbolValue}_spine`;
             const spineAtlasKey = spineKey + '-atlas';
-            const symbolName = `Symbol${symbolValue}_HTBH`;
+            const symbolName = `Symbol${symbolValue}_TB`;
             // Prefer *_win if present, else *_hit
             let hitAnimationName = `${symbolName}_win`;
             try {
@@ -1208,13 +931,16 @@ export class Symbols {
                 const spineSymbol = this.scene.add.spine(x, y, spineKey, spineAtlasKey);
                 spineSymbol.setOrigin(0.5, 0.5);
                 // Use controlled scaling from configuration, then center and fit to cell
-                const configuredScale = this.getSpineSymbolScale(symbolValue);
+                const configuredScale = this.getWinSpineSymbolScale(symbolValue);
                 // Remember the original PNG home position so PNG can restore it later
                 try { (spineSymbol as any).__pngHome = { x, y }; } catch {}
                 // Set canonical measurement pose before centering
                 try { spineSymbol.skeleton.setToSetupPose(); spineSymbol.update(0); } catch {}
-                this.centerAndFitSpine(spineSymbol, x, y, displayWidth, displayHeight, configuredScale, this.getWinSymbolNudge(symbolValue));
-                try { const m = this.getSpineScaleMultiplier(symbolValue); if (m !== 1) spineSymbol.setScale(spineSymbol.scaleX * m, spineSymbol.scaleY * m); } catch {}
+                this.centerAndFitSpine(spineSymbol, x, y, this.displayWidth, this.displayHeight, configuredScale, this.getWinSymbolNudge(symbolValue));
+                try {
+                  const m = this.getSpineScaleMultiplier(symbolValue) * this.getIdleScaleMultiplier(symbolValue);
+                  if (m !== 1) spineSymbol.setScale(spineSymbol.scaleX * m, spineSymbol.scaleY * m);
+                } catch {}
                 // Keep scatter Spine on the scene root and render above all gameplay layers
                 // Do not reparent into the masked symbols container
                 spineSymbol.setDepth(990); // Above all gameplay layers, just below dialogs (1000)
@@ -1237,8 +963,6 @@ export class Symbols {
                   if (!gameStateManager.isBonus && !this.hasEmittedScatterWinStart) {
                     this.hasEmittedScatterWinStart = true;
                     this.scene.events.emit('symbol0-win-start');
-                    // Also fade the light grey base overlay for base scene when scatter starts
-                    this.fadeBaseOverlayForScatterStart(250, 0);
                   }
                 } catch {}
                 // Re-center on next tick to compensate for bounds changes after animation starts
@@ -1349,35 +1073,6 @@ export class Symbols {
     } catch {}
   }
 
-  /**
-   * Stop all Spine animations on current symbol objects without destroying them.
-   * Safe to call even if symbols contain plain Sprites.
-   */
-  public stopAllSpineAnimations(): void {
-    try {
-      if (!this.symbols) return;
-      for (let c = 0; c < this.symbols.length; c++) {
-        const col = this.symbols[c];
-        if (!Array.isArray(col)) continue;
-        for (let r = 0; r < col.length; r++) {
-          const obj: any = col[r];
-          if (!obj) continue;
-          try { this.scene?.tweens?.killTweensOf?.(obj); } catch {}
-          try {
-            const st = obj.animationState;
-            if (st) {
-              try { st.clearTracks?.(); } catch {}
-              try { st.setEmptyAnimation?.(0, 0); } catch {}
-              try { st.timeScale = 0; } catch {}
-            }
-          } catch {}
-        }
-      }
-    } catch (e) {
-      console.warn('[Symbols] stopAllSpineAnimations encountered an error', e);
-    }
-  }
-
   public ensureScatterSymbolsVisible(): void {
     try {
       const data = this.currentSymbolData;
@@ -1398,46 +1093,6 @@ export class Symbols {
         }
       }
     } catch {}
-  }
-
-
-  /** Fade the base light-grey grid background when scatter win starts (base scene). */
-  private fadeBaseOverlayForScatterStart(durationMs: number = 250, toAlpha: number = 0): void {
-    try {
-      if (!this.baseOverlayRect) return;
-      this.scene.tweens.killTweensOf(this.baseOverlayRect);
-      // Ensure it's visible before fading
-      this.baseOverlayRect.setVisible(true);
-      const targetAlpha = Math.max(0, Math.min(1, toAlpha));
-      this.scene.tweens.add({
-        targets: this.baseOverlayRect,
-        alpha: targetAlpha,
-        duration: Math.max(0, durationMs),
-        ease: 'Cubic.easeOut'
-      });
-    } catch {}
-  }
-
-  /**
-   * Get the bounds of the symbol grid
-   */
-  private getSymbolGridBounds(): { x: number, y: number, width: number, height: number } {
-    // Add padding to make the overlay slightly larger than the symbol grid
-    const paddingX = 9;
-    const paddingY = 8;
-
-    const offsetX = 1;
-    const offsetY = 0.7;
-    
-    const x = this.slotX - this.totalGridWidth * 0.5 - paddingX + offsetX;
-    const y = this.slotY - this.totalGridHeight * 0.5 - paddingY + offsetY;
-    
-    return {
-      x: x + offsetX,
-      y: y + offsetY,
-      width: this.totalGridWidth + (paddingX * 2),
-      height: this.totalGridHeight + (paddingY * 2)
-    };
   }
 
   /**
@@ -1983,28 +1638,36 @@ function createInitialSymbols(self: Symbols) {
         const spineKey = `symbol_${symbolValue}_spine`;
         const atlasKey = spineKey + '-atlas';
         const hasSpineJson = (scene.cache.json as any)?.has?.(spineKey);
-        if (hasSpineFactory && hasSpineJson && (scene.add as any)?.spine) {
-          symbol = (scene.add as any).spine(x, y, spineKey, atlasKey);
-          symbol.setOrigin(0.5, 0.5);
-          try { symbol.skeleton.setToSetupPose(); symbol.update(0); } catch {}
+        if (hasSpineJson && (scene.add as any)?.spine) {
+          // Create Spine symbol for initial grid
+          const spineSymbol = (scene.add as any).spine(x, y, spineKey, atlasKey);
+          spineSymbol.setOrigin(0.5, 0.5);
+          try { spineSymbol.skeleton.setToSetupPose(); spineSymbol.update(0); } catch {}
           const baseScale = self.getIdleSpineSymbolScale(symbolValue);
-          self.centerAndFitSpine(symbol, x, y, self.displayWidth, self.displayHeight, baseScale, self.getIdleSymbolNudge(symbolValue));
+          self.centerAndFitSpine(
+            spineSymbol,
+            x,
+            y,
+            self.displayWidth,
+            self.displayHeight,
+            baseScale,
+            self.getIdleSymbolNudge(symbolValue)
+          );
           try {
             const m = self.getSpineScaleMultiplier(symbolValue) * self.getIdleScaleMultiplier(symbolValue);
-            if (m !== 1) symbol.setScale(symbol.scaleX * m, symbol.scaleY * m);
+            if (m !== 1) spineSymbol.setScale(spineSymbol.scaleX * m, spineSymbol.scaleY * m);
           } catch {}
           try {
-            (symbol as any).__pngHome = { x, y };
-            (symbol as any).__pngSize = { w: self.displayWidth, h: self.displayHeight };
-            (symbol as any).__pngNudge = self.getIdleSymbolNudge(symbolValue) || { x: 0, y: 0 };
+            (spineSymbol as any).__pngHome = { x, y };
+            (spineSymbol as any).__pngSize = { w: self.displayWidth, h: self.displayHeight };
+            (spineSymbol as any).__pngNudge = self.getIdleSymbolNudge(symbolValue) || { x: 0, y: 0 };
           } catch {}
           try {
-            (symbol as any).displayWidth = self.displayWidth;
-            (symbol as any).displayHeight = self.displayHeight;
+            (spineSymbol as any).displayWidth = self.displayWidth;
+            (spineSymbol as any).displayHeight = self.displayHeight;
           } catch {}
-          // Start an idle-like animation on the Spine symbol so it is never static
           try {
-            const symbolName = `Symbol${symbolValue}_HTBH`;
+            const symbolName = `Symbol${symbolValue}_TB`;
             let idleAnim = `${symbolName}_idle`;
             try {
               const cachedJson: any = (scene.cache.json as any).get(spineKey);
@@ -2017,17 +1680,19 @@ function createInitialSymbols(self: Symbols) {
                 else if (anims.length > 0) idleAnim = anims[0];
               }
             } catch {}
-            try { symbol.animationState.setAnimation(0, idleAnim, true); } catch {}
-            self.reCenterSpineNextTick(symbol, x, y, self.getIdleSymbolNudge(symbolValue));
+            try { spineSymbol.animationState.setAnimation(0, idleAnim, true); } catch {}
+            self.reCenterSpineNextTick(spineSymbol, x, y, self.getIdleSymbolNudge(symbolValue));
           } catch {}
-          self.container.add(symbol);
+          self.container.add(spineSymbol);
+          symbol = spineSymbol;
         } else {
           const spriteKey = 'symbol_' + symbolValue;
           if (scene.textures.exists(spriteKey)) {
-            symbol = scene.add.sprite(x, y, spriteKey);
-            symbol.displayWidth = self.displayWidth;
-            symbol.displayHeight = self.displayHeight;
-            self.container.add(symbol);
+            const sprite = scene.add.sprite(x, y, spriteKey);
+            sprite.displayWidth = self.displayWidth;
+            sprite.displayHeight = self.displayHeight;
+            self.container.add(sprite);
+            symbol = sprite;
           } else {
             console.warn(`[Symbols] No Spine or PNG texture for initial symbol ${symbolValue} at [${col}, ${row}] – leaving empty.`);
             symbol = null as any;
@@ -2036,23 +1701,16 @@ function createInitialSymbols(self: Symbols) {
       } catch {
         const spriteKey = 'symbol_' + symbolValue;
         if (scene.textures.exists(spriteKey)) {
-          symbol = scene.add.sprite(x, y, spriteKey);
-          symbol.displayWidth = self.displayWidth;
-          symbol.displayHeight = self.displayHeight;
-          self.container.add(symbol);
+          const sprite = scene.add.sprite(x, y, spriteKey);
+          sprite.displayWidth = self.displayWidth;
+          sprite.displayHeight = self.displayHeight;
+          self.container.add(sprite);
+          symbol = sprite;
         } else {
           console.warn(`[Symbols] Failed to create initial symbol ${symbolValue} at [${col}, ${row}] – leaving empty.`);
           symbol = null as any;
         }
       }
-
-      // During bonus: if a sticky wild already exists here and the new symbol is a wildcard (rows 2-4), hide the PNG
-      try {
-        if (gameStateManager.isBonus && row >= 1 && row <= 3) {
-          const val = symbols[col][row];
-          // sticky wilds removed: no special-case hiding
-        }
-      } catch {}
 
       rows.push(symbol);
     }
@@ -2067,49 +1725,21 @@ function createInitialSymbols(self: Symbols) {
 async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinData: any) {
   console.log('[Symbols] Processing SpinData symbols:', symbols);
   
+  // Track whether this spin contains a hook-scatter special so we can
+  // trigger the hook-scatter sequence only after winlines finish.
+  try {
+    const special = spinData && spinData.slot && spinData.slot.special ? spinData.slot.special : null;
+    (self as any).hasPendingHookScatter = !!(special && special.action === 'hook-scatter' && special.position);
+  } catch {
+    (self as any).hasPendingHookScatter = false;
+  }
+  
   // Clear all scatter symbols from previous spin
   if (self.scatterAnimationManager) {
     self.scatterAnimationManager.clearScatterSymbols();
   }
   
-  // Handle sticky multiplier behaviour in bonus mode: merge existing sticky positions and update list
-  try {
-    if (!gameStateManager.isBonus) {
-    } else {
-      const stickyList: Array<{ col: number; row: number; symbol: number }> = (self as any)["stickyMultiplierPositions"] || [];
-      // Snapshot previous sticky positions for this spin's reuse/skip logic
-      (self as any)["prevStickyMultiplierPositions"] = Array.isArray(stickyList) ? stickyList.map(p => ({ ...p })) : [];
-      if (Array.isArray(stickyList) && stickyList.length > 0) {
-        for (const pos of stickyList) {
-          const { col, row, symbol } = pos;
-          if (
-            col >= 0 &&
-            row >= 0 &&
-            col < symbols.length &&
-            row < symbols[col].length
-          ) {
-            symbols[col][row] = symbol;
-          }
-        }
-      }
-      const updatedSticky: Array<{ col: number; row: number; symbol: number }> = [];
-      for (let c = 0; c < symbols.length; c++) {
-        for (let r = 0; r < symbols[c].length; r++) {
-          const v = symbols[c][r];
-          if (v === 12 || v === 13 || v === 14) {
-            updatedSticky.push({ col: c, row: r, symbol: v });
-          }
-        }
-      }
-      (self as any)["stickyMultiplierPositions"] = updatedSticky;
-    }
-  } catch {}
-
-  // Reset symbols and clear previous state before starting new spin
-  console.log('[Symbols] Resetting symbols and clearing previous state for new spin');
-  self.ensureCleanSymbolState();
   
-  // Always clear win lines and overlay when a new spin starts
   console.log('[Symbols] Clearing win lines and overlay for new spin');
   self.clearWinLines();
   
@@ -2173,26 +1803,9 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   // Use the existing dropReels function
   await runDropReels(self, mockData, Symbols.FILLER_COUNT);
   
-  // Update symbols after animation
-  try {
-    if (gameStateManager.isBonus) {
-      const stickyPrev: Array<{ col: number; row: number; symbol: number }> = (self as any)["prevStickyMultiplierPositions"] || [];
-      for (const pos of stickyPrev) {
-        try {
-          if (self.symbols && self.symbols[pos.col] && self.symbols[pos.col][pos.row]) {
-            self.symbols[pos.col][pos.row] = null as any;
-          }
-        } catch {}
-      }
-    }
-  } catch {}
   disposeSymbols(self.symbols);
   self.symbols = self.newSymbols;
   self.newSymbols = [];
-
-  // Update sticky multiplier overlays for bonus mode so visuals persist across spins
-  try { (self as any).updateStickyMultiplierOverlays?.(); } catch {}
-  
   // Replace with spine animations: winners + idle non-winners if there are wins
   // Note: Idle animations for non-winning symbols are now triggered per-reel in dropNewSymbols
   try {
@@ -2346,16 +1959,11 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
       const onWinDialogClosed = () => {
         console.log('[Symbols] WIN_DIALOG_CLOSED received - starting scatter animation sequence');
         gameEventManager.off(GameEventType.WIN_DIALOG_CLOSED, onWinDialogClosed); // Remove listener
-        
-        // Start scatter animation after win dialog closes
-        self.startScatterAnimationSequence(mockData);
       };
       
       gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, onWinDialogClosed);
     } else {
       console.log('[Symbols] No win dialog showing - starting scatter animation immediately');
-      // No win dialog, start scatter animation immediately
-      self.startScatterAnimationSequence(mockData);
     }
   } else {
     console.log(`[Symbols] No scatter detected (found ${scatterGrids.length} scatter symbols, need 3+)`);
@@ -2502,64 +2110,65 @@ function createNewSymbols(self: Symbols, data: Data) {
 			let symbol: any = null;
 
 			try {
-				const stickyPrev: Array<{ col: number; row: number; symbol: number }> = (self as any)["prevStickyMultiplierPositions"] || [];
-				const isSticky = gameStateManager.isBonus && stickyPrev.some(p => p.col === col && p.row === row);
-
-				if (isSticky && self.symbols && self.symbols[col] && self.symbols[col][row]) {
-					// Reuse existing sticky symbol and re-center it
-					symbol = self.symbols[col][row];
+				const spineKey = `symbol_${symbolValue}_spine`;
+				const atlasKey = spineKey + '-atlas';
+				const hasSpine = (scene.cache.json as any)?.has?.(spineKey);
+				
+				if (hasSpine && (scene.add as any)?.spine) {
+					symbol = (scene.add as any).spine(x, y, spineKey, atlasKey);
+					symbol.setOrigin(0.5, 0.5);
+					try { symbol.skeleton.setToSetupPose(); symbol.update(0); } catch {}
+					const baseScale = self.getIdleSpineSymbolScale(symbolValue);
+					self.centerAndFitSpine(
+						symbol,
+						x,
+						y,
+						self.displayWidth,
+						self.displayHeight,
+						baseScale,
+						self.getWinSymbolNudge(symbolValue)
+					);
 					try {
-						symbol.x = x;
-						symbol.y = y;
+						const m = self.getSpineScaleMultiplier(symbolValue) * self.getIdleScaleMultiplier(symbolValue);
+						if (m !== 1) symbol.setScale(symbol.scaleX * m, symbol.scaleY * m);
+					} catch {}
+					try {
+						(symbol as any).__pngHome = { x, y };
+						(symbol as any).__pngSize = { w: self.displayWidth, h: self.displayHeight };
+						(symbol as any).__pngNudge = self.getIdleSymbolNudge(symbolValue) || { x: 0, y: 0 };
+					} catch {}
+					try {
 						(symbol as any).displayWidth = self.displayWidth;
 						(symbol as any).displayHeight = self.displayHeight;
 					} catch {}
+					self.container.add(symbol);
+					try {
+						const symbolName = `Symbol${symbolValue}_TB`;
+						let idleAnim = `${symbolName}_idle`;
+						try {
+							const cachedJson: any = (scene.cache.json as any).get(spineKey);
+							const anims = cachedJson?.animations ? Object.keys(cachedJson.animations) : [];
+							if (!anims.includes(idleAnim)) {
+								const preferWin = `${symbolName}_win`;
+								const fallbackHit = `${symbolName}_hit`;
+								if (anims.includes(preferWin)) idleAnim = preferWin;
+								else if (anims.includes(fallbackHit)) idleAnim = fallbackHit;
+								else if (anims.length > 0) idleAnim = anims[0];
+							}
+						} catch {}
+						try { (symbol as any).animationState?.setAnimation(0, idleAnim, true); } catch {}
+						try { self.reCenterSpineNextTick(symbol, x, y, self.getIdleSymbolNudge(symbolValue)); } catch {}
+					} catch {}
 				} else {
-					// Normal creation path: Spine-first, guarded PNG fallback
-					const spineKey = `symbol_${symbolValue}_spine`;
-					const atlasKey = spineKey + '-atlas';
-					const hasSpine = (scene.cache.json as any)?.has?.(spineKey);
-
-					if (hasSpine && (scene.add as any)?.spine) {
-						symbol = (scene.add as any).spine(x, y, spineKey, atlasKey);
-						symbol.setOrigin(0.5, 0.5);
-						try { symbol.skeleton.setToSetupPose(); symbol.update(0); } catch {}
-						const baseScale = self.getIdleSpineSymbolScale(symbolValue);
-						self.centerAndFitSpine(
-							symbol,
-							x,
-							y,
-							self.displayWidth,
-							self.displayHeight,
-							baseScale,
-							self.getIdleSymbolNudge(symbolValue)
-						);
-						try {
-							const m = self.getSpineScaleMultiplier(symbolValue) * self.getIdleScaleMultiplier(symbolValue);
-							if (m !== 1) symbol.setScale(symbol.scaleX * m, symbol.scaleY * m);
-						} catch {}
-						try {
-							(symbol as any).__pngHome = { x, y };
-							(symbol as any).__pngSize = { w: self.displayWidth, h: self.displayHeight };
-							(symbol as any).__pngNudge = self.getIdleSymbolNudge(symbolValue) || { x: 0, y: 0 };
-						} catch {}
-						try {
-							(symbol as any).displayWidth = self.displayWidth;
-							(symbol as any).displayHeight = self.displayHeight;
-						} catch {}
+					const spriteKey = 'symbol_' + symbolValue;
+					if (scene.textures.exists(spriteKey)) {
+						symbol = scene.add.sprite(x, y, spriteKey);
+						symbol.displayWidth = self.displayWidth;
+						symbol.displayHeight = self.displayHeight;
 						self.container.add(symbol);
 					} else {
-						// PNG fallback only if texture actually exists (should be disabled when Spine-only)
-						const spriteKey = 'symbol_' + symbolValue;
-						if (scene.textures.exists(spriteKey)) {
-							symbol = scene.add.sprite(x, y, spriteKey);
-							symbol.displayWidth = self.displayWidth;
-							symbol.displayHeight = self.displayHeight;
-							self.container.add(symbol);
-						} else {
-							console.warn(`[Symbols] No Spine or PNG texture for new symbol ${symbolValue} at [${col}, ${row}] – leaving empty.`);
-							symbol = null as any;
-						}
+						console.warn(`[Symbols] No Spine or PNG texture for new symbol ${symbolValue} at [${col}, ${row}] – leaving empty.`);
+						symbol = null as any;
 					}
 				}
 			} catch {
@@ -2646,35 +2255,14 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
       if (currentSymbol) {
         // Mark this cell as a winner
         winningPositions.add(`${grid.y}_${grid.x}`);
-        // If there is a sticky multiplier overlay at this cell, hide it while Spine animation is active
-        try {
-          const isStickyCell = !!((self as any)["stickyMultiplierPositions"] || []).some((p: any) => p.col === grid.y && p.row === grid.x);
-          if (!isStickyCell) {
-            const overlay = (self as any).stickyMultiplierOverlays?.find?.((e: any) => e.col === grid.y && e.row === grid.x);
-            const node = overlay?.node || overlay?.sprite; // backward compatibility if any old refs remain
-            if (node && typeof node.setVisible === 'function') {
-              node.setVisible(false);
-            }
-          }
-        } catch {}
         
         // Get the symbol value and construct the Spine key
         const symbolValue = data.symbols[grid.y][grid.x];
 
-        
         const spineKey = `symbol_${symbolValue}_spine`;
         const spineAtlasKey = spineKey + '-atlas';
-        const symbolName = `Symbol${symbolValue}_TB`;
-        // Prefer *_win if present, else *_hit
-        let hitAnimationName = `${symbolName}_win`;
-        try {
-          const cachedJson: any = (self.scene.cache.json as any).get(spineKey);
-          const anims = cachedJson?.animations ? Object.keys(cachedJson.animations) : [];
-          if (!anims.includes(hitAnimationName)) {
-            const fallback = `${symbolName}_hit`;
-            hitAnimationName = anims.includes(fallback) ? fallback : hitAnimationName;
-          }
-        } catch {}
+        // Resolve the best available animation for this symbol (prefer _win, then _hit, else first)
+        const winAnimName = self.resolveSymbolAnimName(spineKey, symbolValue);
         
         // Store original position and scale
         const x = currentSymbol.x;
@@ -2683,59 +2271,52 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
         const displayHeight = currentSymbol.displayHeight;
         
         try {
-          const isStickyCell = !!((self as any)["stickyMultiplierPositions"] || []).some((p: any) => p.col === grid.y && p.row === grid.x);
-          if (isStickyCell) {
-            // Do NOT destroy/replace sticky cell. Ensure it is a Spine and set win animation.
-            let target: any = currentSymbol;
-            if (!(target as any)?.animationState) {
-              // If base is PNG, try to use overlay Spine as the animation target to avoid conversion now
-              const overlay = (self as any).stickyMultiplierOverlays?.find?.((e: any) => e.col === grid.y && e.row === grid.x);
-              if (overlay && (overlay.node as any)?.animationState) {
-                target = overlay.node;
-                try { (overlay.node as any).setVisible(true); } catch {}
-              } else {
-                // As a last resort, skip conversion here to avoid PNG->Spine pop; no animation change
-                continue;
-              }
-            }
-            try {
-              const configuredScale = self.getSpineSymbolScale(symbolValue);
-              self.centerAndFitSpine(target, x, y, self.displayWidth, self.displayHeight, configuredScale, self.getWinSymbolNudge(symbolValue));
-              try { const m = self.getSpineScaleMultiplier(symbolValue); if (m !== 1) target.setScale(target.scaleX * m, target.scaleY * m); } catch {}
-            } catch {}
-            try { target.animationState.setAnimation(0, hitAnimationName, true); } catch {}
-            try {
-              const speed = (window as any)?.gameStateManager?.isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1.0;
-              (target as any).animationState.timeScale = Math.max(0.0001, speed);
-            } catch {}
-            self.reCenterSpineNextTick(target, x, y, self.getWinSymbolNudge(symbolValue));
-          } else {
-            const hasSpineJson = (self.scene.cache.json as any)?.has?.(spineKey);
-            const canCreateSpine = hasSpineJson && (self.scene.add as any)?.spine;
-            if (!canCreateSpine) {
-              console.log(`[Symbols] No Spine data for winning symbol ${symbolValue} at (${grid.x}, ${grid.y}); keeping PNG/WEBP symbol.`);
-              continue;
-            }
-            console.log(`[Symbols] Replacing sprite with Spine animation: ${spineKey} at (${grid.x}, ${grid.y})`);
-            // Remove the current sprite
-            currentSymbol.destroy();
-            // Create Spine animation in its place
-            const spineSymbol = self.scene.add.spine(x, y, spineKey, spineAtlasKey);
-            spineSymbol.setOrigin(0.5, 0.5);
-            const configuredScale = self.getSpineSymbolScale(symbolValue);
-            try { (spineSymbol as any).__pngHome = { x, y }; } catch {}
-            try { spineSymbol.skeleton.setToSetupPose(); spineSymbol.update(0); } catch {}
-            self.centerAndFitSpine(spineSymbol, x, y, self.displayWidth, self.displayHeight, configuredScale, self.getWinSymbolNudge(symbolValue));
-            try { const m = self.getSpineScaleMultiplier(symbolValue); if (m !== 1) spineSymbol.setScale(spineSymbol.scaleX * m, spineSymbol.scaleY * m); } catch {}
-            spineSymbol.animationState.setAnimation(0, hitAnimationName, true);
-            try {
-              const speed = (window as any)?.gameStateManager?.isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1.0;
-              (spineSymbol as any).animationState.timeScale = Math.max(0.0001, speed);
-            } catch {}
-            self.reCenterSpineNextTick(spineSymbol, x, y, self.getWinSymbolNudge(symbolValue));
-            self.container.add(spineSymbol);
-            self.symbols[grid.y][grid.x] = spineSymbol;
+          const hasSpineJson = (self.scene.cache.json as any)?.has?.(spineKey);
+          const canCreateSpine = hasSpineJson && (self.scene.add as any)?.spine;
+          if (!canCreateSpine) {
+            console.log(`[Symbols] No Spine data for winning symbol ${symbolValue} at (${grid.x}, ${grid.y}); keeping PNG/WEBP symbol.`);
+            continue;
           }
+          console.log(`[Symbols] Replacing sprite with Spine animation: ${spineKey} at (${grid.x}, ${grid.y})`);
+          currentSymbol.destroy();
+          const spineSymbol = self.scene.add.spine(x, y, spineKey, spineAtlasKey);
+          spineSymbol.setOrigin(0.5, 0.5);
+          const configuredScale = self.getWinSpineSymbolScale(symbolValue);
+          try { (spineSymbol as any).__pngHome = { x, y }; } catch {}
+          try { spineSymbol.skeleton.setToSetupPose(); spineSymbol.update(0); } catch {}
+          self.centerAndFitSpine(spineSymbol, x, y, self.displayWidth, self.displayHeight, configuredScale, self.getWinSymbolNudge(symbolValue));
+
+          let finalScaleX = spineSymbol.scaleX;
+          let finalScaleY = spineSymbol.scaleY;
+          try {
+            const m = self.getSpineScaleMultiplier(symbolValue) * self.getIdleScaleMultiplier(symbolValue);
+            if (m !== 1) {
+              finalScaleX *= m;
+              finalScaleY *= m;
+            }
+          } catch {}
+
+          try {
+            const startScaleX = finalScaleX * 0.85;
+            const startScaleY = finalScaleY * 0.85;
+            spineSymbol.setScale(startScaleX, startScaleY);
+            self.scene.tweens.add({
+              targets: spineSymbol,
+              scaleX: finalScaleX,
+              scaleY: finalScaleY,
+              duration: 250,
+              ease: 'Power2.easeOut',
+            });
+          } catch {}
+
+          spineSymbol.animationState.setAnimation(0, winAnimName, true);
+          try {
+            const speed = (window as any)?.gameStateManager?.isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1.0;
+            (spineSymbol as any).animationState.timeScale = Math.max(0.0001, speed);
+          } catch {}
+          self.reCenterSpineNextTick(spineSymbol, x, y, self.getWinSymbolNudge(symbolValue));
+          self.container.add(spineSymbol);
+          self.symbols[grid.y][grid.x] = spineSymbol;
 
           // Play win SFX once when winning symbol animations start
           try {
@@ -2754,10 +2335,8 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
               }
             }
           } catch {}
-          
         } catch (error) {
           console.warn(`[Symbols] Failed to apply Spine animation at (${grid.x}, ${grid.y}):`, error);
-          // Fallback to the old tint method if animation target not available
           const fallbackSymbol = self.symbols[grid.y][grid.x];
           if (fallbackSymbol) {
             if (typeof fallbackSymbol.setTint === 'function') {
@@ -2779,9 +2358,6 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
       }
     }
   }
-
-  // Note: Non-winning symbols idle animations are now handled per-reel in dropNewSymbols
-  // This ensures idle animations start after each reel drops rather than all at once
 }
 
 
