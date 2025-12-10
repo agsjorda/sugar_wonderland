@@ -1,0 +1,30 @@
+Report created: 
+	10/10/2025	10:57:06 am
+
+Project name: Ambers.aep
+
+Source files collected to: 
+	C:\Users\PC\Desktop\RainbowFist\Multiplier\Bell\Ambers
+
+Source files collected: None
+
+Collected comps:  
+	Ambers
+	Particle Texture
+	
+Number of collected files:  0
+
+Size of collected files:  0 KB
+
+Rendering plug-ins:
+	Classic 3D
+	
+Effects used:  3
+
+Effect:  Deep Glow
+	
+Effect:  Gaussian Blur
+	
+Effect:  Particular
+	
+

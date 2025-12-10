@@ -1,0 +1,30 @@
+Report created: 
+	07/10/2025	4:42:36 pm
+
+Project name: Stars.aep
+
+Source files collected to: 
+	C:\Users\PC\Desktop\RainbowFist\Multiplier\Bwin\Stars Particle
+
+Source files collected: All
+
+Collected comps:  
+	Comp 1
+	
+Number of collected files:  1
+
+Size of collected files:  40 KB
+
+Collected source files: 
+	C:\Users\PC\Desktop\RainbowFist\Multiplier\Bell\Assets\Star.png
+	
+Rendering plug-ins:
+	Classic 3D
+	
+Effects used:  2
+
+Effect:  Deep Glow
+	
+Effect:  Particular
+	
+

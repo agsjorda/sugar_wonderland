@@ -1,0 +1,29 @@
+Report created: 
+	02/10/2025	4:21:16 pm
+
+Project name: Heart.aep
+
+Source files collected to: 
+	C:\Users\PC\Desktop\Multiplier\Tie\VFX
+
+Source files collected: All
+
+Collected comps:  
+	Comp 1
+	
+Number of collected files:  2
+
+Size of collected files:  4.2 MB
+
+Collected source files: 
+	C:\Users\PC\Desktop\Multiplier\Shoes\Assets\freepik__background__11017.png
+	C:\Users\PC\Desktop\Multiplier\Shoes\Assets\Heart.png
+	
+Rendering plug-ins:
+	Classic 3D
+	
+Effects used:  1
+
+Effect:  Particular
+	
+
