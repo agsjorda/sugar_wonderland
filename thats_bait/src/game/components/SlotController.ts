@@ -2,7 +2,7 @@
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { EventBus } from "../EventBus";
-import { GameData, setSpeed } from "./GameData";
+import { GameData, setSpeed, isWinlinesShowing } from "./GameData";
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { TurboConfig } from '../../config/TurboConfig';
@@ -956,7 +956,7 @@ export class SlotController {
 			}
 			console.log('[SlotController] Spin button clicked');
 			// Ensure symbols container is restored for the new spin
-			try { (this.symbols as any)?.restoreSymbolsAboveReelBg?.(); } catch {}
+			try { this.symbols?.restoreSymbolsAboveReelBg?.(); } catch {}
 			if ((window as any).audioManager) {
 				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
 			}
@@ -2908,15 +2908,22 @@ setBuyFeatureBetAmount(amount: number): void {
 		if (this.isStoppingAutoplay || this.autoplaySpinsRemaining <= 0) {
 			console.log('[SlotController] performAutoplaySpin aborted - isStoppingAutoplay or no spins remaining', {
 				isStoppingAutoplay: this.isStoppingAutoplay,
-				autoplaySpinsRemaining: this.autoplaySpinsRemaining
+				autoplaySpinsRemaining: this.autoplaySpinsRemaining,
 			});
 			return;
 		}
-		// Guard: do not start a new autoplay spin while reels are already spinning
-		if (gameStateManager.isReelSpinning) {
-			console.log('[SlotController] performAutoplaySpin aborted - reels already spinning');
-			return;
-		}
+
+		// Guard: wait until win visuals (winlines/dim/bg darken) are finished
+		// before starting the next autoplay spin. Manual spins never call this
+		// method, so this only affects autoplay.
+		try {
+			if (this.gameData && isWinlinesShowing(this.gameData)) {
+				console.log('[SlotController] performAutoplaySpin blocked - win visuals still active, rescheduling');
+				this.scheduleNextAutoplaySpin(100);
+				return;
+			}
+		} catch {}
+
 		// Guard: block autoplay spins when win dialog is showing
 		if (gameStateManager.isShowingWinDialog) {
 			console.log('[SlotController] performAutoplaySpin blocked - win dialog is showing');
@@ -4330,8 +4337,8 @@ public updateAutoplayButtonState(): void {
 						console.log(`[SlotController] Updated free spin display to ${gameScene.symbols.freeSpinAutoplaySpinsRemaining} remaining`);
 						
 						// Check if there are any more free spins available
-						const freespinData2 = spinData.slot?.freespin || spinData.slot?.freeSpin;
-						const hasMoreFreeSpins = freespinData2?.items?.some((item: any) => item.spinsLeft > 0);
+						const freespinData = spinData.slot?.freespin || spinData.slot?.freeSpin;
+						const hasMoreFreeSpins = freespinData?.items?.some(item => item.spinsLeft > 0);
 						if (!hasMoreFreeSpins) {
 							// No more free spins - end bonus mode
 							console.log('[SlotController] No more free spins available - ending bonus mode');
@@ -4352,13 +4359,13 @@ public updateAutoplayButtonState(): void {
 							this.scene.events.emit('setBonusMode', false);
 						}
 					}
-					
+
 					// Process the spin data directly for free spin autoplay
 					if (this.scene && (this.scene as any).symbols) {
-						const symbolsComponent2 = (this.scene as any).symbols;
-						if (symbolsComponent2 && typeof symbolsComponent2.processSpinData === 'function') {
+						const symbolsComponent = (this.scene as any).symbols;
+						if (symbolsComponent && typeof symbolsComponent.processSpinData === 'function') {
 							console.log('[SlotController] Processing free spin data directly via symbols component');
-							symbolsComponent2.processSpinData(spinData);
+							symbolsComponent.processSpinData(spinData);
 						} else {
 							console.log('[SlotController] Symbols component not available, falling back to SPIN_DATA_RESPONSE');
 							gameEventManager.emit(GameEventType.SPIN_DATA_RESPONSE, {
@@ -4371,11 +4378,20 @@ public updateAutoplayButtonState(): void {
 							spinData: spinData
 						});
 					}
+
 				} catch (error) {
 					console.error('[SlotController] Free spin simulation failed:', error);
 				}
 			} else {
 				console.warn('[SlotController] Not in bonus mode or GameAPI not available for free spin autoplay');
+			}
+		});
+
+		// Listen for scatter bonus activation to reset free spin index
+		this.scene.events.on('scatterBonusActivated', () => {
+			console.log('[SlotController] Scatter bonus activated - resetting free spin index');
+			if (this.gameAPI) {
+				this.gameAPI.resetFreeSpinIndex();
 			}
 		});
 

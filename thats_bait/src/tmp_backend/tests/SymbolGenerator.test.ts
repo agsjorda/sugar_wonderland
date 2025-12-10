@@ -42,22 +42,7 @@ describe('SymbolGenerator', () => {
 		}
 	});
 
-	it('wildcard spawn only at 1, 2, 3 indices', () => {
-		for (let i = 0; i < 1000; i++) {
-			let newSymbols = symbolGenerator.generate();
-
-			for (let col = 0; col < Data.SLOT_COLUMNS; col++) {
-				expect(newSymbols[col][0] < Data.WILDCARDS[0]).toBeTruthy();
-				expect(newSymbols[col][1] <= Data.WILDCARDS[2]).toBeTruthy();
-				expect(newSymbols[col][2] <= Data.WILDCARDS[2]).toBeTruthy();
-				expect(newSymbols[col][3] <= Data.WILDCARDS[2]).toBeTruthy();
-				expect(newSymbols[col][4] < Data.WILDCARDS[0]).toBeTruthy();
-			}
-		}
+	it('no wildcard symbols are configured anymore', () => {
+		expect(Data.WILDCARDS.length).toBe(0);
 	});
-
-	
-
-
-
 })

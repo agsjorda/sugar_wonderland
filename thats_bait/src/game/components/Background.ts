@@ -49,10 +49,10 @@ export class Background {
 	private readonly SEA_EDGE_WAVE_DECAY_PER_SECOND: number = 1.5;
 	private readonly depthBackgroundModifiers = {
 		offsetX: 0,
-		offsetY: -325,
+		offsetY: -410,
 		scale: 1,
- 		scaleXMultiplier: 0.8,
- 		scaleYMultiplier: 0.5,
+ 		scaleXMultiplier: 1,
+ 		scaleYMultiplier: 0.8,
  	};
  	private readonly surfaceBackgroundModifiers = {
  		offsetX: 0,
@@ -78,6 +78,11 @@ export class Background {
 		offsetY: -345,
 		scale: 0.65,
 	};
+	private enableWaterPipelines: boolean = true;
+	private enableBubbleEffects: boolean = true;
+	private bubbleParticleImageScale: number = 0.01;
+	private bubbleStreamImageScale: number = 0.005;
+	private enableBackgroundSpineDecorations: boolean = true;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -106,69 +111,68 @@ export class Background {
 		// Add background layers
 		this.createBackgroundLayers(scene, assetScale);
 		// (Spine-based border is handled by `Symbols` component)
-		// Create ember/fiery particle backdrop (behind gameplay)
-		this.bubbleSystem = new BubbleParticleSystem(scene, -9, {
-			count: 5,
-			speedMin: 0.2,
-			speedMax: 0.2,
-			lifeMin: 6000,
-			lifeMax: 16000,
-			screenMargin: this.SCREEN_MARGIN,
-			spawnPerSecond: 100,
-			maskLeft: 0,
-			maskRight: 0,
-			maskTop: 280,
-			maskBottom: 250,
-			showMaskDebug: false,
-			burstOnStart: false,
-			opacityMin: 0.3,
-			opacityMax: 0.7,
-			textureKey: 'bubble',
-			imageScale: 0.01,
-		});
-
-		// Create multiple vertical bubble streams (5 by default), each with its own offset
-		const baseStreamCenterX = scene.scale.width * 0.5;
-		const baseStreamCenterY = scene.scale.height * 0.5;
-		this.bubbleStreamSystems = [];
-		for (let i = 0; i < this.bubbleStreamModifiers.length; i++) {
-			const mods = this.bubbleStreamModifiers[i];
-			const streamCenterX = baseStreamCenterX + mods.offsetX;
-			const streamCenterY = baseStreamCenterY + mods.offsetY;
-			const stream = new BubbleStreamSystem(scene, {
-				x: streamCenterX,
-				y: streamCenterY,
-				depth: 878,
-				count: 100,
-				spawnPerSecond: 1.2,
-				speedMin: 10,
-				speedMax: 10,
-				opacityMin: 0.2,
-				opacityMax: 0.4,
+		if (this.enableBubbleEffects) {
+			this.bubbleSystem = new BubbleParticleSystem(scene, -9, {
+				count: 5,
+				speedMin: 0.2,
+				speedMax: 0.2,
+				lifeMin: 6000,
+				lifeMax: 16000,
+				screenMargin: this.SCREEN_MARGIN,
+				spawnPerSecond: 100,
 				maskLeft: 0,
 				maskRight: 0,
 				maskTop: 280,
-				radiusMin: 0.5,
-				radiusMax: 3,
 				maskBottom: 250,
 				showMaskDebug: false,
+				burstOnStart: false,
+				opacityMin: 0.4,
+				opacityMax: 1,
 				textureKey: 'bubble',
-				imageScale: 0.005,
+				imageScale: this.bubbleParticleImageScale,
 			});
-			this.bubbleStreamSystems.push(stream);
+
+			const baseStreamCenterX = scene.scale.width * 0.5;
+			const baseStreamCenterY = scene.scale.height * 0.5;
+			this.bubbleStreamSystems = [];
+			for (let i = 0; i < this.bubbleStreamModifiers.length; i++) {
+				const mods = this.bubbleStreamModifiers[i];
+				const streamCenterX = baseStreamCenterX + mods.offsetX;
+				const streamCenterY = baseStreamCenterY + mods.offsetY;
+				const stream = new BubbleStreamSystem(scene, {
+					x: streamCenterX,
+					y: streamCenterY,
+					depth: 878,
+					count: 100,
+					spawnPerSecond: 1.2,
+					speedMin: 10,
+					speedMax: 10,
+					opacityMin: 0.2,
+					opacityMax: 0.4,
+					maskLeft: 0,
+					maskRight: 0,
+					maskTop: 280,
+					radiusMin: 0.5,
+					radiusMax: 3,
+					maskBottom: 250,
+					showMaskDebug: false,
+					textureKey: 'bubble',
+					imageScale: this.bubbleStreamImageScale,
+				});
+				this.bubbleStreamSystems.push(stream);
+			}
+			scene.events.on('update', this.handleUpdate, this);
+			scene.events.once('shutdown', () => {
+				try { scene.events.off('update', this.handleUpdate, this); } catch {}
+				try { this.bubbleSystem?.destroy(); } catch {}
+				try {
+					for (const stream of this.bubbleStreamSystems) {
+						try { stream.destroy(); } catch {}
+					}
+					this.bubbleStreamSystems = [];
+				} catch {}
+			});
 		}
-		// Drive particles using scene update events
-		scene.events.on('update', this.handleUpdate, this);
-		scene.events.once('shutdown', () => {
-			try { scene.events.off('update', this.handleUpdate, this); } catch {}
-			try { this.bubbleSystem?.destroy(); } catch {}
-			try {
-				for (const stream of this.bubbleStreamSystems) {
-					try { stream.destroy(); } catch {}
-				}
-				this.bubbleStreamSystems = [];
-			} catch {}
-		});
 		
 		// Add decorative elements
 		//this.createDecorativeElements(scene, assetScale);
@@ -252,8 +256,10 @@ export class Background {
 			baseSkyX + this.skyBackgroundModifiers.offsetX,
 			baseSkyY + this.skyBackgroundModifiers.offsetY
 		);
-		this.createCharacterSpine(scene);
-		this.createReelBottomSpine(scene);
+		if (this.enableBackgroundSpineDecorations) {
+			this.createCharacterSpine(scene);
+			this.createReelBottomSpine(scene);
+		}
 
 		const seaEdgeY = scene.scale.height * 0.5;
 		const seaEdge = scene.add.image(
@@ -267,75 +273,77 @@ export class Background {
 		// Place Sea-Edge above the reel slot background (depth 880) but below controller UI (900)
 		seaEdge.setDepth(892);
 
-		const renderer: any = scene.game.renderer;
-		const pipelineManager: any = renderer && renderer.pipelines;
-		if (pipelineManager && typeof pipelineManager.add === 'function') {
-			try {
-				const store = pipelineManager.pipelines;
-				const hasVerticalEdge = store && typeof store.has === 'function' && store.has('WaterWaveVerticalSeaEdge');
-				const hasDepth = store && typeof store.has === 'function' && store.has('WaterWaveDepth');
-				const hasSurface = store && typeof store.has === 'function' && store.has('WaterWaveSurface');
-				if (!hasVerticalEdge) {
-					const seaEdgePipeline = new WaterWaveVerticalPipeline(scene.game, {
-						amplitude: this.seaEdgeBaseWaveAmplitude,
-						frequency: 15.0,
-						speed: 6
-					});
-					pipelineManager.add('WaterWaveVerticalSeaEdge', seaEdgePipeline);
-					this.seaEdgeWavePipeline = seaEdgePipeline;
-					this.seaEdgeWaveAmplitude = this.seaEdgeBaseWaveAmplitude;
-				} else if (renderer && typeof renderer.getPipeline === 'function') {
-					try {
-						const existingSeaEdge = renderer.getPipeline('WaterWaveVerticalSeaEdge');
-						if (existingSeaEdge) {
-							this.seaEdgeWavePipeline = existingSeaEdge as WaterWaveVerticalPipeline;
-							this.seaEdgeWaveAmplitude = this.seaEdgeBaseWaveAmplitude;
-						}
-					} catch (_getVerticalEdgeErr) {}
+		if (this.enableWaterPipelines) {
+			const renderer: any = scene.game.renderer;
+			const pipelineManager: any = renderer && renderer.pipelines;
+			if (pipelineManager && typeof pipelineManager.add === 'function') {
+				try {
+					const store = pipelineManager.pipelines;
+					const hasVerticalEdge = store && typeof store.has === 'function' && store.has('WaterWaveVerticalSeaEdge');
+					const hasDepth = store && typeof store.has === 'function' && store.has('WaterWaveDepth');
+					const hasSurface = store && typeof store.has === 'function' && store.has('WaterWaveSurface');
+					if (!hasVerticalEdge) {
+						const seaEdgePipeline = new WaterWaveVerticalPipeline(scene.game, {
+							amplitude: this.seaEdgeBaseWaveAmplitude,
+							frequency: 15.0,
+							speed: 6
+						});
+						pipelineManager.add('WaterWaveVerticalSeaEdge', seaEdgePipeline);
+						this.seaEdgeWavePipeline = seaEdgePipeline;
+						this.seaEdgeWaveAmplitude = this.seaEdgeBaseWaveAmplitude;
+					} else if (renderer && typeof renderer.getPipeline === 'function') {
+						try {
+							const existingSeaEdge = renderer.getPipeline('WaterWaveVerticalSeaEdge');
+							if (existingSeaEdge) {
+								this.seaEdgeWavePipeline = existingSeaEdge as WaterWaveVerticalPipeline;
+								this.seaEdgeWaveAmplitude = this.seaEdgeBaseWaveAmplitude;
+							}
+						} catch (_getVerticalEdgeErr) {}
+					}
+					if (!hasDepth) {
+						const depthWave = new WaterWavePipeline(scene.game, {
+							amplitude: 0.02,
+							frequency: 10.0,
+							speed: 2.0
+						});
+						pipelineManager.add('WaterWaveDepth', depthWave);
+						this.depthWavePipeline = depthWave;
+					} else if (renderer && typeof renderer.getPipeline === 'function') {
+						try {
+							const existingDepth = renderer.getPipeline('WaterWaveDepth');
+							if (existingDepth) {
+								this.depthWavePipeline = existingDepth as WaterWavePipeline;
+							}
+						} catch (_getDepthErr) {}
+					}
+					if (!hasSurface) {
+						const surfaceWave = new WaterRipplePipeline(scene.game, {
+							waveAmplitude: 0.015,
+							waveFrequency: .2,
+							waveSpeed: 1.5,
+							rippleAmplitude: 0.0,
+							rippleFrequency: 1.0,
+							rippleSpeed: 17.5,
+							rippleDecay: 0.2
+						});
+						pipelineManager.add('WaterWaveSurface', surfaceWave);
+						this.surfaceWavePipeline = surfaceWave;
+					} else if (renderer && typeof renderer.getPipeline === 'function') {
+						try {
+							const existingSurface = renderer.getPipeline('WaterWaveSurface');
+							if (existingSurface) {
+								this.surfaceWavePipeline = existingSurface as WaterRipplePipeline;
+							}
+						} catch (_getSurfaceErr) {}
+					}
+				} catch (_e) {}
+				seaEdge.setPipeline('WaterWaveVerticalSeaEdge');
+				if (this.bgDepth) {
+					this.bgDepth.setPipeline('WaterWaveDepth');
 				}
-				if (!hasDepth) {
-					const depthWave = new WaterWavePipeline(scene.game, {
-						amplitude: 0.02,
-						frequency: 10.0,
-						speed: 2.0
-					});
-					pipelineManager.add('WaterWaveDepth', depthWave);
-					this.depthWavePipeline = depthWave;
-				} else if (renderer && typeof renderer.getPipeline === 'function') {
-					try {
-						const existingDepth = renderer.getPipeline('WaterWaveDepth');
-						if (existingDepth) {
-							this.depthWavePipeline = existingDepth as WaterWavePipeline;
-						}
-					} catch (_getDepthErr) {}
+				if (this.bgSurface) {
+					this.bgSurface.setPipeline('WaterWaveSurface');
 				}
-				if (!hasSurface) {
-					const surfaceWave = new WaterRipplePipeline(scene.game, {
-						waveAmplitude: 0.015,
-						waveFrequency: .2,
-						waveSpeed: 1.5,
-						rippleAmplitude: 0.0,
-						rippleFrequency: 1.0,
-						rippleSpeed: 17.5,
-						rippleDecay: 0.2
-					});
-					pipelineManager.add('WaterWaveSurface', surfaceWave);
-					this.surfaceWavePipeline = surfaceWave;
-				} else if (renderer && typeof renderer.getPipeline === 'function') {
-					try {
-						const existingSurface = renderer.getPipeline('WaterWaveSurface');
-						if (existingSurface) {
-							this.surfaceWavePipeline = existingSurface as WaterRipplePipeline;
-						}
-					} catch (_getSurfaceErr) {}
-				}
-			} catch (_e) {}
-			seaEdge.setPipeline('WaterWaveVerticalSeaEdge');
-			if (this.bgDepth) {
-				this.bgDepth.setPipeline('WaterWaveDepth');
-			}
-			if (this.bgSurface) {
-				this.bgSurface.setPipeline('WaterWaveSurface');
 			}
 		}
 
@@ -731,5 +739,108 @@ export class Background {
 
 	getContainer(): Phaser.GameObjects.Container {
 		return this.bgContainer;
+	}
+
+	public darkenDepthForWinSequence(): void {
+		try {
+			if (!this.bgDepth || !this.sceneRef) {
+				return;
+			}
+			const depth: any = this.bgDepth as any;
+			const scene: any = this.sceneRef as any;
+			try {
+				if (typeof depth.__winOriginalAlpha !== 'number') {
+					depth.__winOriginalAlpha = typeof depth.alpha === 'number' ? depth.alpha : 1;
+				}
+				if (typeof depth.__winOriginalTint !== 'number') {
+					// Use the current tint if present, otherwise default to white
+					const currentTint: number = (depth.tintTopLeft as number) ?? 0xffffff;
+					depth.__winOriginalTint = currentTint;
+				}
+			} catch {}
+			try { scene.tweens?.killTweensOf?.(depth); } catch {}
+			try {
+				// Also darken via the WaterWaveDepth shader pipeline so the effect
+				// is visible even when tint/alpha are not applied inside the shader.
+				if (this.depthWavePipeline) {
+					const pipelineAny: any = this.depthWavePipeline as any;
+					try { scene.tweens?.killTweensOf?.(pipelineAny); } catch {}
+					try {
+						scene.tweens.add({
+							targets: pipelineAny,
+							darkenFactor: 0.6,
+							duration: 800,
+							ease: 'Sine.easeOut',
+						});
+					} catch {}
+				}
+				const baseAlpha = typeof depth.alpha === 'number' ? depth.alpha : 1;
+				const targetAlpha = Math.max(0, Math.min(1, baseAlpha * 0.7));
+				// Apply a dark tint as a secondary cue
+				try {
+					if (typeof depth.setTint === 'function') {
+						depth.setTint(0x202020);
+					}
+				} catch {}
+				scene.tweens.add({
+					targets: depth,
+					alpha: targetAlpha,
+					duration: 800,
+					ease: 'Sine.easeOut',
+				});
+			} catch {}
+		} catch {}
+	}
+
+	public restoreDepthAfterWinSequence(): void {
+		try {
+			if (!this.bgDepth || !this.sceneRef) {
+				return;
+			}
+			const depth: any = this.bgDepth as any;
+			const scene: any = this.sceneRef as any;
+			const origAlpha: number =
+				typeof depth.__winOriginalAlpha === 'number'
+					? depth.__winOriginalAlpha
+					: (typeof depth.alpha === 'number' ? depth.alpha : 1);
+			const origTint: number | undefined =
+				typeof depth.__winOriginalTint === 'number'
+					? depth.__winOriginalTint
+					: undefined;
+			try { scene.tweens?.killTweensOf?.(depth); } catch {}
+			try {
+				if (this.depthWavePipeline) {
+					const pipelineAny: any = this.depthWavePipeline as any;
+					try { scene.tweens?.killTweensOf?.(pipelineAny); } catch {}
+					try {
+						scene.tweens.add({
+							targets: pipelineAny,
+							darkenFactor: 0.0,
+							duration: 600,
+							ease: 'Sine.easeOut',
+						});
+					} catch {}
+				}
+				scene.tweens.add({
+					targets: depth,
+					alpha: origAlpha,
+					duration: 600,
+					ease: 'Sine.easeOut',
+					onComplete: () => {
+						try {
+							if (typeof depth.setTint === 'function') {
+								if (typeof origTint === 'number') {
+									depth.setTint(origTint);
+								} else if (typeof depth.clearTint === 'function') {
+									depth.clearTint();
+								}
+							}
+						} catch {}
+						try { delete depth.__winOriginalAlpha; } catch {}
+						try { delete depth.__winOriginalTint; } catch {}
+					},
+				});
+			} catch {}
+		} catch {}
 	}
 }

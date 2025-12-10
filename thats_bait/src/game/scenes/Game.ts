@@ -53,6 +53,7 @@ export class Game extends Phaser.Scene {
 	private hookOriginalDepth: number = 0;
 	private hookScatterStartTimingMultiplier: number = 0.5;
 	private hookScatterEndTimingMultiplier: number = 0.35;
+	private enableRope: boolean = true;
 
 	public readonly gameData: GameData;
 	public readonly gameAPI: GameAPI;
@@ -113,8 +114,10 @@ export class Game extends Phaser.Scene {
 		this.slotController.setSymbols(this.symbols);
 	
 		// Create rope and draggable handles after the main UI so they sit on top visually.
-		this.setupRopeCable();
-		this.bringRopeToFront();
+		if (this.enableRope) {
+			this.setupRopeCable();
+			this.bringRopeToFront();
+		}
 		void this.initializeTokenAndBalance();
 
 		this.registerUiEventListeners();
@@ -174,6 +177,9 @@ export class Game extends Phaser.Scene {
 	}
 
 	update(_time: number, delta: number): void {
+		if (!this.enableRope) {
+			return;
+		}
 		this.rope?.update(delta);
 		if (this.rope && this.hookImage) {
 			const ropeAny: any = this.rope as any;

@@ -39,6 +39,8 @@ export class AssetConfig {
 				'BG-Normal-Slots': `${prefix}/background/BG-Normal-Slots.webp`,
 				'Sea-Edge': `${prefix}/background/Sea-Edge.webp`,
 				'bubble': `${forcedPortraitHighPrefix}/background/bubble.webp`,
+				'winline-bubble-1': `${forcedPortraitHighPrefix}/bubbles/winline-bubble-1.webp`,
+				'winline-bubble-2': `${forcedPortraitHighPrefix}/bubbles/winline-bubble-2.webp`,
 				'hook': `${forcedPortraitHighPrefix}/characters/hook.webp`,
 			},
 			spine: {
@@ -103,27 +105,34 @@ export class AssetConfig {
 	// Add more asset groups as needed
 	getSymbolAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix(); // This gives us assets/{orientation}/{quality}
-		console.log(`[AssetConfig] Loading symbol assets (Spine + WEBP-only symbols) from assets/portrait/high/spine_symbols`);
+		console.log(`[AssetConfig] Loading symbol assets (Spine + WEBP symbols) from assets/portrait/high`);
 		
-		// Generate Spine symbol assets for all symbols (0-14)
+		// Generate Spine + WEBP symbol assets for all symbols (0-14)
 		const symbolImages: { [key: string]: string } = {};
 		const symbolSpine: { [key: string]: { atlas: string; json: string } } = {};
 		
 		// Symbols that have TB Spine atlases/json in public/assets/portrait/high/spine_symbols
-		// All symbols 0-14 are now backed by TB Spine assets.
-		const tbSpineSymbols = new Set<number>([0, 1, 2, 3, 4, 5, 6, 11, 12, 13, 14]);
-		const webpOnlySymbols = new Set<number>([7, 8, 9, 10]);
+		// Extend this list only for symbols we know have atlas/json on disk to avoid 404s.
+		const tbSpineSymbols = new Set<number>([0, 1, 2, 3, 4, 5, 6, 7, 11, 12, 13, 14]);
 		
+		// Symbols that have dedicated WEBP art in public/assets/portrait/high/symbols
+		const webpSymbolsFolder = new Set<number>([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+		
+		// Higher indices fall back to WEBP exported alongside Spine in spine_symbols (none today)
+		const webpSpineFolderFallback = new Set<number>([]);
+		
+		// Force TB symbols to portrait/high paths for now
 		const spinePrefix = `assets/portrait/high`;
-		const symbolImagePrefix = `${spinePrefix}/symbols`;
 		
+		// Register symbols 0-14 using a single, consistent naming scheme:
+		//  - Spine key:   symbol_{i}_spine
+		//  - Image key:   symbol_{i}
+		//  - File names:  spine_symbols/Symbol{i}_TB.(atlas|json), symbols/Symbol{i}_TB.webp
 		for (let i = 0; i <= 14; i++) {
 			const symbolNameTB = `Symbol${i}_TB`;
-			const imageKey = `symbol_${i}`;
-			const imagePath = `${symbolImagePrefix}/${symbolNameTB}.webp`;
-			symbolImages[imageKey] = imagePath;
+			const spineKey = `symbol_${i}_spine`;
+			
 			if (tbSpineSymbols.has(i)) {
-				const spineKey = `symbol_${i}_spine`;
 				const atlasPath = `${spinePrefix}/spine_symbols/${symbolNameTB}.atlas`;
 				const jsonPath = `${spinePrefix}/spine_symbols/${symbolNameTB}.json`;
 				
@@ -132,11 +141,23 @@ export class AssetConfig {
 					json: jsonPath
 				};
 				
-				console.log(`[AssetConfig] Symbol ${i}: spine=${atlasPath}, image=${imagePath}`);
-			} else if (webpOnlySymbols.has(i)) {
-				console.log(`[AssetConfig] Symbol ${i}: image=${imagePath} (WEBP only, no Spine JSON)`);
+				console.log(`[AssetConfig] Symbol ${i}: spine=${atlasPath}`);
 			} else {
-				console.log(`[AssetConfig] Symbol ${i}: image=${imagePath} (no TB Spine asset)`);
+				console.log(`[AssetConfig] Symbol ${i}: spine=<none> (no TB Spine asset)`);
+			}
+			
+			// Register WEBP image used for lightweight spin rendering
+			let imagePath: string | undefined;
+			if (webpSymbolsFolder.has(i)) {
+				imagePath = `${spinePrefix}/symbols/${symbolNameTB}.webp`;
+			} else if (webpSpineFolderFallback.has(i)) {
+				imagePath = `${spinePrefix}/spine_symbols/${symbolNameTB}.webp`;
+			}
+			
+			if (imagePath) {
+				const imageKey = `symbol_${i}`;
+				symbolImages[imageKey] = imagePath;
+				console.log(`[AssetConfig] Symbol ${i}: image=${imagePath}`);
 			}
 		}
 		

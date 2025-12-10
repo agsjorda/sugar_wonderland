@@ -3,7 +3,7 @@ import { Data } from "./Data";
 
 export class SymbolGenerator {
 	public static SCATTER_ROWS: number[] = [0, 2, 4];
-	public static WILDCARD_ROWS: number[] = [1, 2, 3];
+	public static MULTIPLIER_SYMBOLS: number[] = [1, 2, 3];
 
   public generate(exclude: number[] = []): number[][] {
 		const newValues = [];
@@ -38,7 +38,7 @@ export class SymbolGenerator {
 		selection.push(...Data.NORMAL_SYMBOLS);
 
 		// Wildcard only spawn at 1, 2, 3 indices
-		if (SymbolGenerator.WILDCARD_ROWS.includes(row)) {
+		if (SymbolGenerator.MULTIPLIER_SYMBOLS.includes(row)) {
 			//@ts-ignore
 			selection.push(...Data.WILDCARDS);
 		}

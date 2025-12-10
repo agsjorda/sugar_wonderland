@@ -16,7 +16,7 @@ export class Data {
   public static SLOT_ROWS: number = SLOT_ROWS;
   public static SCATTER: number[] = SCATTER_SYMBOL;
   public static NORMAL_SYMBOLS: number[] = NORMAL_SYMBOLS;
-  public static WILDCARDS: number[] = MULTIPLIER_SYMBOLS;
+  public static WILDCARDS: number[] = [];
   public static ALL_SYMBOLS: number[] = ALL_SYMBOLS;
   public static SCATTER_MULTIPLIERS: number[] = SCATTER_MULTIPLIERS;
   public static DELAY_BETWEEN_SPINS: number = DELAY_BETWEEN_SPINS;

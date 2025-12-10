@@ -9,6 +9,7 @@ export interface SpinData {
   
   /** Bet amount for this spin */
   bet: string;
+  baseBet?: string;
   
   /** Slot game data containing the grid and win information */
   slot: SlotData;

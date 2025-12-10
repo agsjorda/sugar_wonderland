@@ -3,6 +3,7 @@ import { GameData } from "./GameData";
 import { gameStateManager } from "../../managers/GameStateManager";
 import { SLOT_ROWS, SLOT_COLUMNS } from "../../config/GameConfig";
 import { SoundEffectType } from "../../managers/AudioManager";
+import { getRandomSymbol5Variant, getSymbol5ImageKeyForVariant } from "./Symbol5VariantHelper";
 
 /**
  * Run the reel-drop sequence, including previous symbols, filler symbols, and new symbols.
@@ -202,61 +203,38 @@ function dropFillers(self: any, fillerCount: number, index: number, extendDurati
     const x = startX + index * symbolTotalWidth + symbolTotalWidth * 0.5;
     const y = getYPos(self, i + START_INDEX_Y);
 
-    const randSymbol = Math.floor(Math.random() * (Data as any).ALL_SYMBOLS.length);
+    // Restrict filler symbols to those that have dedicated WEBP icons in assets/portrait/high/symbols
+    const fillerPool: number[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,];
+    const randIndex = Math.floor(Math.random() * fillerPool.length);
+    const symbolId = fillerPool[randIndex];
     let symbol: any;
 
-    // Prefer Spine symbols for fillers when available (Spine-only pipeline).
-    const spineKey = `symbol_${randSymbol}_spine`;
-    const atlasKey = spineKey + "-atlas";
-    const hasSpineJson = (self.scene.cache.json as any)?.has?.(spineKey);
-    const canCreateSpine = !!hasSpineJson && !!(self.scene.add as any)?.spine;
+    let spriteKey: string | null = null;
 
-    if (canCreateSpine) {
-      try {
-        symbol = (self.scene.add as any).spine(x, y, spineKey, atlasKey);
-        symbol.setOrigin(0.5, 0.5);
-        try { symbol.skeleton.setToSetupPose(); symbol.update(0); } catch {}
-        const baseScale = self.getIdleSpineSymbolScale(randSymbol);
-        self.centerAndFitSpine(symbol, x, y, self.displayWidth, self.displayHeight, baseScale, self.getIdleSymbolNudge(randSymbol));
-        try {
-          const m = self.getSpineScaleMultiplier(randSymbol) * self.getIdleScaleMultiplier(randSymbol);
-          if (m !== 1) symbol.setScale(symbol.scaleX * m, symbol.scaleY * m);
-        } catch {}
-        // Prefer idle-like animation
-        let idleAnim = `Symbol${randSymbol}_TB_idle`;
-        try {
-          const cachedJson: any = (self.scene.cache.json as any).get(spineKey);
-          const anims = cachedJson?.animations ? Object.keys(cachedJson.animations) : [];
-          if (!anims.includes(idleAnim)) {
-            const win = `Symbol${randSymbol}_TB_win`;
-            const hit = `Symbol${randSymbol}_TB_hit`;
-            if (anims.includes(win)) idleAnim = win;
-            else if (anims.includes(hit)) idleAnim = hit;
-            else if (anims.length > 0) idleAnim = anims[0];
-          }
-        } catch {}
-        try { symbol.animationState.setAnimation(0, idleAnim, true); } catch {}
-      } catch (e) {
-        console.warn(`[ReelDropScript] Failed to create Spine filler symbol ${randSymbol}:`, e);
-        symbol = null as any;
-      }
+    if (symbolId === 5) {
+      const variant = getRandomSymbol5Variant();
+      spriteKey = getSymbol5ImageKeyForVariant(variant);
+    } else {
+      spriteKey = "symbol_" + symbolId;
     }
 
-    // If Spine symbol creation is not possible or failed, fall back to PNG/WEBP where available
-    if (!symbol) {
-      const spriteKey = "symbol_" + randSymbol;
-      if (self.scene.textures.exists(spriteKey)) {
-        symbol = self.scene.add.sprite(x, y, spriteKey);
+    const hasSprite = spriteKey ? self.scene.textures.exists(spriteKey) : false;
+
+    // Always try to use the lightweight WEBP symbol sprites for fillers when available
+    if (hasSprite) {
+      try {
+        symbol = self.scene.add.sprite(x, y, spriteKey as string);
         symbol.displayWidth = self.displayWidth;
         symbol.displayHeight = self.displayHeight;
-      } else {
-        console.warn(`[ReelDropScript] No Spine or PNG texture for filler symbol ${randSymbol} - leaving empty and skipping.`);
+      } catch (e) {
+        console.warn(`[ReelDropScript] Failed to create sprite filler symbol ${symbolId} from key ${spriteKey}:`, e);
         symbol = null as any;
       }
     }
 
     // If we failed to create a symbol, skip adding it to containers/tweens entirely
     if (!symbol) {
+      console.warn(`[ReelDropScript] No WEBP sprite texture for filler symbol ${symbolId} (key=${spriteKey}) - skipping filler.`);
       continue;
     }
 
@@ -338,83 +316,20 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
 
     let completedAnimations = 0;
     const totalAnimations = self.newSymbols.length;
+    const START_INDEX_Y = -(fillerCount + SLOT_COLUMNS + extraRows);
 
     for (let col = 0; col < self.newSymbols.length; col++) {
-      let symbol = self.newSymbols[col][index];
-
-      // If symbol is null/undefined, treat it as an instantly completed animation and skip tweens
+      const symbol = self.newSymbols[col][index];
       if (!symbol) {
         completedAnimations++;
         if (completedAnimations === totalAnimations) {
-          self.triggerIdleAnimationsForNewReel(index);
-          try {
-            const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
-            if (isAnticipation && index === 2) {
-              if (self.overlayRect) {
-                if (self.baseOverlayRect) {
-                  self.scene.tweens.add({
-                    targets: self.baseOverlayRect,
-                    alpha: 0,
-                    duration: 300,
-                    ease: "Cubic.easeOut"
-                  });
-                }
-                self.overlayRect.setAlpha(0);
-                self.overlayRect.setVisible(true);
-                self.scene.tweens.add({
-                  targets: self.overlayRect,
-                  alpha: 0.85,
-                  duration: 500,
-                  ease: "Cubic.easeOut"
-                });
-              }
-              const sa = (self.scene as any)?.scatterAnticipation;
-              if (sa && typeof sa.show === "function") { sa.show(); }
-              const sa2 = (self.scene as any)?.scatterAnticipation2;
-              if (sa2 && typeof sa.show === "function") { sa2.show(); }
-              console.log("[ReelDropScript] Scatter anticipation shown after 3rd reel drop");
-            }
-          } catch {}
-          try {
-            const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
-            if (isAnticipation && index === (SLOT_ROWS - 1)) {
-              const sa = (self.scene as any)?.scatterAnticipation;
-              if (sa && typeof sa.hide === "function") { sa.hide(); }
-              const sa2 = (self.scene as any)?.scatterAnticipation2;
-              if (sa2 && typeof sa.hide === "function") { sa2.hide(); }
-              if (self.overlayRect) {
-                self.scene.tweens.add({
-                  targets: self.overlayRect,
-                  alpha: 0,
-                  duration: 300,
-                  ease: "Cubic.easeIn",
-                  onComplete: () => {
-                    try { self.overlayRect.setVisible(false); } catch {}
-                  }
-                });
-                if (self.baseOverlayRect) {
-                  self.baseOverlayRect.setAlpha(0);
-                  self.baseOverlayRect.setVisible(true);
-                  self.scene.tweens.add({
-                    targets: self.baseOverlayRect,
-                    alpha: 0.2,
-                    duration: 300,
-                    ease: "Cubic.easeOut"
-                  });
-                }
-              }
-              console.log("[ReelDropScript] Scatter anticipation hidden after last reel drop");
-              (self.scene as any).__isScatterAnticipationActive = false;
-            }
-          } catch {}
-          resolve();
+          finalize();
         }
         continue;
       }
 
-      const START_INDEX_Y = -(fillerCount + SLOT_COLUMNS + extraRows);
-      const y = getYPos(self, col + START_INDEX_Y);
-      symbol.y = y;
+      const startIndex = col + START_INDEX_Y;
+      symbol.y = getYPos(self, startIndex);
 
       self.scene.tweens.chain({
         targets: symbol,
@@ -451,77 +366,82 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
 
               completedAnimations++;
               if (completedAnimations === totalAnimations) {
-                // Trigger _idle animations for this reel's NEW symbols immediately after drop completion
-                self.triggerIdleAnimationsForNewReel(index);
-
-                // Scatter anticipation show/hide logic mirrors the in-file behavior
-                try {
-                  const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
-                  if (isAnticipation && index === 2) {
-                    if (self.overlayRect) {
-                      if (self.baseOverlayRect) {
-                        self.scene.tweens.add({
-                          targets: self.baseOverlayRect,
-                          alpha: 0,
-                          duration: 300,
-                          ease: "Cubic.easeOut"
-                        });
-                      }
-                      self.overlayRect.setAlpha(0);
-                      self.overlayRect.setVisible(true);
-                      self.scene.tweens.add({
-                        targets: self.overlayRect,
-                        alpha: 0.85,
-                        duration: 500,
-                        ease: "Cubic.easeOut"
-                      });
-                    }
-                    const sa = (self.scene as any)?.scatterAnticipation;
-                    if (sa && typeof sa.show === "function") { sa.show(); }
-                    const sa2 = (self.scene as any)?.scatterAnticipation2;
-                    if (sa2 && typeof sa.show === "function") { sa2.show(); }
-                    console.log("[ReelDropScript] Scatter anticipation shown after 3rd reel drop");
-                  }
-                } catch {}
-
-                try {
-                  const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
-                  if (isAnticipation && index === (SLOT_ROWS - 1)) {
-                    const sa = (self.scene as any)?.scatterAnticipation;
-                    if (sa && typeof sa.hide === "function") { sa.hide(); }
-                    const sa2 = (self.scene as any)?.scatterAnticipation2;
-                    if (sa2 && typeof sa.hide === "function") { sa2.hide(); }
-                    if (self.overlayRect) {
-                      self.scene.tweens.add({
-                        targets: self.overlayRect,
-                        alpha: 0,
-                        duration: 300,
-                        ease: "Cubic.easeIn",
-                        onComplete: () => {
-                          try { self.overlayRect.setVisible(false); } catch {}
-                        }
-                      });
-                      if (self.baseOverlayRect) {
-                        self.baseOverlayRect.setAlpha(0);
-                        self.baseOverlayRect.setVisible(true);
-                        self.scene.tweens.add({
-                          targets: self.baseOverlayRect,
-                          alpha: 0.2,
-                          duration: 300,
-                          ease: "Cubic.easeOut"
-                        });
-                      }
-                    }
-                    console.log("[ReelDropScript] Scatter anticipation hidden after last reel drop");
-                    (self.scene as any).__isScatterAnticipationActive = false;
-                  }
-                } catch {}
-                resolve();
+                finalize();
               }
             }
           }
         ]
       });
+    }
+
+    function finalize() {
+      // Trigger _idle animations for this reel's NEW symbols immediately after drop completion
+      self.triggerIdleAnimationsForNewReel(index);
+
+      // Scatter anticipation show/hide logic mirrors existing behaviour
+      try {
+        const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
+        if (isAnticipation && index === 2) {
+          if (self.overlayRect) {
+            if (self.baseOverlayRect) {
+              self.scene.tweens.add({
+                targets: self.baseOverlayRect,
+                alpha: 0,
+                duration: 300,
+                ease: "Cubic.easeOut"
+              });
+            }
+            self.overlayRect.setAlpha(0);
+            self.overlayRect.setVisible(true);
+            self.scene.tweens.add({
+              targets: self.overlayRect,
+              alpha: 0.85,
+              duration: 500,
+              ease: "Cubic.easeOut"
+            });
+          }
+          const sa = (self.scene as any)?.scatterAnticipation;
+          if (sa && typeof sa.show === "function") { sa.show(); }
+          const sa2 = (self.scene as any)?.scatterAnticipation2;
+          if (sa2 && typeof sa.show === "function") { sa2.show(); }
+          console.log("[ReelDropScript] Scatter anticipation shown after 3rd reel drop");
+        }
+      } catch {}
+
+      try {
+        const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
+        if (isAnticipation && index === (SLOT_ROWS - 1)) {
+          const sa = (self.scene as any)?.scatterAnticipation;
+          if (sa && typeof sa.hide === "function") { sa.hide(); }
+          const sa2 = (self.scene as any)?.scatterAnticipation2;
+          if (sa2 && typeof sa.hide === "function") { sa2.hide(); }
+          if (self.overlayRect) {
+            self.scene.tweens.add({
+              targets: self.overlayRect,
+              alpha: 0,
+              duration: 300,
+              ease: "Cubic.easeIn",
+              onComplete: () => {
+                try { self.overlayRect.setVisible(false); } catch {}
+              }
+            });
+            if (self.baseOverlayRect) {
+              self.baseOverlayRect.setAlpha(0);
+              self.baseOverlayRect.setVisible(true);
+              self.scene.tweens.add({
+                targets: self.baseOverlayRect,
+                alpha: 0.2,
+                duration: 300,
+                ease: "Cubic.easeOut"
+              });
+            }
+          }
+          console.log("[ReelDropScript] Scatter anticipation hidden after last reel drop");
+          (self.scene as any).__isScatterAnticipationActive = false;
+        }
+      } catch {}
+
+      resolve();
     }
   });
 }

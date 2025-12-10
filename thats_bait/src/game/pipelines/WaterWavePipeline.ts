@@ -4,6 +4,7 @@ type WaterWaveOptions = {
     amplitude?: number;
     frequency?: number;
     speed?: number;
+    darkenFactor?: number;
 };
 
 export class WaterWavePipeline extends Phaser.Renderer.WebGL.Pipelines.SinglePipeline {
@@ -11,6 +12,7 @@ export class WaterWavePipeline extends Phaser.Renderer.WebGL.Pipelines.SinglePip
     private amplitude: number;
     private frequency: number;
     private speed: number;
+    private darkenFactor: number;
 
     constructor(game: Phaser.Game, options: WaterWaveOptions = {}) {
         const fragShader = `
@@ -20,13 +22,17 @@ export class WaterWavePipeline extends Phaser.Renderer.WebGL.Pipelines.SinglePip
         uniform float uAmplitude;
         uniform float uFrequency;
         uniform float uSpeed;
+        uniform float uDarkenFactor;
         varying vec2 outTexCoord;
 
         void main() {
             vec2 uv = outTexCoord;
             float wave = sin((uv.y * uFrequency) + (uTime * uSpeed)) * uAmplitude;
             uv.x += wave;
-            gl_FragColor = texture2D(uMainSampler, uv);
+            vec4 color = texture2D(uMainSampler, uv);
+            float f = clamp(uDarkenFactor, 0.0, 1.0);
+            color.rgb *= (1.0 - f);
+            gl_FragColor = color;
         }
         `;
 
@@ -41,6 +47,7 @@ export class WaterWavePipeline extends Phaser.Renderer.WebGL.Pipelines.SinglePip
         this.amplitude = options.amplitude ?? 0.02;
         this.frequency = options.frequency ?? 10.0;
         this.speed = options.speed ?? 2.0;
+        this.darkenFactor = options.darkenFactor ?? 0.0;
     }
 
     onPreRender() {
@@ -49,6 +56,7 @@ export class WaterWavePipeline extends Phaser.Renderer.WebGL.Pipelines.SinglePip
         this.set1f('uAmplitude', this.amplitude);
         this.set1f('uFrequency', this.frequency);
         this.set1f('uSpeed', this.speed);
+        this.set1f('uDarkenFactor', this.darkenFactor);
     }
 
     setAmplitude(value: number) {
@@ -61,6 +69,10 @@ export class WaterWavePipeline extends Phaser.Renderer.WebGL.Pipelines.SinglePip
 
     setSpeed(value: number) {
         this.speed = value;
+    }
+
+    setDarkenFactor(value: number) {
+        this.darkenFactor = Phaser.Math.Clamp(value, 0, 1);
     }
 }
 

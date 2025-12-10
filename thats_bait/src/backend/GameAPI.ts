@@ -230,10 +230,12 @@ function normalizeSpinResponse(raw: any, bet: number): SpinData {
 
     const playerId = typeof raw.playerId === 'string' ? raw.playerId : 'local';
     const betValue = raw.bet !== undefined ? raw.bet : bet;
+    const baseBetStr = bet != null ? bet.toString() : (betValue != null ? betValue.toString() : '0');
 
     return {
         playerId,
         bet: betValue != null ? betValue.toString() : bet.toString(),
+        baseBet: baseBetStr,
         slot
     };
 }

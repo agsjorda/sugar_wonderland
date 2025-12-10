@@ -1192,6 +1192,7 @@ export class Dialogs {
 			console.log('[Dialogs] Reset win line drawer interrupted flag for manual dialog close');
 		}
 		
+		// NOTE: Do NOT call ensureCleanSymbolState() here as it immediately clears winning symbols
 		// The winning symbols should remain visible until the next spin starts
 		// The actual symbol reset will happen when the next spin is triggered
 		console.log('[Dialogs] Preserving winning symbols visibility until next spin starts');
