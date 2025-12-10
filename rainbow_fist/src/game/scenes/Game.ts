@@ -1233,11 +1233,27 @@ export class Game extends Scene
 			return count;
 		};
 		
+		// Add offline spin function
+		(window as any).testSpin = async () => {
+			console.log('[Game] TEST: Performing offline spin...');
+			if (this.symbols) {
+				try {
+					await this.symbols.performOfflineSpin();
+					console.log('[Game] TEST: Offline spin completed');
+				} catch (error) {
+					console.error('[Game] TEST: Error performing offline spin:', error);
+				}
+			} else {
+				console.error('[Game] TEST: Symbols component not available');
+			}
+		};
+		
 		console.log('[Game] Coin system ready! Press SPACEBAR to spawn coins or use console commands:');
 		console.log('- spawnCoins(5) - Spawn 5 coins');
 		console.log('- spawnSingleCoin(400, 300) - Spawn one coin at position');
 		console.log('- clearCoins() - Remove all coins');
 		console.log('- getCoinCount() - Check active coin count');
+		console.log('- testSpin() - Perform an offline spin using test data');
 	}
 
 	switchBetweenModes(isBonus: boolean): void {

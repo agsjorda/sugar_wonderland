@@ -1711,6 +1711,15 @@ export class Symbols {
     // Process the symbols using the same logic as before
     await processSpinDataSymbols(this, symbols, spinData);
   }
+
+  /**
+   * Perform an offline spin using test data
+   */
+  public async performOfflineSpin(): Promise<void> {
+    console.log('[Symbols] Performing offline spin with test data...');
+    const testSpinData = getTestSpinData();
+    await this.processSpinData(testSpinData);
+  }
 }
 
 function getTestSpinData(): any {
@@ -3797,7 +3806,8 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
               if (isIndex1to9) {
                 // Choose effect by index range
                 // const spineKey = (vNum >= 1 && vNum <= 5) ? 'Symbol_HP_256' : 'Symbol_LP_256';
-                const spineKey = `Symbol${vNum}_WF`;
+                // Use the same spine keys that are loaded in AssetConfig (symbol{n}_spine)
+                const spineKey = `symbol${vNum}_spine`;
                 const spineAtlasKey = `${spineKey}-atlas`;
                 const x = obj.x;
                 const y = obj.y;
@@ -3822,6 +3832,7 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
                   let animationDuration = 1000;
                   let completed = false;
                   try {
+                    // High-paying symbols (<=5) have explicit win animations; low-paying reuse idle/wiggle
                     const animationName = `Symbol${vNum}_RF_win`;
                     if (fx.animationState && fx.animationState.setAnimation) {
                       // Set animation and attach listener to TrackEntry if possible
@@ -3857,7 +3868,9 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
                         if (fx.animationState && fx.animationState.addListener) {
                           fx.animationState.addListener({ complete: onDone, end: onDone } as any);
                         }
-                      } catch { }
+                      } catch {
+                        console.warn('[Symbols] Failed to animate symbols using spine animation');
+                       }
                     }
 
                     // play explosion sfx
