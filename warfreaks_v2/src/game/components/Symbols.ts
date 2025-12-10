@@ -154,6 +154,8 @@ export class Symbols {
     this.scene = scene;
     initVariables(this);
     createContainer(this);
+    prewarmSymbolSpinePools(this);
+    prewarmSparkSpinePool(this);
     onStart(this);
     onSpinDataReceived(this);
     this.onSpinDone(this.scene);
@@ -257,6 +259,67 @@ export class Symbols {
 
     if (spineTracksCleared > 0) {
       console.log(`[Symbols] Cleared tracks on ${spineTracksCleared} Spine symbols for spin`);
+    }
+  }
+
+  /**
+   * Start dropping/clearing existing symbols as soon as a new spin is triggered.
+   * This is intentionally decoupled from `dropReels` so the clear phase can
+   * begin immediately at spin start (manual or autoplay), before new reels drop.
+   */
+  public startPreSpinDrop(): void {
+    if (!this.symbols || this.symbols.length === 0) {
+      console.log('[Symbols] startPreSpinDrop: no symbols to drop');
+      return;
+    }
+
+    const firstCol = this.symbols[0];
+    const numRows = Array.isArray(firstCol) ? firstCol.length : 0;
+    if (numRows === 0) {
+      console.log('[Symbols] startPreSpinDrop: symbol grid has zero rows');
+      return;
+    }
+
+    // Ensure GameData timings are initialized before the very first drop.
+    // This mirrors the logic in processSpinDataSymbols so the first pre-spin
+    // drop does not use the tiny constructor defaults (which look "too fast").
+    const gameData = this.scene?.gameData as GameData;
+    let isTurbo = false;
+    let rowDelay = 0;
+    if (gameData) {
+      const baseDelay = DELAY_BETWEEN_SPINS; // 2500ms default
+      const adjustedDelay = gameStateManager.isTurbo
+        ? baseDelay * TurboConfig.TURBO_SPEED_MULTIPLIER
+        : baseDelay;
+      setSpeed(gameData, adjustedDelay);
+      isTurbo = !!gameData.isTurbo;
+      rowDelay = typeof (gameData as any).dropReelsDelay === 'number'
+        ? (gameData as any).dropReelsDelay
+        : 0;
+    }
+
+    const extendLastReelDrop = false;
+
+    console.log('[Symbols] Starting pre-spin drop of existing symbols', {
+      numRows,
+      isTurbo,
+      rowDelay,
+    });
+
+    // Reverse the sequence: start from bottom row to top row
+    for (let step = 0; step < numRows; step++) {
+      const actualRow = (numRows - 1) - step;
+      const isLastReel = actualRow === 0;
+      const startDelay = isTurbo ? 0 : rowDelay * step;
+
+      this.scene.time.delayedCall(startDelay, () => {
+        console.log(`[Symbols] Pre-spin dropping row ${actualRow}/${numRows - 1}`);
+        try {
+          dropPrevSymbols(this, actualRow, isLastReel && extendLastReelDrop);
+        } catch (e) {
+          console.warn('[Symbols] Error during pre-spin drop for row', actualRow, e);
+        }
+      });
     }
   }
 
@@ -2177,6 +2240,44 @@ function onStart(self: Symbols) {
   });
 }
 
+function prewarmSymbolSpinePools(self: Symbols, countPerSymbol: number = 8) {
+  // Pre-warm Spine instances for symbols 1-9 to avoid first-use hitches.
+  const symbolValues = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+  for (const value of symbolValues) {
+    const isHighPaying = value >= 1 && value <= 5;
+    const spineKey = `Symbol_${isHighPaying ? 'HP' : 'LP'}_WF`;
+    const atlasKey = `${spineKey}-atlas`;
+
+    for (let i = 0; i < countPerSymbol; i++) {
+      try {
+        const spine = acquireSpineFromPool(self, spineKey, atlasKey);
+        if (spine) {
+          releaseSpineToPool(self, spine);
+        }
+      } catch (e) {
+        console.warn('[Symbols] Failed to prewarm Spine pool for', spineKey, e);
+        break;
+      }
+    }
+  }
+}
+
+function prewarmSparkSpinePool(self: Symbols, count: number = 6) {
+  const spineKey = 'spark_vfx';
+  const atlasKey = `${spineKey}-atlas`;
+  for (let i = 0; i < count; i++) {
+    try {
+      const spine = acquireSpineFromPool(self, spineKey, atlasKey);
+      if (spine) {
+        releaseSpineToPool(self, spine);
+      }
+    } catch (e) {
+      console.warn('[Symbols] Failed to prewarm spark Spine pool', e);
+      break;
+    }
+  }
+}
+
 function createInitialSymbols(self: Symbols) {
   let scene = self.scene;
 
@@ -2316,12 +2417,20 @@ function getSpinePoolKey(spineKey: string, atlasKey: string): string {
 
 function acquireSpineFromPool(self: Symbols, spineKey: string, atlasKey: string): SpineGameObject | null {
   const poolKey = getSpinePoolKey(spineKey, atlasKey);
+  // Fast path: reuse a LIFO stack of available items to avoid O(n) scans
+  const availablePools = (self as any).spineAvailablePools || ((self as any).spineAvailablePools = {});
+  const availableStack: SpineGameObject[] = availablePools[poolKey] || (availablePools[poolKey] = []);
+
   if (!self.spinePools[poolKey]) {
     self.spinePools[poolKey] = [];
   }
   const pool = self.spinePools[poolKey];
 
-  const available = pool.find((fx: any) => !fx.__pooledActive);
+  // Try LIFO stack first; fallback to linear scan to remain backward compatible
+  let available: any = availableStack.pop();
+  if (!available) {
+    available = pool.find((fx: any) => !fx.__pooledActive);
+  }
   if (available) {
     (available as any).__pooledActive = true;
     try {
@@ -2372,6 +2481,13 @@ function releaseSpineToPool(self: Symbols, spine: SpineGameObject | any): void {
   } catch { }
   try {
     (spine as any).__pooledActive = false;
+    // Push into available stack for O(1) reuse
+    const poolKey = (spine as any).__spinePoolKey;
+    if (poolKey) {
+      const availablePools = (self as any).spineAvailablePools || ((self as any).spineAvailablePools = {});
+      const availableStack: SpineGameObject[] = availablePools[poolKey] || (availablePools[poolKey] = []);
+      availableStack.push(spine);
+    }
   } catch { }
 }
 
@@ -2834,9 +2950,9 @@ function finalizeSpinProcessing(self: Symbols, spinData: any): void {
     console.log('[Symbols] Emitting REELS_STOP and WIN_STOP after symbol animations and tumbles (no winlines flow)');
     try {
       gameEventManager.emit(GameEventType.WIN_STOP, { spinData });
-      self.scene.time.delayedCall(50, () => {
+      if(gameStateManager.isReelSpinning) {
         gameEventManager.emit(GameEventType.REELS_STOP, { spinData });
-      });
+      }
     } catch (e) {
       console.warn('[Symbols] Failed to emit REELS_STOP/WIN_STOP:', e);
     }
@@ -3704,6 +3820,7 @@ function reevaluateWinsFromGrid(self: Symbols): void {
 
     // Apply highlighting only if not disabled
     if (!(Symbols as any).WINLINE_CHECKING_DISABLED) {
+      console.log('[Symbols] Re-evaluated wins from grid, replacing with spine animations');
       replaceWithSpineAnimations(self, dt);
     }
   } catch (e) {
@@ -4151,6 +4268,91 @@ function synchronizeMockDataSymbols(self: Symbols, mockData: Data): void {
   mockData.symbols = rebuilt;
 }
 
+// Helper: Rebuild currentSymbolData after compression (extracted to avoid duplication)
+function rebuildCurrentSymbolDataAfterCompression(self: Symbols, numCols: number, numRows: number): void {
+  if (!self.currentSymbolData) return;
+  const rebuilt: (number | null)[][] = Array.from({ length: numRows }, () => Array<number | null>(numCols).fill(null));
+  for (let col = 0; col < numCols; col++) {
+    const keptValues: number[] = [];
+    for (let row = 0; row < numRows; row++) {
+      const v = self.currentSymbolData[row]?.[col];
+      if (typeof v === 'number') keptValues.push(v);
+    }
+    const bottomStart = numRows - keptValues.length;
+    for (let i = 0; i < keptValues.length; i++) {
+      const newRow = bottomStart + i;
+      rebuilt[newRow][col] = keptValues[i];
+    }
+  }
+  const finalized: number[][] = rebuilt.map(row => row.map(v => (typeof v === 'number' ? v : 0)));
+  self.currentSymbolData = finalized;
+}
+
+// Helper: Create drop promise for a symbol (extracted to avoid duplication)
+function createDropPromise(
+  self: Symbols,
+  created: any,
+  col: number,
+  targetY: number,
+  sequenceIndex: number,
+  MANUAL_STAGGER_MS: number,
+  isOverlap: boolean,
+  gameData: any
+): Promise<void> {
+  return new Promise<void>((resolve) => {
+    try {
+      const DROP_STAGGER_MS = (gameData?.tumbleDropStaggerMs ?? (MANUAL_STAGGER_MS * 0.25));
+      const computedStartDelay = (gameData?.tumbleDropStartDelayMs ?? 0) + (DROP_STAGGER_MS * sequenceIndex);
+      const skipPreHop = !!(gameData?.tumbleSkipPreHop);
+      const symbolHop = (gameData?.winUpHeight ?? 0) * 0.5;
+      const dropDuration = isOverlap 
+        ? ((gameData?.dropDuration ?? 1000) * 1.2)
+        : ((gameData?.dropDuration ?? 1000) * 0.9);
+      const tweensArr: any[] = [];
+      const handleLanding = () => {
+        try {
+          const mag = (gameData as any)?.dropShakeMagnitude ?? 0;
+          const dur = Math.max(50, (gameData as any)?.dropShakeDurationMs ?? 120);
+          if (mag > 0) {
+            const axis = (gameData as any)?.dropShakeAxis ?? 'both';
+            if (!gameStateManager.isTurbo) simulateCameraShake(self, getObjectsToShake(self), dur, mag, axis);
+          }
+        } catch { }
+        try {
+          if (!gameData?.isTurbo && (window as any).audioManager) {
+            (window as any).audioManager.playSoundEffect(gameStateManager.isBonus ? SoundEffectType.BONUS_REEL_DROP : SoundEffectType.REEL_DROP);
+          }
+        } catch { }
+        tryPlaySparkVFXForColumn(self, col, created);
+        resolve();
+      };
+      if (!skipPreHop) {
+        tweensArr.push({
+          delay: computedStartDelay,
+          y: `-= ${symbolHop}`,
+          duration: gameData?.winUpDuration ?? 1000,
+          ease: Phaser.Math.Easing.Circular.Out,
+        });
+        tweensArr.push({
+          y: targetY,
+          duration: dropDuration,
+          ease: Phaser.Math.Easing.Linear,
+          onComplete: handleLanding
+        });
+      } else {
+        tweensArr.push({
+          delay: computedStartDelay,
+          y: targetY,
+          duration: dropDuration,
+          ease: Phaser.Math.Easing.Linear,
+          onComplete: handleLanding
+        });
+      }
+      self.scene.tweens.chain({ targets: created, tweens: tweensArr });
+    } catch { resolve(); }
+  });
+}
+
 async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
   self.dropSparkPlayedColumns.clear();
   const outs = (tumble?.symbols?.out || []) as Array<{ symbol: number; count: number }>;
@@ -4168,8 +4370,10 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
   const numCols = self.symbols.length;
   const numRows = self.symbols[0].length;
 
-  // Match manual drop timings and staggering for visual consistency
-  const MANUAL_STAGGER_MS: number = (self.scene?.gameData?.tumbleStaggerMs ?? 100);
+  // Cache frequently accessed values for performance
+  const gameData = self.scene?.gameData;
+  const currentSymbolData = self.currentSymbolData;
+  const MANUAL_STAGGER_MS: number = (gameData?.tumbleStaggerMs ?? 100);
 
   // Build / reuse a removal mask per cell
   // removeMask[col][row]
@@ -4199,35 +4403,48 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
   }
 
   // Build position indices by symbol (topmost-first per column)
-  const positionsBySymbol: { [key: number]: Array<{ col: number; row: number }> } = {};
+  // Use Map for better performance than object with string keys
+  const positionsBySymbol = new Map<number, Array<{ col: number; row: number }>>();
   let sequenceIndex = 0; // ensures 1-by-1 ordering across columns left-to-right
   for (let col = 0; col < numCols; col++) {
     for (let row = 0; row < numRows; row++) {
-      const val = self.currentSymbolData?.[row]?.[col];
+      const val = currentSymbolData?.[row]?.[col];
       if (typeof val !== 'number') continue;
-      if (!positionsBySymbol[val]) positionsBySymbol[val] = [];
-      positionsBySymbol[val].push({ col, row });
+      let list = positionsBySymbol.get(val);
+      if (!list) {
+        list = [];
+        positionsBySymbol.set(val, list);
+      }
+      list.push({ col, row });
     }
   }
   // Sort each symbol's positions top-to-bottom (row asc), then left-to-right (col asc)
-  Object.keys(positionsBySymbol).forEach(k => {
-    positionsBySymbol[Number(k)].sort((a, b) => a.row - b.row || a.col - b.col);
-  });
+  for (const list of positionsBySymbol.values()) {
+    list.sort((a, b) => a.row - b.row || a.col - b.col);
+  }
 
   // Determine per-column incoming counts
   const insCountByCol: number[] = Array.from({ length: numCols }, (_, c) => (Array.isArray(ins?.[c]) ? ins[c].length : 0));
   let targetRemovalsPerCol: number[] = insCountByCol.slice();
 
   // Helper to pick and mark a position for a symbol in a preferred column
+  // Optimized: use index tracking instead of splice (O(n) -> O(1))
+  const usedIndicesBySymbol = new Map<number, Set<number>>();
   function pickAndMark(symbol: number, preferredCol: number | null): boolean {
-    const list = positionsBySymbol[symbol] || [];
+    const list = positionsBySymbol.get(symbol);
+    if (!list) return false;
+    let usedIndices = usedIndicesBySymbol.get(symbol);
+    if (!usedIndices) {
+      usedIndices = new Set<number>();
+      usedIndicesBySymbol.set(symbol, usedIndices);
+    }
     for (let i = 0; i < list.length; i++) {
+      if (usedIndices.has(i)) continue; // already used
       const p = list[i];
       if (removeMask[p.col][p.row]) continue; // already marked
       if (preferredCol !== null && p.col !== preferredCol) continue;
       removeMask[p.col][p.row] = true;
-      // Remove from list for efficiency
-      list.splice(i, 1);
+      usedIndices.add(i); // Mark as used instead of removing
       return true;
     }
     return false;
@@ -4281,7 +4498,7 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
       for (let col = 0; col < numCols; col++) {
         for (let row = 0; row < numRows; row++) {
           if (removeMask[col][row]) {
-            const val = self.currentSymbolData?.[row]?.[col];
+            const val = currentSymbolData?.[row]?.[col];
             const key = typeof val === 'number' ? val : -1;
             if (!removedBySymbol[key]) removedBySymbol[key] = [];
             removedBySymbol[key].push({ col, row });
@@ -4301,236 +4518,224 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
 
   // Track unique winning symbols and their positions for win amount popup
   const uniqueWinningSymbols = new Map<number, Array<{ x: number; y: number; isEdge: boolean }>>();
+
+  const trackWinningSymbolPosition = (symbolValue: number, x: number, y: number, col: number, row: number) => {
+    try {
+      const isEdge = col === 0 || col === numCols - 1 || row === 0 || row === numRows - 1;
+      if (!uniqueWinningSymbols.has(symbolValue)) {
+        uniqueWinningSymbols.set(symbolValue, []);
+      }
+      uniqueWinningSymbols.get(symbolValue)!.push({ x, y, isEdge });
+    } catch { }
+  };
+
+  const clearSymbolSlot = (col: number, row: number) => {
+    self.symbols[col][row] = null as any;
+    if (self.currentSymbolData && self.currentSymbolData[row]) {
+      (self.currentSymbolData[row] as any)[col] = null;
+    }
+  };
+
+  const destroySymbolSafe = (obj: any) => {
+    try { self.scene.tweens.killTweensOf(obj); } catch { }
+    try { obj.destroy(); } catch { }
+  };
+
+  const playFallbackTweenOnSymbol = (obj: any, col: number, row: number, vNum: number, resolve: () => void) => {
+    const x = obj.x;
+    const y = obj.y;
+
+    try { self.moveSymbolToFront(obj); } catch { }
+    try { scheduleScaleUp(self, obj, 100, 500, 1.1); } catch { }
+    try { scheduleScaleUp(self, obj, 700, 200, 0); } catch { }
+    try {
+      scheduleTranslate(self, obj, 400, 500, 0, -3, false, () => {
+        destroySymbolSafe(obj);
+        clearSymbolSlot(col, row);
+        trackWinningSymbolPosition(vNum, x, y, col, row);
+        resolve();
+      });
+    } catch {
+      destroySymbolSafe(obj);
+      clearSymbolSlot(col, row);
+      resolve();
+    }
+  };
+
+  const playSpineWinEffect = (obj: any, col: number, row: number, vNum: number, resolve: () => void) => {
+    const isHighPaying = vNum >= 1 && vNum <= 5;
+    const spineKey = `Symbol_${isHighPaying ? 'HP' : 'LP'}_WF`;
+    const spineAtlasKey = `${spineKey}-atlas`;
+    const x = obj.x;
+    const y = obj.y;
+
+    try {
+      const fx = acquireSpineFromPool(self, spineKey, spineAtlasKey);
+      if (!fx) {
+        playFallbackTweenOnSymbol(obj, col, row, vNum, resolve);
+        return;
+      }
+
+      let animationCanPlay = false;
+      let animationDuration = 1000;
+      let completed = false;
+
+      try {
+        fx.setPosition(x, y);
+        fx.setVisible(true);
+        fx.setActive(true);
+        fx.setOrigin(0.5, 0.5);
+      } catch { }
+
+      try {
+        fx.setScale(self.getSpineSymbolScale(vNum));
+      } catch { }
+
+      try {
+        const animationName = isHighPaying ? `symbol${vNum}_WF_win` : `symbol${vNum}_WF`;
+        console.log('[Symbols] Playing animation:', animationName);
+        if (fx.animationState && fx.animationState.setAnimation) {
+          const entry: any = fx.animationState.setAnimation(0, animationName, false);
+          animationCanPlay = !!entry;
+          try {
+            fx.animationState.timeScale = gameData?.isTurbo
+              ? self.getSymbolWinTimeScale(vNum) * TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER
+              : self.getSymbolWinTimeScale(vNum);
+          } catch { }
+          try {
+            const dur = fx.skeleton?.data?.findAnimation?.(animationName)?.duration;
+            animationDuration = (typeof dur === 'number' ? dur : 0.798) * 1000 * (fx.animationState.timeScale || 1);
+          } catch {
+            animationDuration = 1000 * (fx.animationState.timeScale || 1);
+          }
+
+          const onDone = () => {
+            console.log('[Symbols] Animation complete (track/state listener)');
+            if (completed) return; completed = true;
+            try { releaseSpineToPool(self, fx); } catch { }
+            resolve();
+          };
+
+          try {
+            if (entry && (entry.setListener || 'listener' in entry)) {
+              if (typeof entry.setListener === 'function') {
+                entry.setListener({ complete: onDone, end: onDone });
+              } else {
+                (entry as any).listener = { complete: onDone, end: onDone };
+              }
+            }
+          } catch { }
+          try {
+            if (fx.animationState && fx.animationState.addListener) {
+              fx.animationState.addListener({ complete: onDone, end: onDone } as any);
+            }
+          } catch { }
+        }
+      } catch {
+        animationCanPlay = false;
+      }
+
+      if (!animationCanPlay) {
+        try { releaseSpineToPool(self, fx); } catch { }
+        playFallbackTweenOnSymbol(obj, col, row, vNum, resolve);
+        return;
+      }
+
+      destroySymbolSafe(obj);
+      clearSymbolSlot(col, row);
+
+      try {
+        const audio = (window as any)?.audioManager;
+        if (audio && typeof audio.playSingleInstanceSoundEffect === 'function') {
+          const delay = 700 / (gameStateManager.isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
+          self.scene.time.delayedCall(delay, () => {
+            audio.playSingleInstanceSoundEffect(gameStateManager.isBonus ? SoundEffectType.BONUS_EXPLOSION : SoundEffectType.EXPLOSION);
+            console.log('[Symbols] Playing explosion SFX');
+          });
+        }
+      } catch { }
+
+      try { self.moveSymbolToFront(fx); } catch { }
+      try { scheduleScaleUp(self, fx, 20, 200, 1.05); } catch { }
+      try { scheduleTranslate(self, fx, 20, 200, 0, -3); } catch { }
+      trackWinningSymbolPosition(vNum, x, y, col, row);
+
+      console.log('[Symbols] Animation duration:', animationDuration);
+      self.scene.time.delayedCall(Math.max(animationDuration, (gameData?.winUpDuration ?? 0) + animationDuration), () => {
+        if (completed) return; completed = true;
+        try { releaseSpineToPool(self, fx); } catch { }
+        resolve();
+      });
+    } catch {
+      playFallbackTweenOnSymbol(obj, col, row, vNum, resolve);
+    }
+  };
+
+  const playFadeOutRemoval = (obj: any, col: number, row: number, resolve: () => void) => {
+    try { self.scene.tweens.killTweensOf(obj); } catch { }
+    self.scene.tweens.add({
+      targets: obj,
+      alpha: 0,
+      duration: gameData?.winUpDuration ?? 1000,
+      ease: Phaser.Math.Easing.Cubic.In,
+      onComplete: () => {
+        try { obj.destroy(); } catch { }
+        clearSymbolSlot(col, row);
+        resolve();
+      }
+    });
+  };
+
+  const createRemovalPromise = (col: number, row: number, obj: any) => new Promise<void>((resolve) => {
+    try {
+      const value = currentSymbolData?.[row]?.[col];
+      const vNum = Number(value);
+      const isIndex1to9 = Number.isFinite(vNum) && vNum >= 1 && vNum <= 9;
+
+      if (isIndex1to9) {
+        playSpineWinEffect(obj, col, row, vNum, resolve);
+      } else {
+        playFadeOutRemoval(obj, col, row, resolve);
+      }
+    } catch {
+      try { obj.destroy(); } catch { }
+      clearSymbolSlot(col, row);
+      console.log('[Symbols] Animation complete (fallback)');
+      resolve();
+    }
+  });
+
   for (let col = 0; col < numCols; col++) {
     for (let row = 0; row < numRows; row++) {
-      if (removeMask[col][row]) {
-        const obj = self.symbols[col][row];
-        if (obj) {
-          removalPromises.push(new Promise<void>((resolve) => {
-            try {
-              const value = self.currentSymbolData?.[row]?.[col];
-
-              // Replace fade with Spine effect for matched symbols
-              const vNum = Number(value);
-              const isIndex1to9 = Number.isFinite(vNum) && vNum >= 1 && vNum <= 9;
-
-              // Helper: fallback when there is no Spine or Spine animation to play.
-              const playFallbackTweenOnSymbol = () => {
-                const x = obj.x;
-                const y = obj.y;
-
-                try { self.moveSymbolToFront(obj); } catch { }
-                try { scheduleScaleUp(self, obj, 100, 500, 1.1); } catch { }
-                try { scheduleScaleUp(self, obj, 700, 200, 0); } catch { }
-                // Use translate tween's onComplete to perform cleanup and resolve
-                try {
-                  scheduleTranslate(self, obj, 400, 500, 0, -3, false, () => {
-                    try { self.scene.tweens.killTweensOf(obj); } catch { }
-                    try { obj.destroy(); } catch { }
-                    self.symbols[col][row] = null as any;
-                    if (self.currentSymbolData && self.currentSymbolData[row]) {
-                      (self.currentSymbolData[row] as any)[col] = null;
-                    }
-                    // Track position for win amount popup, same as Spine path
-                    try {
-                      const isEdge = col === 0 || col === numCols - 1 || row === 0 || row === numRows - 1;
-                      if (!uniqueWinningSymbols.has(vNum)) {
-                        uniqueWinningSymbols.set(vNum, []);
-                      }
-                      uniqueWinningSymbols.get(vNum)!.push({ x, y, isEdge });
-                    } catch { }
-                    resolve();
-                  });
-                } catch {
-                  // If tween scheduling fails, immediately clean up and resolve
-                  try { self.scene.tweens.killTweensOf(obj); } catch { }
-                  try { obj.destroy(); } catch { }
-                  self.symbols[col][row] = null as any;
-                  if (self.currentSymbolData && self.currentSymbolData[row]) {
-                    (self.currentSymbolData[row] as any)[col] = null;
-                  }
-                  resolve();
-                }
-              };
-
-              if (isIndex1to9) {
-                // Choose effect by index range
-                // const spineKey = (vNum >= 1 && vNum <= 5) ? 'Symbol_HP_256' : 'Symbol_LP_256';
-                const isHighPaying = vNum >= 1 && vNum <= 5;
-                const spineKey = `Symbol_${isHighPaying ? 'HP' : 'LP'}_WF`;
-                const spineAtlasKey = `${spineKey}-atlas`;
-                const x = obj.x;
-                const y = obj.y;
-
-                try {
-                  const fx = acquireSpineFromPool(self, spineKey, spineAtlasKey);
-
-                  // If there is no Spine instance at all, fall back to simple tweens on the symbol.
-                  if (!fx) {
-                    playFallbackTweenOnSymbol();
-                    return;
-                  }
-
-                  let animationCanPlay = false;
-                  let animationDuration = 1000;
-                  let completed = false;
-
-                  // Position and activate the pooled Spine effect at the symbol location
-                  try {
-                    fx.setPosition(x, y);
-                    fx.setVisible(true);
-                    fx.setActive(true);
-                    fx.setOrigin(0.5, 0.5);
-                  } catch { }
-
-                  // Fit effect to symbol box for consistent sizing
-                  try {
-                    fx.setScale(self.getSpineSymbolScale(vNum));
-                    // fitSpineToSymbolBox(self, fx); 
-                  } catch { }
-
-                  try {
-                    const animationName = isHighPaying ? `symbol${vNum}_WF_win` : `symbol${vNum}_WF`;
-                    console.log('[Symbols] Playing animation:', animationName);
-                    if (fx.animationState && fx.animationState.setAnimation) {
-                      // Set animation and attach listener to TrackEntry if possible
-                      const entry: any = fx.animationState.setAnimation(0, animationName, false);
-                      animationCanPlay = !!entry;
-                      // Apply configured time scale (use self scope)
-                      try {
-                        fx.animationState.timeScale = self.scene.gameData.isTurbo
-                          ? self.getSymbolWinTimeScale(vNum) * TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER
-                          : self.getSymbolWinTimeScale(vNum);
-                      } catch { }
-                      // Resolve duration from skeleton data
-                      try {
-                        const dur = fx.skeleton?.data?.findAnimation?.(animationName)?.duration;
-                        animationDuration = (typeof dur === 'number' ? dur : 0.798) * 1000 * (fx.animationState.timeScale || 1);
-                      } catch {
-                        animationDuration = 1000 * (fx.animationState.timeScale || 1);
-                      }
-                      // Unified completion handler
-                      const onDone = () => {
-                        console.log('[Symbols] Animation complete (track/state listener)');
-                        if (completed) return; completed = true;
-                        try { releaseSpineToPool(self, fx); } catch { }
-                        resolve();
-                      };
-                      // Prefer TrackEntry listener if available
-                      try {
-                        if (entry && (entry.setListener || 'listener' in entry)) {
-                          if (typeof entry.setListener === 'function') {
-                            entry.setListener({ complete: onDone, end: onDone });
-                          } else {
-                            (entry as any).listener = { complete: onDone, end: onDone };
-                          }
-                        }
-                      } catch { }
-                      // Fallback: state-level listener
-                      try {
-                        if (fx.animationState && fx.animationState.addListener) {
-                          fx.animationState.addListener({ complete: onDone, end: onDone } as any);
-                        }
-                      } catch { }
-                    }
-                  } catch {
-                    animationCanPlay = false;
-                  }
-
-                  // If we cannot play a Spine animation, release fx and use the simple tweens on the symbol instead.
-                  if (!animationCanPlay) {
-                    try { releaseSpineToPool(self, fx); } catch { }
-                    playFallbackTweenOnSymbol();
-                    return;
-                  }
-
-                  // At this point we have a valid Spine animation; remove the symbol and let the Spine effect play.
-                  try { self.scene.tweens.killTweensOf(obj); } catch { }
-                  try { obj.destroy(); } catch { }
-                  self.symbols[col][row] = null as any;
-                  if (self.currentSymbolData && self.currentSymbolData[row]) {
-                    (self.currentSymbolData[row] as any)[col] = null;
-                  }
-
-                  // play explosion sfx
-                  try {
-                    const audio = (window as any)?.audioManager;
-                    if (audio && typeof audio.playSingleInstanceSoundEffect === 'function') {
-                      const delay = 700 / (gameStateManager.isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
-                      self.scene.time.delayedCall(delay, () => {
-                        audio.playSingleInstanceSoundEffect(gameStateManager.isBonus ? SoundEffectType.BONUS_EXPLOSION : SoundEffectType.EXPLOSION);
-                        console.log('[Symbols] Playing explosion SFX');
-                      });
-                    }
-                  } catch { }
-
-                  try { self.moveSymbolToFront(fx); } catch { }
-                  try { scheduleScaleUp(self, fx, 20, 200, 1.05); } catch { }
-                  try { scheduleTranslate(self, fx, 20, 200, 0, -3); } catch { }
-
-                  // Collect position for unique symbol win amount popup (will be called once per symbol after loop)
-                  try {
-                    const isEdge = col === 0 || col === numCols - 1 || row === 0 || row === numRows - 1;
-                    if (!uniqueWinningSymbols.has(vNum)) {
-                      uniqueWinningSymbols.set(vNum, []);
-                    }
-                    uniqueWinningSymbols.get(vNum)!.push({ x, y, isEdge });
-                  } catch { }
-
-                  console.log('[Symbols] Animation duration:', animationDuration);
-                  // Safety timeout in case Spine complete event does not fire
-                  self.scene.time.delayedCall(Math.max(animationDuration, self.scene.gameData.winUpDuration + animationDuration), () => {
-                    if (completed) return; completed = true;
-                    try { releaseSpineToPool(self, fx); } catch { }
-                    resolve();
-                  });
-                } catch {
-                  // If spine creation/animation fails in an unexpected way, fall back to simple tweens.
-                  playFallbackTweenOnSymbol();
-                }
-              } else {
-                // Non-sugar or unsupported index: fallback to soft fade without scale change
-                try { self.scene.tweens.killTweensOf(obj); } catch { }
-                self.scene.tweens.add({
-                  targets: obj,
-                  alpha: 0,
-                  // No scale change
-                  duration: self.scene.gameData.winUpDuration,
-                  ease: Phaser.Math.Easing.Cubic.In,
-                  onComplete: () => {
-                    try { obj.destroy(); } catch { }
-                    // Leave null placeholder for compression step
-                    self.symbols[col][row] = null as any;
-                    if (self.currentSymbolData && self.currentSymbolData[row]) {
-                      (self.currentSymbolData[row] as any)[col] = null;
-                    }
-                    resolve();
-                  }
-                });
-              }
-
-            } catch {
-              try { obj.destroy(); } catch { }
-              self.symbols[col][row] = null as any;
-              if (self.currentSymbolData && self.currentSymbolData[row]) {
-                (self.currentSymbolData[row] as any)[col] = null;
-              }
-              console.log('[Symbols] Animation complete (fallback)');
-              resolve();
-            }
-          }));
-        } else {
-          self.symbols[col][row] = null as any;
-          if (self.currentSymbolData && self.currentSymbolData[row]) {
-            (self.currentSymbolData[row] as any)[col] = null;
-          }
-          console.log('[Symbols] Animation complete (no object)');
-        }
+      if (!removeMask[col][row]) continue;
+      const obj = self.symbols[col][row];
+      if (obj) {
+        removalPromises.push(createRemovalPromise(col, row, obj));
+      } else {
+        clearSymbolSlot(col, row);
+        console.log('[Symbols] Animation complete (no object)');
       }
     }
   }
 
   // Schedule win amount popup once per unique winning symbol, preferring non-edge positions
+  // Pre-build win amount map for O(1) lookup instead of O(n*m) nested loops
+  const winAmountBySymbol = new Map<number, number>();
+  const tumbles = gameStateManager.isBonus
+    ? self.currentSpinData?.slot?.freespin?.items[self.scene.gameAPI.getCurrentFreeSpinIndex() - 1]?.tumble
+    : self.currentSpinData?.slot?.tumbles;
+  if (tumbles && Array.isArray(tumbles.items)) {
+    for (const tumbleItem of tumbles.items) {
+      if (tumbleItem.symbols?.out) {
+        for (const out of tumbleItem.symbols.out) {
+          if (typeof out.symbol === 'number' && typeof out.win === 'number') {
+            winAmountBySymbol.set(out.symbol, out.win);
+          }
+        }
+      }
+    }
+  }
+
   for (const [symbolValue, positions] of uniqueWinningSymbols.entries()) {
     try {
       // Prefer non-edge positions, fallback to edge positions
@@ -4539,23 +4744,10 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
       const randomIndex = Math.floor(Math.random() * positionsToChooseFrom.length);
       const selectedPosition = positionsToChooseFrom[randomIndex];
 
-      // Calculate win amount for this unique symbol from tumbles out data
-      let displayAmount = 0;
-      const tumbles = gameStateManager.isBonus
-        ? self.currentSpinData?.slot?.freespin?.items[self.scene.gameAPI.getCurrentFreeSpinIndex() - 1]?.tumble
-        : self.currentSpinData?.slot?.tumbles;
-      if (tumbles && Array.isArray(tumbles.items)) {
-        // Find the win of the symbol value in symbol.out array
-        for (const tumbleItem of tumbles.items) {
-          for (const out of tumbleItem.symbols.out) {
-            if (out.symbol === symbolValue) {
-              displayAmount = out.win || 0;
-            }
-          }
-        }
-      }
+      // Use pre-built map for O(1) lookup
+      const displayAmount = winAmountBySymbol.get(symbolValue) || 0;
 
-      const delayMs = 750 / (self.scene.gameData.isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
+      const delayMs = 750 / (gameData?.isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
       const durationMs = 1000;
       scheduleWinAmountPopup(self, selectedPosition.x, selectedPosition.y, displayAmount, delayMs, durationMs);
     } catch { }
@@ -4597,8 +4789,8 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
           self.scene.tweens.add({
             targets: obj,
             y: targetY,
-            delay: STAGGER_MS * col * (self.scene?.gameData?.compressionDelayMultiplier ?? 1),
-            duration: self.scene.gameData.dropDuration / 2,
+            delay: STAGGER_MS * col * (gameData?.compressionDelayMultiplier ?? 1),
+            duration: (gameData?.dropDuration ?? 1000) / 2,
             // ease: Phaser.Math.Easing.Bounce.Out,
             ease: Phaser.Math.Easing.Cubic.Out,
             onComplete: () => resolve(),
@@ -4609,7 +4801,7 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
   }
 
   // Overlap-aware drop scheduling: if enabled, start drops during compression; otherwise, drop after compression completes
-  const overlapDrops = !!(self.scene?.gameData?.tumbleOverlapDropsDuringCompression);
+  const overlapDrops = !!(gameData?.tumbleOverlapDropsDuringCompression);
   const dropPromises: Promise<void>[] = [];
   const symbolTotalWidth = self.displayWidth + self.horizontalSpacing;
   const startX = self.slotX - self.totalGridWidth * 0.5;
@@ -4620,23 +4812,7 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
     self.symbols = newGrid;
     // Rebuild currentSymbolData to reflect compressed positions now
     try {
-      if (self.currentSymbolData) {
-        const rebuilt: (number | null)[][] = Array.from({ length: numRows }, () => Array<number | null>(numCols).fill(null));
-        for (let col = 0; col < numCols; col++) {
-          const keptValues: number[] = [];
-          for (let row = 0; row < numRows; row++) {
-            const v = self.currentSymbolData[row]?.[col];
-            if (typeof v === 'number') keptValues.push(v);
-          }
-          const bottomStart = numRows - keptValues.length;
-          for (let i = 0; i < keptValues.length; i++) {
-            const newRow = bottomStart + i;
-            rebuilt[newRow][col] = keptValues[i];
-          }
-        }
-        const finalized: number[][] = rebuilt.map(row => row.map(v => (typeof v === 'number' ? v : 0)));
-        self.currentSymbolData = finalized;
-      }
+      rebuildCurrentSymbolDataAfterCompression(self, numCols, numRows);
     } catch { }
 
     // Start drops now, while compression tweens are in-flight
@@ -4669,55 +4845,7 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
 
         try { playDropAnimationIfAvailable(created); } catch { }
 
-        const DROP_STAGGER_MS = (self.scene?.gameData?.tumbleDropStaggerMs ?? (MANUAL_STAGGER_MS * 0.25));
-        const symbolHop = self.scene.gameData.winUpHeight * 0.5;
-        dropPromises.push(new Promise<void>((resolve) => {
-          try {
-            const computedStartDelay = (self.scene?.gameData?.tumbleDropStartDelayMs ?? 0) + (DROP_STAGGER_MS * sequenceIndex);
-            const skipPreHop = !!(self.scene?.gameData?.tumbleSkipPreHop);
-            const tweensArr: any[] = [];
-            const handleLanding = () => {
-              try {
-                const mag = (self.scene.gameData as any)?.dropShakeMagnitude ?? 0;
-                const dur = Math.max(50, (self.scene.gameData as any)?.dropShakeDurationMs ?? 120);
-                if (mag > 0) {
-                  const axis = (self.scene.gameData as any)?.dropShakeAxis ?? 'both';
-                  if (!gameStateManager.isTurbo) simulateCameraShake(self, getObjectsToShake(self), dur, mag, axis);
-                }
-              } catch { }
-              try {
-                if (!self.scene.gameData.isTurbo && (window as any).audioManager) {
-                  (window as any).audioManager.playSoundEffect(gameStateManager.isBonus ? SoundEffectType.BONUS_REEL_DROP : SoundEffectType.REEL_DROP);
-                }
-              } catch { }
-              tryPlaySparkVFXForColumn(self, col, created);
-              resolve();
-            };
-            if (!skipPreHop) {
-              tweensArr.push({
-                delay: computedStartDelay,
-                y: `-= ${symbolHop}`,
-                duration: self.scene.gameData.winUpDuration,
-                ease: Phaser.Math.Easing.Circular.Out,
-              });
-              tweensArr.push({
-                y: targetY,
-                duration: (self.scene.gameData.dropDuration * 1.2),
-                ease: Phaser.Math.Easing.Linear,
-                onComplete: handleLanding
-              });
-            } else {
-              tweensArr.push({
-                delay: computedStartDelay,
-                y: targetY,
-                duration: (self.scene.gameData.dropDuration * 1.2),
-                ease: Phaser.Math.Easing.Linear,
-                onComplete: handleLanding
-              });
-            }
-            self.scene.tweens.chain({ targets: created, tweens: tweensArr });
-          } catch { resolve(); }
-        }));
+        dropPromises.push(createDropPromise(self, created, col, targetY, sequenceIndex, MANUAL_STAGGER_MS, true, gameData));
         sequenceIndex++;
         totalSpawned++;
       }
@@ -4730,23 +4858,7 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
     await Promise.all(compressPromises);
     self.symbols = newGrid;
     try {
-      if (self.currentSymbolData) {
-        const rebuilt: (number | null)[][] = Array.from({ length: numRows }, () => Array<number | null>(numCols).fill(null));
-        for (let col = 0; col < numCols; col++) {
-          const keptValues: number[] = [];
-          for (let row = 0; row < numRows; row++) {
-            const v = self.currentSymbolData[row]?.[col];
-            if (typeof v === 'number') keptValues.push(v);
-          }
-          const bottomStart = numRows - keptValues.length;
-          for (let i = 0; i < keptValues.length; i++) {
-            const newRow = bottomStart + i;
-            rebuilt[newRow][col] = keptValues[i];
-          }
-        }
-        const finalized: number[][] = rebuilt.map(row => row.map(v => (typeof v === 'number' ? v : 0)));
-        self.currentSymbolData = finalized;
-      }
+      rebuildCurrentSymbolDataAfterCompression(self, numCols, numRows);
     } catch { }
 
     for (let col = 0; col < numCols; col++) {
@@ -4773,39 +4885,7 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
           (self.currentSymbolData[targetRow] as any)[col] = value;
         }
         try { playDropAnimationIfAvailable(created); } catch { }
-        const DROP_STAGGER_MS = (self.scene?.gameData?.tumbleDropStaggerMs ?? (MANUAL_STAGGER_MS * 0.25));
-        const symbolHop = self.scene.gameData.winUpHeight * 0.5;
-        dropPromises.push(new Promise<void>((resolve) => {
-          try {
-            const computedStartDelay = (self.scene?.gameData?.tumbleDropStartDelayMs ?? 0) + (DROP_STAGGER_MS * sequenceIndex);
-            const skipPreHop = !!(self.scene?.gameData?.tumbleSkipPreHop);
-            const tweensArr: any[] = [];
-            const handleLanding = () => {
-              try {
-                const mag = (self.scene.gameData as any)?.dropShakeMagnitude ?? 0;
-                const dur = Math.max(50, (self.scene.gameData as any)?.dropShakeDurationMs ?? 120);
-                if (mag > 0) {
-                  const axis = (self.scene.gameData as any)?.dropShakeAxis ?? 'both';
-                  if (!gameStateManager.isTurbo) simulateCameraShake(self, getObjectsToShake(self), dur, mag, axis);
-                }
-              } catch { }
-              try {
-                if (!self.scene.gameData.isTurbo && (window as any).audioManager) {
-                  (window as any).audioManager.playSoundEffect(gameStateManager.isBonus ? SoundEffectType.BONUS_REEL_DROP : SoundEffectType.REEL_DROP);
-                }
-              } catch { }
-              tryPlaySparkVFXForColumn(self, col, created);
-              resolve();
-            };
-            if (!skipPreHop) {
-              tweensArr.push({ delay: computedStartDelay, y: `-= ${symbolHop}`, duration: self.scene.gameData.winUpDuration, ease: Phaser.Math.Easing.Circular.Out });
-              tweensArr.push({ y: targetY, duration: (self.scene.gameData.dropDuration * 0.9), ease: Phaser.Math.Easing.Linear, onComplete: handleLanding });
-            } else {
-              tweensArr.push({ delay: computedStartDelay, y: targetY, duration: (self.scene.gameData.dropDuration * 0.9), ease: Phaser.Math.Easing.Linear, onComplete: handleLanding });
-            }
-            self.scene.tweens.chain({ targets: created, tweens: tweensArr });
-          } catch { resolve(); }
-        }));
+        dropPromises.push(createDropPromise(self, created, col, targetY, sequenceIndex, MANUAL_STAGGER_MS, false, gameData));
         sequenceIndex++;
         totalSpawned++;
       }
@@ -4827,11 +4907,7 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
   } catch { }
 
   // Re-evaluate wins after each tumble drop completes (async so visuals continue)
-  try {
-    self.scene.time.delayedCall(0, () => {
-      try { reevaluateWinsFromGrid(self); } catch { }
-    });
-  } catch { }
+  try { reevaluateWinsFromGrid(self); } catch { }
 }
 
 

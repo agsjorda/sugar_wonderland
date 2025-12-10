@@ -93,6 +93,11 @@ export class SlotController {
 	private autoplaySpinsRemaining: number = 0;
 	private autoplayTimer: Phaser.Time.TimerEvent | null = null;
 
+	private inProcessOfReenablingSpinButton: boolean = false;
+	private inProcessOfReenablingAutoplayButton: boolean = false;
+	private inProcessOfReenablingFeatureButton: boolean = false;
+	private readonly buttonReenableDelay: number = 0;
+
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
 		this.screenModeManager = screenModeManager;
@@ -752,6 +757,12 @@ export class SlotController {
 	 * Enable feature button (restore opacity and enable interaction)
 	 */
 	private enableFeatureButton(): void {
+		if (this.inProcessOfReenablingFeatureButton) {
+			return;
+		}
+		this.inProcessOfReenablingFeatureButton = true;
+		this.inProcessOfReenablingFeatureButton = false;
+
 		const featureButton = this.buttons.get('feature');
 		const desiredAlpha = 1.0;
 
@@ -769,6 +780,28 @@ export class SlotController {
 		this.featureLabelText?.setAlpha(desiredAlpha);
 		this.featureAmountText?.setAlpha(desiredAlpha);
 		this.featureDollarText?.setAlpha(desiredAlpha);
+
+		// this.scene?.time.delayedCall(this.buttonReenableDelay, () => {
+		// 	this.inProcessOfReenablingFeatureButton = false;
+
+		// 	const featureButton = this.buttons.get('feature');
+		// 	const desiredAlpha = 1.0;
+
+		// 	if (featureButton) {
+		// 		// Guard: do not re-enable during bonus or before explicit allow
+		// 		if (gameStateManager.isBonus || !this.canEnableFeatureButton) {
+		// 			console.log('[SlotController] Skipping feature enable (bonus active or not allowed yet)');
+		// 			return;
+		// 		}
+		// 		featureButton.setAlpha(desiredAlpha); // Restore full opacity
+		// 		featureButton.setInteractive(); // Re-enable clicking
+		// 		console.log('[SlotController] Feature button enabled');
+		// 	}
+
+		// 	this.featureLabelText?.setAlpha(desiredAlpha);
+		// 	this.featureAmountText?.setAlpha(desiredAlpha);
+		// 	this.featureDollarText?.setAlpha(desiredAlpha);
+		// });
 	}
 
 	/**
@@ -1082,10 +1115,13 @@ export class SlotController {
 				this.stopAutoplay();
 				return;
 			}
-			if (gameStateManager.isReelSpinning) {
+			if (gameStateManager.isProcessingSpin) {
 				console.log('[SlotController] Spin blocked - already spinning');
 				return;
 			}
+
+			// Mark that we have begun processing a spin on this frame
+			gameStateManager.isProcessingSpin = true;
 
 			// Disable spin button, bet buttons, feature button and play animations
 			this.disableSpinButton();
@@ -1753,6 +1789,9 @@ export class SlotController {
 				return;
 			}
 
+			// Mark that we have begun processing a spin on this frame
+			gameStateManager.isProcessingSpin = true;
+
 			// Disable spin button, bet buttons, feature button and play animations
 			this.disableSpinButton();
 			this.disableBetButtons();
@@ -2217,9 +2256,16 @@ export class SlotController {
 				const delayMs = 150;
 				if (this.scene) {
 					this.scene.time.delayedCall(delayMs, () => {
-						// Guard: don't re-enable controls if reels started again or a win dialog is now showing
-						if (gameStateManager.isReelSpinning || gameStateManager.isShowingWinDialog) {
-							console.log(`[SlotController] Skipping control enable (${logLabel}) - state changed during delay`);
+						// Guard: don't re-enable controls if a new spin started,
+						// reels started again, or a win dialog is now showing
+						if (
+							gameStateManager.isProcessingSpin ||
+							gameStateManager.isReelSpinning ||
+							gameStateManager.isShowingWinDialog
+						) {
+							console.log(
+								`[SlotController] Skipping control enable (${logLabel}) - state changed during delay`,
+							);
 							return;
 						}
 						this.enableSpinButton();
@@ -2233,6 +2279,18 @@ export class SlotController {
 						console.log(`[SlotController] Controls enabled after REELS_STOP with delay (${logLabel})`);
 					});
 				} else {
+					// Same guards when we don't have a scene timer available
+					if (
+						gameStateManager.isProcessingSpin ||
+						gameStateManager.isReelSpinning ||
+						gameStateManager.isShowingWinDialog
+					) {
+						console.log(
+							`[SlotController] Skipping control enable (${logLabel}) without delay - state changed`,
+						);
+						return;
+					}
+
 					this.enableSpinButton();
 					this.enableAutoplayButton();
 					this.enableBetButtons();
@@ -2507,6 +2565,12 @@ export class SlotController {
 			return;
 		}
 
+		if(gameStateManager.isProcessingSpin)
+		{
+			console.log('[SlotController] Amplify button clicked - blocked by recent press');
+			return;
+		}
+
 		if (gameData.isEnhancedBet) {
 			// Amplify bet is active, turn it off
 			console.log('[SlotController] Turning amplify bet OFF via button click');
@@ -2628,7 +2692,7 @@ export class SlotController {
 		if (this.spinIcon) {
 			this.spinIcon.setVisible(true);
 		}
-		if (this.spinIconTween) {
+		if (this.spinIconTween && !gameStateManager.isProcessingSpin) {
 			this.spinIconTween.resume();
 		}
 		if (this.autoplayStopIcon) {
@@ -2644,14 +2708,12 @@ export class SlotController {
 		}
 
 		// Re-enable spin button if not spinning, with a slight delay to avoid immediate re-clicks
-		if (!gameStateManager.isReelSpinning) {
+		if (!gameStateManager.isProcessingSpin) {
 			if (this.scene) {
-				this.scene.time.delayedCall(150, () => {
-					// Only re-enable if we're still not spinning and autoplay hasn't restarted
-					if (!gameStateManager.isReelSpinning && !gameStateManager.isAutoPlaying) {
-						this.enableSpinButton();
-					}
-				});
+				// Only re-enable if we're still not spinning and autoplay hasn't restarted
+				if (!gameStateManager.isProcessingSpin && !gameStateManager.isAutoPlaying) {
+					this.enableSpinButton();
+				}
 			} else {
 				this.enableSpinButton();
 			}
@@ -2662,10 +2724,24 @@ export class SlotController {
 	 * Perform a single autoplay spin
 	 */
 	private async performAutoplaySpin(): Promise<void> {
-		if (this.autoplaySpinsRemaining <= 0) {
+		if (this.autoplaySpinsRemaining <= 0 || !gameStateManager.isAutoPlaying) {
 			console.log('[SlotController] No autoplay spins remaining');
 			return;
 		}
+
+		if(gameStateManager.isProcessingSpin)
+		{
+			console.log('[SlotController] Autoplay spin blocked - already processing spin');
+
+			this.scene?.time.delayedCall(200, () => {
+				this.performAutoplaySpin();
+			});
+
+			return;
+		}
+
+		// Mark the beginning of an autoplay spin attempt on this frame
+		gameStateManager.isProcessingSpin = true;
 
 		console.log(`[SlotController] Performing autoplay spin. ${this.autoplaySpinsRemaining} spins remaining`);
 
@@ -3475,12 +3551,21 @@ export class SlotController {
 	 * Enable the autoplay button (remove grey tint and enable interaction)
 	 */
 	public enableAutoplayButton(): void {
-		const autoplayButton = this.buttons.get('autoplay');
-		if (autoplayButton) {
-			autoplayButton.clearTint(); // Remove grey tint
-			autoplayButton.setInteractive();
-			console.log('[SlotController] Autoplay button enabled');
+		if (this.inProcessOfReenablingAutoplayButton) {
+			return;
 		}
+		this.inProcessOfReenablingAutoplayButton = true;
+
+		this.scene?.time.delayedCall(this.buttonReenableDelay, () => {
+			this.inProcessOfReenablingAutoplayButton = false;
+
+			const autoplayButton = this.buttons.get('autoplay');
+			if (autoplayButton) {
+				autoplayButton.clearTint(); // Remove grey tint
+				autoplayButton.setInteractive();
+				console.log('[SlotController] Autoplay button enabled');
+			}
+		});
 	}
 
 	/**
@@ -3539,8 +3624,13 @@ export class SlotController {
 	 * Handle spin logic - either normal API call or free spin simulation
 	 */
 	private async handleSpin(): Promise<void> {
+		// Ensure processing flag is set when any spin path begins (covers autoplay and other callers)
+		gameStateManager.isProcessingSpin = true;
+
 		if (!this.gameAPI) {
 			console.warn('[SlotController] GameAPI not available, falling back to EventBus');
+			// No backend call is made in this fallback path, consider spin processing done
+			gameStateManager.isProcessingSpin = false;
 			EventBus.emit('spin');
 			return;
 		}
@@ -3646,6 +3736,7 @@ export class SlotController {
 					console.log('[SlotController] No spin data received - free spins have ended, stopping spin');
 					// Re-enable the spin button and exit early
 					gameStateManager.isReelSpinning = false;
+					gameStateManager.isProcessingSpin = false;
 					this.enableSpinButton();
 					return;
 				}
@@ -3703,7 +3794,15 @@ export class SlotController {
 
 		} catch (error) {
 			console.error('[SlotController] ❌ Spin failed:', error);
-			// Don't emit the spin event if the API call failed
+			// Any failure to obtain or process spin data should clear the processing flag
+			gameStateManager.isProcessingSpin = false;
+			// Allow UI controls to recover in case of error and avoid emitting spin events
+			this.enableSpinButton();
+			this.enableAutoplayButton();
+			this.enableBetButtons();
+			this.enableFeatureButton();
+			this.enableAmplifyButton();
+			return;
 		}
 	}
 
@@ -4125,19 +4224,27 @@ export class SlotController {
 	 * Enable the spin button
 	 */
 	public enableSpinButton(): void {
-		const spinButton = this.buttons.get('spin');
-		if (spinButton) {
-			spinButton.clearTint(); // Remove gray tint
-			spinButton.setInteractive();
-			console.log('[SlotController] Spin button enabled');
-			// Restore icon animation
-			if (this.spinIcon) {
-				this.spinIcon.setAlpha(1);
+		if(this.inProcessOfReenablingSpinButton) return;
+		this.inProcessOfReenablingSpinButton = true;
+		this.inProcessOfReenablingSpinButton = false;
+
+			const spinButton = this.buttons.get('spin');
+			if (spinButton) {
+				spinButton.clearTint(); // Remove gray tint
+				spinButton.setInteractive();
+				console.log('[SlotController] Spin button enabled');
+				// Restore icon animation
+				if (this.spinIcon) {
+					this.spinIcon.setAlpha(1);
+				}
+				if (this.spinIconTween) {
+					this.spinIconTween.resume();
+				}
 			}
-			if (this.spinIconTween) {
-				this.spinIconTween.resume();
-			}
-		}
+		
+		this.scene?.time.delayedCall(this.buttonReenableDelay, () => {
+			
+		});
 	}
 
 	/**

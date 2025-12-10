@@ -72,12 +72,12 @@ export class Background {
 
 		// Listen for symbol match (use WIN_START as the global signal for wins)
 		gameEventManager.on(GameEventType.WIN_START, () => {
-			this.toggleRifleSpineAnimation(true);
+			// this.toggleRifleSpineAnimation(true);
 		});
 
 		// Listen for symbol match (use WIN_START as the global signal for wins)
 		gameEventManager.on(GameEventType.WIN_STOP, () => {
-			this.toggleRifleSpineAnimation(false);
+			// this.toggleRifleSpineAnimation(false);
 		});
 	}
 

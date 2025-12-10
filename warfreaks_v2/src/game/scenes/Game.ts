@@ -435,13 +435,7 @@ export class Game extends Scene
 				onClose: () => {
 					console.log('[Game] Autoplay options closed');
 					// Re‑enable the spin button with a slight delay after closing the panel
-					if (this.time) {
-						this.time.delayedCall(150, () => {
-							this.slotController.enableSpinButton();
-						});
-					} else {
-						this.slotController.enableSpinButton();
-					}
+					this.slotController.enableSpinButton();
 				},
 				onConfirm: (autoplayCount: number) => {
 					console.log(`[Game] Autoplay confirmed: ${autoplayCount} spins`);
@@ -500,7 +494,6 @@ export class Game extends Scene
 				const betAmount = parseFloat(spinData.bet);
 				
 				console.log(`[Game] WIN_START: Total win: $${totalWin}, bet: $${betAmount}`);
-				this.spawnCoinsForWin(totalWin, betAmount);
 			} 
 		});
 
@@ -665,7 +658,7 @@ export class Game extends Scene
 		spinData.slot?.freespin?.items[this.gameAPI.getCurrentFreeSpinIndex() - 1]?.tumble?.items[this.gameAPI.getCurrentTumbleIndex() - 1]?.symbols?.out: 
 		spinData.slot?.tumbles?.items[this.gameAPI.getCurrentTumbleIndex() - 1]?.symbols?.out;
 
-		if (!outResult.length) {
+		if (outResult && !outResult.length) {
 			console.log('[Game] No winning symbols in tumble item - skipping WinTracker display');
 			return;
 		}
