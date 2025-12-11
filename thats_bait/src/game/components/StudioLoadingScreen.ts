@@ -542,7 +542,10 @@ export function queueGameAssetLoading(scene: Scene, assetLoader: AssetLoader): v
     assetLoader.loadNumberAssets(scene);
     assetLoader.loadScatterWinOverlayAssets(scene);
     assetLoader.loadDialogAssets(scene);
+    try { (assetLoader as any).loadTransitionAssets?.(scene); } catch {}
     assetLoader.loadAudioAssets(scene);
     assetLoader.loadSpinCardAssets(scene);
     console.log('[StudioLoadingScreen] Queued game asset loading (optimized)');
 }
+
+// ... (rest of the code remains the same)

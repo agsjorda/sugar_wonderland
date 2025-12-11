@@ -17,7 +17,8 @@ import { flashAllSymbolsOverlay } from './SymbolFlash';
 import { applyImageSymbolWinRipple, clearImageSymbolWinRipple } from '../effects/SymbolImageWinRipple';
 import { applyNonWinningSymbolDim, clearNonWinningSymbolDim } from '../effects/NonWinningSymbolDimmer';
 import { WaterWaveVerticalPipeline } from '../pipelines/WaterWavePipeline';
-import { getSymbol5VariantForCell, getSymbol5SpineKeyForVariant, getDefaultSymbol5Variant, getSymbol5ImageKeyForVariant, getSymbol5ImageKeyForCell } from './Symbol5VariantHelper';
+import { getSymbol5VariantForCell, getSymbol5SpineKeyForVariant, getDefaultSymbol5Variant, getSymbol5ImageKeyForVariant, getSymbol5ImageKeyForCell, getMoneyValueForCell } from './Symbol5VariantHelper';
+import { MoneyValueOverlayManager } from './MoneyValueOverlayManager';
 
 export class Symbols {
   
@@ -47,6 +48,12 @@ export class Symbols {
   private hasEmittedScatterWinStart: boolean = false;
   public currentSpinData: any = null; // Store current spin data for access by other components
   private hasPendingHookScatter: boolean = false;
+  private moneyValueOverlayManager?: MoneyValueOverlayManager;
+  public moneyValueScaleModifier: number = 0.7;
+  public moneyValueOffsetY: number = 0;
+  public moneyValueWidthPaddingFactor: number = 0.8;
+  public moneyValueHeightPaddingFactor: number = 0.35;
+  public moneyValueSpacing: number = 1;
   
   
 
@@ -55,27 +62,27 @@ export class Symbols {
   public gridMask?: Phaser.Display.Masks.GeometryMask;
   public gridMaskPaddingLeft: number = 10;
   public gridMaskPaddingRight: number = 20;
-  public gridMaskPaddingTop: number = 50;
-  public gridMaskPaddingBottom: number = 25;
+  public gridMaskPaddingTop: number = 45;
+  public gridMaskPaddingBottom: number = 120;
 
   // Base overlay (light grey behind symbols) padding in pixels
   public baseOverlayPaddingLeft: number = 20;
   public baseOverlayPaddingRight: number = 20;
   public baseOverlayPaddingTop: number = 10;
   public baseOverlayPaddingBottom: number = 27; // slightly larger bottom by default
-
-  // PNG border offsets (apply to image-based borders in any mode)
-  public borderTopOffsetY: number = 0;
-  public borderBottomOffsetY: number = -14;
   
   // Skip-drop state
   private skipReelDropsActive: boolean = false;
 
   // Flash overlay configuration
-  private flashOverlayAlphaStart: number = 0.9;
-  private flashOverlayFadeTo: number = 0.0;
-  private flashOverlayDurationMs: number = 120;
-  private flashOverlaySpeedMultiplier: number = 1.0;
+  public flashOverlayAlphaStart: number = 1;
+  public flashOverlayFadeTo: number = 0.0;
+  public flashOverlayDurationMs: number = 120;
+  public flashOverlaySpeedMultiplier: number = 1.0;
+  public winSymbolFlashAlphaStart: number = 0.9;
+  public winSymbolFlashFadeTo: number = 0.0;
+  public winSymbolFlashDurationMs: number = 120;
+  public winSymbolFlashSpeedMultiplier: number = 1.0;
 
   // Configuration for Spine symbol scales in idle animations - adjust these values manually
   private idleSpineSymbolScales: { [key: number]: number } = {
@@ -435,6 +442,7 @@ export class Symbols {
     this.winLineDrawer = new WinLineDrawer(scene, this);
     initVariables(this);
     createContainer(this);
+    this.moneyValueOverlayManager = new MoneyValueOverlayManager(this as any);
     onStart(this);
     onSpinDataReceived(this);
     this.onSpinDone(this.scene);
@@ -644,6 +652,17 @@ export class Symbols {
             for (let r = 0; r < col.length; r++) {
               const obj = col[r];
               if (obj) keep.add(obj);
+            }
+          }
+        }
+      } catch {}
+
+      try {
+        if (this.moneyValueOverlayManager) {
+          const overlayContainers = this.moneyValueOverlayManager.getOverlayContainers();
+          for (const cont of overlayContainers) {
+            if (cont) {
+              keep.add(cont);
             }
           }
         }
@@ -861,6 +880,18 @@ export class Symbols {
     if (processedCount > 0) {
       console.log(`[Symbols] Cleaned state for ${processedCount} symbols before spin (converted ${convertedCount} Spine symbols to WEBP/PNG)`);
     }
+  }
+
+  private clearMoneyValueOverlays(): void {
+    try {
+      this.moneyValueOverlayManager?.clearOverlays();
+    } catch {}
+  }
+
+  public updateMoneyValueOverlays(spinData: any, symbolsOverride?: any[][]): void {
+    try {
+      this.moneyValueOverlayManager?.updateOverlays(spinData, symbolsOverride);
+    } catch {}
   }
 
   private onSpinDone(scene: Game) {
@@ -1355,6 +1386,179 @@ export class Symbols {
       this.winLineDrawer.stopLooping();
       this.winLineDrawer.clearLines();
     }
+  }
+
+  /**
+   * Pulse / ripple the given winning symbols for the currently drawn winline.
+   * This is called by WinLineDrawer via symbolsReference.pulseWinningSymbols(winningGrids).
+   *
+   * Behaviour:
+   * - Clears any existing ripple rings from all symbols so only the active winline is highlighted.
+   * - Applies the shared image ripple helper to the winning symbols, with a small left-to-right delay
+   *   based on their column (x) order in the winline.
+   */
+  public pulseWinningSymbols(winningGrids: Grid[]): void {
+    try {
+      if (!this.scene || !this.symbols || !Array.isArray(this.symbols)) {
+        return;
+      }
+
+      // First, clear existing ripples from all symbols so only the current line is highlighted
+      try {
+        for (let outer = 0; outer < this.symbols.length; outer++) {
+          const colOrRow = this.symbols[outer];
+          if (!Array.isArray(colOrRow)) {
+            continue;
+          }
+          for (let inner = 0; inner < colOrRow.length; inner++) {
+            const symbol: any = colOrRow[inner];
+            if (!symbol) {
+              continue;
+            }
+            try { clearImageSymbolWinRipple(this.scene, symbol); } catch {}
+          }
+        }
+      } catch {}
+
+      if (!winningGrids || winningGrids.length === 0) {
+        return;
+      }
+
+      // Sort winning symbols by column so the pulse travels left-to-right along the winline
+      const sorted = [...winningGrids].sort((a, b) => a.x - b.x);
+      const perColumnDelay = 80; // ms between columns
+
+      sorted.forEach((grid, index) => {
+        const sy = grid.y;
+        const sx = grid.x;
+
+        const rowOrCol = this.symbols[sy];
+        if (!rowOrCol || !Array.isArray(rowOrCol)) {
+          return;
+        }
+        const symbol: any = rowOrCol[sx];
+        if (!symbol) {
+          return;
+        }
+
+        const delayMs = index * perColumnDelay;
+        try {
+          this.scene.time.delayedCall(delayMs, () => {
+            try {
+              if (!symbol || (symbol as any).destroyed === true || symbol.active === false) {
+                return;
+              }
+              // Apply ripple ring + size pulse
+              applyImageSymbolWinRipple(this.scene, symbol);
+
+              // Also apply a one-shot flash overlay using the same
+              // shape/scale approach as SymbolFlash, but only for this symbol.
+              try {
+                const anySymbol: any = symbol as any;
+                const home = (anySymbol as any).__pngHome as { x: number; y: number } | undefined;
+                const nudge = (anySymbol as any).__pngNudge as { x: number; y: number } | undefined;
+
+                const centerX = (home?.x ?? anySymbol.x) + (nudge?.x ?? 0);
+                const centerY = (home?.y ?? anySymbol.y) + (nudge?.y ?? 0);
+                // Use the symbol's own drawn size so the flash hugs the symbol
+                const rawW = (anySymbol.displayWidth ?? this.displayWidth) as number;
+                const rawH = (anySymbol.displayHeight ?? this.displayHeight) as number;
+                const w = Math.max(2, rawW);
+                const h = Math.max(2, rawH);
+
+                let overlay: any;
+                try {
+                  const sceneAny: any = this.scene as any;
+
+                  // Try to resolve a PNG texture key that matches this symbol's artwork.
+                  let pngKey: string | undefined;
+
+                  // 1) Prefer the logical symbol value from currentSymbolData when available
+                  try {
+                    const symbolData: number[][] | null = this.currentSymbolData;
+                    let symbolValue: number | undefined;
+                    const v = symbolData?.[sy]?.[sx];
+                    if (typeof v === 'number') {
+                      symbolValue = v;
+                    }
+
+                    if (symbolValue !== undefined) {
+                      if (symbolValue === 5) {
+                        // Money symbol 5: resolve variant-specific PNG key when possible
+                        let variantKey: string | null = null;
+                        try {
+                          const spinData: any = this.currentSpinData;
+                          if (spinData) {
+                            variantKey = getSymbol5ImageKeyForCell(spinData, sy, sx);
+                          }
+                        } catch {}
+
+                        if (variantKey && sceneAny.textures?.exists?.(variantKey)) {
+                          pngKey = variantKey;
+                        } else {
+                          try {
+                            const fallbackKey = getSymbol5ImageKeyForVariant(getDefaultSymbol5Variant());
+                            if (sceneAny.textures?.exists?.(fallbackKey)) {
+                              pngKey = fallbackKey;
+                            }
+                          } catch {}
+                        }
+                      } else {
+                        const baseKey = `symbol_${symbolValue}`;
+                        if (sceneAny.textures?.exists?.(baseKey)) {
+                          pngKey = baseKey;
+                        }
+                      }
+                    }
+                  } catch {}
+
+                  // 2) Fallback: use the symbol's own texture key if valid
+                  if (!pngKey) {
+                    const texKey = (anySymbol.texture && (anySymbol.texture as any).key) as string | undefined;
+                    if (texKey && sceneAny.textures?.exists?.(texKey)) {
+                      pngKey = texKey;
+                    }
+                  }
+
+                  if (pngKey && sceneAny.textures?.exists?.(pngKey)) {
+                    overlay = sceneAny.add.image(centerX, centerY, pngKey);
+                    overlay.setOrigin(0.5, 0.5);
+                    overlay.setDisplaySize(w, h);
+                  } else {
+                    // Final fallback: simple rect if no PNG key can be resolved
+                    overlay = sceneAny.add.rectangle(centerX, centerY, w, h, 0xffffff, 1.0);
+                    try { overlay.setOrigin(0.5, 0.5); } catch {}
+                  }
+                } catch {
+                  overlay = this.scene.add.rectangle(centerX, centerY, w, h, 0xffffff, 1.0);
+                  try { (overlay as any).setOrigin(0.5, 0.5); } catch {}
+                }
+
+                try { overlay.setDepth(1005); } catch {}
+                try { (overlay as any).setBlendMode?.(Phaser.BlendModes.ADD); } catch {}
+
+                const alphaStart = Math.max(0, Math.min(1, this.winSymbolFlashAlphaStart));
+                const alphaEnd = Math.max(0, Math.min(1, this.winSymbolFlashFadeTo));
+                overlay.setAlpha(alphaStart);
+
+                const effectiveSpeed = Math.max(0.05, this.winSymbolFlashSpeedMultiplier);
+                const dur = Math.max(20, Math.floor(this.winSymbolFlashDurationMs / effectiveSpeed));
+
+                this.scene.tweens.add({
+                  targets: overlay,
+                  alpha: alphaEnd,
+                  duration: dur,
+                  ease: 'Sine.easeOut',
+                  onComplete: () => {
+                    try { overlay.destroy(); } catch {}
+                  }
+                });
+              } catch {}
+            } catch {}
+          });
+        } catch {}
+      });
+    } catch {}
   }
 
   /**
@@ -2150,7 +2354,7 @@ export class Symbols {
 // preload()
 function initVariables(self: Symbols) {
   let centerX = self.scene.scale.width * 0.497;
-  let centerY = self.scene.scale.height * 0.483;
+  let centerY = self.scene.scale.height * 0.455;
 
   self.symbols = [];
   self.newSymbols = [];
@@ -2209,8 +2413,8 @@ function createInitialSymbols(self: Symbols) {
   // Use fixed symbols for testing
   const symbols = [
     [0, 1, 3, 1, 0],  // Column 0: scatter, symbol1, symbol3, symbol1, scatter
-    [1, 5, 2, 5, 2],  // Column 1: symbol1, symbol5, symbol2, symbol5, symbol2
-    [2, 5, 5, 1, 5]   // Column 2: symbol2, symbol5, symbol5, symbol1, symbol5
+    [1, 4, 2, 2, 2],  // Column 1: symbol1, symbol5, symbol2, symbol5, symbol2
+    [2, 6, 7, 1, 8]   // Column 2: symbol2, symbol5, symbol5, symbol1, symbol5
   ];
   console.log('[Symbols] Using fixed initial symbols:', symbols);
   
@@ -2239,6 +2443,7 @@ function createInitialSymbols(self: Symbols) {
           atlasKey = variantInfo.atlasKey;
         }
         const hasSpineJson = (scene.cache.json as any)?.has?.(spineKey);
+
         if (hasSpineJson && (scene.add as any)?.spine) {
           // Create Spine symbol for initial grid
           const spineSymbol = (scene.add as any).spine(x, y, spineKey, atlasKey);
@@ -2270,6 +2475,8 @@ function createInitialSymbols(self: Symbols) {
           try {
             const symbolName = `Symbol${symbolValue}_TB`;
             let idleAnim = `${symbolName}_idle`;
+
+            // Resolve available animation
             try {
               const cachedJson: any = (scene.cache.json as any).get(spineKey);
               const anims = cachedJson?.animations ? Object.keys(cachedJson.animations) : [];
@@ -2281,7 +2488,9 @@ function createInitialSymbols(self: Symbols) {
                 else if (anims.length > 0) idleAnim = anims[0];
               }
             } catch {}
+
             try { spineSymbol.animationState.setAnimation(0, idleAnim, true); } catch {}
+            // Re-center on next tick to compensate for bounds changes after animation starts
             self.reCenterSpineNextTick(spineSymbol, x, y, self.getIdleSymbolNudge(symbolValue));
           } catch {}
           self.container.add(spineSymbol);
@@ -2409,12 +2618,20 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   // Use the existing createNewSymbols function
   createNewSymbols(self, mockData);
   
+  try {
+    self.updateMoneyValueOverlays(spinData, self.newSymbols);
+  } catch {}
+  
   // Use the existing dropReels function
   await runDropReels(self, mockData, Symbols.FILLER_COUNT);
   
   disposeSymbols(self.symbols);
   self.symbols = self.newSymbols;
   self.newSymbols = [];
+
+  try {
+    self.updateMoneyValueOverlays(spinData);
+  } catch {}
 
   // Replace with spine animations: winners + idle non-winners if there are wins
   // Note: Idle animations for non-winning symbols are now triggered per-reel in dropNewSymbols
@@ -2470,9 +2687,12 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
     if (spinData.slot.paylines && spinData.slot.paylines.length > 0) {
       // Determine win line animation type based on autoplay state and counter
       const slotController = (self.scene as any).slotController;
-      const isLastAutoplaySpin = slotController && slotController.autoplaySpinsRemaining === 0;
-      const isAutoplayActive = slotController && slotController.autoplaySpinsRemaining > 0;
+      const autoplaySpinsRemaining = slotController ? slotController.autoplaySpinsRemaining : 0;
       const isFreeSpinAutoplay = self.freeSpinAutoplayActive;
+      // Normal autoplay is tracked via GameStateManager; exclude free-spin autoplay from this flag
+      const isNormalAutoplay = gameStateManager.isAutoPlaying && !isFreeSpinAutoplay;
+      const isLastAutoplaySpin = isNormalAutoplay && autoplaySpinsRemaining === 0;
+      const isAutoplayActive = isNormalAutoplay && autoplaySpinsRemaining > 0;
       const isSkipActive = typeof (self as any).isSkipReelDropsActive === 'function' ? (self as any).isSkipReelDropsActive() : false;
       
       // Check free spin autoplay FIRST to prevent it from being treated as "last autoplay spin"
@@ -2481,13 +2701,6 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
         // Apply turbo mode exactly like normal autoplay does
         if (slotController && typeof slotController.applyTurboToWinlineAnimations === 'function') {
           console.log('[Symbols] Applying turbo mode to winlines via SlotController (same as normal autoplay)');
-          slotController.applyTurboToWinlineAnimations();
-        }
-        self.winLineDrawer.drawWinLinesOnceFromSpinData(spinData);
-      } else if (isSkipActive) {
-        console.log('[Symbols] Drawing win lines from SpinData (single-pass due to skip request)');
-        // Optional: accelerate winline animations similar to turbo
-        if (slotController && typeof slotController.applyTurboToWinlineAnimations === 'function') {
           slotController.applyTurboToWinlineAnimations();
         }
         self.winLineDrawer.drawWinLinesOnceFromSpinData(spinData);
@@ -3004,16 +3217,8 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
           const canCreateSpine = hasSpineJson && (self.scene.add as any)?.spine;
           if (!canCreateSpine) {
             console.log(`[Symbols] No Spine data for winning symbol ${symbolValue} at (${grid.x}, ${grid.y}); keeping PNG/WEBP symbol.`);
-
-            // For image-only symbols (8, 9, 10) that have no Spine win animation,
-            // apply a white ripple effect from the center using a shared helper.
-            try {
-              const fallbackSymbol: any = currentSymbol;
-              if (fallbackSymbol && (symbolValue === 8 || symbolValue === 9 || symbolValue === 10)) {
-                applyImageSymbolWinRipple(self.scene, fallbackSymbol);
-              }
-            } catch {}
-
+            // Keep the existing PNG/WEBP symbol without adding a special-case ripple here.
+            // Ripple/pulse highlighting is now driven centrally by pulseWinningSymbols per winline.
             continue;
           }
           console.log(`[Symbols] Replacing sprite with Spine animation: ${spineKey} at (${grid.x}, ${grid.y})`);

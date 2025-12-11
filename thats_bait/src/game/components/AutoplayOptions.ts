@@ -2,6 +2,8 @@ import { Scene } from 'phaser';
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { SoundEffectType } from '../../managers/AudioManager';
+import { BET_OPTIONS } from '../../config/BetConfig';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 
 export interface AutoplayOptionsConfig {
 	position?: { x: number; y: number };
@@ -11,6 +13,7 @@ export interface AutoplayOptionsConfig {
 	currentAutoplayCount?: number;
 	currentBet?: number;
 	currentBalance?: number;
+	isEnhancedBet?: boolean;
 }
 
 export class AutoplayOptions {
@@ -22,17 +25,11 @@ export class AutoplayOptions {
 	private currentAutoplayCount: number = 10;
 	private currentBet: number = 0.20; // Default bet amount
 	private currentBalance: number = 0; // Current game balance
+	private isEnhancedBet: boolean = false;
 	private autoplayOptions: number[] = [
 		10, 30, 50, 75, 100, 150, 500, 1000
 	];
-	private betOptions: number[] = [
-		0.2, 0.4, 0.6, 0.8, 1,
-		1.2, 1.6, 2, 2.4, 2.8,
-		3.2, 3.6, 4, 5, 6,
-		8, 10, 14, 18, 24,
-		32, 40, 60, 80, 100,
-		110, 120, 130, 140, 150
-	];
+	private betOptions: number[] = BET_OPTIONS;
 	private autoplayButtons: Phaser.GameObjects.Container[] = [];
 	private selectedButtonIndex: number = -1;
 	private selectedBetIndex: number = -1;
@@ -44,6 +41,7 @@ export class AutoplayOptions {
 	private balanceAmountText: Phaser.GameObjects.Text;
 	private onCloseCallback?: () => void;
 	private onConfirmCallback?: (autoplayCount: number) => void;
+	private amplifyBetAnimation: any;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -260,6 +258,9 @@ export class AutoplayOptions {
 		const x = screenWidth * 0.5;
 		const y = backgroundTop + 490; // Position relative to background top
 		
+		// Create amplify bet animation behind the bet display
+		this.createAmplifyBetAnimation(scene, x, y);
+		
 		// "Autospins" label
 		const autoplayLabel = scene.add.text(x - 180, y - 70, 'Bet', {
 			fontSize: '24px',
@@ -320,6 +321,28 @@ export class AutoplayOptions {
 		this.container.add(this.plusButton);
 	}
 
+	private createAmplifyBetAnimation(scene: Scene, x: number, y: number): void {
+		try {
+			if (!ensureSpineFactory(scene, '[AutoplayOptions] createAmplifyBetAnimation')) {
+				console.warn('[AutoplayOptions] Spine factory unavailable, skipping amplify bet animation');
+				return;
+			}
+			if (!scene.cache.json.has('amplify_bet')) {
+				console.warn('[AutoplayOptions] Amplify bet spine assets not loaded, skipping animation creation');
+				return;
+			}
+			const spineObj = (scene.add as any).spine(x, y, 'amplify_bet', 'amplify_bet-atlas');
+			this.amplifyBetAnimation = spineObj;
+			this.amplifyBetAnimation.setOrigin(0.5, 0.5);
+			this.amplifyBetAnimation.setScale(1);
+			this.amplifyBetAnimation.setVisible(false);
+			this.container.add(this.amplifyBetAnimation);
+			console.log('[AutoplayOptions] Amplify bet spine animation created for autoplay bet UI');
+		} catch (error) {
+			console.error('[AutoplayOptions] Failed to create amplify bet animation:', error);
+		}
+	}
+
 	private createConfirmButton(scene: Scene): void {
 		const screenWidth = scene.scale.width;
 		const screenHeight = scene.scale.height;
@@ -365,6 +388,34 @@ export class AutoplayOptions {
 				this.hide();
 			}
 		});
+	}
+
+	private updateAmplifyBetVisual(): void {
+		if (!this.amplifyBetAnimation) {
+			return;
+		}
+		try {
+			if (this.isEnhancedBet) {
+				this.amplifyBetAnimation.setVisible(true);
+				const data: any = this.amplifyBetAnimation.skeleton?.data;
+				const idleName = 'animation';
+				if (data && typeof data.findAnimation === 'function' && data.findAnimation(idleName)) {
+					this.amplifyBetAnimation.animationState.setAnimation(0, idleName, true);
+				} else {
+					const animations = data?.animations || [];
+					if (animations.length > 0) {
+						this.amplifyBetAnimation.animationState.setAnimation(0, animations[0].name, true);
+					}
+				}
+			} else {
+				this.amplifyBetAnimation.setVisible(false);
+				try {
+					this.amplifyBetAnimation.animationState.clearTracks();
+				} catch {}
+			}
+		} catch (e) {
+			console.warn('[AutoplayOptions] Failed to update amplify bet visual:', e);
+		}
 	}
 
 	private selectButton(index: number, value: number): void {
@@ -452,12 +503,16 @@ export class AutoplayOptions {
 			if (config.currentBalance !== undefined) {
 				this.currentBalance = config.currentBalance;
 			}
+			if (config.isEnhancedBet !== undefined) {
+				this.isEnhancedBet = config.isEnhancedBet;
+			}
 			this.onCloseCallback = config.onClose;
 			this.onConfirmCallback = config.onConfirm;
 		}
 		
 		// Update the balance display with current balance
 		this.updateBalanceDisplay();
+		this.updateAmplifyBetVisual();
 		
 		// Find and select the button that matches the current autoplay count
 		const matchingIndex = this.autoplayOptions.findIndex(option => option === this.currentAutoplayCount);

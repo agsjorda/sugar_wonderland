@@ -25,6 +25,7 @@ export class Background {
 		{ offsetX: 200, offsetY: 90 },
 	];
 	private bgDepth?: Phaser.GameObjects.Image;
+	private bgFog?: Phaser.GameObjects.Image;
 	private bgSurface?: Phaser.GameObjects.Image;
 	private bgSky?: Phaser.GameObjects.Image;
 	private reelBottomSpine?: any;
@@ -49,25 +50,33 @@ export class Background {
 	private readonly SEA_EDGE_WAVE_DECAY_PER_SECOND: number = 1.5;
 	private readonly depthBackgroundModifiers = {
 		offsetX: 0,
-		offsetY: -410,
-		scale: 1,
- 		scaleXMultiplier: 1,
- 		scaleYMultiplier: 0.8,
- 	};
- 	private readonly surfaceBackgroundModifiers = {
- 		offsetX: 0,
- 		offsetY: -369.5,
- 		scale: 1,
- 		scaleXMultiplier: 1,
- 		scaleYMultiplier: 1,
- 	};
- 	private readonly skyBackgroundModifiers = {
- 		offsetX: 0,
- 		offsetY: 0,
- 		scale: 1,
- 		scaleXMultiplier: 1,
- 		scaleYMultiplier: 1,
- 	};
+		offsetY: -360,
+		scale: 0.71,
+		scaleXMultiplier: 1,
+		scaleYMultiplier: 0.6,
+	};
+	private readonly fogBackgroundModifiers = {
+		offsetX: 0,
+		offsetY: -230,
+		scale: 0.71,
+		scaleXMultiplier: 0.9,
+		scaleYMultiplier: 0.35,
+		opacity: 0.5,
+	};
+	private readonly surfaceBackgroundModifiers = {
+		offsetX: 0,
+		offsetY: -618,
+		scale: 0.18,
+		scaleXMultiplier: 1,
+		scaleYMultiplier: 1,
+	};
+	private readonly skyBackgroundModifiers = {
+		offsetX: 0,
+		offsetY: -367,
+		scale: 0.209,
+		scaleXMultiplier: 1,
+		scaleYMultiplier: 1,
+	};
 	private readonly reelBottomModifiers = {
 		offsetX: 0,
 		offsetY: -112,
@@ -191,6 +200,15 @@ export class Background {
 		).setOrigin(0.5, 0.5);
 		this.bgDepth = bgDepth;
 
+		const bgFog = scene.add.image(
+			scene.scale.width * 0.5,
+			scene.scale.height * 0.9,
+			'BG-Fog'
+		).setOrigin(0.5, 0.5);
+		this.bgFog = bgFog;
+		bgFog.setDepth(900);
+		bgFog.setAlpha(this.fogBackgroundModifiers.opacity);
+
 		// Sky layer (in front, with its own offset)
 		const bgSky = scene.add.image(
 			scene.scale.width * 0.5,
@@ -221,6 +239,14 @@ export class Background {
 			depthCoverBase * this.depthBackgroundModifiers.scaleYMultiplier
 		);
 
+		const scaleFogX = scene.scale.width / bgFog.width;
+		const scaleFogY = scene.scale.height / bgFog.height;
+		const fogCoverBase = Math.max(scaleFogX, scaleFogY) * this.fogBackgroundModifiers.scale;
+		bgFog.setScale(
+			fogCoverBase * this.fogBackgroundModifiers.scaleXMultiplier,
+			fogCoverBase * this.fogBackgroundModifiers.scaleYMultiplier
+		);
+
 		const scaleSurfaceX = scene.scale.width / bgSurface.width;
 		const scaleSurfaceY = scene.scale.height / bgSurface.height;
 		const surfaceCoverBase = Math.max(scaleSurfaceX, scaleSurfaceY) * this.surfaceBackgroundModifiers.scale;
@@ -243,6 +269,12 @@ export class Background {
 		bgDepth.setPosition(
 			baseDepthX + this.depthBackgroundModifiers.offsetX,
 			baseDepthY + this.depthBackgroundModifiers.offsetY
+		);
+		const baseFogX = scene.scale.width * 0.5;
+		const baseFogY = scene.scale.height * 0.9;
+		bgFog.setPosition(
+			baseFogX + this.fogBackgroundModifiers.offsetX,
+			baseFogY + this.fogBackgroundModifiers.offsetY
 		);
 		const baseSurfaceX = scene.scale.width * 0.5;
 		const baseSurfaceY = scene.scale.height * 0.9;
@@ -272,7 +304,6 @@ export class Background {
 		seaEdge.setScale(seaEdgeScale * this.seaEdgeWidthMultiplier, seaEdgeScale);
 		// Place Sea-Edge above the reel slot background (depth 880) but below controller UI (900)
 		seaEdge.setDepth(892);
-
 		if (this.enableWaterPipelines) {
 			const renderer: any = scene.game.renderer;
 			const pipelineManager: any = renderer && renderer.pipelines;
@@ -448,7 +479,7 @@ export class Background {
 			const baseScale = (scene.scale.width / 1920) * this.reelBottomModifiers.scale;
 			this.reelBottomSpine.setScale(baseScale);
 			// Place between slot background (880) and Sea-Edge (885)
-			this.reelBottomSpine.setDepth(879);
+			this.reelBottomSpine.setDepth(900);
 			if (typeof this.reelBottomSpine.setScrollFactor === "function") {
 				this.reelBottomSpine.setScrollFactor(0);
 			}

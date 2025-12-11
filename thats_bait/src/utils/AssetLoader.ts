@@ -87,6 +87,11 @@ export class AssetLoader {
         this.loadAssetGroup(scene, this.assetConfig.getBonusHeaderAssets());
     }
 
+    loadTransitionAssets(scene: Scene): void {
+        console.log('[AssetLoader] Loading transition assets...');
+        this.loadAssetGroup(scene, (this.assetConfig as any).getTransitionAssets());
+    }
+
     loadLoadingAssets(scene: Scene): void {
         console.log('[AssetLoader] Loading loading assets...');
         this.loadAssetGroup(scene, this.assetConfig.getLoadingAssets());

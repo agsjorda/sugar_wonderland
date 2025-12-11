@@ -39,7 +39,9 @@ export class NumberDisplay {
 		'8': 'number_8',
 		'9': 'number_9',
 		',': 'number_comma',
-		'.': 'number_dot'
+		'.': 'number_dot',
+		'x': 'number_x',
+		'X': 'number_x'
 	};
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager, config: NumberDisplayConfig) {

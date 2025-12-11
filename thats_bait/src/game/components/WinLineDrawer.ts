@@ -26,6 +26,7 @@ export class WinLineDrawer {
   private bubbleScaleRandomness: number = 1.0;       // >1 = more variation in radius/scale
   private bubbleWobbleAmount: number = 0.8;          // >1 = larger wobble distance
   private bubbleWobbleSpeed: number = 1.0;           // >1 = faster wobble tween
+  public bubbleAlphaMultiplier: number = 0.4;        // 0–1 global opacity multiplier for all winline bubbles
 
   // Configurable timing intervals (in milliseconds)
   private lineDisplayTime: number = 250;     // How long each line stays visible after drawing (increased from 750ms)
@@ -72,6 +73,14 @@ export class WinLineDrawer {
     if (options.wobbleSpeed !== undefined) {
       this.bubbleWobbleSpeed = Math.max(0.25, Math.min(4.0, options.wobbleSpeed));
     }
+  }
+
+  /**
+   * Set a global opacity multiplier for all winline bubbles (0–1).
+   * This affects both winline-bubble-1 and winline-bubble-2 textures and fallbacks.
+   */
+  public setBubbleOpacity(alpha: number): void {
+    this.bubbleAlphaMultiplier = Math.max(0, Math.min(1, alpha));
   }
 
   /**
@@ -593,7 +602,9 @@ export class WinLineDrawer {
         bubble = img;
       } else {
         const g = this.scene.add.graphics();
-        g.fillStyle(0xffffff, 0.8);
+        const baseFillAlpha = 0.8;
+        const fillAlpha = Math.max(0, Math.min(1, baseFillAlpha * (this.bubbleAlphaMultiplier || 1.0)));
+        g.fillStyle(0xffffff, fillAlpha);
         g.fillCircle(pos.x, pos.y, 4);
         bubble = g;
       }
@@ -608,7 +619,8 @@ export class WinLineDrawer {
       const radius = radiusMin + Math.random() * (radiusMax - radiusMin);
       const radiusFactor = radius / Math.max(1, radiusMin);
       const finalScale = bubbleImageScale * radiusFactor;
-      const finalAlpha = pos.isWinning ? 0.9 : 0.7;
+      const baseAlpha = pos.isWinning ? 0.9 : 0.7;
+      const finalAlpha = Math.max(0, Math.min(1, baseAlpha * (this.bubbleAlphaMultiplier || 1.0)));
 
       // Small local wobble around base position, scaled by wobble modifiers
       const wobbleAmount = this.bubbleWobbleAmount || 1.0;
@@ -781,6 +793,12 @@ export class WinLineDrawer {
    * Clear all drawn lines
    */
   public clearLines(): void {
+    try {
+      const ref: any = this.symbolsReference;
+      if (ref && typeof ref.pulseWinningSymbols === 'function') {
+        ref.pulseWinningSymbols([]);
+      }
+    } catch {}
     this.lines.forEach(line => {
       try { this.scene.tweens.killTweensOf(line); } catch {}
       try {

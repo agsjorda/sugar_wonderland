@@ -123,3 +123,59 @@ export function getSymbol5ImageKeyForCell(
   }
   return getSymbol5ImageKeyForVariant(variant);
 }
+
+export function getMoneyValueForCell(
+	spinData: SpinData | null | undefined,
+	column: number,
+	row: number
+): number | null {
+	try {
+		if (!spinData || !spinData.slot || !Array.isArray(spinData.slot.area)) {
+			return null;
+		}
+
+		const area = spinData.slot.area;
+		const symbol = area?.[column]?.[row];
+		if (symbol !== 5 && symbol !== 12 && symbol !== 13 && symbol !== 14) {
+			return null;
+		}
+
+		const rawMoney = spinData.slot.money;
+		if (!Array.isArray(rawMoney)) {
+			return null;
+		}
+
+		const money = normalizeMoneyGrid(rawMoney);
+		const value = money?.[column]?.[row];
+		if (typeof value !== 'number' || value < 0) {
+			return null;
+		}
+
+		return value;
+	} catch {
+		return null;
+	}
+}
+
+export function getMoneyMultiplierForCell(
+	spinData: SpinData | null | undefined,
+	column: number,
+	row: number
+): number | null {
+	try {
+		const value = getMoneyValueForCell(spinData, column, row);
+		if (value == null) {
+			return null;
+		}
+
+		const betStr = (spinData as any).baseBet ?? spinData!.bet;
+		const bet = parseFloat(betStr);
+		if (!bet) {
+			return null;
+		}
+
+		return value / bet;
+	} catch {
+		return null;
+	}
+}

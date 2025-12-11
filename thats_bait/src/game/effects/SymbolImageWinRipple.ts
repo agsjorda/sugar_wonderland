@@ -6,6 +6,7 @@ export function applyImageSymbolWinRipple(scene: Phaser.Scene, symbol: any): voi
       return;
     }
     const anySymbol: any = symbol as any;
+    // If a ripple ring already exists, do not stack another one on top.
     if (anySymbol.__winRippleRing) {
       return;
     }
@@ -43,10 +44,15 @@ export function applyImageSymbolWinRipple(scene: Phaser.Scene, symbol: any): voi
       });
     } catch {}
 
-    // Add a subtle size pulse on the symbol itself, similar to the earlier effect
+    // Add a subtle size pulse on the symbol itself.
+    // Store the base scale so we can restore it cleanly when clearing the ripple.
     try {
       const baseScaleX = (anySymbol.scaleX ?? 1) as number;
       const baseScaleY = (anySymbol.scaleY ?? 1) as number;
+      (anySymbol as any).__winRippleBaseScaleX = baseScaleX;
+      (anySymbol as any).__winRippleBaseScaleY = baseScaleY;
+      // Kill any existing scale tweens targeting this symbol to avoid stacking pulses
+      try { scene.tweens.killTweensOf(anySymbol); } catch {}
       scene.tweens.add({
         targets: anySymbol,
         scaleX: baseScaleX * 1.15,
@@ -72,5 +78,16 @@ export function clearImageSymbolWinRipple(scene: Phaser.Scene, symbol: any): voi
       try { ring.destroy(); } catch {}
       try { delete anySymbol.__winRippleRing; } catch {}
     }
+    // Restore the symbol's original scale and kill any lingering scale tweens
+    try {
+      const baseX = (anySymbol as any).__winRippleBaseScaleX;
+      const baseY = (anySymbol as any).__winRippleBaseScaleY;
+      if (typeof baseX === 'number' && typeof baseY === 'number') {
+        try { scene.tweens.killTweensOf(anySymbol); } catch {}
+        try { anySymbol.setScale(baseX, baseY); } catch {}
+      }
+      try { delete (anySymbol as any).__winRippleBaseScaleX; } catch {}
+      try { delete (anySymbol as any).__winRippleBaseScaleY; } catch {}
+    } catch {}
   } catch {}
 }

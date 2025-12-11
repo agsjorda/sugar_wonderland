@@ -192,7 +192,8 @@ function dropFillers(self: any, fillerCount: number, index: number, extendDurati
   const extraPixels = extraMs > 0 && baseDropMs > 0 ? (baseDropDistance * (extraMs / baseDropMs)) : 0;
   const extraRows = extraPixels > 0 ? Math.ceil(extraPixels / height) : 0;
   const TOTAL_ITEMS = fillerCount + SLOT_COLUMNS + extraRows;
-  const DROP_DISTANCE = TOTAL_ITEMS * height + GameData.WIN_UP_HEIGHT;
+  const EXTRA_VISUAL_ROWS = 4;
+  const DROP_DISTANCE = (TOTAL_ITEMS + EXTRA_VISUAL_ROWS) * height + GameData.WIN_UP_HEIGHT;
   const fillerSymbols: any[] = [];
 
   for (let i = 0; i < TOTAL_ITEMS - SLOT_COLUMNS; i++) {

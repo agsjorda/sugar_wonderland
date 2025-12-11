@@ -465,18 +465,20 @@ export class Preloader extends Scene
             });
         }
 
-		// Start game on click
-        this.buttonSpin?.once('pointerdown', () => {
-            // Fade out the Preloader camera, then start Game when complete
-            this.cameras.main.once('camerafadeoutcomplete', () => {
-				console.log('[Preloader] Starting Game scene after camera fade out');
-				this.scene.start('Game', {
-                    networkManager: this.networkManager,
-                    screenModeManager: this.screenModeManager
-                });
-            });
-            this.cameras.main.fadeOut(500, 0, 0, 0);
-        });
+		// Start game on click release (allow user to hold the button)
+		this.buttonSpin?.once('pointerup', () => {
+			this.time.delayedCall(120, () => {
+				this.scene.launch('BubbleTransition', {
+					fromSceneKey: 'Preloader',
+					toSceneKey: 'Game',
+					gameStartData: {
+						networkManager: this.networkManager,
+						screenModeManager: this.screenModeManager
+					}
+				});
+				this.scene.bringToTop('BubbleTransition');
+			});
+		});
 
 		// Ensure web fonts are applied after they are ready
 		const fontsObj: any = (document as any).fonts;

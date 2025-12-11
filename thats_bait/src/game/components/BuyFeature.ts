@@ -2,6 +2,7 @@ import { Scene } from 'phaser';
 import { resolveAssetUrl } from '../../utils/AssetLoader';
 import { SlotController } from './SlotController';
 import { SoundEffectType } from '../../managers/AudioManager';
+import { BET_OPTIONS } from '../../config/BetConfig';
 
 export interface BuyFeatureConfig {
 	position?: { x: number; y: number };
@@ -21,14 +22,7 @@ export class BuyFeature {
 	private currentBet: number = 0.2; // Start with first bet option
 	private slotController: SlotController | null = null;
 	private readonly BET_MULTIPLIER: number = 100; // Multiplier for price display
-	private betOptions: number[] = [
-		0.2, 0.4, 0.6, 0.8, 1,
-		1.2, 1.6, 2, 2.4, 2.8,
-		3.2, 3.6, 4, 5, 6,
-		8, 10, 14, 18, 24,
-		32, 40, 60, 80, 100,
-		110, 120, 130, 140, 150
-	];
+	private betOptions: number[] = BET_OPTIONS;
 	private currentBetIndex: number = 0; // Index in betOptions array
 	private closeButton: Phaser.GameObjects.Text;
 	private confirmButton: Phaser.GameObjects.Text;

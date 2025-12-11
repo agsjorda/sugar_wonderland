@@ -663,11 +663,13 @@ export class Game extends Phaser.Scene {
 		const baseBet = this.slotController.getBaseBetAmount();
 		const normalizedBaseBet = !isNaN(baseBet) && baseBet > 0 ? baseBet : displayedBet;
 		const currentBalance = this.slotController.getBalanceAmount();
+		const isEnhancedBet = this.gameData.isEnhancedBet;
 
 		this.autoplayOptions.show({
 			currentAutoplayCount: 10,
 			currentBet: normalizedBaseBet,
 			currentBalance,
+			isEnhancedBet,
 			onClose: () => {
 				this.updateInfoText('Autoplay options closed.');
 			},

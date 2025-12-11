@@ -38,6 +38,7 @@ export class AssetConfig {
 				'BG-Sky': `${prefix}/background/BG-Sky.webp`,
 				'BG-Normal-Slots': `${prefix}/background/BG-Normal-Slots.webp`,
 				'Sea-Edge': `${prefix}/background/Sea-Edge.webp`,
+				'BG-Fog': `${forcedPortraitHighPrefix}/background/BG-Fog.webp`,
 				'bubble': `${forcedPortraitHighPrefix}/background/bubble.webp`,
 				'winline-bubble-1': `${forcedPortraitHighPrefix}/bubbles/winline-bubble-1.webp`,
 				'winline-bubble-2': `${forcedPortraitHighPrefix}/bubbles/winline-bubble-2.webp`,
@@ -359,17 +360,20 @@ export class AssetConfig {
 		// Add digit images (0-9)
 		for (let i = 0; i <= 9; i++) {
 			const key = `number_${i}`;
-			const path = `${prefix}/numbers/${i}.png`;
+			const path = `${prefix}/numbers/number_${i}.webp`;
 			numberImages[key] = path;
 			console.log(`[AssetConfig] Number ${key}: ${path}`);
 		}
 		
 		// Add comma and dot
-		numberImages['number_comma'] = `${prefix}/numbers/number_comma.png`;
-		numberImages['number_dot'] = `${prefix}/numbers/number_dot.png`;
+		numberImages['number_comma'] = `${prefix}/numbers/number_comma.webp`;
+		numberImages['number_dot'] = `${prefix}/numbers/number_dot.webp`;
 		
-		console.log(`[AssetConfig] Number comma: ${prefix}/numbers/number_comma.png`);
-		console.log(`[AssetConfig] Number dot: ${prefix}/numbers/number_dot.png`);
+		console.log(`[AssetConfig] Number comma: ${prefix}/numbers/number_comma.webp`);
+		console.log(`[AssetConfig] Number dot: ${prefix}/numbers/number_dot.webp`);
+		
+		numberImages['number_x'] = `${prefix}/numbers/number_x.webp`;
+		console.log(`[AssetConfig] Number x: ${prefix}/numbers/number_x.webp`);
 		
 		return {
 			images: numberImages
@@ -473,12 +477,25 @@ export class AssetConfig {
 		};
 	}
 
+	getTransitionAssets(): AssetGroup {
+		const forcedPortraitHighPrefix = `assets/portrait/high`;
+		return {
+			spine: {
+				'bubbles_transition': {
+					atlas: `${forcedPortraitHighPrefix}/transitions/Bubbles_Transition.atlas`,
+					json: `${forcedPortraitHighPrefix}/transitions/Bubbles_Transition.json`
+				}
+			}
+		};
+	}
+
 	// Helper method to get all assets for a scene
 	getAllAssets(): { [key: string]: AssetGroup } {
 		return {
 			background: this.getBackgroundAssets(),
 			bonusHeader: this.getBonusHeaderAssets(),
 			loading: this.getLoadingAssets(),
+			transitions: this.getTransitionAssets(),
 			symbols: this.getSymbolAssets(),
 			buttons: this.getButtonAssets(),
 			fonts: this.getFontAssets(),

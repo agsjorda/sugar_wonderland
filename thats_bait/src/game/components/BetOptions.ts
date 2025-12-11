@@ -2,6 +2,7 @@ import { Scene } from 'phaser';
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { SoundEffectType } from '../../managers/AudioManager';
+import { BET_OPTIONS } from '../../config/BetConfig';
 
 export interface BetOptionsConfig {
 	position?: { x: number; y: number };
@@ -18,14 +19,8 @@ export class BetOptions {
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
 	private currentBet: number = 240.00;
-	private betOptions: number[] = [
-		0.2, 0.4, 0.6, 0.8, 1,
-		1.2, 1.6, 2, 2.4, 2.8,
-		3.2, 3.6, 4, 5, 6,
-		8, 10, 14, 18, 24,
-		32, 40, 60, 80, 100,
-		110, 120, 130, 140, 150
-	];
+	private betOptions: number[] = BET_OPTIONS;
+
 	private betButtons: Phaser.GameObjects.Container[] = [];
 	private selectedButtonIndex: number = -1;
 	private closeButton: Phaser.GameObjects.Text;
