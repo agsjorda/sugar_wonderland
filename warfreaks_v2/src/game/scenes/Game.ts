@@ -468,6 +468,8 @@ export class Game extends Scene
 		// Listen for win start to spawn coins based on win amount
 		gameEventManager.on(GameEventType.WIN_START, (data: any) => {
 			console.log('[Game] WIN_START event received - spawning coins based on win amount');
+			// Advance tumble index so downstream consumers read the correct tumble step
+			this.gameAPI.incrementCurrentTumbleIndex();
 			
 			// Try to obtain SpinData from the event payload, then fall back to Symbols.currentSpinData
 			const spinDataFromEvent = (data as SpinDataEventData | undefined)?.spinData as SpinData | undefined;
@@ -505,7 +507,7 @@ export class Game extends Scene
 			if (this.symbols && this.symbols.currentSpinData) {
 				console.log('[Game] WIN_STOP: Found current spin data, calculating total win from paylines');
 				
-				const slotData = data.spinData.slot;
+				const slotData = data.spinData?.slot || data?.slot;
 				console.log('[Game] WIN_STOP: Slot data: ', slotData);
 
 				let totalWin = 0;
@@ -543,6 +545,8 @@ export class Game extends Scene
 		// Listen for reel completion to handle balance updates and win tracker display
 		gameEventManager.on(GameEventType.REELS_STOP, (eventData?: GameEventData) => {
 			console.log('[Game] REELS_STOP event received');
+			// Reset tumble index at the end of a reel cycle
+			this.gameAPI.resetCurrentTumbleIndex();
 			
 			// Request balance update to finalize the spin (add winnings to balance)
 			// This is needed to complete the spin cycle and update the final state
@@ -654,9 +658,7 @@ export class Game extends Scene
 
 		console.log(`[Game] showWinTrackerForSpinData: `, spinData);
 
-		const outResult = gameStateManager.isBonus ? 
-		spinData.slot?.freespin?.items[this.gameAPI.getCurrentFreeSpinIndex() - 1]?.tumble?.items[this.gameAPI.getCurrentTumbleIndex() - 1]?.symbols?.out: 
-		spinData.slot?.tumbles?.items[this.gameAPI.getCurrentTumbleIndex() - 1]?.symbols?.out;
+		const outResult = this.getWinTrackerOutResult(spinData);
 
 		if (outResult && !outResult.length) {
 			console.log('[Game] No winning symbols in tumble item - skipping WinTracker display');
@@ -684,8 +686,12 @@ export class Game extends Scene
 
 		console.log(`[Game] outResult: `, outResult);
 
+		const isBonusMode = gameStateManager.isBonus;
+		const winTextColor = isBonusMode ? '#ffffff' : '#ffffff';
+		const winStrokeColor = isBonusMode ? '#4b5320' : '#cc6600'; // make this dark green for bonus, dark army green otherwise
+
 		// Build one config per winning symbol and let WinTracker lay them out side by side
-		const winRowConfigs = outResult.map((item: any) => ({
+		const winRowConfigs = outResult?.map((item: any) => ({
 			scene: this,
 			symbolScale: 0.06,
 			symbolIndex: item.symbol,
@@ -695,17 +701,73 @@ export class Game extends Scene
 			y: rowY,
 			depth: 950,
 			textFontSize: '16px',
-			// dark green instead of black for bonus mode same as the remaining free spin stroke color
-			textColor: gameStateManager.isBonus ? '#000000' : '#ffffff',
+			textColor: winTextColor,
+			textStyle: {
+				stroke: winStrokeColor,
+				strokeThickness: 2,
+			},
 		}));
 
-		this.winTrackerRow = WinTracker.createSymbolWinRow(winRowConfigs);
+		this.winTrackerRow = WinTracker.createSymbolWinRow(winRowConfigs ?? []);
+		WinTracker.startWave(this.winTrackerRow, {scale: 1.3, duration: 150, staggerDelay: 100});
 
 		console.log('[Game] WinTracker rows displayed under reels border from tumble data', {
 			outResult,
 			position: { x: rowX, y: rowY }
 		});
 	}
+
+	/**
+	 * Determine the "current" tumble out-result safely.
+	 * We prefer the current tumble index when it is valid; otherwise we fall back to the
+	 * latest tumble item that contains an `out` list.
+	 */
+	private getWinTrackerOutResult(spinData: any): any[] | undefined {
+		const isBonus = gameStateManager.isBonus;
+
+		const getItems = (maybe: any): any[] => {
+			if (!maybe) return [];
+			if (Array.isArray(maybe)) return maybe;
+			if (Array.isArray(maybe.items)) return maybe.items;
+			return [];
+		};
+
+		const tumbleItems = (() => {
+			if (isBonus) {
+				const fsIndex = this.gameAPI.getCurrentFreeSpinIndex() - 1;
+				const fsItem = spinData.slot?.freespin?.items?.[fsIndex] ?? spinData.slot?.freeSpin?.items?.[fsIndex];
+				return getItems(fsItem?.tumble);
+			}
+			return getItems(spinData.slot?.tumbles);
+		})();
+
+		if (!tumbleItems.length) {
+			return undefined;
+		}
+
+		const preferredIndex = this.gameAPI.getCurrentTumbleIndex() - 1;
+		const pickIndex = (idx: number) => {
+			const item = tumbleItems[idx];
+			const out = item?.symbols?.out;
+			return Array.isArray(out) ? out : undefined;
+		};
+
+		// 1) Prefer the current tumble index if it's in range and has an out array
+		if (preferredIndex >= 0 && preferredIndex < tumbleItems.length) {
+			const preferredOut = pickIndex(preferredIndex);
+			if (preferredOut) return preferredOut;
+		}
+
+		// 2) Fallback: last tumble step that has an out array
+		for (let i = tumbleItems.length - 1; i >= 0; i--) {
+			const out = pickIndex(i);
+			if (out) return out;
+		}
+
+		return undefined;
+	}
+
+	// WinTracker wave tween + cleanup are handled by WinTracker.ts (startWave/clearContainer)
 
 	/**
 	 * Start the split transition animation

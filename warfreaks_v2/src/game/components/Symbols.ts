@@ -66,6 +66,7 @@ export class Symbols {
   public baseCenterY: number = 0;
 
   public cachedTotalWin: number = 0;
+  public cachedPreBonusWins: number = 0;
 
   private symbolWinTimeScales: { [key: number]: number } = {
     0: 1.5,
@@ -2039,6 +2040,16 @@ export class Symbols {
     }
   }
 
+  public calculateAndCachePreBonusWins(spinData: any) {
+    if (gameStateManager.isBonus) {
+      return;
+    }
+
+    const multiplierValue = spinData?.slot?.freeSpin?.multiplierValue ?? spinData?.slot?.freespin?.multiplierValue;
+    this.cachedPreBonusWins = typeof multiplierValue === 'number' && !Number.isNaN(multiplierValue) ? multiplierValue : 0;
+    console.log(`[Symbols] Cached pre-bonus wins from free spin multiplierValue: ${this.cachedPreBonusWins}`);
+  }
+
   /**
    * Get the time scale for a specific symbol's win animation
    */
@@ -2787,6 +2798,7 @@ function handleScatterAndBonusFlow(
   console.log(`[Symbols] Scatter detected! Found ${scatterGrids.length} scatter symbols`);
   try {
     self.calculateAndCacheTotalWin(spinData);
+    self.calculateAndCachePreBonusWins(spinData);
   } catch { }
   gameStateManager.isScatter = true;
 
@@ -3419,8 +3431,8 @@ function dropPrevSymbols(self: Symbols, index: number, extendDuration: boolean =
   const distanceToScreenBottom = Math.max(0, self.scene.scale.height - gridBottomY);
   const DROP_DISTANCE = distanceToScreenBottom + self.totalGridHeight + (height * 2) + self.scene.gameData.winUpHeight;
   const totalAnimations = self.symbols.length;
-  const STAGGER_MS = gameStateManager.isTurbo ? 0 : 75; // match dropNewSymbols stagger (left-to-right, one by one feel)
-  const clearHop = self.scene.gameData.winUpHeight * 0.2;
+  const STAGGER_MS = gameStateManager.isTurbo ? 0 : 175; // match dropNewSymbols stagger (left-to-right, one by one feel)
+  const clearHop = self.scene.gameData.winUpHeight * 0.25;
 
   for (let i = 0; i < self.symbols.length; i++) {
     // Check if the current row exists and has the required index
@@ -3428,9 +3440,6 @@ function dropPrevSymbols(self: Symbols, index: number, extendDuration: boolean =
       console.warn(`[Symbols] dropPrevSymbols: skipping invalid row ${i} or index ${index}`);
       continue;
     }
-
-    // Trigger drop animation on the symbol if available (sugar Spine)
-    try { playDropAnimationIfAvailable(self.symbols[i][index]); } catch { }
 
     self.scene.tweens.chain({
       targets: self.symbols[i][index],
@@ -3986,8 +3995,17 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
                 try {
                   doveSpine.setOrigin(0.5, 0.5);
                   doveSpine.setDepth(999);
-                  doveSpine.setVisible(true);
-                  doveSpine.setActive(true);
+                    // Reset any residual state from the pool
+                    try { self.scene.tweens.killTweensOf(doveSpine); } catch { }
+                    doveSpine.setVisible(true);
+                    doveSpine.setActive(true);
+                    doveSpine.setAlpha(1);
+                    doveSpine.setRotation(0);
+                    doveSpine.setAngle(0);
+                    doveSpine.setPosition(0, 0);
+                    if (doveSpine.animationState) {
+                      try { doveSpine.animationState.clearTracks(); } catch { }
+                    }
                   multContainer.add(doveSpine);
                   if (doveSpine.animationState) {
                     doveSpine.animationState.setAnimation(0, `symbol10_WF`, true);
@@ -3999,21 +4017,29 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
                     }
 
                     // Pre‑compute path parameters so both dove and value image can share them
-                    leaveTargetX = col < numCols / 2 ? -self.scene.scale.width * 0.6 : self.scene.scale.width * 0.6;
-                    leaveTargetY = -self.scene.scale.height * 0.3;
-                    leaveDelay = Math.random() * 100 + 150 / (isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
-                    leaveDuration = 1250 / (isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
-                    const leaveFacingDirection = col < numCols / 2 ? 1 : -1;
+                    // First hop: exit diagonally toward the opposite side of the screen
+                    const isOnLeftSide = col < numCols / 2;
+                    // Push the exit point fully off-screen on the opposite side
+                    leaveTargetX = isOnLeftSide
+                      ? self.scene.scale.width * 1.2
+                      : -self.scene.scale.width * 1.2;
+                    leaveTargetY = -self.scene.scale.height * (Math.random() * 0.2 + 0.3);
+                    const speedMultiplier = isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1;
+                    leaveDelay = (Math.random() * 300 + 120) / speedMultiplier;
+                    leaveDuration = 1250 / speedMultiplier;
+                    const leaveFacingDirection = isOnLeftSide ? 1 : -1;
                     doveSpine.setScale(leaveFacingDirection * scale, scale);
                     scheduleTranslate(self, doveSpine, leaveDelay, leaveDuration, leaveTargetX, leaveTargetY);
 
+                    // Second hop: re-enter from a random point above the screen, heading to the target
                     returnStartingX = Math.random() * self.scene.scale.width * 1.1 - self.scene.scale.width * 0.1;
-                    returnStartingY = -50;
+                    returnStartingY = -self.scene.scale.height * (0.15 + Math.random() * 0.1);
 
                     returnTargetX = self.scene.scale.width * 0.68 + Math.random() * self.scene.scale.width * 0.07;
                     returnTargetY = self.scene.scale.height * 0.1;
-                    returnDelay = leaveDelay + leaveDuration;
-                    returnDuration = (Math.random() * 400 + 600) / (isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
+                    const returnPause = (Math.random() * 250 + 150) / speedMultiplier;
+                    returnDelay = leaveDelay + leaveDuration + returnPause;
+                    returnDuration = (Math.random() * 400 + 600) / speedMultiplier;
 
                     // Ensure the awaited duration also covers the full leave + return tweens,
                     // including the final value-image drop/fade sequence that runs after the
@@ -4221,18 +4247,13 @@ function playTumbleSfx(self: Symbols): void {
  * Expects tumbles to be in the SpinData format: [{ symbols: { in: number[][], out: {symbol:number,count:number,win:number}[] }, win: number }, ...]
  */
 async function applyTumbles(self: Symbols, tumbles: any[], mockData?: Data): Promise<void> {
-  self.scene.gameAPI.incrementCurrentTumbleIndex();
-
   for (const tumble of tumbles) {
     await applySingleTumble(self, tumble);
     if (mockData) {
       synchronizeMockDataSymbols(self, mockData);
     }
-    self.scene.gameAPI.incrementCurrentTumbleIndex();
   }
 
-  self.scene.gameAPI.resetCurrentTumbleIndex();
-  
   // Notify listeners that all tumbles have completed
   try {
     gameEventManager.emit(GameEventType.SYMBOLS_TUMBLES_COMPLETE);
@@ -5059,6 +5080,7 @@ function createMultiplierSymbol(self: Symbols, value: number, x: number, y: numb
   // Multiplier symbols prefer a Spine representation with timeScale = 0 (frozen pose)
   // to keep a rich visual while avoiding continuous animation cost. If the Spine
   // asset or pool is not available, gracefully fall back to a PNG symbol.
+  const adjustedIndex = value - 1;
 
   // Use the pooled multiplier frame Spine (defined in AssetConfig / symbol assets)
   const spineKey = 'multiplier_WF';
@@ -5073,13 +5095,13 @@ function createMultiplierSymbol(self: Symbols, value: number, x: number, y: numb
 
   // Fallback: if Spine could not be acquired/created, use the existing PNG path
   if (!spine) {
-    return createPngSymbol(self, value, x, y, alpha);
+    return createPngSymbol(self, adjustedIndex, x, y, alpha);
   }
 
   try {
     // Configure basic transform
-    const origin = self.getSpineSymbolOrigin(10);
-    const scale = self.getSpineSymbolScale(10);
+    const origin = self.getSpineSymbolOrigin(adjustedIndex);
+    const scale = self.getSpineSymbolScale(adjustedIndex);
 
     spine.setOrigin(origin.x, origin.y);
     spine.setScale(scale);
@@ -5092,7 +5114,7 @@ function createMultiplierSymbol(self: Symbols, value: number, x: number, y: numb
     } catch { }
 
     // Tag with symbol value for any downstream logic (tumbles, effects, etc.)
-    try { (spine as any).symbolValue = value; } catch { }
+    try { (spine as any).symbolValue = adjustedIndex; } catch { }
 
     // Ensure the multiplier Spine lives inside the main symbols container
     try {
@@ -5106,7 +5128,7 @@ function createMultiplierSymbol(self: Symbols, value: number, x: number, y: numb
       const state = spine.animationState;
       if (state) {
         // Animation names follow the `symbol{value}_WF` convention used elsewhere
-        const animName = `symbol${value}_WF`;
+        const animName = `symbol${adjustedIndex}_WF`;
         try {
           state.setAnimation(0, animName, true);
         } catch {
@@ -5127,7 +5149,7 @@ function createMultiplierSymbol(self: Symbols, value: number, x: number, y: numb
   } catch (configureError) {
     console.warn('[Symbols] Failed to configure multiplier Spine, falling back to PNG:', configureError);
     try { releaseSpineToPool(self, spine as any); } catch { }
-    return createPngSymbol(self, value, x, y, alpha);
+    return createPngSymbol(self, adjustedIndex, x, y, alpha);
   }
 }
 

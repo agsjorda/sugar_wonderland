@@ -37,7 +37,7 @@ export class BonusHeader {
 		}
 
 		console.log(`[BonusHeader] Bonus mode ${isBonus ? 'started' : 'ended'} - resetting display state`);
-		this.resetBonusDisplayState();
+		this.resetBonusDisplayState(isBonus);
 	};
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
@@ -56,6 +56,7 @@ export class BonusHeader {
 		
 		// Create main container for all bonus header elements
 		this.bonusHeaderContainer = scene.add.container(0, 0);
+		this.currentWinnings = this.getCachedPreBonusWins();
 		
 		const screenConfig = this.screenModeManager.getScreenConfig();
 		const assetScale = this.networkManager.getAssetScale();
@@ -350,6 +351,12 @@ export class BonusHeader {
 		return formatted;
 	}
 
+	private getCachedPreBonusWins(): number {
+		const symbolsComponent = (this.bonusHeaderContainer?.scene as any)?.symbols;
+		const cachedValue = symbolsComponent?.cachedPreBonusWins;
+		return typeof cachedValue === 'number' && !Number.isNaN(cachedValue) ? cachedValue : 0;
+	}
+
 	/**
 	 * Get current winnings amount
 	 */
@@ -369,7 +376,7 @@ export class BonusHeader {
 	 */
 	public initializeWinnings(): void {
 		console.log('[BonusHeader] Initializing winnings display - starting hidden');
-		this.currentWinnings = 0;
+		this.currentWinnings = this.getCachedPreBonusWins();
 		this.hideWinningsDisplay();
 	}
 
@@ -427,21 +434,26 @@ export class BonusHeader {
 		gameEventManager.on(GameEventType.REELS_START, () => {
 			console.log('[BonusHeader] REELS_START received');
 
-			if(this.currentWinnings <= 0) {
-                const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
-                const spinData = symbolsComponent?.currentSpinData;
-                if(spinData) {
-                    const freeSpin = spinData.slot?.freeSpin || spinData.slot?.freespin;
-                    // add all tumble item wins
-                    const tumbleItems = spinData.slot.tumbles?.items;
-                    const tumbleWins = tumbleItems !== undefined && tumbleItems.length > 0 ? tumbleItems.reduce((sum, item) => sum + item.win, 0) : 0;
-                    if(freeSpin) {
-                        this.currentWinnings += freeSpin.multiplierValue ?? 0;
-                    }
-                    this.currentWinnings += tumbleWins;
-                    console.log(`[BonusHeader] REELS_START: free spin multiplier: ${freeSpin.multiplierValue}, tumble wins: ${tumbleWins}, total winnings: ${this.currentWinnings}`);
-                }
-            }
+			const cachedPreBonusWins = this.getCachedPreBonusWins();
+			if (this.currentWinnings <= 0 && cachedPreBonusWins > 0) {
+				this.currentWinnings = cachedPreBonusWins;
+			}
+
+			const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
+			const spinData = symbolsComponent?.currentSpinData;
+			if(spinData) {
+				const freeSpin = spinData.slot?.freeSpin || spinData.slot?.freespin;
+				// add all tumble item wins
+				const tumbleItems = spinData.slot.tumbles?.items;
+				const tumbleWins = tumbleItems !== undefined && tumbleItems.length > 0 ? tumbleItems.reduce((sum, item) => sum + item.win, 0) : 0;
+				if(freeSpin && this.currentWinnings <= 0) {
+					this.currentWinnings += freeSpin.multiplierValue ?? 0;
+				}
+				if (tumbleWins > 0) {
+					this.currentWinnings += tumbleWins;
+				}
+				console.log(`[BonusHeader] REELS_START: free spin multiplier: ${freeSpin?.multiplierValue}, tumble wins: ${tumbleWins}, total winnings: ${this.currentWinnings}`);
+			}
 
 			// On reels start, if baseWinnings != 0, add baseWinnings * multiplier to currentWinnings
 			if (this.currentBaseWinnings !== 0) {
@@ -496,7 +508,7 @@ export class BonusHeader {
 			const freespinItem = spinData?.slot?.freespin?.items?.[fsIndex];
 
 			// Base winnings for the CURRENT tumble (before multiplier is applied)
-			const baseWinnings = freespinItem?.tumble?.items[this.scene.gameAPI.getCurrentTumbleIndex() - 1].win ?? 0;
+			const baseWinnings = freespinItem?.tumble?.items[this.scene.gameAPI.getCurrentTumbleIndex()].win ?? 0;
 
 			// On win start, track just the current tumble's base winnings
 			this.currentBaseWinnings += baseWinnings;
@@ -577,8 +589,8 @@ export class BonusHeader {
 		}
 	}
 
-	private resetBonusDisplayState(): void {
-		this.currentWinnings = 0;
+	private resetBonusDisplayState(isBonus: boolean = false): void {
+		this.currentWinnings = isBonus ? this.getCachedPreBonusWins() : 0;
 		this.currentBaseWinnings = 0;
 		this.currentMultiplier = 0;
 		this.hideWinningsDisplay();

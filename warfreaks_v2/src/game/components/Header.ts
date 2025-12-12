@@ -258,9 +258,9 @@ export class Header {
 			const symbolsComponent = (this.headerContainer.scene as any).symbols;
 			if(symbolsComponent && symbolsComponent.currentSpinData) {
 				const spinData = symbolsComponent.currentSpinData;
-				const winnings = spinData?.slot?.tumbles?.items[this.scene.gameAPI.getCurrentTumbleIndex() - 1]?.win || 0;
+				const winnings = spinData?.slot?.tumbles?.items[this.scene.gameAPI.getCurrentTumbleIndex()]?.win || 0;
 
-				console.log(`[Header] Current winnings: ${winnings} ${this.scene.gameAPI.getCurrentTumbleIndex() - 1}`);
+				console.log(`[Header] Current winnings: ${winnings} ${this.scene.gameAPI.getCurrentTumbleIndex()}`);
 				
 				const updateDelay = 700 * (gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1);
 				this.scene.time.delayedCall(updateDelay, () => {

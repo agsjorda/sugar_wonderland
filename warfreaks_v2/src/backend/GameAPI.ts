@@ -740,6 +740,7 @@ export class GameAPI {
      */
     public incrementCurrentTumbleIndex(): void {
         this.currentTumbleIndex++;
+        console.log('[GameAPI] currentTumbleIndex Debugging: Incrementing tumble index to', this.currentTumbleIndex);
     }
 
     /**
@@ -747,6 +748,7 @@ export class GameAPI {
      * This method should be called when tumbles are finished to reset the index
      */
     public resetCurrentTumbleIndex(): void {
+        console.log('[GameAPI] currentTumbleIndex Debugging: Resetting tumble index to 0');
         this.currentTumbleIndex = 0;
     }
 

@@ -42,6 +42,9 @@ export class SlotController {
 	// Store pending balance updates until reels stop spinning
 	private pendingBalanceUpdate: { balance: number; bet: number; winnings?: number } | null = null;
 
+	// Turbo state that should be applied on the next spin boundary
+	private desiredTurboState: boolean | null = null;
+
 	// Spine animation for spin button
 	private spinButtonAnimation: any = null;
 
@@ -2147,6 +2150,10 @@ export class SlotController {
 
 		gameEventManager.on(GameEventType.REELS_STOP, () => {
 			console.log('[SlotController] Reels stopped event received - updating spin button state');
+
+			// Apply any queued turbo toggle now that the spin has completed
+			this.applyPendingTurboState('reels-stop');
+
 			// Reset decrement guard for next spin
 			this.hasDecrementedAutoplayForCurrentSpin = false;
 
@@ -2513,45 +2520,67 @@ export class SlotController {
 	 * Handle turbo button click - toggle between on and off states
 	 */
 	private handleTurboButtonClick(): void {
-		// Check GameData state to determine current turbo status
 		const gameData = this.getGameData();
 		if (!gameData) {
 			console.error('[SlotController] GameData not available for turbo button click');
 			return;
 		}
 
-		if (gameData.isTurbo) {
-			// Turbo is active, turn it off
-			console.log('[SlotController] Turning turbo OFF via button click');
-			gameData.isTurbo = false;
-			this.setTurboButtonState(false);
-		} else {
-			// Turbo is not active, turn it on
-			console.log('[SlotController] Turning turbo ON via button click');
-			gameData.isTurbo = true;
-			this.setTurboButtonState(true);
+		// Toggle desired state (use pending desired if one exists to keep UX consistent)
+		const currentVisualState = this.desiredTurboState !== null ? this.desiredTurboState : gameData.isTurbo;
+		const nextDesiredState = !currentVisualState;
+		this.desiredTurboState = nextDesiredState;
+
+		// Update the button visuals immediately to reflect the requested state
+		this.setTurboButtonState(nextDesiredState);
+
+		const hasActiveSpin = gameStateManager.isReelSpinning || gameStateManager.isProcessingSpin;
+		console.log(`[SlotController] Turbo toggle scheduled -> ${nextDesiredState ? 'ON' : 'OFF'} (current applied: ${gameData.isTurbo}, activeSpin: ${hasActiveSpin})`);
+
+		// If no spin is currently active, apply immediately so the upcoming spin uses it.
+		if (!hasActiveSpin) {
+			this.applyPendingTurboState('idle-toggle');
+		}
+	}
+
+	/**
+	 * Apply any pending turbo state change at a safe boundary (reels stop or spin start)
+	 */
+	private applyPendingTurboState(reason: string = 'unspecified'): void {
+		const gameData = this.getGameData();
+		if (!gameData) {
+			console.warn('[SlotController] GameData not available to apply pending turbo state');
+			return;
 		}
 
-		// Apply turbo speed modifications
+		if (this.desiredTurboState === null) {
+			return;
+		}
+
+		if (gameData.isTurbo === this.desiredTurboState) {
+			console.log(`[SlotController] Pending turbo state matches current (${gameData.isTurbo}) - clearing (reason: ${reason})`);
+			this.desiredTurboState = null;
+			return;
+		}
+
+		// Apply pending state to game data and global state manager
+		gameData.isTurbo = this.desiredTurboState;
+		gameStateManager.isTurbo = this.desiredTurboState;
+		this.setTurboButtonState(this.desiredTurboState);
+
+		// Apply turbo-related speed modifications and propagate to other components
 		this.applyTurboSpeedModifications();
-
-		// Force apply turbo to scene GameData (used by Symbols component)
 		this.forceApplyTurboToSceneGameData();
-
-		// Apply turbo to winline animations via Symbols component
 		this.applyTurboToWinlineAnimations();
 
-		// Emit turbo event for other components to handle
+		// Emit events so other systems stay in sync
 		EventBus.emit('turbo', gameData.isTurbo);
+		gameEventManager.emit(gameData.isTurbo ? GameEventType.TURBO_ON : GameEventType.TURBO_OFF);
 
-		// Send turbo state to backend for speed modifications
-		if (gameData.isTurbo) {
-			gameEventManager.emit(GameEventType.TURBO_ON);
-		} else {
-			gameEventManager.emit(GameEventType.TURBO_OFF);
-		}
+		console.log(`[SlotController] Applied pending turbo state: ${gameData.isTurbo} (reason: ${reason})`);
 
-		console.log(`[SlotController] Turbo state changed to: ${gameData.isTurbo} and sent to backend`);
+		// Clear pending flag
+		this.desiredTurboState = null;
 	}
 
 	/**
@@ -3627,6 +3656,9 @@ export class SlotController {
 		// Ensure processing flag is set when any spin path begins (covers autoplay and other callers)
 		gameStateManager.isProcessingSpin = true;
 
+		// Apply any pending turbo toggle so it takes effect for this spin
+		this.applyPendingTurboState('spin-start');
+
 		if (!this.gameAPI) {
 			console.warn('[SlotController] GameAPI not available, falling back to EventBus');
 			// No backend call is made in this fallback path, consider spin processing done
@@ -3662,16 +3694,20 @@ export class SlotController {
 		// text back to the base bet while amplify is still logically ON.
 		this.syncDisplayedBetWithAmplifyStateFromBase();
 
-		// Start clearing/dropping existing symbols immediately at spin start
-		try {
-			const gameScene: any = this.scene as any;
-			const symbolsComponent = gameScene?.symbols;
-			if (symbolsComponent && typeof symbolsComponent.startPreSpinDrop === 'function') {
-				console.log('[SlotController] Triggering pre-spin symbol drop');
-				symbolsComponent.startPreSpinDrop();
+		// Start clearing/dropping existing symbols immediately at spin start (non-turbo only)
+		if (!gameStateManager.isTurbo) {
+			try {
+				const gameScene: any = this.scene as any;
+				const symbolsComponent = gameScene?.symbols;
+				if (symbolsComponent && typeof symbolsComponent.startPreSpinDrop === 'function') {
+					console.log('[SlotController] Triggering pre-spin symbol drop');
+					symbolsComponent.startPreSpinDrop();
+				}
+			} catch (e) {
+				console.warn('[SlotController] Failed to start pre-spin symbol drop:', e);
 			}
-		} catch (e) {
-			console.warn('[SlotController] Failed to start pre-spin symbol drop:', e);
+		} else {
+			console.log('[SlotController] Skipping pre-spin symbol drop in turbo mode');
 		}
 
 		// Play spin sound effect
