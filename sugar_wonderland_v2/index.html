@@ -4,6 +4,16 @@
 	<meta charset="UTF-8" />
 	<link rel="icon" type="image/png" href="/favicon.png" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	
+	<!-- Resource hints for faster loading -->
+	<!-- Preload critical background image -->
+	<link rel="preload" as="image" href="/fullscreen_bg.webp" type="image/webp" />
+	<!-- Preload critical fonts -->
+	<link rel="preload" as="font" href="/assets/fonts/poppins/Poppins-Regular.ttf" type="font/ttf" crossorigin="anonymous" />
+	<link rel="preload" as="font" href="/assets/fonts/poppins/Poppins-Bold.ttf" type="font/ttf" crossorigin="anonymous" />
+	<!-- Prefetch DNS for external resources (if any) -->
+	<!-- <link rel="dns-prefetch" href="https://api.example.com" /> -->
+	
 	<link rel="stylesheet" href="/style.css">
 	<title>Sugar Wonderland</title>
 	<link rel="stylesheet" href="/main.scss">

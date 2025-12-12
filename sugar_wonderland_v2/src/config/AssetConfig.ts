@@ -38,16 +38,7 @@ export class AssetConfig {
 				'cloud-upper': `assets/portrait/high/background/cloud_upper.png`,
 				'cloud-middle': `assets/portrait/high/background/cloud_middle.png`,
 				'cloud-lower': `assets/portrait/high/background/cloud_lower.png`,
-				'shine': `assets/portrait/high/background/shine.png`,
-				// Mostly for landscape bg
-				// 'balloon-01': `${prefix}/background/balloon-01.png`,
-				// 'balloon-02': `${prefix}/background/balloon-02.png`,
-				// 'balloon-03': `${prefix}/background/balloon-03.png`,
-				// 'balloon-04': `${prefix}/background/balloon-04.png`,
-				// 'reel-xmaslight-default': `${prefix}/background/reel-xmaslight-default.png`,
-				// 'bulb-01': `${prefix}/background/bulb-01.png`,
-				// 'bulb-02': `${prefix}/background/bulb-02.png`,
-				// 'bulb-03': `${prefix}/background/bulb-03.png`,
+				'shine': `assets/portrait/high/background/shine.png`
 			}
 		};
 	}
@@ -89,21 +80,6 @@ export class AssetConfig {
 		};
 	}
 
-	/**
-	 * Candy transition assets – currently only available in portrait/high.
-	 * We intentionally avoid getAssetPrefix() to ensure correct pathing.
-	 */
-	getCandyTransitionAssets(): AssetGroup {
-		console.log('[AssetConfig] Loading Candy Transition assets');
-		return {
-			spine: {
-				'transition_SW': {
-					atlas: `assets/portrait/high/candy_transition/transition_SW.atlas`,
-					json: `assets/portrait/high/candy_transition/transition_SW.json`
-				}
-			}
-		};
-	}
 
 	getLoadingAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix();
@@ -131,51 +107,12 @@ export class AssetConfig {
 	// Add more asset groups as needed
 	getSymbolAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix(); // This gives us assets/{orientation}/{quality}
-		console.log(`[AssetConfig] Loading symbol assets from: ${prefix}/symbols/ and ${prefix}/Symbols_KA/`);
+		console.log(`[AssetConfig] Loading symbol assets from: ${prefix}/symbols/`);
 		
 		// Generate symbol assets for all symbols (0-21)
 		const symbolImages: { [key: string]: string } = {};
 		const symbolSpine: { [key: string]: { atlas: string; json: string } } = {};
 		
-		for (let i = 0; i <= 22; i++) {
-			// PNG sprites for normal display
-			const spriteKey = `symbol_${i}`;
-			let spritePath: string;
-			// Special PNG overrides
-			if (i === 0) {
-				spritePath = `assets/symbols/high/sugar_symbols/Symbol0.png`;
-			} else if (i >= 10 && i <= 16) {
-				// 10–16 map to Symbols11 visual
-				spritePath = `assets/symbols/high/sugar_symbols/Symbol11.png`;
-			} else if (i >= 17 && i <= 20) {
-				// 17–20 map to Symbols10 visual
-				spritePath = `assets/symbols/high/sugar_symbols/Symbol10.png`;
-			} else if (i >= 21 && i <= 22) {
-				// 21–22 map to Symbols12 visual
-				spritePath = `assets/symbols/high/sugar_symbols/Symbol12.png`;
-			} else {
-				spritePath = `assets/symbols/${this.networkManager.getNetworkSpeed() ? 'high' : 'low'}/Symbol${i}_KA.png`;
-			}
-			symbolImages[spriteKey] = spritePath;
-			
-			// Spine animations for hit effects only for 1-14 (others intentionally PNG-only)
-			if (i >= 1 && i <= 14) {
-				const spineKey = `symbol_${i}_spine`;
-				const symbolName = `Symbol${i}_KA`;
-				const atlasPath = `${prefix}/Symbols_KA/${symbolName}.atlas`;
-				const jsonPath = `${prefix}/Symbols_KA/${symbolName}.json`;
-				
-				symbolSpine[spineKey] = {
-					atlas: atlasPath,
-					json: jsonPath
-				};
-				
-				console.log(`[AssetConfig] Symbol ${i}: sprite=${spritePath}, spine=${atlasPath}`);
-			} else {
-				console.log(`[AssetConfig] Symbol ${i}: sprite=${spritePath} (PNG-only)`);
-			}
-		}
-
 		// Sugar symbol Spine animations (idle) for Symbol0–Symbol9
 		// These are provided in a fixed path under assets/symbols/high/sugar_symbols
 		for (let i = 0; i <= 9; i++) {
@@ -338,52 +275,43 @@ export class AssetConfig {
 				'helpscreen_2': `${prefix}/help_screen/helpscreen_2.webp`,
 				'helpscreen_3': `${prefix}/help_screen/helpscreen_3.webp`,
 
-				// HowToPlay images
-				'howToPlay1': `${prefix}/help_screen/HowToPlay1.png`,
-				'howToPlay1Mobile': `${prefix}/help_screen/HowToPlay1Mobile.png`,
-				'howToPlay2': `${prefix}/help_screen/HowToPlay2.png`,
-				'howToPlay2Mobile': `${prefix}/help_screen/HowToPlay2Mobile.png`,
-				'howToPlay3': `${prefix}/help_screen/HowToPlay3.png`,
-				'howToPlay3Mobile': `${prefix}/help_screen/HowToPlay3Mobile.png`,
-				'howToPlay4': `${prefix}/help_screen/HowToPlay4.png`,
-				'howToPlay4Mobile': `${prefix}/help_screen/HowToPlay4Mobile.png`,
-				'howToPlay5': `${prefix}/help_screen/HowToPlay5.png`,
-				'howToPlay6': `${prefix}/help_screen/HowToPlay6.png`,
-				'howToPlay7': `${prefix}/help_screen/HowToPlay7.png`,
-				'howToPlay8': `${prefix}/help_screen/HowToPlay8.png`,
-				'howToPlay8Mobile': `${prefix}/help_screen/HowToPlay8Mobile.png`,
-				'howToPlay9': `${prefix}/help_screen/HowToPlay9.png`,
-				'howToPlay9Mobile': `${prefix}/help_screen/HowToPlay9Mobile.png`,
-				'howToPlay10': `${prefix}/help_screen/HowToPlay10.png`,
-				'howToPlay10Mobile': `${prefix}/help_screen/HowToPlay10Mobile.png`,
-				// Feature help
-				'BuyFeatHelp': `${prefix}/help_screen/BuyFeatHelp.png`,
-				'BuyFeatMobile': `${prefix}/help_screen/BuyFeatMobile.png`,
-				'DoubleHelp': `${prefix}/help_screen/DoubleHelp.png`,
-				'DoubleHelpMobile': `${prefix}/help_screen/DoubleHelpMobile.png`,
-				// Payline visuals
-				'paylineMobileWin': `${prefix}/help_screen/paylineMobileWin.png`,
-				'paylineMobileNoWin': `${prefix}/help_screen/paylineMobileNoWin.png`,
-				// Scatter / Tumble / Multiplier visuals
-				'scatterGame': `${prefix}/help_screen/scatterGame.png`,
-				'scatterIcon': `${prefix}/help_screen/scatterIcon.png`,
-				'scatterWin': `${prefix}/help_screen/scatterWin.png`,
-				'ScatterLabel': `${prefix}/help_screen/ScatterSymbol.png`,
-				'wheelSpin_helper': `assets/portrait/high/help_screen/wheelSpin_helper.png`,
-				'freeSpin_round': `assets/portrait/high/help_screen/freeSpin_round.png`,
-				'tumbleIcon': `${prefix}/help_screen/tumbleIcon.png`,
-				'tumbleWin': `${prefix}/help_screen/tumbleWin.png`,
-				'multiplierGame': `${prefix}/help_screen/multiplierGame.png`,
-				'multiplierIcon': `${prefix}/help_screen/multiplierIcon.png`,
-				// Winlines thumbnails (static, not dependent on screen prefix)
-				// Keys: winlines1 .. winlines20
-				...(() => {
-					const map: { [key: string]: string } = {};
-					for (let i = 1; i <= 20; i++) {
-						map[`winlines${i}`] = `assets/winlines/winline${i}.png`;
-					}
-					return map;
-				})()
+				// // HowToPlay images
+				// 'howToPlay1': `${prefix}/help_screen/HowToPlay1.png`,
+				// 'howToPlay1Mobile': `${prefix}/help_screen/HowToPlay1Mobile.png`,
+				// 'howToPlay2': `${prefix}/help_screen/HowToPlay2.png`,
+				// 'howToPlay2Mobile': `${prefix}/help_screen/HowToPlay2Mobile.png`,
+				// 'howToPlay3': `${prefix}/help_screen/HowToPlay3.png`,
+				// 'howToPlay3Mobile': `${prefix}/help_screen/HowToPlay3Mobile.png`,
+				// 'howToPlay4': `${prefix}/help_screen/HowToPlay4.png`,
+				// 'howToPlay4Mobile': `${prefix}/help_screen/HowToPlay4Mobile.png`,
+				// 'howToPlay5': `${prefix}/help_screen/HowToPlay5.png`,
+				// 'howToPlay6': `${prefix}/help_screen/HowToPlay6.png`,
+				// 'howToPlay7': `${prefix}/help_screen/HowToPlay7.png`,
+				// 'howToPlay8': `${prefix}/help_screen/HowToPlay8.png`,
+				// 'howToPlay8Mobile': `${prefix}/help_screen/HowToPlay8Mobile.png`,
+				// 'howToPlay9': `${prefix}/help_screen/HowToPlay9.png`,
+				// 'howToPlay9Mobile': `${prefix}/help_screen/HowToPlay9Mobile.png`,
+				// 'howToPlay10': `${prefix}/help_screen/HowToPlay10.png`,
+				// 'howToPlay10Mobile': `${prefix}/help_screen/HowToPlay10Mobile.png`,
+				// // Feature help
+				// 'BuyFeatHelp': `${prefix}/help_screen/BuyFeatHelp.png`,
+				// 'BuyFeatMobile': `${prefix}/help_screen/BuyFeatMobile.png`,
+				// 'DoubleHelp': `${prefix}/help_screen/DoubleHelp.png`,
+				// 'DoubleHelpMobile': `${prefix}/help_screen/DoubleHelpMobile.png`,
+				// // Payline visuals
+				// 'paylineMobileWin': `${prefix}/help_screen/paylineMobileWin.png`,
+				// 'paylineMobileNoWin': `${prefix}/help_screen/paylineMobileNoWin.png`,
+				// // Scatter / Tumble / Multiplier visuals
+				// 'scatterGame': `${prefix}/help_screen/scatterGame.png`,
+				// 'scatterIcon': `${prefix}/help_screen/scatterIcon.png`,
+				// 'scatterWin': `${prefix}/help_screen/scatterWin.png`,
+				// 'ScatterLabel': `${prefix}/help_screen/ScatterSymbol.png`,
+				// 'wheelSpin_helper': `assets/portrait/high/help_screen/wheelSpin_helper.png`,
+				// 'freeSpin_round': `assets/portrait/high/help_screen/freeSpin_round.png`,
+				// 'tumbleIcon': `${prefix}/help_screen/tumbleIcon.png`,
+				// 'tumbleWin': `${prefix}/help_screen/tumbleWin.png`,
+				// 'multiplierGame': `${prefix}/help_screen/multiplierGame.png`,
+				// 'multiplierIcon': `${prefix}/help_screen/multiplierIcon.png`
 			}
 		};
 	}
@@ -395,30 +323,30 @@ export class AssetConfig {
 		
 		return {
 			spine: {
-				'Congrats_KA': {
-					atlas: `${prefix}/dialogs/Congrats_KA.atlas`,
-					json: `${prefix}/dialogs/Congrats_KA.json`
-				},
-				'SmallW_KA': {
-					atlas: `${prefix}/dialogs/SmallW_KA.atlas`,
-					json: `${prefix}/dialogs/SmallW_KA.json`
-				},
-				'MediumW_KA': {
-					atlas: `${prefix}/dialogs/MediumW_KA.atlas`,
-					json: `${prefix}/dialogs/MediumW_KA.json`
-				},
-				'LargeW_KA': {
-					atlas: `${prefix}/dialogs/largeW_KA.atlas`,
-					json: `${prefix}/dialogs/largeW_KA.json`
-				},
-				'SuperW_KA': {
-					atlas: `${prefix}/dialogs/SuperW_KA.atlas`,
-					json: `${prefix}/dialogs/SuperW_KA.json`
-				},
-				'FreeSpinDialog_KA': {
-					atlas: `${prefix}/dialogs/FreeSpinDialog_KA.atlas`,
-					json: `${prefix}/dialogs/FreeSpinDialog_KA.json`
-				},
+				// 'Congrats_KA': {
+				// 	atlas: `${prefix}/dialogs/Congrats_KA.atlas`,
+				// 	json: `${prefix}/dialogs/Congrats_KA.json`
+				// },
+				// 'SmallW_KA': {
+				// 	atlas: `${prefix}/dialogs/SmallW_KA.atlas`,
+				// 	json: `${prefix}/dialogs/SmallW_KA.json`
+				// },
+				// 'MediumW_KA': {
+				// 	atlas: `${prefix}/dialogs/MediumW_KA.atlas`,
+				// 	json: `${prefix}/dialogs/MediumW_KA.json`
+				// },
+				// 'LargeW_KA': {
+				// 	atlas: `${prefix}/dialogs/largeW_KA.atlas`,
+				// 	json: `${prefix}/dialogs/largeW_KA.json`
+				// },
+				// 'SuperW_KA': {
+				// 	atlas: `${prefix}/dialogs/SuperW_KA.atlas`,
+				// 	json: `${prefix}/dialogs/SuperW_KA.json`
+				// },
+				// 'FreeSpinDialog_KA': {
+				// 	atlas: `${prefix}/dialogs/FreeSpinDialog_KA.atlas`,
+				// 	json: `${prefix}/dialogs/FreeSpinDialog_KA.json`
+				// },
 				'Win': {
 					atlas: `${prefix}/win_dialog/Win.atlas`,
 					json: `${prefix}/win_dialog/Win.json`
@@ -434,12 +362,7 @@ export class AssetConfig {
 	getScatterAnticipationAssets(): AssetGroup {
 		console.log('[AssetConfig] Loading Scatter Anticipation assets');
 		return {
-			spine: {
-				'reelanim_KA': {
-					atlas: `assets/portrait/high/scatterAnticipation/reelanim_KA.atlas`,
-					json: `assets/portrait/high/scatterAnticipation/reelanim_KA.json`
-				}
-			}
+			spine: {}
 		};
 	}
 
@@ -506,7 +429,6 @@ export class AssetConfig {
 				'mainbg_ka': 'assets/sounds/BG/mainbg_sw.ogg',
 				'bonusbg_ka': 'assets/sounds/BG/bonusbg_sw.ogg',
 				'freespinbg_ka': 'assets/sounds/BG/freespinbg_sw.ogg',
-				'ambience_ka': 'assets/sounds/SFX/ambience_ka.ogg',
 				'spinb_ka': 'assets/sounds/SFX/spin_sw.ogg',
 				'reeldrop_ka': 'assets/sounds/SFX/reeldrop_sw.ogg',
 				'turbodrop_ka': 'assets/sounds/SFX/turbodrop_sw.ogg',
@@ -514,20 +436,11 @@ export class AssetConfig {
 				'candy_transition_sw': 'assets/sounds/SFX/candy_transition.ogg',
 				// Scatter win "nom nom" SFX – played when scatter win animation runs
 				'nomnom_sw': 'assets/sounds/SFX/nomnom_sw.ogg',
-				'wheelspin_ka': 'assets/sounds/SFX/wheelspin_ka.ogg',
 				'coin_throw_ka': 'assets/sounds/SFX/coin_throw_ka.ogg',
 				'coin_drop_ka': 'assets/sounds/SFX/coin_drop_ka.ogg',
-				// Hit win SFX
-				'hitwin_ka': 'assets/sounds/SFX/hitwin_ka.ogg',
-				// Wild multi SFX
-				'wildmulti_ka': 'assets/sounds/SFX/wildmulti_ka.ogg',
 				// Multiplier trigger / bomb SFX (bonus-mode multipliers)
 				'bomb_sw': 'assets/sounds/SFX/bomb_sw.ogg',
 				'scatter_sw': 'assets/sounds/SFX/scatter_sw.ogg',
-				'anticipation_ka': 'assets/sounds/SFX/anticipation_ka.ogg',
-				// Winline SFX
-				'winline_1_ka': 'assets/sounds/SFX/winline_1_ka.ogg',
-				'winline_2_ka': 'assets/sounds/SFX/winline_2_ka.ogg',
 				// Tumble symbol-win SFX (play per tumble index)
 				'twin1_sw': 'assets/sounds/SFX/symbol_win/twin1_sw.ogg',
 				'twin2_sw': 'assets/sounds/SFX/symbol_win/twin2_sw.ogg',
@@ -538,25 +451,17 @@ export class AssetConfig {
 				'megaw_ka': 'assets/sounds/Wins/megaw_sw.ogg',
 				'superw_ka': 'assets/sounds/Wins/superw_sw.ogg',
 				'epicw_ka': 'assets/sounds/Wins/epicw_sw.ogg',
-				'freespin_ka': 'assets/sounds/Wins/freespin_ka.ogg',
-				'congrats_ka': 'assets/sounds/Wins/congrats_sw.ogg',
-
-				// Win dialog SFX
-				'bigwskip_ka': 'assets/sounds/Wins/bigwskip_ka.ogg',
-				'megawskip_ka': 'assets/sounds/Wins/megawskip_ka.ogg',
-				'superwskip_ka': 'assets/sounds/Wins/superwskip_ka.ogg',
-				'epicwskip_ka': 'assets/sounds/Wins/epicwskip_ka.ogg'
+				'congrats_ka': 'assets/sounds/Wins/congrats_sw.ogg'
 			}
 		};
 	}
 
 	// Helper method to get all assets for a scene
-	getAllAssets(): { [key: string]: AssetGroup } {
+		getAllAssets(): { [key: string]: AssetGroup } {
 		return {
 			background: this.getBackgroundAssets(),
 			header: this.getHeaderAssets(),
 			bonusHeader: this.getBonusHeaderAssets(),
-			candyTransition: this.getCandyTransitionAssets(),
 			loading: this.getLoadingAssets(),
 			symbols: this.getSymbolAssets(),
 			buttons: this.getButtonAssets(),

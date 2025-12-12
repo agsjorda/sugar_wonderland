@@ -318,7 +318,6 @@ export class Preloader extends Scene
 		this.assetLoader.loadDialogAssets(this);
 		// Load Scatter Anticipation spine (portrait/high only asset paths)
 		this.assetLoader.loadScatterAnticipationAssets(this);
-		this.assetLoader.loadCandyTransitionAssets(this);
 		this.assetLoader.loadBonusBackgroundAssets(this);
 		this.assetLoader.loadNumberAssets(this);
 		this.assetLoader.loadCoinAssets(this);

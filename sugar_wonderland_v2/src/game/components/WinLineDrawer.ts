@@ -487,15 +487,6 @@ export class WinLineDrawer {
     this.lines.push(graphics);
 
     // Play winline SFX when starting to draw the line
-    try {
-      const sceneAny: any = this.scene as any;
-      const audio = sceneAny?.audioManager || (window as any)?.audioManager;
-      const shouldPlay = (!this.isLooping) || (this.isLooping && !this.hasEmittedFirstLoopWinStop);
-      if (shouldPlay && audio && typeof audio.playRandomWinlineSfx === 'function') {
-        audio.playRandomWinlineSfx();
-      }
-    } catch {}
-
     // Start the animated drawing with brightness variation
     this.animateLineDrawWithBrightness(graphics, pathPoints, lineColor, winlineIndex, onComplete);
   }

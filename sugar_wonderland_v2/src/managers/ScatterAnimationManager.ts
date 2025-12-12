@@ -88,14 +88,19 @@ export class ScatterAnimationManager {
     }
 
     // Switch BG music to Free Spin track when scatter animation starts
-    try {
-      const audioMgr = (window as any).audioManager;
-      if (audioMgr && typeof audioMgr.switchToFreeSpinMusic === 'function') {
-        audioMgr.switchToFreeSpinMusic();
-        console.log('[ScatterAnimationManager] Requested switch to free spin background music');
+    // Only switch music for initial scatter triggers, not retriggers (when already in bonus mode)
+    if (!gameStateManager.isBonus) {
+      try {
+        const audioMgr = (window as any).audioManager;
+        if (audioMgr && typeof audioMgr.switchToFreeSpinMusic === 'function') {
+          audioMgr.switchToFreeSpinMusic();
+          console.log('[ScatterAnimationManager] Requested switch to free spin background music');
+        }
+      } catch (e) {
+        console.warn('[ScatterAnimationManager] Failed to switch to free spin music', e);
       }
-    } catch (e) {
-      console.warn('[ScatterAnimationManager] Failed to switch to free spin music', e);
+    } else {
+      console.log('[ScatterAnimationManager] Skipping free spin music switch - already in bonus mode (retrigger)');
     }
 
     try {
@@ -480,28 +485,10 @@ export class ScatterAnimationManager {
   private async resetAllSymbolsAndAnimations(): Promise<void> {
     console.log('[ScatterAnimationManager] Resetting all symbols and animations...');
     
-    try {
-      // If free spin music is playing, stop it and switch to bonus music when entering bonus mode
-      try {
-        const audioMgr = (window as any).audioManager;
-        const currentType = audioMgr && typeof audioMgr.getCurrentMusicType === 'function' ? audioMgr.getCurrentMusicType() : null;
-        if (currentType === 'freespin') {
-          if (typeof audioMgr.stopCurrentMusic === 'function') {
-            audioMgr.stopCurrentMusic();
-            console.log('[ScatterAnimationManager] Stopped free spin music after scatter animation finishes');
-          }
-          if (gameStateManager.isBonus) {
-            if (typeof audioMgr.crossfadeTo === 'function') {
-              audioMgr.crossfadeTo('bonus', 600);
-              console.log('[ScatterAnimationManager] Crossfading to bonus background music after scatter animation');
-            } else if (typeof audioMgr.playBackgroundMusic === 'function') {
-              audioMgr.playBackgroundMusic('bonus');
-              console.log('[ScatterAnimationManager] Started bonus background music after scatter animation');
-            }
-          }
-        }
-      } catch {}
+    // Free spin music will be stopped when the dialog closes
+    // Bonus music will be triggered when showBonusBackground event is emitted
 
+    try {
       // Reset game state - but don't reset isBonus if we're in an active bonus mode
       gameStateManager.isScatter = false;
       

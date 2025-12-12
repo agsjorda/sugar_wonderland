@@ -30,7 +30,6 @@ import { AutoplayOptions } from '../components/AutoplayOptions';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { SymbolExplosionTransition } from '../components/SymbolExplosionTransition';
-import { CoinAnimation } from '../components/CoinAnimation';
 import { GameAPI } from '../../backend/GameAPI';
 import { SpinData } from '../../backend/SpinData';
 import { AudioManager, MusicType, SoundEffectType } from '../../managers/AudioManager';
@@ -58,7 +57,6 @@ export class Game extends Scene
 	private betOptions: BetOptions;
 	private autoplayOptions: AutoplayOptions;
 	private candyTransition: SymbolExplosionTransition;
-	private coinAnimation: CoinAnimation;
 	public gameAPI: GameAPI;
 	public audioManager: AudioManager;
 	private menu: Menu;
@@ -332,10 +330,6 @@ export class Game extends Scene
 		}
 
 		this.candyTransition.play(undefined, { allowedSymbols });
-		
-		// Create coin animation component
-		this.coinAnimation = new CoinAnimation(this.networkManager, this.screenModeManager);
-		this.coinAnimation.create(this);
 
 		// Create scatter anticipation component inside background container to avoid symbol mask and stay behind symbols
 		this.scatterAnticipation.create(this, this.background.getContainer());
@@ -344,12 +338,6 @@ export class Game extends Scene
 		
 		// Initialize balance on game start
 		this.initializeGameBalance();
-		
-		// Add spacebar key listener for coin spawning
-		this.input.keyboard?.on('keydown-SPACE', () => {
-			console.log('[Game] Spacebar pressed - spawning coins');
-			this.spawnCoins(3); // Spawn 3 coins when spacebar is pressed
-		});
 		
 		// Emit START event AFTER SlotController is created
 		console.log(`[Game] Emitting START event to initialize game...`);
@@ -483,8 +471,6 @@ export class Game extends Scene
 		});
 
 		// Note: SPIN_RESPONSE event listeners removed - now using SPIN_DATA_RESPONSE
-
-		// Coins are no longer spawned on wins; WIN_START remains for other systems
 
 		// Listen for animations completion to show win dialogs (tumble-based)
 		gameEventManager.on(GameEventType.WIN_STOP, (data: any) => {
@@ -778,6 +764,50 @@ export class Game extends Scene
 			return;
 		}
 
+		// If multiplier animations are in progress, defer win dialog until animations complete
+		try {
+			const symbolsAny: any = this.symbols as any;
+			const isMultiplierAnimationsInProgress =
+				symbolsAny && typeof symbolsAny.isMultiplierAnimationsInProgress === 'function'
+					? !!symbolsAny.isMultiplierAnimationsInProgress()
+					: false;
+			
+			if (isMultiplierAnimationsInProgress) {
+				console.log('[Game] Multiplier animations in progress - deferring win dialog until MULTIPLIER_ANIMATIONS_COMPLETE');
+				this.winQueue.push({ payout, bet });
+				console.log(`[Game] Added to win queue due to multiplier animations. Queue length: ${this.winQueue.length}`);
+				// Wait for multiplier animations to complete, then process the win queue
+				gameEventManager.once(GameEventType.MULTIPLIER_ANIMATIONS_COMPLETE, () => {
+					console.log('[Game] MULTIPLIER_ANIMATIONS_COMPLETE received - processing win queue');
+					this.processWinQueue();
+				});
+				return;
+			}
+		} catch (e) {
+			console.warn('[Game] Failed to check multiplier animation status:', e);
+		}
+
+		// If scatter retrigger animation is in progress, defer win dialog until animation and dialog complete
+		try {
+			const symbolsAny: any = this.symbols as any;
+			const isRetriggerAnimationInProgress =
+				symbolsAny && typeof symbolsAny.isScatterRetriggerAnimationInProgress === 'function'
+					? !!symbolsAny.isScatterRetriggerAnimationInProgress()
+					: false;
+			
+			if (isRetriggerAnimationInProgress) {
+				console.log('[Game] Scatter retrigger animation in progress - deferring win dialog until retrigger dialog closes');
+				this.winQueue.push({ payout, bet });
+				console.log(`[Game] Added to win queue due to retrigger animation. Queue length: ${this.winQueue.length}`);
+				// Wait for retrigger animation to complete, then the retrigger dialog will show
+				// After the retrigger dialog closes (dialogAnimationsComplete), we'll process the win queue
+				// This is handled by the existing dialogAnimationsComplete listener which calls processWinQueue()
+				return;
+			}
+		} catch (e) {
+			console.warn('[Game] Failed to check retrigger animation status:', e);
+		}
+		
 		// If scatter is active and we're autoplaying (normal or free spin), defer win dialog
 		// until after the free spin dialog finishes (dialogAnimationsComplete).
 		// This ensures the sequence: scatter symbol anims -> free spin dialog -> win dialog.
@@ -904,101 +934,6 @@ export class Game extends Scene
 
 
 	/**
-	 * Spawn coins manually (for testing or special events)
-	 */
-	public spawnCoins(count: number = 3): void {
-		if (this.coinAnimation) {
-			this.coinAnimation.spawnCoins(count);
-			// Play coin throw SFX once when coins spawn
-			try {
-				const audio = (window as any).audioManager as AudioManager | undefined;
-				if (audio && typeof audio.playSoundEffect === 'function') {
-					audio.playSoundEffect(SoundEffectType.COIN_THROW);
-				}
-			} catch {}
-		}
-	}
-
-	/**
-	 * Spawn coins based on win amount and multiplier
-	 */
-	public spawnCoinsForWin(totalWin: number, betAmount: number): void {
-		if (!this.coinAnimation) {
-			console.warn('[Game] Coin animation not available for win');
-			return;
-		}
-
-		const multiplier = totalWin / betAmount;
-		let coinCount = 0;
-
-		// Determine coin count based on win multiplier thresholds
-		if (multiplier >= 60) {
-			// Large win: 30 coins
-			coinCount = 50;
-			console.log(`[Game] Large Win! Spawning ${coinCount} coins for ${multiplier.toFixed(2)}x multiplier`);
-		} else if (multiplier >= 45) {
-			// Super win: 20 coins
-			coinCount = 30;
-			console.log(`[Game] Super Win! Spawning ${coinCount} coins for ${multiplier.toFixed(2)}x multiplier`);
-		} else if (multiplier >= 30) {
-			// Medium win: 15 coins
-			coinCount = 20;
-			console.log(`[Game] Medium Win! Spawning ${coinCount} coins for ${multiplier.toFixed(2)}x multiplier`);
-		} else if (multiplier >= 20) {
-			// Small win: 10 coins
-			coinCount = 10;
-			console.log(`[Game] Small Win! Spawning ${coinCount} coins for ${multiplier.toFixed(2)}x multiplier`);
-		} else {
-			// Below threshold: 5 coins
-			coinCount = 5;
-			console.log(`[Game] Below threshold win! Spawning ${coinCount} coins for ${multiplier.toFixed(2)}x multiplier`);
-		}
-		// Delay 1 second before spawning coins and playing SFX
-		this.time.delayedCall(500, () => {
-			// Play coin throw SFX once at start of win-based coin spawn
-			try {
-				const audio = (window as any).audioManager as AudioManager | undefined;
-				if (audio && typeof audio.playSoundEffect === 'function') {
-					audio.playSoundEffect(SoundEffectType.COIN_THROW);
-				}
-			} catch {}
-			// Spawn coins over 1.5 seconds
-			this.spawnCoinsOverTime(coinCount, 1500);
-		});
-	}
-
-	/**
-	 * Spawn coins over a specified time period using the manually set position
-	 */
-	private spawnCoinsOverTime(totalCoins: number, durationMs: number): void {
-		if (!this.coinAnimation) {
-			return;
-		}
-
-		// Use the same position as the manually set position in CoinAnimation
-		const centerX = this.scale.width * 0.65;
-		const centerY = this.scale.height * 0.22;
-
-		const intervalMs = durationMs / totalCoins;
-		console.log(`[Game] Spawning ${totalCoins} coins over ${durationMs}ms (${intervalMs.toFixed(1)}ms per coin) at position (${centerX}, ${centerY})`);
-
-		for (let i = 0; i < totalCoins; i++) {
-			this.time.delayedCall(i * intervalMs, () => {
-				this.coinAnimation.spawnSingleCoin(centerX, centerY);
-			});
-		}
-	}
-
-	/**
-	 * Spawn a single coin at specific position
-	 */
-	public spawnSingleCoin(x?: number, y?: number, velocityX?: number, velocityY?: number): void {
-		if (this.coinAnimation) {
-			this.coinAnimation.spawnSingleCoin(x, y, velocityX, velocityY);
-		}
-	}
-
-	/**
 	 * Check if there's a delayed scatter animation waiting and start it
 	 */
 	private checkAndStartDelayedScatterAnimation(): void {
@@ -1062,11 +997,7 @@ export class Game extends Scene
 					console.log('[Game] Already in bonus mode (retrigger detected) - preserving accumulated winnings total');
 				}
 
-				// Switch to bonus background music (only if not already playing)
-				if (this.audioManager && !wasAlreadyInBonus) {
-					this.audioManager.playBackgroundMusic(MusicType.BONUS);
-					console.log('[Game] Switched to bonus background music');
-				}
+				// Music will be switched when showBonusBackground event is emitted
 			} else {
 				console.log('[Game] Bonus mode ended - enabling winningsDisplay');
 				// Ensure bonus-finished flag is cleared and bonus mode is turned off when leaving bonus
@@ -1134,6 +1065,13 @@ export class Game extends Scene
 			} else {
 				console.error('[Game] BonusBackground is null!');
 			}
+			
+			// Switch to bonus background music when background changes to bonus
+			if (this.audioManager) {
+				this.audioManager.playBackgroundMusic(MusicType.BONUS);
+				console.log('[Game] Switched to bonus background music (bonusbg_ka)');
+			}
+			
 			console.log('[Game] ===== BONUS BACKGROUND EVENT HANDLED =====');
 		});
 
@@ -1265,35 +1203,6 @@ export class Game extends Scene
 			if (this.bonusHeader) console.log('- BonusHeader visible:', this.bonusHeader.getContainer().visible);
 		};
 		
-		// Add coin testing methods
-		(window as any).spawnCoins = (count: number = 3) => {
-			console.log(`[Game] TEST: Spawning ${count} coins (or press SPACEBAR)`);
-			this.spawnCoins(count);
-		};
-		
-		(window as any).spawnSingleCoin = (x?: number, y?: number) => {
-			console.log(`[Game] TEST: Spawning single coin at (${x || 'center'}, ${y || 'center'})`);
-			this.spawnSingleCoin(x, y);
-		};
-		
-		(window as any).clearCoins = () => {
-			console.log('[Game] TEST: Clearing all coins');
-			if (this.coinAnimation) {
-				this.coinAnimation.clearAllCoins();
-			}
-		};
-		
-		(window as any).getCoinCount = () => {
-			const count = this.coinAnimation ? this.coinAnimation.getCoinCount() : 0;
-			console.log(`[Game] TEST: Current coin count: ${count}`);
-			return count;
-		};
-		
-		console.log('[Game] Coin system ready! Press SPACEBAR to spawn coins or use console commands:');
-		console.log('- spawnCoins(5) - Spawn 5 coins');
-		console.log('- spawnSingleCoin(400, 300) - Spawn one coin at position');
-		console.log('- clearCoins() - Remove all coins');
-		console.log('- getCoinCount() - Check active coin count');
 	}
 
 	changeScene() {

@@ -90,6 +90,7 @@ export interface HistoryItem {
     createdAt: string;
 }
 
+
 export class GameAPI {  
     gameData: GameData;
     exitURL: string = '';

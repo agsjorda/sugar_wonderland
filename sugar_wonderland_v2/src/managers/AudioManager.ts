@@ -13,15 +13,9 @@ export enum SoundEffectType {
 	CANDY_TRANSITION = 'candy_transition',
 	// Scatter win "nom nom" SFX (Symbol0 win animation)
 	SCATTER_NOMNOM = 'scatter_nomnom',
-	WHEEL_SPIN = 'wheelspin',
 	MENU_CLICK = 'menu_click',
-	HIT_WIN = 'hitwin',
-	WILD_MULTI = 'wildmulti',
 	MULTIPLIER_TRIGGER = 'multitrigger',
 	SCATTER = 'scatter',
-	ANTICIPATION = 'anticipation',
-	WIN_LINE_1 = 'winline_1',
-	WIN_LINE_2 = 'winline_2',
 	// Tumble-driven symbol-win SFX (play per tumble index)
 	SYMBOL_WIN_1 = 'symbol_win_1',
 	SYMBOL_WIN_2 = 'symbol_win_2',
@@ -34,13 +28,6 @@ export enum SoundEffectType {
 	WIN_MEGA = 'win_mega',
 	WIN_SUPER = 'win_super',
 	WIN_EPIC = 'win_epic',
-
-	WIN_BIG_TURBO = 'win_big_turbo',
-	WIN_MEGA_TURBO = 'win_mega_turbo',
-	WIN_SUPER_TURBO = 'win_super_turbo',
-	WIN_EPIC_TURBO = 'win_epic_turbo'
-	,
-	DIALOG_FREESPIN = 'dialog_freespin',
 	DIALOG_CONGRATS = 'dialog_congrats'
 }
 
@@ -170,21 +157,6 @@ export class AudioManager {
 				console.warn('[AudioManager] Failed to create candy_transition_sw SFX instance:', e);
 			}
 
-			// Create wheel spin sound effect instance
-			const wheelSpinSfx = this.scene.sound.add('wheelspin_ka', {
-				volume: this.sfxVolume,
-				loop: false
-			});
-			this.sfxInstances.set(SoundEffectType.WHEEL_SPIN, wheelSpinSfx);
-			console.log('[AudioManager] Wheel spin sound effect instance created');
-
-			// Create winline SFX instances
-			const winline1 = this.scene.sound.add('winline_1_ka', { volume: this.sfxVolume, loop: false });
-			this.sfxInstances.set(SoundEffectType.WIN_LINE_1, winline1);
-			const winline2 = this.scene.sound.add('winline_2_ka', { volume: this.sfxVolume, loop: false });
-			this.sfxInstances.set(SoundEffectType.WIN_LINE_2, winline2);
-			console.log('[AudioManager] Winline SFX instances created');
-
 			// Create tumble symbol-win SFX instances (twin1..4_sw)
 			try {
 				const twin1 = this.scene.sound.add('twin1_sw', { volume: this.sfxVolume, loop: false });
@@ -222,24 +194,6 @@ export class AudioManager {
 				console.warn('[AudioManager] Failed to create coin_drop_ka SFX instance:', e);
 			}
 
-			// Create hit win SFX instance
-			try {
-				const hitWin = this.scene.sound.add('hitwin_ka', { volume: this.sfxVolume, loop: false });
-				this.sfxInstances.set(SoundEffectType.HIT_WIN, hitWin);
-				console.log('[AudioManager] Hit win SFX instance created');
-			} catch (e) {
-				console.warn('[AudioManager] Failed to create hitwin_ka SFX instance:', e);
-			}
-
-			// Create wild multi SFX instance
-			try {
-				const wildMulti = this.scene.sound.add('wildmulti_ka', { volume: this.sfxVolume, loop: false });
-				this.sfxInstances.set(SoundEffectType.WILD_MULTI, wildMulti);
-				console.log('[AudioManager] Wild multi SFX instance created');
-			} catch (e) {
-				console.warn('[AudioManager] Failed to create wildmulti_ka SFX instance:', e);
-			}
-
 			// Create multiplier trigger / bomb SFX instance (bonus-mode multipliers)
 			try {
 				const bombSfx = this.scene.sound.add('bomb_sw', { volume: this.sfxVolume, loop: false });
@@ -267,15 +221,6 @@ export class AudioManager {
 				console.warn('[AudioManager] Failed to create nomnom_sw SFX instance:', e);
 			}
 
-			// Create anticipation SFX instance (looping)
-			try {
-				const anticipation = this.scene.sound.add('anticipation_ka', { volume: this.sfxVolume, loop: true });
-				this.sfxInstances.set(SoundEffectType.ANTICIPATION, anticipation);
-				console.log('[AudioManager] Anticipation SFX instance created');
-			} catch (e) {
-				console.warn('[AudioManager] Failed to create anticipation_ka SFX instance:', e);
-			}
-
 			// Create win dialog SFX instances
 			const bigWinSfx = this.scene.sound.add('bigw_ka', { volume: this.sfxVolume, loop: false });
 			this.sfxInstances.set(SoundEffectType.WIN_BIG, bigWinSfx);
@@ -285,25 +230,9 @@ export class AudioManager {
 			this.sfxInstances.set(SoundEffectType.WIN_SUPER, superWinSfx);
 			const epicWinSfx = this.scene.sound.add('epicw_ka', { volume: this.sfxVolume, loop: false });
 			this.sfxInstances.set(SoundEffectType.WIN_EPIC, epicWinSfx);
-			// Create win dialog SFX instances turbo
-			const bigWinSfxTurbo = this.scene.sound.add('bigwskip_ka', { volume: this.sfxVolume, loop: false });
-			this.sfxInstances.set(SoundEffectType.WIN_BIG_TURBO, bigWinSfxTurbo);
-			const megaWinSfxTurbo = this.scene.sound.add('megawskip_ka', { volume: this.sfxVolume, loop: false });
-			this.sfxInstances.set(SoundEffectType.WIN_MEGA_TURBO, megaWinSfxTurbo);
-			const superWinSfxTurbo = this.scene.sound.add('superwskip_ka', { volume: this.sfxVolume, loop: false });
-			this.sfxInstances.set(SoundEffectType.WIN_SUPER_TURBO, superWinSfxTurbo);
-			const epicWinSfxTurbo = this.scene.sound.add('epicwskip_ka', { volume: this.sfxVolume, loop: false });
-			this.sfxInstances.set(SoundEffectType.WIN_EPIC_TURBO, epicWinSfxTurbo);
 			console.log('[AudioManager] Win dialog SFX instances created');
 
 			// Create dialog-specific SFX instances
-			try {
-				const freeSpinDlg = this.scene.sound.add('freespin_ka', { volume: this.sfxVolume, loop: false });
-				this.sfxInstances.set(SoundEffectType.DIALOG_FREESPIN, freeSpinDlg);
-				console.log('[AudioManager] Free spin dialog SFX instance created');
-			} catch (e) {
-				console.warn('[AudioManager] Failed to create freespin_ka SFX instance:', e);
-			}
 			try {
 				const congratsDlg = this.scene.sound.add('congrats_ka', { volume: this.sfxVolume, loop: false });
 				this.sfxInstances.set(SoundEffectType.DIALOG_CONGRATS, congratsDlg);
@@ -343,15 +272,6 @@ export class AudioManager {
 		else if (clamped === 3) pick = SoundEffectType.SYMBOL_WIN_3;
 		else if (clamped >= 4) pick = SoundEffectType.SYMBOL_WIN_1;
 		console.log(`[AudioManager] playSymbolWinByTumble: tumbleIndex=${tumbleIndex}, clamped=${clamped}, playing=${pick}`);
-		this.playSoundEffect(pick);
-	}
-
-	/**
-	 * Play a random winline SFX
-	 */
-	playRandomWinlineSfx(): void {
-		if (this.isMuted) return;
-		const pick = Math.random() < 0.5 ? SoundEffectType.WIN_LINE_1 : SoundEffectType.WIN_LINE_2;
 		this.playSoundEffect(pick);
 	}
 
@@ -694,19 +614,17 @@ export class AudioManager {
 	resumeMusicBasedOnGameState(): void {
 		if (this.isMuted) return;
 
-		// Determine music type based on game state
-		let musicType: MusicType;
-		
-		if (gameStateManager.isBonus) {
-			// Check if we're in free spin mode
-			// You might want to add a specific state for free spins
-			musicType = MusicType.BONUS;
+		// Only resume main music when unmuting
+		// Bonus music will be triggered when showBonusBackground event is emitted
+		// Don't automatically switch to bonus music based on isBonus flag
+		if (!gameStateManager.isBonus) {
+			this.playBackgroundMusic(MusicType.MAIN);
+			this.startAmbientAudio();
 		} else {
-			musicType = MusicType.MAIN;
+			// If we're in bonus mode but music isn't playing, don't auto-start bonus music
+			// It should only start when the background actually changes
+			console.log('[AudioManager] In bonus mode - bonus music will start when background changes');
 		}
-
-		this.playBackgroundMusic(musicType);
-		this.startAmbientAudio();
 	}
 
 	/**
@@ -757,17 +675,11 @@ export class AudioManager {
 	onGameStateChange(): void {
 		if (this.isMuted) return;
 
-		let musicType: MusicType;
-		
-		if (gameStateManager.isBonus) {
-			musicType = MusicType.BONUS;
-		} else {
-			musicType = MusicType.MAIN;
-		}
-
-		// Only switch if the music type has changed
-		if (this.currentMusic !== musicType) {
-			this.playBackgroundMusic(musicType);
+		// Only switch to main music when leaving bonus mode
+		// Bonus music will be triggered when showBonusBackground event is emitted
+		// Don't automatically switch to bonus music based on isBonus flag
+		if (!gameStateManager.isBonus && this.currentMusic === MusicType.BONUS) {
+			this.playBackgroundMusic(MusicType.MAIN);
 		}
 	}
 
@@ -808,21 +720,13 @@ export class AudioManager {
 						console.warn('[AudioManager] Failed to apply playback rate to SFX:', e);
 					}
 				}
-				// Ensure looping SFX restarts if needed
-				if (sfxType === SoundEffectType.ANTICIPATION && sfx.isPlaying) {
-					sfx.stop();
-				}
 				sfx.play();
 				// Track current win SFX so we can fade it out on dialog close
 				if (
 					sfxType === SoundEffectType.WIN_BIG ||
 					sfxType === SoundEffectType.WIN_MEGA ||
 					sfxType === SoundEffectType.WIN_SUPER ||
-					sfxType === SoundEffectType.WIN_EPIC ||
-					sfxType === SoundEffectType.WIN_BIG_TURBO ||
-					sfxType === SoundEffectType.WIN_MEGA_TURBO ||
-					sfxType === SoundEffectType.WIN_SUPER_TURBO ||
-					sfxType === SoundEffectType.WIN_EPIC_TURBO
+					sfxType === SoundEffectType.WIN_EPIC
 				) {
 					this.currentWinSfx = sfx;
 				}
@@ -908,38 +812,18 @@ export class AudioManager {
 		if (this.isMuted) return;
 		let effect: SoundEffectType | null = null;
 		const t = (dialogType || '').toLowerCase();
-		const sceneAny: any = this.scene as any;
-		const symbolsRef = sceneAny?.symbols;
-		const isFsAuto = symbolsRef && typeof symbolsRef.isFreeSpinAutoplayActive === 'function' ? !!symbolsRef.isFreeSpinAutoplayActive() : false;
-		const isAuto = !!(gameStateManager.isAutoPlaying || gameStateManager.isAutoPlaySpinRequested || sceneAny?.gameData?.isAutoPlaying || isFsAuto);
-		const isTurbo = !!(sceneAny?.gameData?.isTurbo || gameStateManager.isTurbo);
 
-		if (isAuto && isTurbo) {
-			switch (t) {
-				case 'smallw_ka':
-					effect = SoundEffectType.WIN_BIG_TURBO; break;
-				case 'mediumw_ka':
-					effect = SoundEffectType.WIN_MEGA_TURBO; break;
-				case 'largew_ka':
-					effect = SoundEffectType.WIN_SUPER_TURBO; break;
-				case 'superw_ka':
-					effect = SoundEffectType.WIN_EPIC_TURBO; break;
-				default:
-					break;
-			}
-		} else {
-			switch (t) {
-				case 'smallw_ka':
-					effect = SoundEffectType.WIN_BIG; break;
-				case 'mediumw_ka':
-					effect = SoundEffectType.WIN_MEGA; break;
-				case 'largew_ka':
-					effect = SoundEffectType.WIN_SUPER; break;
-				case 'superw_ka':
-					effect = SoundEffectType.WIN_EPIC; break;
-				default:
-					break;
-			}
+		switch (t) {
+			case 'smallw_ka':
+				effect = SoundEffectType.WIN_BIG; break;
+			case 'mediumw_ka':
+				effect = SoundEffectType.WIN_MEGA; break;
+			case 'largew_ka':
+				effect = SoundEffectType.WIN_SUPER; break;
+			case 'superw_ka':
+				effect = SoundEffectType.WIN_EPIC; break;
+			default:
+				break;
 		}
 
 		if (effect) {

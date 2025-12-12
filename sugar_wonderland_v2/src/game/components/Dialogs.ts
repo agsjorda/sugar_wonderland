@@ -1184,6 +1184,11 @@ export class Dialogs {
 				if (audioManager && typeof audioManager.fadeOutSfx === 'function') {
 					audioManager.fadeOutSfx('dialog_congrats', 400);
 				}
+				// Stop free spin music when dialog closes - bonus music will start when background changes
+				if (audioManager && typeof audioManager.stopCurrentMusic === 'function') {
+					audioManager.stopCurrentMusic();
+					console.log('[Dialogs] Stopped free spin music as dialog closes');
+				}
 			} catch {}
 			this.disableAllWinDialogElements();
 			this.cleanupDialog();
@@ -1275,6 +1280,15 @@ export class Dialogs {
 		// Wait for iris transition to complete, then proceed
 		scene.time.delayedCall(1500, () => {
 			console.log('[Dialogs] Iris closed - triggering bonus mode');
+			
+			// Stop free spin music when dialog closes - bonus music will start when background changes
+			try {
+				const audioManager = (window as any).audioManager;
+				if (audioManager && typeof audioManager.stopCurrentMusic === 'function') {
+					audioManager.stopCurrentMusic();
+					console.log('[Dialogs] Stopped free spin music as dialog closes (iris transition)');
+				}
+			} catch {}
 			
 			// Trigger bonus mode during closed iris
 			console.log('[Dialogs] Triggering bonus mode during closed iris');

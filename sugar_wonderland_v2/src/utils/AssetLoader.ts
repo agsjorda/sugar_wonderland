@@ -123,11 +123,6 @@ export class AssetLoader {
 		console.log('[AssetLoader] Dialog assets loaded');
 	}
 
-	loadCandyTransitionAssets(scene: Scene): void {
-		console.log('[AssetLoader] Loading candy transition assets...');
-		this.loadAssetGroup(scene, this.assetConfig.getCandyTransitionAssets());
-		console.log('[AssetLoader] Candy transition assets loaded');
-	}
 
 	loadScatterAnticipationAssets(scene: Scene): void {
 		console.log('[AssetLoader] Loading scatter anticipation assets...');

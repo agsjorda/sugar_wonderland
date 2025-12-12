@@ -37,6 +37,12 @@ export class Symbols {
 
   // Track whether any wins occurred during the current spin item (including all tumbles)
   private hadWinsInCurrentItem: boolean = false;
+  
+  // Track if multiplier animations are currently in progress
+  private multiplierAnimationsInProgress: boolean = false;
+  
+  // Track if scatter retrigger animation is currently in progress
+  private scatterRetriggerAnimationInProgress: boolean = false;
 
  
 
@@ -91,6 +97,24 @@ export class Symbols {
       }
       gameStateManager.isBonusFinished = false;
     } catch {}
+  }
+  
+  /**
+   * Check if there's a pending scatter retrigger that will add more free spins
+   */
+  public hasPendingScatterRetrigger(): boolean {
+    return !!(this.pendingScatterRetrigger && Array.isArray(this.pendingScatterRetrigger.scatterGrids) && this.pendingScatterRetrigger.scatterGrids.length > 0);
+  }
+  
+  /**
+   * Check if scatter retrigger animation is currently in progress
+   */
+  public isMultiplierAnimationsInProgress(): boolean {
+    return this.multiplierAnimationsInProgress;
+  }
+
+  public isScatterRetriggerAnimationInProgress(): boolean {
+    return this.scatterRetriggerAnimationInProgress;
   }
   
   /**
@@ -161,6 +185,12 @@ export class Symbols {
         return;
       }
       
+      // Reset multiplier animation tracking for new spin
+      this.multiplierAnimationsInProgress = false;
+      
+      // Reset scatter retrigger animation tracking for new spin
+      this.scatterRetriggerAnimationInProgress = false;
+      
       this.ensureCleanSymbolState();
       
       // Win line checking/clearing disabled
@@ -181,12 +211,25 @@ export class Symbols {
       // Reset dialog showing flag
       gameStateManager.isShowingWinDialog = false;
 
-      // If bonus just finished, immediately show congrats and reset flag
+      // If bonus just finished, check if we need to wait for multiplier animations
       if (gameStateManager.isBonusFinished) {
-        console.log('[Symbols] isBonusFinished is true on WIN_DIALOG_CLOSED - showing congrats now');
-        // Show congrats now and reset the flag; bonus mode exit happens on congrats close
-        this.showCongratsDialogAfterDelay();
-        gameStateManager.isBonusFinished = false;
+        console.log('[Symbols] isBonusFinished is true on WIN_DIALOG_CLOSED');
+        
+        // If multiplier animations are in progress, wait for them to complete before showing congrats
+        if (this.multiplierAnimationsInProgress) {
+          console.log('[Symbols] Multiplier animations in progress - waiting for MULTIPLIER_ANIMATIONS_COMPLETE before showing congrats');
+          // Set up one-time listener for multiplier animations completion
+          gameEventManager.once(GameEventType.MULTIPLIER_ANIMATIONS_COMPLETE, () => {
+            console.log('[Symbols] MULTIPLIER_ANIMATIONS_COMPLETE received - now showing congrats');
+            this.showCongratsDialogAfterDelay();
+            gameStateManager.isBonusFinished = false;
+          });
+        } else {
+          console.log('[Symbols] No multiplier animations in progress - showing congrats immediately');
+          // Show congrats now and reset the flag; bonus mode exit happens on congrats close
+          this.showCongratsDialogAfterDelay();
+          gameStateManager.isBonusFinished = false;
+        }
       } else {
         // Fallback: if in bonus mode and spin data indicates no spins left, also proceed to congrats
         try {
@@ -199,6 +242,17 @@ export class Symbols {
           }
         } catch {}
       }
+    });
+    
+    // Track multiplier animation state
+    gameEventManager.on(GameEventType.MULTIPLIERS_TRIGGERED, () => {
+      console.log('[Symbols] MULTIPLIERS_TRIGGERED - setting multiplierAnimationsInProgress to true');
+      this.multiplierAnimationsInProgress = true;
+    });
+    
+    gameEventManager.on(GameEventType.MULTIPLIER_ANIMATIONS_COMPLETE, () => {
+      console.log('[Symbols] MULTIPLIER_ANIMATIONS_COMPLETE - setting multiplierAnimationsInProgress to false');
+      this.multiplierAnimationsInProgress = false;
     });
 
   }
@@ -419,21 +473,39 @@ export class Symbols {
         const retrigger = this.pendingScatterRetrigger;
         this.pendingScatterRetrigger = null;
         console.log('[Symbols] WIN_STOP: Running delayed scatter retrigger sequence (bonus)');
+        // Mark retrigger animation as in progress (will remain true until retrigger dialog closes)
+        this.scatterRetriggerAnimationInProgress = true;
         try {
           // Re-scan the live grid to ensure we animate the actual current scatters
           const liveGrids = this.getLiveScatterGrids();
           await this.playScatterRetriggerSequence(liveGrids);
+          // Emit event that retrigger animation has completed
+          try {
+            gameEventManager.emit(GameEventType.SCATTER_RETRIGGER_ANIMATION_COMPLETE);
+            console.log('[Symbols] Emitted SCATTER_RETRIGGER_ANIMATION_COMPLETE event');
+          } catch {}
         } catch (e) {
           console.warn('[Symbols] Retrigger scatter sequence failed:', e);
+          // Still emit completion event even if there was an error
+          try {
+            gameEventManager.emit(GameEventType.SCATTER_RETRIGGER_ANIMATION_COMPLETE);
+          } catch {}
         }
         // Show retrigger dialog (+5 spins)
+        // Keep flag true during dialog - it will be cleared when dialog closes
         try {
           this.scatterAnimationManager?.showRetriggerFreeSpinsDialog(5);
         } catch (e) {
           console.warn('[Symbols] Failed to show retrigger dialog:', e);
+          // If dialog fails to show, clear the flag
+          this.scatterRetriggerAnimationInProgress = false;
         }
         // Continue free spin autoplay after dialog finishes
         this.scene.events.once('dialogAnimationsComplete', () => {
+          // Clear retrigger animation flag when retrigger dialog closes
+          this.scatterRetriggerAnimationInProgress = false;
+          console.log('[Symbols] Retrigger dialog closed - cleared scatterRetriggerAnimationInProgress flag');
+          
           // Ensure autoplay is marked active
           try {
             this.freeSpinAutoplayActive = true;
@@ -2480,6 +2552,17 @@ export class Symbols {
   private showCongratsDialogAfterDelay(): void {
     console.log('[Symbols] Showing congrats dialog after delay');
     
+    // If multiplier animations are in progress, wait for them to complete before showing congrats
+    if (this.multiplierAnimationsInProgress) {
+      console.log('[Symbols] Multiplier animations in progress - waiting for MULTIPLIER_ANIMATIONS_COMPLETE before showing congrats');
+      // Set up one-time listener for multiplier animations completion
+      gameEventManager.once(GameEventType.MULTIPLIER_ANIMATIONS_COMPLETE, () => {
+        console.log('[Symbols] MULTIPLIER_ANIMATIONS_COMPLETE received - now showing congrats');
+        this.showCongratsDialogAfterDelay();
+      });
+      return;
+    }
+    
     // Close any open win dialogs first (safety check)
     const gameScene = this.scene as any;
     if (gameScene.dialogs && typeof gameScene.dialogs.hideDialog === 'function') {
@@ -2702,13 +2785,14 @@ function onStart(self: Symbols) {
 function createInitialSymbols(self: Symbols) {
   let scene = self.scene;
 
-  // Check if symbol textures are available
-  const testKey = 'symbol_0';
-  if (!scene.textures.exists(testKey)) {
-    console.error('[Symbols] Symbol textures not loaded! Available textures:', Object.keys(scene.textures.list));
-    return;
+  // Check if Spine symbol assets are available (no longer checking PNG textures)
+  const testSpineKey = 'symbol_0_sugar_spine';
+  const testAtlasKey = `${testSpineKey}-atlas`;
+  if (!scene.textures.exists(testAtlasKey)) {
+    console.warn('[Symbols] Spine symbol assets may not be loaded yet. Continuing anyway...');
+  } else {
+    console.log('[Symbols] Spine symbol assets are available');
   }
-  console.log('[Symbols] Symbol textures are available');
 
   // Use fixed symbols for testing (row-major: [row][col])
   const initialRowMajor = [
@@ -3487,16 +3571,27 @@ function createSugarOrPngSymbol(self: Symbols, value: number, x: number, y: numb
     } catch {}
   }
 
-  // Fallback to PNG sprite
-  const sprite = self.scene.add.sprite(x, y, 'symbol_' + value);
-  try { (sprite as any).symbolValue = value; } catch {}
-  sprite.displayWidth = self.displayWidth;
-  sprite.displayHeight = self.displayHeight;
-  if (typeof sprite.setAlpha === 'function') sprite.setAlpha(alpha);
-  self.container.add(sprite);
-  // Attach overlay PNG in front for multipliers
-  try { attachMultiplierOverlay(self, sprite, value, x, y); } catch {}
-  return sprite;
+  // Fallback to PNG sprite (if available)
+  const spriteKey = 'symbol_' + value;
+  if (self.scene.textures.exists(spriteKey)) {
+    const sprite = self.scene.add.sprite(x, y, spriteKey);
+    try { (sprite as any).symbolValue = value; } catch {}
+    sprite.displayWidth = self.displayWidth;
+    sprite.displayHeight = self.displayHeight;
+    if (typeof sprite.setAlpha === 'function') sprite.setAlpha(alpha);
+    self.container.add(sprite);
+    // Attach overlay PNG in front for multipliers
+    try { attachMultiplierOverlay(self, sprite, value, x, y); } catch {}
+    return sprite;
+  }
+  
+  // If no PNG fallback available, create a placeholder rectangle
+  console.warn(`[Symbols] No sprite or Spine available for symbol ${value}, creating placeholder`);
+  const placeholder = self.scene.add.rectangle(x, y, self.displayWidth, self.displayHeight, 0x888888, 0.5);
+  try { (placeholder as any).symbolValue = value; } catch {}
+  if (typeof placeholder.setAlpha === 'function') placeholder.setAlpha(alpha);
+  self.container.add(placeholder);
+  return placeholder;
 }
 
 /**
@@ -3521,18 +3616,9 @@ async function playMultiplierWinThenIdle(self: Symbols, obj: any, base: string):
       const animState = obj?.animationState;
       if (!animState || !animState.setAnimation) return safeResolve();
       const winAnim = `${base}_Win`;
-      // Listen for completion of the Win animation to return to Idle
-      if (animState.addListener) {
-        const listener = {
-          complete: (entry: any) => {
-            try {
-              if (!entry || entry.animation?.name !== winAnim) return;
-            } catch {}
-            safeResolve();
-          }
-        } as any;
-        try { animState.addListener(listener); } catch {}
-      }
+      // Note: We do NOT resolve when the Win animation completes.
+      // The promise must wait for the overlay PNG animation to fully complete (travel + pop + fade).
+      // Resolution happens in the overlay animation's fade complete callback (line 3766).
       // Start the Win animation
       let entry: any = null;
       try { if (animState.clearTracks) animState.clearTracks(); } catch {}
@@ -3694,7 +3780,13 @@ async function playMultiplierWinThenIdle(self: Symbols, obj: any, base: string):
                     }
                   }
                 });
-              } catch {}
+              } catch {
+                // If overlay creation fails, resolve after a short delay
+                safeResolve();
+              }
+            } else {
+              // No overlay texture available - resolve immediately since there's nothing to animate
+              safeResolve();
             }
           } catch {}
           // Do not resolve here; wait for the fly tween to complete so arrival is processed before continuing
@@ -3856,6 +3948,11 @@ async function triggerAllMultiplierWinsAfterBonusSpin(self: Symbols): Promise<vo
         resolve();
       });
     });
+    // Emit event that all multiplier animations have completed
+    try {
+      gameEventManager.emit(GameEventType.MULTIPLIER_ANIMATIONS_COMPLETE);
+      console.log('[Symbols] Emitted MULTIPLIER_ANIMATIONS_COMPLETE event');
+    } catch {}
   } catch {}
 }
 
@@ -5264,17 +5361,10 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
               const audio = (window as any)?.audioManager;
               if (audio && typeof audio.playSoundEffect === 'function') {
                 // During bonus mode, wins that include multiplier symbols (wildcards)
-                // should use the dedicated bomb SFX. In base game, keep existing
-                // wild-multi vs normal hit behavior.
-                let sfx: SoundEffectType = SoundEffectType.HIT_WIN;
-                if (hasWildcardInWin) {
-                  if (gameStateManager.isBonus) {
-                    sfx = SoundEffectType.MULTIPLIER_TRIGGER;
-                  } else {
-                    sfx = SoundEffectType.WILD_MULTI;
-                  }
+                // should use the dedicated bomb SFX
+                if (hasWildcardInWin && gameStateManager.isBonus) {
+                  audio.playSoundEffect(SoundEffectType.MULTIPLIER_TRIGGER);
                 }
-                audio.playSoundEffect(sfx);
                 hasPlayedWinSfx = true;
                 // If this spin triggered scatter, chain play scatter_sw after hit/wildmulti
                 try {

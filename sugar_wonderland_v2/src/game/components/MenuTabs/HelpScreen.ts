@@ -1062,48 +1062,6 @@ export class HelpScreen {
         });
     }
 
-    // Render a grid of winline thumbnails (e.g., winlines1..winlines20). Returns bottom Y of the grid
-    private drawWinlinesThumbnailsGrid(
-        scene: GameScene,
-        container: GameObjects.Container,
-        topY: number,
-        rows: number = 5,
-        columns: number = 4
-    ): number {
-        // Frame metrics for layout
-        const { frameW, frameX } = this.getFrameMetrics(container);
-
-        const inset = this.padding * 2;
-        // Horizontal and vertical gaps (vertical now ultra-tight)
-        const gapX = Math.max(4, Math.floor(this.padding * 0.6));
-        const gapY = 0;
-        const usableWidth = Math.max(0, frameW - inset * 2);
-        const cellSize = Math.floor((usableWidth - gapX * (columns - 1)) / columns);
-        const startX = frameX + inset;
-
-        let maxBottom = topY;
-        // Vertical step set to 70% of cell height for clearer separation
-        const stepY = Math.max(1, Math.floor(cellSize * 0.73 + gapY));
-        for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < columns; c++) {
-                // Column-major ordering so images increment vertically down a column
-                const idx = c * rows + r + 1;
-                const key = `winlines${idx}`;
-                const x = startX + c * (cellSize + gapX) + cellSize / 2;
-                const y = topY + r * stepY + cellSize / 2;
-                const img = scene.add.image(x, y, key) as ButtonImage;
-                img.setOrigin(0.5, 0.5);
-                // Fit image into square cell without stretching; do not upscale beyond 1x
-                const originalW = img.width || 1;
-                const originalH = img.height || 1;
-                const fitScale = Math.min(cellSize / originalW, cellSize / originalH);
-                img.setScale(Math.min(1, fitScale));
-                container.add(img);
-            }
-        }
-        maxBottom = topY + (rows - 1) * stepY + cellSize;
-        return maxBottom;
-    }
 
     private createHeader(scene: GameScene, x: number, y: number, container: GameObjects.Container, text: string, color: string): void {
         const genericTableWidth = this.contentWidth + this.padding * 3;

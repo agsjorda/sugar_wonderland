@@ -103,6 +103,8 @@ export class SlotController {
 	private autoplayTimer: Phaser.Time.TimerEvent | null = null;
 	// When true, current autoplay session is a dedicated "freeround autoplay"
 	private isFreeRoundAutoplay: boolean = false;
+	// Flag to track if we need to re-enable spin button after first autoplay spin in normal mode
+	private shouldReenableSpinButtonAfterFirstAutoplay: boolean = false;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -2298,6 +2300,16 @@ export class SlotController {
 					if (this.isFreeRoundAutoplay && this.scene) {
 						this.scene.events.emit('freeround-autoplay-remaining', this.autoplaySpinsRemaining);
 					}
+					
+					// Re-enable spin button interaction after first autoplay spin is triggered in normal mode
+					if (this.shouldReenableSpinButtonAfterFirstAutoplay) {
+						const spinButton = this.buttons.get('spin');
+						if (spinButton) {
+							spinButton.setInteractive();
+							this.shouldReenableSpinButtonAfterFirstAutoplay = false;
+							console.log('[SlotController] Re-enabled spin button interaction after first autoplay spin');
+						}
+					}
 				}
 			}
 			// During bonus mode, sync the free spin display exactly when reels start
@@ -2371,23 +2383,34 @@ export class SlotController {
 					
 					const gameScene: any = this.scene as any;
 					const symbolsComponent = gameScene?.symbols;
-					// Prefer Symbols' remaining counter if available
-					if (symbolsComponent && typeof symbolsComponent.freeSpinAutoplaySpinsRemaining === 'number') {
-						const remaining: number = symbolsComponent.freeSpinAutoplaySpinsRemaining;
-						// If after this spin there are no spins remaining, flag bonus finished
-						if (remaining <= 0) {
-							console.log('[SlotController] REELS_STOP: remaining free spins <= 0 – setting isBonusFinished=true');
-							gameStateManager.isBonusFinished = true;
-						}
-					} else if (this.gameAPI && typeof this.gameAPI.getCurrentSpinData === 'function') {
-						// Fallback: inspect GameAPI spin data for remaining spins
-						const apiSpinData: any = this.gameAPI.getCurrentSpinData();
-						const fs = apiSpinData?.slot?.freespin || apiSpinData?.slot?.freeSpin;
-						if (fs?.items && Array.isArray(fs.items)) {
-							const totalRemaining = fs.items.reduce((sum: number, it: any) => sum + (it?.spinsLeft || 0), 0);
-							if (totalRemaining <= 1) {
-								console.log('[SlotController] REELS_STOP: totalRemaining free spins <= 1 – setting isBonusFinished=true');
+					
+					// Check if there's a pending scatter retrigger that will add more free spins
+					// If so, don't set isBonusFinished because the bonus will continue
+					const hasPendingRetrigger = symbolsComponent && typeof symbolsComponent.hasPendingScatterRetrigger === 'function' 
+						? symbolsComponent.hasPendingScatterRetrigger() 
+						: false;
+					
+					if (hasPendingRetrigger) {
+						console.log('[SlotController] REELS_STOP: Pending scatter retrigger detected - NOT setting isBonusFinished (bonus will continue)');
+					} else {
+						// Prefer Symbols' remaining counter if available
+						if (symbolsComponent && typeof symbolsComponent.freeSpinAutoplaySpinsRemaining === 'number') {
+							const remaining: number = symbolsComponent.freeSpinAutoplaySpinsRemaining;
+							// If after this spin there are no spins remaining, flag bonus finished
+							if (remaining <= 0) {
+								console.log('[SlotController] REELS_STOP: remaining free spins <= 0 – setting isBonusFinished=true');
 								gameStateManager.isBonusFinished = true;
+							}
+						} else if (this.gameAPI && typeof this.gameAPI.getCurrentSpinData === 'function') {
+							// Fallback: inspect GameAPI spin data for remaining spins
+							const apiSpinData: any = this.gameAPI.getCurrentSpinData();
+							const fs = apiSpinData?.slot?.freespin || apiSpinData?.slot?.freeSpin;
+							if (fs?.items && Array.isArray(fs.items)) {
+								const totalRemaining = fs.items.reduce((sum: number, it: any) => sum + (it?.spinsLeft || 0), 0);
+								if (totalRemaining <= 1) {
+									console.log('[SlotController] REELS_STOP: totalRemaining free spins <= 1 – setting isBonusFinished=true');
+									gameStateManager.isBonusFinished = true;
+								}
 							}
 						}
 					}
@@ -2819,6 +2842,14 @@ export class SlotController {
 				this.autoplayStopIcon.setVisible(true);
 				if (this.primaryControllers) this.primaryControllers.bringToTop(this.autoplayStopIcon);
 			}
+			
+			// Disable spin button interaction for normal mode autoplay until first spin is triggered
+			const spinButton = this.buttons.get('spin');
+			if (spinButton) {
+				spinButton.disableInteractive();
+				this.shouldReenableSpinButtonAfterFirstAutoplay = true;
+				console.log('[SlotController] Disabled spin button interaction - will re-enable after first autoplay spin');
+			}
 		}
 		
 		// Keep spin button enabled during autoplay (allow stopping autoplay)
@@ -2856,6 +2887,7 @@ export class SlotController {
 		// Update state
 		this.autoplaySpinsRemaining = 0;
 		this.isFreeRoundAutoplay = false;
+		this.shouldReenableSpinButtonAfterFirstAutoplay = false;
 		
 		// Update GameData and GameStateManager
 		if (this.gameData) {
@@ -4256,28 +4288,46 @@ public updateAutoplayButtonState(): void {
 			try {
 				if (data?.isRetrigger) {
 					// Determine current remaining free spins
+					// Priority: Symbols tracker (authoritative) > API data > display text
 					let currentRemaining = 0;
-					// Prefer the current displayed number if available
+					
+					// First, try Symbols' internal tracker (most accurate)
 					try {
-						const txt = (this.freeSpinNumber?.text || '').toString().trim();
-						const val = parseInt(txt, 10);
-						if (!isNaN(val) && val >= 0) currentRemaining = val;
-					} catch {}
-					// Fallback to Symbols' internal tracker
-					if (currentRemaining <= 0) {
 						const sym = (this.scene as any)?.symbols;
 						if (sym && typeof sym.freeSpinAutoplaySpinsRemaining === 'number') {
 							currentRemaining = sym.freeSpinAutoplaySpinsRemaining;
+							console.log(`[SlotController] Retrigger: Using Symbols tracker for current remaining: ${currentRemaining}`);
 						}
-					}
+					} catch {}
+					
 					// Fallback to computing from API data
 					if (currentRemaining <= 0) {
 						try {
 							const apiSpinData = this.gameAPI?.getCurrentSpinData();
 							if (apiSpinData) {
 								currentRemaining = this.computeDisplaySpinsLeft(apiSpinData);
+								console.log(`[SlotController] Retrigger: Using API data for current remaining: ${currentRemaining}`);
 							}
 						} catch {}
+					}
+					
+					// Last resort: use display text (may be stale, but better than 0)
+					if (currentRemaining <= 0) {
+						try {
+							const txt = (this.freeSpinNumber?.text || '').toString().trim();
+							const val = parseInt(txt, 10);
+							if (!isNaN(val) && val >= 0) {
+								currentRemaining = val;
+								console.log(`[SlotController] Retrigger: Using display text for current remaining: ${currentRemaining}`);
+							}
+						} catch {}
+					}
+					
+					// Ensure we don't use a value > 1 if we're on the last spin
+					// If currentRemaining is 1, it means we just finished the last spin, so base should be 0
+					if (currentRemaining === 1) {
+						console.log('[SlotController] Retrigger: Last spin detected (currentRemaining=1), using 0 as base for retrigger calculation');
+						currentRemaining = 0;
 					}
 					
 					const newRemaining = Math.max(0, currentRemaining + 5);

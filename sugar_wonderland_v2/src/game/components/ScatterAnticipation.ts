@@ -62,31 +62,9 @@ export class ScatterAnticipation {
 
 	private tryCreateSpine(centerX: number, centerY: number): void {
 		if (!this.container) return;
-		// Ensure spine data is in cache; if not, retry a few times
-		if (!(this.scene.cache.json as any).has('reelanim_KA')) {
-			if (this.retryCount < 5) {
-				this.retryCount++;
-				console.warn(`[ScatterAnticipation] Spine json 'reelanim_KA' not ready. Retrying (${this.retryCount}/5)...`);
-				this.scene.time.delayedCall(250, () => this.tryCreateSpine(centerX, centerY));
-				return;
-			} else {
-				console.error('[ScatterAnticipation] Spine assets still not ready after retries. Skipping creation.');
-				return;
-			}
-		}
-
-		try {
-			this.spineObject = this.scene.add.spine(centerX, centerY, 'reelanim_KA', 'reelanim_KA-atlas');
-			this.spineObject.setOrigin(0.5, 0.5);
-			this.spineObject.setScale(0.42);
-			this.spineObject.setDepth(0);
-			this.playDefaultLoop();
-			this.container.add(this.spineObject);
-			// Do not change visibility here; Game controls start visibility
-			console.log('[ScatterAnticipation] Created spine animation at center');
-		} catch (error) {
-			console.error('[ScatterAnticipation] Failed to create spine animation', error);
-		}
+		// No spine assets available - component is disabled
+		console.log('[ScatterAnticipation] No spine assets available. Skipping creation.');
+		return;
 	}
 
 	public show(): void {
@@ -98,13 +76,6 @@ export class ScatterAnticipation {
 			}
 			// Ensure animation is playing when shown
 			this.playDefaultLoop();
-			// Play anticipation loop SFX
-			try {
-				const audio = (window as any)?.audioManager;
-				if (audio && typeof audio.playSoundEffect === 'function') {
-					audio.playSoundEffect('anticipation');
-				}
-			} catch {}
 		}
 	}
 
@@ -115,13 +86,6 @@ export class ScatterAnticipation {
 		} else if (this.spineObject) {
 			this.spineObject.setVisible(false);
 		}
-		// Fade out anticipation SFX
-		try {
-			const audio = (window as any)?.audioManager;
-			if (audio && typeof audio.fadeOutSfx === 'function') {
-				audio.fadeOutSfx('anticipation', 300);
-			}
-		} catch {}
 	}
 
 	public destroy(): void {

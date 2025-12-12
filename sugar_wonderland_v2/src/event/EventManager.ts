@@ -16,6 +16,10 @@ export enum GameEventType {
   MULTIPLIERS_TRIGGERED = 'MULTIPLIERS_TRIGGERED', // payload: { spinTotal: number, multiplierSum: number }
   // Emitted each time a multiplier PNG reaches the winnings display center
   MULTIPLIER_ARRIVED = 'MULTIPLIER_ARRIVED', // payload: { spinTotal: number, weight: number }
+  // Emitted after all multiplier animations have completed (including overlay animations to center)
+  MULTIPLIER_ANIMATIONS_COMPLETE = 'MULTIPLIER_ANIMATIONS_COMPLETE',
+  // Emitted after scatter retrigger animation sequence has completed
+  SCATTER_RETRIGGER_ANIMATION_COMPLETE = 'SCATTER_RETRIGGER_ANIMATION_COMPLETE',
   WIN_DIALOG_CLOSED = 'WIN_DIALOG_CLOSED',
   DIALOG_START = 'DIALOG_START',
   DIALOG_STOP = 'DIALOG_STOP',
