@@ -50,6 +50,7 @@ export class BonusHeader {
 		
 		// Create main container for all bonus header elements
 		this.bonusHeaderContainer = scene.add.container(0, 0);
+		this.currentWinnings = this.getCachedPreBonusWins();
 		
 		const screenConfig = this.screenModeManager.getScreenConfig();
 		const assetScale = this.networkManager.getAssetScale();
@@ -292,7 +293,7 @@ export class BonusHeader {
 	 */
 	public initializeWinnings(): void {
 		console.log('[BonusHeader] Initializing winnings display - starting hidden');
-		this.currentWinnings = 0;
+		this.currentWinnings = this.getCachedPreBonusWins();
 		this.hideWinningsDisplay();
 	}
 
@@ -339,6 +340,11 @@ export class BonusHeader {
 		gameEventManager.on(GameEventType.REELS_START, () => {
 			console.log('[BonusHeader] REELS_START received');
 			
+			const cachedPreBonusWins = this.getCachedPreBonusWins();
+			if (this.currentWinnings <= 0 && cachedPreBonusWins > 0) {
+				this.currentWinnings = cachedPreBonusWins;
+			}
+
 			this.isFirstWinThisSpin = false;
 		});
 
@@ -347,6 +353,11 @@ export class BonusHeader {
 		// only be cleared once the bonus round has actually ended.
 		gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, () => {
 			console.log('[BonusHeader] WIN_DIALOG_CLOSED received');
+
+			if (gameStateManager.isBonus) {
+				console.log('[BonusHeader] Bonus active – keeping total winnings on screen');
+				return;
+			}
 
 			// Outside of bonus, it's safe to reset like the regular header does
 			console.log('[BonusHeader] Not in bonus – resetting winnings display');
@@ -394,6 +405,12 @@ export class BonusHeader {
 		});
 
 		// WIN_STOP no longer needs to accumulate totals; TOTAL WIN comes from freespin.totalWin
+	}
+
+	private getCachedPreBonusWins(): number {
+		const symbolsComponent = (this.bonusHeaderContainer?.scene as any)?.symbols;
+		const cachedValue = symbolsComponent?.cachedPreBonusWins;
+		return typeof cachedValue === 'number' && !Number.isNaN(cachedValue) ? cachedValue : 0;
 	}
 
 	resetMultiplierValue() {

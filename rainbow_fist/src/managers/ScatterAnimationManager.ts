@@ -308,81 +308,130 @@ export class ScatterAnimationManager {
     }
   }
 
-  private async startNuclearTransition(scene: Scene, delayModifier?: number, flashDuration?: number): Promise<void> {
-    const spine = scene.add.spine(0, 0, 'nuclear', 'nuclear-atlas');
-    const scale = getFullScreenSpineScale(scene, spine, true);
-    const offset = { x: 0, y: 50 };
-    const anchor = { x: 0.5, y: 0.5 };
-    const origin = { x: 0.5, y: 0.5 };
+  private async runFadeToBlackFallback(scene: Scene, flashDuration?: number): Promise<void> {
+    if (!scene) return;
 
-    const onComplete = () => {
-      try { spine.off('complete', onComplete); } catch { }
-      try { spine.destroy(); } catch { }
-    };
+    const duration = flashDuration || 500;
+    const camera = scene.cameras.main;
 
-    const animationDuration = playSpineAnimationSequenceWithConfig(scene, spine, [0], { x: scale.x * 1.1, y: scale.y * 1.2 }, anchor, origin, offset, 999, false, onComplete);
-
-    // Play missile SFX when the nuclear animation starts
-    try {
-      const audioMgr = (window as any).audioManager;
-      if (audioMgr && typeof audioMgr.playSoundEffect === 'function') {
-        audioMgr.playSoundEffect(SoundEffectType.MISSILE);
-        console.log('[ScatterAnimationManager] Missile SFX played at nuclear animation start');
-
-        const isTurbo = gameStateManager.isTurbo;
-        this.scene?.time.delayedCall(900, () => {
-          audioMgr.fadeOutSfx(SoundEffectType.MISSILE, 300);
-          audioMgr.playSoundEffect(SoundEffectType.EXPLOSION);
-          this.scene?.time.delayedCall(300, () => {
-            audioMgr.playSoundEffect(SoundEffectType.NUKE);
-            console.log('[ScatterAnimationManager] Nuke SFX played at nuclear animation end');
-          });
-          console.log('[ScatterAnimationManager] Missile SFX faded out at nuclear animation end');
-        });
-
-      }
-    } catch (e) {
-      console.warn('[ScatterAnimationManager] Failed to play missile SFX at nuclear animation start', e);
-    }
-    const delay = delayModifier ? animationDuration * delayModifier : animationDuration;
-
-    // use FlashTransition component for the flash instead of manual tween
-    const totalDuration = flashDuration || 500;
+    console.warn('[ScatterAnimationManager] Falling back to fade-to-black transition');
 
     return new Promise<void>((resolve) => {
-      scene.time.delayedCall(delay, () => {
-        this.flashTransition.show();
-        this.flashTransition.setAlphaImmediate(0);
-        this.flashTransition.flashOverlay(1, totalDuration / 2, 'In');
+      const onFadeOutComplete = () => {
+        scene.events.emit('scatterBonusCompleted');
+        this.triggerBonusMode(scene);
+        camera.fadeIn(duration, 0, 0, 0);
+      };
 
-        // fade back down after reaching full white
-        scene.time.delayedCall(totalDuration * 2, () => {
-          this.flashTransition.flashOverlay(0, totalDuration / 2, 'Out');
-          // Emit scatter bonus completion BEFORE triggering bonus mode so listeners can
-          // register for dialogAnimationsComplete in time
-          scene.events.emit('scatterBonusCompleted');
-          this.triggerBonusMode(scene);
-        });
+      const onFadeInComplete = () => {
+        camera.off('camerafadeoutcomplete', onFadeOutComplete);
+        camera.off('camerafadeincomplete', onFadeInComplete);
+        resolve();
+      };
 
-        // hide overlay shortly after the flash completes
-        scene.time.delayedCall(totalDuration * 3, () => {
-          this.flashTransition.hide();
+      camera.once('camerafadeoutcomplete', onFadeOutComplete);
+      camera.once('camerafadeincomplete', onFadeInComplete);
+      camera.fadeOut(duration, 0, 0, 0);
+    });
+  }
 
-          // Emit dialog animations complete event AFTER the full iris transition completes
-          console.log('[Dialogs] Dialog animations complete event emitted after full iris transition');
+  private async startNuclearTransition(scene: Scene, delayModifier?: number, flashDuration?: number): Promise<void> {
+    if (!scene) {
+      console.warn('[ScatterAnimationManager] Scene not available, using fade-to-black fallback');
+      await this.runFadeToBlackFallback(scene, flashDuration);
+      return;
+    }
 
-          // Restore background music volume after dialog completes
-          try {
-            const audioManager = (window as any).audioManager;
-            if (audioManager && typeof audioManager.restoreBackground === 'function') {
-              audioManager.restoreBackground();
-            }
-          } catch { }
+    const hasSpineSupport = !!(scene.add as any)?.spine;
+    if (!hasSpineSupport) {
+      console.warn('[ScatterAnimationManager] Spine support missing, using fade-to-black fallback');
+      await this.runFadeToBlackFallback(scene, flashDuration);
+      return;
+    }
 
-          resolve();
+    if (!this.flashTransition) {
+      this.flashTransition = new FlashTransition(scene);
+    }
+
+    try {
+      const spine = scene.add.spine(0, 0, 'nuclear', 'nuclear-atlas');
+      const scale = getFullScreenSpineScale(scene, spine, true);
+      const offset = { x: 0, y: 50 };
+      const anchor = { x: 0.5, y: 0.5 };
+      const origin = { x: 0.5, y: 0.5 };
+
+      const onComplete = () => {
+        try { spine.off('complete', onComplete); } catch { }
+        try { spine.destroy(); } catch { }
+      };
+
+      const animationDuration = playSpineAnimationSequenceWithConfig(scene, spine, [0], { x: scale.x * 1.1, y: scale.y * 1.2 }, anchor, origin, offset, 999, false, onComplete);
+
+      // Play missile SFX when the nuclear animation starts
+      try {
+        const audioMgr = (window as any).audioManager;
+        if (audioMgr && typeof audioMgr.playSoundEffect === 'function') {
+          audioMgr.playSoundEffect(SoundEffectType.MISSILE);
+          console.log('[ScatterAnimationManager] Missile SFX played at nuclear animation start');
+
+          const isTurbo = gameStateManager.isTurbo;
+          this.scene?.time.delayedCall(900, () => {
+            audioMgr.fadeOutSfx(SoundEffectType.MISSILE, 300);
+            audioMgr.playSoundEffect(SoundEffectType.EXPLOSION);
+            this.scene?.time.delayedCall(300, () => {
+              audioMgr.playSoundEffect(SoundEffectType.NUKE);
+              console.log('[ScatterAnimationManager] Nuke SFX played at nuclear animation end');
+            });
+            console.log('[ScatterAnimationManager] Missile SFX faded out at nuclear animation end');
+          });
+
+        }
+      } catch (e) {
+        console.warn('[ScatterAnimationManager] Failed to play missile SFX at nuclear animation start', e);
+      }
+      const delay = delayModifier ? animationDuration * delayModifier : animationDuration;
+
+      // use FlashTransition component for the flash instead of manual tween
+      const totalDuration = flashDuration || 500;
+
+      return new Promise<void>((resolve) => {
+        scene.time.delayedCall(delay, () => {
+          this.flashTransition.show();
+          this.flashTransition.setAlphaImmediate(0);
+          this.flashTransition.flashOverlay(1, totalDuration / 2, 'In');
+
+          // fade back down after reaching full white
+          scene.time.delayedCall(totalDuration * 2, () => {
+            this.flashTransition.flashOverlay(0, totalDuration / 2, 'Out');
+            // Emit scatter bonus completion BEFORE triggering bonus mode so listeners can
+            // register for dialogAnimationsComplete in time
+            scene.events.emit('scatterBonusCompleted');
+            this.triggerBonusMode(scene);
+          });
+
+          // hide overlay shortly after the flash completes
+          scene.time.delayedCall(totalDuration * 3, () => {
+            this.flashTransition.hide();
+
+            // Emit dialog animations complete event AFTER the full iris transition completes
+            console.log('[Dialogs] Dialog animations complete event emitted after full iris transition');
+
+            // Restore background music volume after dialog completes
+            try {
+              const audioManager = (window as any).audioManager;
+              if (audioManager && typeof audioManager.restoreBackground === 'function') {
+                audioManager.restoreBackground();
+              }
+            } catch { }
+
+            resolve();
+          });
         });
       });
-    });
+    } catch (error) {
+      console.warn('[ScatterAnimationManager] Nuclear transition unavailable, using fade-to-black fallback', error);
+      await this.runFadeToBlackFallback(scene, flashDuration);
+    }
   }
 
   private triggerBonusMode(scene: Scene): void {

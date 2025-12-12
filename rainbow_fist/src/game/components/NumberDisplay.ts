@@ -77,7 +77,7 @@ export class NumberDisplay {
 	private dropShadowColor: number = 0x000000;
 
 	private borderPadding = 8;
-	private borderAlpha = 0.4;
+	private borderAlpha = 0.65;
 	private borderLineColor = 0xFFFF00;
 	private borderFillColor = 0x000000;
 
@@ -443,7 +443,7 @@ export class NumberDisplay {
 		this.numberBorder.clear();
 		this.numberBorder.fillStyle(this.borderFillColor, this.borderAlpha);
 		this.numberBorder.fillRoundedRect(borderX, borderY, borderWidth, borderHeight, 4);
-		this.numberBorder.lineStyle(2, this.borderLineColor, this.borderAlpha);
+		this.numberBorder.lineStyle(3, this.borderLineColor, this.borderAlpha);
 		this.numberBorder.strokeRoundedRect(borderX, borderY, borderWidth, borderHeight, 4);
 	}
 

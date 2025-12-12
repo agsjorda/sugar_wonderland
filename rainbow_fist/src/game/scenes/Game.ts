@@ -11,7 +11,7 @@
  * Base stable version - revert to this if future changes break functionality
  */
 import { EventBus } from '../EventBus';
-import { Scene } from 'phaser';
+import { Scene, Input } from 'phaser';
 import { Background } from '../components/Background';
 import { Header } from '../components/Header';
 import { SlotController } from '../components/SlotController';
@@ -65,6 +65,7 @@ export class Game extends Scene
 	private menu: Menu;
 	private scatterAnticipation: ScatterAnticipation;
 		private winTrackerRow?: Phaser.GameObjects.Container;
+	private modeToggleKeys?: { base: Input.Keyboard.Key; bonus: Input.Keyboard.Key };
 	
 	// Note: Payout data now calculated directly from paylines in WIN_STOP handler
 	// Track whether this spin has winlines to animate
@@ -440,6 +441,8 @@ export class Game extends Scene
 			} else {
 				console.log('[Game] Skipping balance update on REELS_STOP (scatter/bonus active)');
 			}
+
+			this.gameAPI.incrementCurrentTumbleIndex();
 			
 			// Get current spin data to determine win amount
 			if (this.symbols && this.symbols.currentSpinData) {
@@ -463,17 +466,25 @@ export class Game extends Scene
 			if (this.symbols && this.symbols.currentSpinData) {
 				console.log('[Game] WIN_STOP: Found current spin data, calculating total win from paylines');
 				
-				// Calculate total win from SpinData (handles base + freespins)
-				// const totalWin = this.calculateTotalWinFromPaylines(spinData);
-				// const betAmount = parseFloat(spinData.bet);
-				const betAmount = parseFloat(this.symbols.currentSpinData.bet);
-				const totalWin = this.symbols.currentSpinData.slot?.totalWin ?? 0;
-				
+				const slotData = data.spinData?.slot || data?.slot;
+				console.log('[Game] WIN_STOP: Slot data: ', slotData);
+
+				let totalWin = 0;
+				if(gameStateManager.isScatter)
+					totalWin = SpinDataUtils.getScatterSpinWins(data.spinData);
+				else if(gameStateManager.isBonus)
+					totalWin = SpinDataUtils.getBonusSpinWins(data.spinData, this.gameAPI.getCurrentFreeSpinIndex() - 1);
+				else
+					totalWin = data.spinData.slot.totalWin;
+
+				const betAmount = parseFloat(data.spinData.bet);
 				console.log(`[Game] WIN_STOP: Total win calculated: $${totalWin}, bet: $${betAmount}`);
 				
 				if (totalWin > 0) {
 					// Note: Win dialog threshold check moved to Symbols component for earlier detection
+					console.log('[Game] WIN_STOP: Showing win dialog');
 					this.checkAndShowWinDialog(totalWin, betAmount);
+					console.log('[Game] WIN_STOP: Win dialog shown');
 				} else {
 					console.log('[Game] WIN_STOP: No wins detected from paylines');
 				}
@@ -492,7 +503,10 @@ export class Game extends Scene
 		// Listen for reel completion to handle balance updates and win tracker display
 		gameEventManager.on(GameEventType.REELS_STOP, (eventData?: GameEventData) => {
 			console.log('[Game] REELS_STOP event received');
-			
+
+			// Reset tumble index when reels stop (end of win/tumble chain).
+			this.gameAPI.resetCurrentTumbleIndex();
+
 			// Request balance update to finalize the spin (add winnings to balance)
 			// This is needed to complete the spin cycle and update the final state
 			console.log('[Game] Reels done - requesting balance update to finalize spin');
@@ -599,7 +613,7 @@ export class Game extends Scene
 		spinData.slot?.freespin?.items[this.gameAPI.getCurrentFreeSpinIndex() - 1]?.tumble?.items[this.gameAPI.getCurrentTumbleIndex()]?.symbols?.out: 
 		spinData.slot?.tumbles?.items[this.gameAPI.getCurrentTumbleIndex()]?.symbols?.out;
 
-		if (outResult && !outResult.length) {
+		if (!outResult || !outResult.length) {
 			console.log('[Game] No winning symbols in tumble item - skipping WinTracker display');
 			return;
 		}
@@ -621,14 +635,17 @@ export class Game extends Scene
 		const reelsBottomY = slotY + totalGridHeight * 0.5 + paddingY + offsetY;
 
 		const rowX = slotX;
-		const rowY = reelsBottomY + 34; // Slight offset below the border
+		const rowY = reelsBottomY + 25; // Slight offset below the border
 
 		console.log(`[Game] outResult: `, outResult);
 
 		// Build one config per winning symbol and let WinTracker lay them out side by side
-		const winRowConfigs = outResult.map((item: any) => ({
+		const isBonusMode = gameStateManager.isBonus;
+		const winTextColor = '#ffffff';
+		const winStrokeColor = isBonusMode ? '#4b5320' : '#cc6600'; // dark green in bonus, army green otherwise
+
+		const winRowConfigs = outResult?.map((item: any) => ({
 			scene: this,
-			symbolScale: 0.06,
 			symbolIndex: item.symbol,
 			symbolWinCount: item.count,
 			totalWinAmount: item.win,
@@ -636,11 +653,15 @@ export class Game extends Scene
 			y: rowY,
 			depth: 950,
 			textFontSize: '16px',
-			// dark green instead of black for bonus mode same as the remaining free spin stroke color
-			textColor: gameStateManager.isBonus ? '#000000' : '#ffffff',
+			textColor: winTextColor,
+			textStyle: {
+				stroke: winStrokeColor,
+				strokeThickness: 2,
+			},
 		}));
 
-		this.winTrackerRow = WinTracker.createSymbolWinRow(winRowConfigs);
+		this.winTrackerRow = WinTracker.createSymbolWinRow(winRowConfigs ?? []);
+		WinTracker.startWave(this.winTrackerRow, { scale: 1.3, duration: 150, staggerDelay: 100 });
 
 		console.log('[Game] WinTracker rows displayed under reels border from tumble data', {
 			outResult,
@@ -1177,6 +1198,8 @@ export class Game extends Scene
 			minimizeKey: 'minimize'
 		});
 
+		this.setupModeToggleKeys();
+
 		// Add a test method to manually trigger bonus mode (for debugging)
 		(window as any).testBonusMode = () => {
 			console.log('[Game] TEST: Manually triggering bonus mode');
@@ -1328,5 +1351,45 @@ export class Game extends Scene
 		this.events.once('shutdown', () => {
 			// Clean up any game-specific resources if needed
 		});
+	}
+
+	private setupModeToggleKeys(): void {
+		const keyboard = this.input?.keyboard;
+		if (!keyboard) {
+			console.warn('[Game] Keyboard input not available for mode toggle');
+			return;
+		}
+
+		const baseKey = keyboard.addKey(Input.Keyboard.KeyCodes.Q);
+		const bonusKey = keyboard.addKey(Input.Keyboard.KeyCodes.E);
+
+		baseKey.on('down', () => this.handleModeToggle(false));
+		bonusKey.on('down', () => this.handleModeToggle(true));
+
+		this.modeToggleKeys = { base: baseKey, bonus: bonusKey };
+
+		this.events.once('shutdown', () => {
+			if (this.modeToggleKeys) {
+				this.modeToggleKeys.base.destroy();
+				this.modeToggleKeys.bonus.destroy();
+				this.modeToggleKeys = undefined;
+			}
+		});
+	}
+
+	private handleModeToggle(isBonus: boolean): void {
+		if (this.gameStateManager.isBonus === isBonus) {
+			console.log(`[Game] Already in ${isBonus ? 'bonus' : 'base'} mode`);
+			return;
+		}
+
+		this.gameStateManager.isBonus = isBonus;
+		this.switchBetweenModes(isBonus);
+
+		if (isBonus) {
+			this.audioManager?.playBackgroundMusic(MusicType.BONUS);
+		} else {
+			this.audioManager?.playBackgroundMusic(MusicType.MAIN);
+		}
 	}
 }

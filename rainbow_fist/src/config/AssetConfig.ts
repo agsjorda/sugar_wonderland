@@ -339,7 +339,7 @@ export class AssetConfig {
 					json: `${prefix}/dialogs/EpicW_RF/EpicW_RF.json`
 				},
 				'super_win': {
-					atlas: `${prefix}/dialogs/SuperW_RF/SuperW_RF.atlas`,
+					atlas: `${prefix}/dialogs/SuperW_RF/SuperW_RF.atlas`, 
 					json: `${prefix}/dialogs/SuperW_RF/SuperW_RF.json`
 				},
 				'free_spin': {
@@ -347,8 +347,8 @@ export class AssetConfig {
 					json: `${prefix}/dialogs/FreeSpin_RF/FreeSpin_RF.json`
 				},
 				'max_win': {
-					atlas: `${prefix}/dialogs/MaxWin_RF/MaxWin_RF.atlas`,
-					json: `${prefix}/dialogs/MaxWin_RF/MaxWin_RF.json`
+					atlas: `${prefix}/dialogs/MaxW_RF/MaxW_RF.atlas`,
+					json: `${prefix}/dialogs/MaxW_RF/MaxW_RF.json`
 				},
 				// 'total_win': {
 				// 	atlas: `${prefix}/dialogs/TotalWin_RF/TotalWin_RF.atlas`,

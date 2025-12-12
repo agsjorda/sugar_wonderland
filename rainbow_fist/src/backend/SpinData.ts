@@ -24,6 +24,9 @@ export interface SlotData {
   /** Array of winning paylines */
   paylines: PaylineData[];
 
+  /** Total win for this spin (base + bonus) */
+  totalWin?: number;
+
   /** Optional tumble steps for cluster wins (array of steps with in/out and win) */
   tumbles?: any[];
   
@@ -88,6 +91,9 @@ export interface FreespinItem {
   
   /** Win amount for this specific free spin */
   subTotalWin: number;
+  
+  /** Total win for this specific free spin (when provided) */
+  totalWin?: number;
   
   /** 3x5 grid of symbols for this free spin (columns x rows) */
   area: number[][];
@@ -314,5 +320,22 @@ export class SpinDataUtils {
     const betAmount = parseFloat(spinData.bet);
     if (betAmount === 0) return 0;
     return this.getTotalWin(spinData) / betAmount;
+  }
+
+  static getTotalWinFromFreeSpin(spinData: any): number {
+    const freespin = spinData.slot.freespin || spinData.slot.freeSpin;
+    if (!freespin || !Array.isArray(freespin.items)) return 0;
+    return freespin.items.reduce((sum: number, item: any) => sum + (item?.totalWin || 0), 0);
+  }
+
+  static getScatterSpinWins(spinData: any): number {
+    const totalWin = spinData?.slot?.totalWin ?? 0;
+    const freeSpinWin = this.getTotalWinFromFreeSpin(spinData);
+    return totalWin - freeSpinWin;
+  }
+
+  static getBonusSpinWins(spinData: any, freeSpinIndex: number): number {
+    const freeSpinWin = spinData?.slot?.freespin?.items?.[freeSpinIndex]?.totalWin ?? 0;
+    return freeSpinWin;
   }
 }

@@ -59,8 +59,8 @@ export class Dialogs {
 	// Dialog configuration
 	private dialogScales: Record<string, number> = {
 		'Congratulations': 1,
-		'FreeSpinDialog': 1,
-		'BonusFreeSpinDialog': 1,
+		'FreeSpinDialog': 0.28,
+		'BonusFreeSpinDialog': 0.28,
 		'EpicWin': 1.01,
 		'MegaWin': 1.01,
 		'BigWin': 1.01,
@@ -76,6 +76,18 @@ export class Dialogs {
 		'MegaWin': { x: 0.51, y: 0.555 },
 		'EpicWin': { x: 0.5, y: 0.5175 },
 		'SuperWin': { x: 0.5, y: 0.5075 },
+	};
+
+	// Number display positions (relative). Defaults to center + offset when not specified.
+	private numberDisplayPositions: Record<string, { x: number; y: number }> = {
+		'BigWin': { x: 0.5, y: 0.525 },
+		'MegaWin': { x: 0.5, y: 0.525 },
+		'EpicWin': { x: 0.5, y: 0.525 },
+		'SuperWin': { x: 0.5, y: 0.525 },
+		'FreeSpinDialog': { x: 0.5, y: 0.625 },
+		'BonusFreeSpinDialog': { x: 0.5, y: 0.5 },
+		'MaxWin': { x: 0.5, y: 0.625 },
+		'Congratulations': { x: 0.5, y: 0.625 },
 	};
 
 	private dialogLoops: Record<string, boolean> = {
@@ -611,7 +623,7 @@ export class Dialogs {
 		// Create the text with your original styling
 		this.continueText = scene.add.text(
 			scene.scale.width / 2,
-			scene.scale.height / 2 + 300,
+			scene.scale.height * 0.91,
 			'Press anywhere to continue',
 			{
 				fontFamily: 'Poppins-Bold',
@@ -662,18 +674,20 @@ export class Dialogs {
 		}
 		
 		// Create number display configuration
+		const position = this.getNumberDisplayPosition(scene);
 		const numberConfig: NumberDisplayConfig = {
-			x: scene.scale.width / 2,
-			y: scene.scale.height / 2 + 110,
-			scale: 0.1,
-			spacing: 8,
+			x: position.x,
+			y: position.y,
+			scale: 0.04,
+			spacing: -12,
 			alignment: 'center',
 			decimalPlaces: freeSpins !== undefined ? 0 : 2, // No decimals for free spins
 			showCommas: freeSpins !== undefined ? false : true, // No commas for free spins
 			prefix: '', // No prefix for any number display
 			suffix: '', // No suffix - only display numbers
-			commaYOffset: 18,
-			dotYOffset: 18
+			commaYOffset: 15,
+			dotYOffset: 15
+
 		};
 
 		// Create the number display
@@ -1297,6 +1311,10 @@ export class Dialogs {
 					this.performDialogCleanup();
 					console.log('[Dialogs] Dialog elements cleaned up after fade-out');
 					
+					// Notify listeners that dialog animations (including win dialog fade-outs) are done
+					scene.events.emit('dialogAnimationsComplete');
+					console.log('[Dialogs] dialogAnimationsComplete emitted after win dialog fade-out');
+					
 					// Reset alpha to 1 for next dialog
 					this.dialogOverlay.setAlpha(1);
 					
@@ -1630,6 +1648,21 @@ export class Dialogs {
 		}
 		// Default to center of screen
 		return { x: scene.scale.width / 2, y: scene.scale.height / 2 };
+	}
+
+	private getNumberDisplayPosition(scene: Scene): { x: number; y: number } {
+		const type = this.currentDialogType || '';
+		const relativePosition = this.numberDisplayPositions[type];
+
+		if (relativePosition) {
+			return {
+				x: relativePosition.x * scene.scale.width,
+				y: relativePosition.y * scene.scale.height,
+			};
+		}
+
+		// Fallback to legacy placement slightly below center for non-win dialogs
+		return { x: scene.scale.width / 2, y: scene.scale.height / 2 + 110 };
 	}
 
 	private getDialogLoop(dialogType: string): boolean {

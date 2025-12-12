@@ -31,6 +31,86 @@ export interface SymbolWinRowConfig {
 export class WinTracker {
 	private static readonly ROW_CONTAINER_NAME = 'win-tracker-row';
 	private static readonly GROUP_CONTAINER_NAME = 'win-tracker-group';
+	private static readonly WAVE_TWEEN_DATA_KEY = '__winTrackerWaveTween';
+
+	public static startWave(
+		container?: Phaser.GameObjects.Container | null,
+		options?: {
+			scale?: number;
+			duration?: number;
+			staggerDelay?: number;
+			repeat?: number;
+		},
+	): Phaser.Tweens.Tween | undefined {
+		if (!container) return undefined;
+
+		// Stop any existing wave tween attached to this container
+		WinTracker.stopWave(container);
+
+		const scene = container.scene;
+		if (!scene || !scene.tweens) return undefined;
+
+		const targets: Phaser.GameObjects.GameObject[] = [];
+
+		const gatherTargets = (node: Phaser.GameObjects.GameObject) => {
+			const anyNode = node as any;
+
+			// Skip Containers as tween targets, otherwise the whole row scales uniformly.
+			if (node instanceof Phaser.GameObjects.Container) {
+				if (Array.isArray(anyNode.list)) {
+					anyNode.list.forEach((child: Phaser.GameObjects.GameObject) => gatherTargets(child));
+				}
+				return;
+			}
+
+			if (typeof anyNode.setScale === 'function') {
+				targets.push(node);
+			}
+
+			// Safety: traverse potential nested lists even on non-containers.
+			if (Array.isArray(anyNode.list)) {
+				anyNode.list.forEach((child: Phaser.GameObjects.GameObject) => gatherTargets(child));
+			}
+		};
+
+		gatherTargets(container);
+		if (!targets.length) return undefined;
+
+		const scale = options?.scale ?? 1.12;
+		const duration = options?.duration ?? 150;
+		const staggerDelay = options?.staggerDelay ?? 80;
+		const repeat = options?.repeat ?? 0;
+
+		const tween = scene.tweens.add({
+			targets,
+			// Relative to current scale of each target
+			scaleX: (target: any) => (typeof target.scaleX === 'number' ? target.scaleX : 1) * scale,
+			scaleY: (target: any) => (typeof target.scaleY === 'number' ? target.scaleY : 1) * scale,
+			ease: 'Sine.easeInOut',
+			duration,
+			yoyo: true,
+			repeat,
+			delay: scene.tweens.stagger(staggerDelay, { from: 0 }),
+		});
+
+		// Persist tween reference on the container for cleanup
+		container.setDataEnabled();
+		container.setData(WinTracker.WAVE_TWEEN_DATA_KEY, tween);
+
+		return tween;
+	}
+
+	public static stopWave(container?: Phaser.GameObjects.Container | null): void {
+		if (!container) return;
+		const anyContainer = container as any;
+		const data = anyContainer.data;
+		const tween = data?.get?.(WinTracker.WAVE_TWEEN_DATA_KEY) as Phaser.Tweens.Tween | undefined;
+		if (tween) {
+			try { tween.stop(); } catch { }
+			try { tween.remove(); } catch { }
+			try { data.remove(WinTracker.WAVE_TWEEN_DATA_KEY); } catch { }
+		}
+	}
 
 	public readonly container: Phaser.GameObjects.Container;
 
@@ -137,11 +217,13 @@ export class WinTracker {
 	 */
 	public static clearContainer(container?: Phaser.GameObjects.Container | null): void {
 		if (!container) return;
+		WinTracker.stopWave(container);
 		// `destroyed` is available on most GameObjects; guard in case of typing differences
 		const anyContainer = container as any;
-		if (!anyContainer.destroyed) {
-			container.destroy();
-		}
+		if (anyContainer.destroyed) return;
+		// Be explicit: destroy children too, to avoid any lingering images/text.
+		try { container.removeAll(true); } catch { }
+		container.destroy();
 	}
 
 	/**
@@ -152,7 +234,8 @@ export class WinTracker {
 		scene.children.each((child: Phaser.GameObjects.GameObject) => {
 			console.log('[WinTracker] Clearing from scene', child.name);
 			if (child.name === WinTracker.ROW_CONTAINER_NAME || child.name === WinTracker.GROUP_CONTAINER_NAME) {
-				child.destroy();
+				// Only WinTracker containers should hit this branch
+				WinTracker.clearContainer(child as any);
 			}
 		});
 	}
@@ -185,7 +268,7 @@ export class WinTracker {
 		currentX += countText.width + 6;
 
 		// [sprite] – use symbol_{index} texture if available
-		const symbolKey = `symbol_${symbolIndex}`;
+		const symbolKey = `symbol${symbolIndex}`;
 		let symbolWidth = 0;
 
 		if (scene.textures.exists(symbolKey)) {

@@ -22,6 +22,14 @@ import { SpinData, SpinDataUtils } from "../../backend/SpinData";
 const DEBUG_SYMBOLS_TUMBLES = false;
 
 export class Symbols {
+  // DEBUGGING
+  public showWireframes: boolean = true; // Toggle to show/hide wireframe boxes
+  public showMaskWireframe: boolean = true; // Toggle to show/hide mask wireframe
+
+  public wireframeBoxes: Phaser.GameObjects.Graphics[] = [];
+  public maskWireframe?: Phaser.GameObjects.Graphics;
+
+
   private static readonly WINLINE_CHECKING_DISABLED: boolean = true;
 
   public static FILLER_COUNT: number = 20;
@@ -42,16 +50,13 @@ export class Symbols {
   public symbolDetector: SymbolDetector;
   private overlayRect?: Phaser.GameObjects.Graphics;
   public currentSpinData: any = null; // Store current spin data for access by other components
+  public cachedPreBonusWins: number = 0;
   private dialogs: Dialogs;
   public dropSparkPlayedColumns: Set<number> = new Set();
   public sparkVFXPool: SpineGameObject[] = [];
   public symbolSpritePool: GameObjects.Sprite[] = [];
   public spinePools: { [key: string]: SpineGameObject[] } = {};
   public multiplierSymbolCache: SpineGameObject[] = [];
-  public wireframeBoxes: Phaser.GameObjects.Graphics[] = [];
-  public showWireframes: boolean = false; // Toggle to show/hide wireframe boxes
-  public maskWireframe?: Phaser.GameObjects.Graphics;
-  public showMaskWireframe: boolean = false; // Toggle to show/hide mask wireframe
   public tumbleRemoveMask: boolean[][] = [];
 
   private symbolSpineKey: string = 'Symbol_WF';
@@ -63,15 +68,15 @@ export class Symbols {
 
   public static readonly MULTIPLIER_ANIMATION_TIME_SCALE: number = 0.5;
 
-  public readonly baseSymbolWidth: number = 67;
-  public readonly baseSymbolHeight: number = 67;
+  public readonly baseSymbolWidth: number = 70;
+  public readonly baseSymbolHeight: number = 70;
 
-  public gridOffsetX: number = 0;
+  public gridOffsetX: number = 2;
   public gridOffsetY: number = -40;
   public baseCenterX: number = 0;
   public baseCenterY: number = 0;
 
-  public maskPadding: { left: number, right: number, top: number, bottom: number } = { left: 14, right: 14, top: 60, bottom: 13 };
+  public maskPadding: { left: number, right: number, top: number, bottom: number } = { left: 14, right: 14, top: 54, bottom: 7 };
 
   private symbolWinTimeScales: { [key: number]: number } = {
     0: 1,
@@ -1752,6 +1757,16 @@ export class Symbols {
     return this.freeSpinAutoplayActive;
   }
 
+  public calculateAndCachePreBonusWins(spinData: any) {
+    if (gameStateManager.isBonus) {
+      return;
+    }
+
+    const multiplierValue = spinData?.slot?.freeSpin?.multiplierValue ?? spinData?.slot?.freespin?.multiplierValue;
+    this.cachedPreBonusWins = typeof multiplierValue === 'number' && !Number.isNaN(multiplierValue) ? multiplierValue : 0;
+    console.log(`[Symbols] Cached pre-bonus wins from free spin multiplierValue: ${this.cachedPreBonusWins}`);
+  }
+
   /**
    * Get the time scale for a specific symbol's win animation
    */
@@ -2547,6 +2562,9 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   // NOW handle scatter symbols AFTER winlines are drawn
   if (scatterGrids.length >= 4) {
     console.log(`[Symbols] Scatter detected! Found ${scatterGrids.length} scatter symbols`);
+    try {
+      self.calculateAndCachePreBonusWins(spinData);
+    } catch { }
     gameStateManager.isScatter = true;
 
     // If there are no normal wins (no paylines), play scatter SFX now
@@ -2624,10 +2642,17 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   // Mark spin as done after all animations and tumbles finish (no winline drawer flow)
   console.log('[Symbols] Emitting REELS_STOP and WIN_STOP after symbol animations and tumbles (no winlines flow)');
   try {
-    gameEventManager.emit(GameEventType.WIN_STOP);
-    this.scene.time.delayedCall(50, () => {
-      gameEventManager.emit(GameEventType.REELS_STOP);
-    });
+    // Pass spinData to match warfreaks_v2 event payload
+    gameEventManager.emit(GameEventType.WIN_STOP, { spinData });
+    const scene = self.scene;
+    if (scene?.time) {
+      scene.time.delayedCall(50, () => {
+        gameEventManager.emit(GameEventType.REELS_STOP, { spinData });
+      });
+    } else {
+      // Fallback if scene/time is unavailable; emit immediately to avoid stalling
+      gameEventManager.emit(GameEventType.REELS_STOP, { spinData });
+    }
   } catch (e) {
     console.warn('[Symbols] Failed to emit REELS_STOP/WIN_STOP:', e);
   }
@@ -3859,14 +3884,9 @@ function playTumbleSfx(self: Symbols): void {
  * Expects tumbles to be in the SpinData format: [{ symbols: { in: number[][], out: {symbol:number,count:number,win:number}[] }, win: number }, ...]
  */
 async function applyTumbles(self: Symbols, tumbles: any[]): Promise<void> {
-  self.scene.gameAPI.incrementCurrentTumbleIndex();
-
   for (const tumble of tumbles) {
     await applySingleTumble(self, tumble);
-    self.scene.gameAPI.incrementCurrentTumbleIndex();
   }
-
-  self.scene.gameAPI.resetCurrentTumbleIndex();
 }
 
 async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {

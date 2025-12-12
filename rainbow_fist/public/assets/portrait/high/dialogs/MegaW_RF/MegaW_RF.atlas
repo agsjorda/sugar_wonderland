@@ -67,6 +67,9 @@ MegaW_RF_2.webp
 size:2044,2044
 filter:Linear,Linear
 pma:false
+Circle
+bounds:666,364,222,228
+offsets:1,1,224,230
 Star/Star_00005
 bounds:2,113,662,479
 offsets:165,264,1000,1000
