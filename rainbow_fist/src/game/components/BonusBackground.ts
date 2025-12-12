@@ -15,6 +15,10 @@ export class BonusBackground {
 	private reelFrame: Phaser.GameObjects.Image;
 	private movingDoves: SpineGameObject[] = [];
 
+	private reelFrameDepth: number = 550;
+
+	private reelFramePosition: {x: number, y: number} = {x: 0.5, y: 0.2};
+
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
 		this.screenModeManager = screenModeManager;
@@ -87,12 +91,15 @@ export class BonusBackground {
 
 		// Add reel frame
 		this.reelFrame = scene.add.image(
-			scene.scale.width * 0.495,
-			scene.scale.height * 0.62,
+			scene.scale.width * this.reelFramePosition.x,
+			scene.scale.height * 0.415,
 			'bonus_reel_frame'
-		).setOrigin(0.5, 0.95)
-		.setScale(assetScale * 0.323, assetScale * 0.291)
-		.setDepth(5);
+		).setOrigin(0.5, 0.5)
+		.setDepth(this.reelFrameDepth);
+
+		// Fit reel frame to screen width while preserving aspect ratio
+		this.fitReelFrameToScreenWidth(scene);
+
 		this.bonusContainer.add(this.reelFrame);
 
 		// Dove spine animation
@@ -130,6 +137,7 @@ export class BonusBackground {
 		}
 		this.fitBackgroundToScreen(scene);
 		this.fitArchToBottom(scene);
+		this.fitReelFrameToScreenWidth(scene);
 	}
 
 	private fitArchToBottom(scene: Scene): void {
@@ -143,6 +151,27 @@ export class BonusBackground {
 		this.arch.setScale(scale);
 		this.arch.setOrigin(0.5, 1);
 		this.arch.setPosition(screenWidth * 0.5, screenHeight);
+	}
+
+	/**
+	 * Scales the reel frame so that it fits the full screen width
+	 * while preserving its aspect ratio.
+	 */
+	private fitReelFrameToScreenWidth(scene: Scene): void {
+		if (!this.reelFrame) return;
+
+		const screenWidth = scene.scale.width;
+		const screenHeight = scene.scale.height;
+
+		const imageWidth = this.reelFrame.frame.width;
+		const imageHeight = this.reelFrame.frame.height;
+
+		if (imageWidth === 0 || imageHeight === 0) return;
+
+		// Uniform scale, based only on width, to keep aspect ratio
+		const scale = screenWidth / imageWidth;
+
+		this.reelFrame.setScale(scale);
 	}
 
 	getContainer(): Phaser.GameObjects.Container {

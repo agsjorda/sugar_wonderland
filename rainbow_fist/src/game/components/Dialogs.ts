@@ -61,10 +61,10 @@ export class Dialogs {
 		'Congratulations': 1,
 		'FreeSpinDialog': 1,
 		'BonusFreeSpinDialog': 1,
-		'EpicWin': 0.9,
-		'MegaWin': 0.9,
-		'BigWin': 0.9,
-		'SuperWin': 0.9,
+		'EpicWin': 1.01,
+		'MegaWin': 1.01,
+		'BigWin': 1.01,
+		'SuperWin': 1.01,
 	};
 
 	// Dialog positions (relative: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom)
@@ -72,10 +72,10 @@ export class Dialogs {
 		'Congratulations': { x: 0.535, y: 0.625 },
 		'FreeSpinDialog': { x: 0.5, y: 0.3 },
 		'BonusFreeSpinDialog': { x: 0.5, y: 0.3 },
-		'EpicWin': { x: 0.5, y: 0.5 },
-		'MegaWin': { x: 0.5, y: 0.5 },
-		'BigWin': { x: 0.5, y: 0.5 },
-		'SuperWin': { x: 0.5, y: 0.5 },
+		'BigWin': { x: 0.54, y: 0.53 },
+		'MegaWin': { x: 0.51, y: 0.555 },
+		'EpicWin': { x: 0.5, y: 0.5175 },
+		'SuperWin': { x: 0.5, y: 0.5075 },
 	};
 
 	private dialogLoops: Record<string, boolean> = {
@@ -91,22 +91,23 @@ export class Dialogs {
 
 	private winDialogAnimationNames: Record<string, string> = {
 		'Congratulations': 'total_win_idle',
-		'FreeSpinDialog': 'freespin_WF_idle',
-		'BonusFreeSpinDialog': 'free5spin_WF_idle',
-		'BigWin': 'big_WF',
-		'MegaWin': 'mega_WF',
-		'EpicWin': 'epic_WF',
-		'SuperWin': 'super_WF'
+		'FreeSpinDialog': 'FreeSpin_RF',
+		'BonusFreeSpinDialog': 'FreeSpinRetri_RF',
+		'BigWin': 'BWin',
+		'MegaWin': 'animation',
+		'EpicWin': 'animation',
+		'SuperWin': 'animation',
+		'default': 'animation'
 	}
 
 	private dialogSpineNames: Record<string, string> = {
 		'Congratulations': 'total_win',
 		'FreeSpinDialog': 'free_spin',
 		'BonusFreeSpinDialog': 'free_spin',
-		'BigWin': 'win_dialog',
-		'MegaWin': 'win_dialog',
-		'EpicWin': 'win_dialog',
-		'SuperWin': 'win_dialog'
+		'BigWin': 'big_win',
+		'MegaWin': 'mega_win',
+		'EpicWin': 'epic_win',
+		'SuperWin': 'super_win'
 	}
 	private flashTransition: FlashTransition | null = null;
 
@@ -386,20 +387,20 @@ export class Dialogs {
 			
 			// Play intro animation first, then loop idle based on configuration (fallback to idle if intro missing)
 			const shouldLoop = this.getDialogLoop(config.type);
-			const rootAnimName = this.winDialogAnimationNames[config.type];
+			const rootAnimName = this.winDialogAnimationNames[config.type] || this.winDialogAnimationNames['default'] || config.type;
 			try {
-				console.log(`[Dialogs] Playing intro animation: ${rootAnimName ? rootAnimName : config.type}`);
-				this.currentDialog.animationState.setAnimation(0, `${rootAnimName ? rootAnimName : config.type}`, shouldLoop);
+				console.log(`[Dialogs] Playing intro animation: ${rootAnimName}`);
+				this.currentDialog.animationState.setAnimation(0, rootAnimName, shouldLoop);
 			}
 			catch (error) {
 				try {
-					console.log(`[Dialogs] Playing intro animation: ${rootAnimName ? rootAnimName : config.type}_win`);
-					this.currentDialog.animationState.setAnimation(0, `${rootAnimName ? rootAnimName : config.type}_win`, false);
-					this.currentDialog.animationState.addAnimation(0, `${rootAnimName ? rootAnimName : config.type}_idle`, shouldLoop, 0);
+					console.log(`[Dialogs] Playing intro animation: ${rootAnimName}_win`);
+					this.currentDialog.animationState.setAnimation(0, `${rootAnimName}_win`, false);
+					this.currentDialog.animationState.addAnimation(0, `${rootAnimName}_idle`, shouldLoop, 0);
 				} catch (error) {
-					console.log(`[Dialogs] Intro animation failed, falling back to idle: ${rootAnimName ? rootAnimName : config.type}_idle`);
+					console.log(`[Dialogs] Intro animation failed, falling back to idle: ${rootAnimName}_idle`);
 					// Fallback to idle animation if intro is missing
-					this.currentDialog.animationState.setAnimation(0, `${rootAnimName ? rootAnimName : config.type}_idle`, shouldLoop);
+					this.currentDialog.animationState.setAnimation(0, `${rootAnimName}_idle`, shouldLoop);
 				}
 			}
 			

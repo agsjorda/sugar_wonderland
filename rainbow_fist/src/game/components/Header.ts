@@ -25,6 +25,9 @@ export class Header {
 	private scene: Game;
 	private currentMultiplier: number = 0;
 
+	private winningsLabelTextOffset: {x: number, y: number} = {x: 0, y: -14};
+	private winningsValueTextOffset: {x: number, y: number} = {x: 0, y: 6};
+
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
 		this.screenModeManager = screenModeManager;
@@ -84,7 +87,7 @@ export class Header {
 	private createMultiplierBar(scene: Scene, x: number, y: number, assetScale: number): void {
 		const multiplierBar = scene.add.image(x, y, 'multiplier-bar')
 		.setOrigin(0.5, 0.5)
-		.setScale(assetScale)
+		.setScale(assetScale * 1.2)
 		.setDepth(300); // Above idle symbols (0) but below winning symbols (600) and overlay (500)
 		this.headerContainer.add(multiplierBar);
 	}
@@ -162,16 +165,16 @@ export class Header {
 
 	private createWinBarText(scene: Scene, x: number, y: number): void {
 		// Line 1: "YOU WON"
-		this.youWonText = scene.add.text(x, y - 8, 'YOU WON', {
-			fontSize: '14px',
+		this.youWonText = scene.add.text(x + this.winningsLabelTextOffset.x, y + this.winningsLabelTextOffset.y, 'YOU WON', {
+			fontSize: '12px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
 		}).setOrigin(0.5, 0.5).setDepth(301); // Higher depth than win bar, above idle symbols (0) but below winning symbols (600) and overlay (500)
 		this.headerContainer.add(this.youWonText);
 
 		// Line 2: "$ 0.00" with bold formatting (base winnings / expression prefix)
-		this.amountText = scene.add.text(x, y + 7, '$ 0.00', {
-			fontSize: '18px',
+		this.amountText = scene.add.text(x + this.winningsValueTextOffset.x, y + this.winningsValueTextOffset.y, '$ 0.00', {
+			fontSize: '20px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
 		}).setOrigin(0.5, 0.5).setDepth(301); // Higher depth than win bar, above idle symbols (0) but below winning symbols (600) and overlay (500)

@@ -365,42 +365,42 @@ export class Game extends Scene
 		EventBus.on('autoplay', () => {
 			console.log('[Game] Autoplay button clicked - showing options');
 			
-			const currentBetText = this.slotController.getBetAmountText();
-			const currentBet = currentBetText ? parseFloat(currentBetText) : 0.20;
+			// Get base bet amount (without enhanced bet increase)
+			const baseBet = this.slotController.getBaseBetAmount() || 0.20;
+			
+			// Get enhanced bet state from gameData
+			const isEnhancedBet = this.gameData.isEnhancedBet;
 			
 			// Get the most current balance as a numeric value from the SlotController
 			const currentBalance = this.slotController.getBalanceAmount();
 			
-			console.log(`[Game] Current balance for autoplay options: $${currentBalance}`);
+			console.log(`[Game] Current balance for autoplay options: $${currentBalance}, base bet: $${baseBet}, enhanced bet: ${isEnhancedBet}`);
 
 			// Disable the spin button while autoplay settings are open
 			this.slotController.disableSpinButton();
 			
 			this.autoplayOptions.show({
 				currentAutoplayCount: 10,
-				currentBet: currentBet,
+				currentBet: baseBet,
 				currentBalance: currentBalance,
+				isEnhancedBet: isEnhancedBet,
 				onClose: () => {
 					console.log('[Game] Autoplay options closed');
 					// Re‑enable the spin button with a slight delay after closing the panel
-					if (this.time) {
-						this.time.delayedCall(150, () => {
-							this.slotController.enableSpinButton();
-						});
-					} else {
-						this.slotController.enableSpinButton();
-					}
+					this.slotController.enableSpinButton();
 				},
 				onConfirm: (autoplayCount: number) => {
 					console.log(`[Game] Autoplay confirmed: ${autoplayCount} spins`);
-					// Read the bet selected within the autoplay panel
+					// Read the bet selected within the autoplay panel (this is the base bet)
 					const selectedBet = this.autoplayOptions.getCurrentBet();
 					// If bet changed, update UI and backend
-					if (Math.abs(selectedBet - currentBet) > 0.0001) {
+					if (Math.abs(selectedBet - baseBet) > 0.0001) {
 						this.slotController.updateBetAmount(selectedBet);
-						gameEventManager.emit(GameEventType.BET_UPDATE, { newBet: selectedBet, previousBet: currentBet });
+						gameEventManager.emit(GameEventType.BET_UPDATE, { newBet: selectedBet, previousBet: baseBet });
 					}
-					console.log(`[Game] Total cost: $${(selectedBet * autoplayCount).toFixed(2)}`);
+					// Calculate total cost with enhanced bet if active
+					const betToUse = isEnhancedBet ? selectedBet * 1.25 : selectedBet;
+					console.log(`[Game] Total cost: $${(betToUse * autoplayCount).toFixed(2)}`);
 					
 					// Re‑enable the spin button shortly after the panel closes
 					if (this.time) {
@@ -599,7 +599,7 @@ export class Game extends Scene
 		spinData.slot?.freespin?.items[this.gameAPI.getCurrentFreeSpinIndex() - 1]?.tumble?.items[this.gameAPI.getCurrentTumbleIndex()]?.symbols?.out: 
 		spinData.slot?.tumbles?.items[this.gameAPI.getCurrentTumbleIndex()]?.symbols?.out;
 
-		if (!outResult.length) {
+		if (outResult && !outResult.length) {
 			console.log('[Game] No winning symbols in tumble item - skipping WinTracker display');
 			return;
 		}

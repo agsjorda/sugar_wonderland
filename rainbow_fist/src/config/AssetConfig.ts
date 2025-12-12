@@ -47,7 +47,7 @@ export class AssetConfig {
 
 		return {
 			images: {
-				// 'bonus_background': `${prefix}/bonus_background/BG-Bonus.webp`,
+				'bonus_background': `${prefix}/bonus_background/bonus_background.webp`,
 				'bonus_reel_frame': `${prefix}/background/reel_frame.png`,
 			},
 			spine: {
@@ -117,41 +117,6 @@ export class AssetConfig {
 		};
 	}
 
-	// Network resources notes: NONE | Not used
-	// Add more asset groups as needed
-	getSymbolAssets(): AssetGroup {
-		const prefix = this.getAssetPrefix(); // This gives us assets/{orientation}/{quality}
-		console.log(`[AssetConfig] Loading symbol assets from: ${prefix}/symbols/ and ${prefix}/Symbols_KA/`);
-		// Generate symbol assets for all symbols (0-9)
-		const symbolImages: { [key: string]: string } = {};
-		const symbolSpine: { [key: string]: { atlas: string; json: string } } = {};
-		
-		for (let i = 0; i <= 9; i++) {
-			// PNG sprites for normal display
-			const spriteKey = `symbol_${i}`;
-			const spritePath = `${prefix}/symbols/symbol_${i}.webp`;
-			symbolImages[spriteKey] = spritePath;
-			
-			// Spine animations for hit effects
-			const spineKey = `symbol_${i}_spine`;
-			const symbolName = `Symbol${i}_KA`;
-			const atlasPath = `${prefix}/Symbols_KA/${symbolName}.atlas`;
-			const jsonPath = `${prefix}/Symbols_KA/${symbolName}.json`;
-			
-			symbolSpine[spineKey] = {
-				atlas: atlasPath,
-				json: jsonPath
-			};
-			
-			//console.log(`[AssetConfig] Symbol ${i}: sprite=${spritePath}, spine=${atlasPath}`);
-		}
-		
-		return {
-			images: symbolImages,
-			spine: symbolSpine
-		};
-	}
-
 	getSymbolSpineAndPngAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix(); // This gives us assets/{orientation}/{quality}
 		console.log(`[AssetConfig] Loading symbol assets from: ${prefix}/symbols/ and ${prefix}/symbols`);
@@ -186,8 +151,7 @@ export class AssetConfig {
 		}
 
 		// Multiplier symbol
-		// symbolImages['symbol10'] = `${prefix}/symbols/symbol10.webp`;
-		symbolSpine['symbol10_spine'] = {
+		symbolSpine['multiplier_spine'] = {
 			atlas: `${prefix}/symbols/Symbol10_RF/Symbol10_RF.atlas`,
 			json: `${prefix}/symbols/Symbol10_RF/Symbol10_RF.json`
 		};
@@ -363,20 +327,32 @@ export class AssetConfig {
 			},
 			spine: {
 				'big_win': {
-					atlas: `${prefix}/dialogs/BWin_RF/BWin_RF.atlas`,
-					json: `${prefix}/dialogs/BWin_RF/BWin_RF.json`
+					atlas: `${prefix}/dialogs/BigW_RF/BigW_RF.atlas`,
+					json: `${prefix}/dialogs/BigW_RF/BigW_RF.json`
 				},
-				// 'free_spin': {
-				// 	atlas: `${prefix}/dialogs/free_spin.atlas`,
-				// 	json: `${prefix}/dialogs/free_spin.json`
-				// },
-				// 'max_win': {
-				// 	atlas: `${prefix}/dialogs/max_win.atlas`,
-				// 	json: `${prefix}/dialogs/max_win.json`
-				// },
+				'mega_win': {
+					atlas: `${prefix}/dialogs/MegaW_RF/MegaW_RF.atlas`,
+					json: `${prefix}/dialogs/MegaW_RF/MegaW_RF.json`
+				},
+				'epic_win': {
+					atlas: `${prefix}/dialogs/EpicW_RF/EpicW_RF.atlas`,
+					json: `${prefix}/dialogs/EpicW_RF/EpicW_RF.json`
+				},
+				'super_win': {
+					atlas: `${prefix}/dialogs/SuperW_RF/SuperW_RF.atlas`,
+					json: `${prefix}/dialogs/SuperW_RF/SuperW_RF.json`
+				},
+				'free_spin': {
+					atlas: `${prefix}/dialogs/FreeSpin_RF/FreeSpin_RF.atlas`,
+					json: `${prefix}/dialogs/FreeSpin_RF/FreeSpin_RF.json`
+				},
+				'max_win': {
+					atlas: `${prefix}/dialogs/MaxWin_RF/MaxWin_RF.atlas`,
+					json: `${prefix}/dialogs/MaxWin_RF/MaxWin_RF.json`
+				},
 				// 'total_win': {
-				// 	atlas: `${prefix}/dialogs/total_win.atlas`,
-				// 	json: `${prefix}/dialogs/total_win.json`
+				// 	atlas: `${prefix}/dialogs/TotalWin_RF/TotalWin_RF.atlas`,
+				// 	json: `${prefix}/dialogs/TotalWin_RF/TotalWin_RF.json`
 				// },
 			}
 		};

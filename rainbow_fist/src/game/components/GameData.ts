@@ -26,10 +26,10 @@ export class GameData {
 	public dropShakeMagnitude: number = 1.5; // 0 disables shake; typical values ~0.002 - 0.01
 	public dropShakeDurationMs: number = 150; // duration per shake event
 	public dropShakeAxis: 'both' | 'x' | 'y' = 'both'; // restrict shake to one dimension if needed
-	public bigWinThreshold: number = 2;
-	public megaWinThreshold: number = 4;
-	public epicWinThreshold: number = 6;
-	public superWinThreshold: number = 8;
+	public bigWinThreshold: number = 0;
+	public megaWinThreshold: number = 20;
+	public epicWinThreshold: number = 45;
+	public superWinThreshold: number = 60;
 	public constructor() {
 		setSpeed(this, 1.0);
 	}

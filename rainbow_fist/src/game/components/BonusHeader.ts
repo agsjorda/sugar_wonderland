@@ -31,6 +31,9 @@ export class BonusHeader {
 	private currentBaseWinnings: number = 0;
 	private isFirstWinThisSpin: boolean = true;
 
+	private winningsLabelTextOffset: {x: number, y: number} = {x: 0, y: -14};
+	private winningsValueTextOffset: {x: number, y: number} = {x: 0, y: 6};
+
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
 		this.screenModeManager = screenModeManager;
@@ -72,22 +75,22 @@ export class BonusHeader {
 	private createPortraitBonusHeader(scene: Scene, assetScale: number): void {
 		console.log("[BonusHeader] Creating portrait bonus header layout");
 		
-        // Add Kobi logo bonus (top-anchored, width-ratio scaling)
-		this.createLogoSpine(scene);
+        // Add logo
+		this.createLogoImage(scene, assetScale);
 
 		// Add text inside the win bar bonus
-		const winBarBonusWidthMultiplier = 0.51;
-		const winBarBonusHeightMultiplier = 0.205;
-		const winBarX = scene.scale.width * winBarBonusWidthMultiplier;
-		const winBarY = scene.scale.height * winBarBonusHeightMultiplier;
+		const winBarWidthRatio = 0.5;
+		const winBarHeightRatio = 0.2125;
+		const winBarX = scene.scale.width * winBarWidthRatio;
+		const winBarY = scene.scale.height * winBarHeightRatio;
 		this.createWinBar(scene, winBarX, winBarY, assetScale);
 		this.createWinBarText(scene, winBarX, winBarY);
 
 		// Add multiplier bar
-		const multiplierBarWidthMultiplier = 0.74;
-		const multiplierBarHeightMultiplier = 0.155;
-		const multiplierBarX = scene.scale.width * multiplierBarWidthMultiplier;
-		const multiplierBarY = scene.scale.height * multiplierBarHeightMultiplier;
+		const multiplierBarWidthRatio = 0.775;
+		const multiplierBarHeightRatio = 0.1725;
+		const multiplierBarX = scene.scale.width * multiplierBarWidthRatio;
+		const multiplierBarY = scene.scale.height * multiplierBarHeightRatio;
 		this.createMultiplierBar(scene, multiplierBarX, multiplierBarY, assetScale);
 		this.createMultiplierDisplay(scene, multiplierBarX, multiplierBarY);
 	}
@@ -130,16 +133,6 @@ export class BonusHeader {
 		this.hideMultiplierText();
 	}
 
-	private createLogoImage(scene: Scene): void {
-        this.logoImage = scene.add.image(
-            scene.scale.width *  0.5,
-            0,
-            'logo-bonus'
-        ).setOrigin(0.5, 0).setDepth(10);
-        this.fitLogoToTop(scene, 0.3);
-        this.bonusHeaderContainer.add(this.logoImage);
-	}
-	
 	private createLogoSpine(scene: Scene): void {
 		try {
 			// Make sure the spine data is in cache before trying to create it
@@ -163,6 +156,15 @@ export class BonusHeader {
 		}
 	}
 
+	private createLogoImage(scene: Scene, assetScale: number): void {
+		this.logoImage = scene.add.image(
+			scene.scale.width * 0.5,
+			scene.scale.height * 0.0225,
+			'logo-bonus'
+		).setOrigin(0.5, 0).setScale(assetScale).setDepth(10);
+		this.bonusHeaderContainer.add(this.logoImage);
+	}
+
 	private createWinBar(scene: Scene, x: number, y: number, assetScale: number): void {
 		const winBarBonus = scene.add.image(
 			x,
@@ -177,16 +179,16 @@ export class BonusHeader {
 
 	private createWinBarText(scene: Scene, x: number, y: number): void {
 		// Line 1: "YOU WON"
-		this.youWonText = scene.add.text(x, y - 8, 'YOU WON', {
-			fontSize: '14px',
+		this.youWonText = scene.add.text(x + this.winningsLabelTextOffset.x, y + this.winningsLabelTextOffset.y, 'YOU WON', {
+			fontSize: '12px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
 		}).setOrigin(0.5, 0.5).setDepth(11); // Higher depth than win bar
 		this.bonusHeaderContainer.add(this.youWonText);
 
 		// Line 2: "$ 0.00" with bold formatting
-		this.amountText = scene.add.text(x, y + 7, '$ 999,999,999,999.00', {
-			fontSize: '18px',
+		this.amountText = scene.add.text(x + this.winningsValueTextOffset.x, y + this.winningsValueTextOffset.y, '$ 999,999,999,999.00', {
+			fontSize: '20px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
 		}).setOrigin(0.5, 0.5).setDepth(11); // Higher depth than win bar
@@ -501,28 +503,7 @@ export class BonusHeader {
 			}
 		}
 
-        this.fitLogoToTop(scene, 0.30);
 	}
-
-    private fitLogoToTop(scene: Scene, scale: number): void {
-        if (!this.logoImage) return;
-        const screenWidth = scene.scale.width;
-        const screenHeight = scene.scale.height;
-        const frame = this.logoImage.frame;
-        const imageWidth = frame?.width || 0;
-        const imageHeight = frame?.height || 0;
-        if (!imageWidth || !imageHeight) return;
-
-        // Choose a width ratio that looks good across devices
-        const widthRatio = scale; // % of screen width
-        const targetWidth = screenWidth * widthRatio;
-        const uniformScale = targetWidth / imageWidth;
-
-        this.logoImage.setScale(uniformScale); // preserves aspect ratio
-        this.logoImage.setOrigin(0.5, 0);
-        const topMargin = Math.max(0, screenHeight * 0.005);
-        this.logoImage.setPosition(screenWidth * 0.5, topMargin);
-    }
 
 	getContainer(): Phaser.GameObjects.Container {
 		return this.bonusHeaderContainer;

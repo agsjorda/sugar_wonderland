@@ -10,6 +10,7 @@ export interface AutoplayOptionsConfig {
 	currentAutoplayCount?: number;
 	currentBet?: number;
 	currentBalance?: number;
+	isEnhancedBet?: boolean;
 }
 
 export class AutoplayOptions {
@@ -19,8 +20,9 @@ export class AutoplayOptions {
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
 	private currentAutoplayCount: number = 10;
-	private currentBet: number = 0.20; // Default bet amount
+	private currentBet: number = 0.20; // Default bet amount (base bet)
 	private currentBalance: number = 0; // Current game balance
+	private isEnhancedBet: boolean = false; // Track enhanced bet state
 	private autoplayOptions: number[] = [
 		10, 30, 50, 75, 100, 150, 500, 1000
 	];
@@ -41,6 +43,7 @@ export class AutoplayOptions {
 	private minusButton: Phaser.GameObjects.Text;
 	private plusButton: Phaser.GameObjects.Text;
 	private balanceAmountText: Phaser.GameObjects.Text;
+	private enhanceBetIdleAnimation: any = null; // Enhanced bet spine animation
 	private onCloseCallback?: () => void;
 	private onConfirmCallback?: (autoplayCount: number) => void;
 
@@ -67,6 +70,9 @@ export class AutoplayOptions {
 		
 		// Create autoplay input section
 		this.createAutoplayInput(scene);
+		
+		// Create enhanced bet animation
+		this.createEnhanceBetAnimation(scene);
 		
 		// Create confirm button
 		this.createConfirmButton(scene);
@@ -307,6 +313,77 @@ export class AutoplayOptions {
 		this.container.add(this.plusButton);
 	}
 
+	/**
+	 * Create the Enhance Bet idle loop spine animation near the bet display
+	 */
+	private createEnhanceBetAnimation(scene: Scene): void {
+		try {
+			if (!scene.cache.json.has('enhance_bet_idle_on')) {
+				console.warn('[AutoplayOptions] enhance_bet_idle_on spine assets not loaded, skipping idle animation creation');
+				return;
+			}
+
+			const screenWidth = scene.scale.width;
+			const screenHeight = scene.scale.height;
+			const backgroundHeight = 772;
+			const backgroundTop = screenHeight - backgroundHeight;
+			
+			// Position near the bet display (same x, slightly offset y)
+			const betX = screenWidth * 0.5;
+			const betY = backgroundTop + 490;
+			const animationOffsetX = -10; // slight left offset to match SlotController
+			const animationOffsetY = 0;
+
+			this.enhanceBetIdleAnimation = scene.add.spine(
+				betX + animationOffsetX,
+				betY + animationOffsetY,
+				'enhance_bet_idle_on',
+				'enhance_bet_idle_on-atlas'
+			);
+			this.enhanceBetIdleAnimation.setOrigin(0.5, 0.5);
+			this.enhanceBetIdleAnimation.setScale(2.94, 1.35);
+			this.enhanceBetIdleAnimation.setDepth(2001); // Above the container depth (2000)
+			this.enhanceBetIdleAnimation.setVisible(false);
+
+			// Add to container
+			this.container.add(this.enhanceBetIdleAnimation);
+
+			console.log('[AutoplayOptions] Enhance Bet idle spine animation created');
+		} catch (error) {
+			console.error('[AutoplayOptions] Failed to create enhance bet idle animation:', error);
+		}
+	}
+
+	/**
+	 * Show the enhance bet idle loop animation
+	 */
+	private showEnhanceBetIdleLoop(): void {
+		if (!this.enhanceBetIdleAnimation) {
+			return;
+		}
+		this.enhanceBetIdleAnimation.setVisible(true);
+		const idleName = 'animation'; // single animation in JSON is named 'animation'
+		if (this.enhanceBetIdleAnimation.skeleton?.data.findAnimation(idleName)) {
+			this.enhanceBetIdleAnimation.animationState.setAnimation(0, idleName, true);
+		} else {
+			const animations = this.enhanceBetIdleAnimation.skeleton?.data.animations || [];
+			if (animations.length > 0) {
+				this.enhanceBetIdleAnimation.animationState.setAnimation(0, animations[0].name, true);
+			}
+		}
+	}
+
+	/**
+	 * Hide the enhance bet idle loop animation
+	 */
+	private hideEnhanceBetIdleLoop(): void {
+		if (!this.enhanceBetIdleAnimation) {
+			return;
+		}
+		this.enhanceBetIdleAnimation.animationState.clearTracks();
+		this.enhanceBetIdleAnimation.setVisible(false);
+	}
+
 	private createConfirmButton(scene: Scene): void {
 		const screenWidth = scene.scale.width;
 		const screenHeight = scene.scale.height;
@@ -385,7 +462,10 @@ export class AutoplayOptions {
 
 	private updateAutoplayDisplay(): void {
 		if (this.autoplayDisplay) {
-			this.autoplayDisplay.setText(`$${this.currentBet.toFixed(2)}`);
+			// If enhanced bet is active, show enhanced bet amount (base bet * 1.25)
+			const displayBet = this.isEnhancedBet ? this.currentBet * 1.25 : this.currentBet;
+			console.log("[AutoplayOptions] Updating autoplay display to: $", displayBet, this.isEnhancedBet ? "(enhanced bet)" : "");
+			this.autoplayDisplay.setText(`$${displayBet.toFixed(2)}`);
 		}
 	}
 
@@ -436,6 +516,9 @@ export class AutoplayOptions {
 			if (config.currentBalance !== undefined) {
 				this.currentBalance = config.currentBalance;
 			}
+			if (config.isEnhancedBet !== undefined) {
+				this.isEnhancedBet = config.isEnhancedBet;
+			}
 			this.onCloseCallback = config.onClose;
 			this.onConfirmCallback = config.onConfirm;
 		}
@@ -481,6 +564,13 @@ export class AutoplayOptions {
 
 		this.updateAutoplayDisplay();
 		
+		// Show/hide enhanced bet animation based on state
+		if (this.isEnhancedBet) {
+			this.showEnhanceBetIdleLoop();
+		} else {
+			this.hideEnhanceBetIdleLoop();
+		}
+		
 		// Start positioned below the screen for slide-up effect
 		this.container.setY(this.container.scene.scale.height);
 		this.container.setVisible(true);
@@ -504,6 +594,9 @@ export class AutoplayOptions {
 
 	hide(): void {
 		this.container.setVisible(false);
+		
+		// Hide enhanced bet animation when panel is hidden
+		this.hideEnhanceBetIdleLoop();
 		
 		// Hide the mask when the panel is hidden
 		if (this.confirmButtonMask) {

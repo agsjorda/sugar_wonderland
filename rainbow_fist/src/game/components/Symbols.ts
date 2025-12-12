@@ -18,6 +18,9 @@ import { hideSpineAttachmentsByKeywords, playSpineAnimationSequence, playSpineAn
 import { NumberDisplay, NumberDisplayConfig } from "./NumberDisplay";
 import { SpinData, SpinDataUtils } from "../../backend/SpinData";
 
+// Debug flags for verbose tumble logging / diagnostics
+const DEBUG_SYMBOLS_TUMBLES = false;
+
 export class Symbols {
   private static readonly WINLINE_CHECKING_DISABLED: boolean = true;
 
@@ -42,14 +45,23 @@ export class Symbols {
   private dialogs: Dialogs;
   public dropSparkPlayedColumns: Set<number> = new Set();
   public sparkVFXPool: SpineGameObject[] = [];
+  public symbolSpritePool: GameObjects.Sprite[] = [];
+  public spinePools: { [key: string]: SpineGameObject[] } = {};
+  public multiplierSymbolCache: SpineGameObject[] = [];
   public wireframeBoxes: Phaser.GameObjects.Graphics[] = [];
   public showWireframes: boolean = false; // Toggle to show/hide wireframe boxes
   public maskWireframe?: Phaser.GameObjects.Graphics;
   public showMaskWireframe: boolean = false; // Toggle to show/hide mask wireframe
+  public tumbleRemoveMask: boolean[][] = [];
 
   private symbolSpineKey: string = 'Symbol_WF';
   private symbolPngKey: string = 'symbol_';
   private symbolSpineAtlasKey: string = 'Symbol_WF-atlas';
+  public static readonly SCATTER_SPINE_KEY: string = 'symbol0_spine';
+  public static readonly SCATTER_HIT_ANIMATION_NAME: string = 'Symbol0_RF_win';
+  public static readonly MULTIPLIER_SPINE_KEY: string = 'multiplier_spine';
+
+  public static readonly MULTIPLIER_ANIMATION_TIME_SCALE: number = 0.5;
 
   public readonly baseSymbolWidth: number = 67;
   public readonly baseSymbolHeight: number = 67;
@@ -75,35 +87,23 @@ export class Symbols {
     10: 1,
   }
 
-  private spineSymbolOrigins: { [key: number]: { x: number, y: number } } =
-    {
-      0: { x: 0.5, y: 0.5 },
-      1: { x: 0.46, y: 0.6 },
-      2: { x: 0.5, y: 0.5 },
-      3: { x: 0.5, y: 0.5 },
-      4: { x: 0.5, y: 0.625 },
-      5: { x: 0.5, y: 0.5 },
-      6: { x: 0.5, y: 0.5 },
-      7: { x: 0.5, y: 0.5 },
-      8: { x: 0.5, y: 0.5 },
-      9: { x: 0.5, y: 0.5 },
-      10: { x: 0.5, y: 0.5 },
-    }
-
-  // Configuration for Spine symbol scales - adjust these values manually
-  private spineSymbolScales: { [key: number]: number } = {
-    0: 0.1,   // Symbol0_RF scale (scatter)
-    1: 0.045,  // Symbol1_RF scale (HP)
-    2: 0.0375,  // Symbol2_RF scale (HP)
-    3: 0.0525,  // Symbol3_RF scale (HP)
-    4: 0.0375,  // Symbol4_RF scale (HP)
-    5: 0.1,  // Symbol5_RF scale (LP)
-    6: 0.1,  // Symbol6_RF scale (LP)
-    7: 0.1,  // Symbol7_RF scale (LP)
-    8: 0.1,  // Symbol8_RF scale (LP)
-    9: 0.1,  // Symbol9_RF scale (LP)
-    10: 0.1,  // Symbol10_RF scale (multiplier)
-  };
+  private multiplierAnimationMapping: { [key: number]: string } = {
+    11: '2x',
+    12: '3x',
+    13: '4x',
+    14: '5x',
+    15: '6x',
+    16: '8x',
+    17: '10x',
+    18: '12x',
+    19: '15x',
+    20: '20x',
+    21: '25x', // 25x is missing in multiplier animation
+    22: '50x',
+    23: '100x',
+    24: '250x',
+    25: '500x',
+  }
 
   public multiplierIndexMapping: { [key: number]: number } = {
     11: 2,
@@ -122,6 +122,37 @@ export class Symbols {
     24: 250,
     25: 500,
   };
+
+  public static readonly SPINE_SYMBOL_ORIGINS: { [key: number]: { x: number, y: number } } =
+    {
+      0: { x: 0.5, y: 0.5 },
+      1: { x: 0.46, y: 0.6 },
+      2: { x: 0.5, y: 0.5 },
+      3: { x: 0.5, y: 0.5 },
+      4: { x: 0.5, y: 0.625 },
+      5: { x: 0.5, y: 0.5 },
+      6: { x: 0.5, y: 0.5 },
+      7: { x: 0.5, y: 0.5 },
+      8: { x: 0.5, y: 0.5 },
+      9: { x: 0.5, y: 0.5 },
+      10: { x: 0.5, y: 0.6 },
+    }
+
+  // Configuration for Spine symbol scales - adjust these values manually
+  public static readonly SPINE_SYMBOL_SCALES: { [key: number]: number } = {
+    0: 0.1,   // Symbol0_RF scale (scatter)
+    1: 0.045,  // Symbol1_RF scale (HP)
+    2: 0.0375,  // Symbol2_RF scale (HP)
+    3: 0.0525,  // Symbol3_RF scale (HP)
+    4: 0.0375,  // Symbol4_RF scale (HP)
+    5: 0.1,  // Symbol5_RF scale (LP)
+    6: 0.1,  // Symbol6_RF scale (LP)
+    7: 0.1,  // Symbol7_RF scale (LP)
+    8: 0.1,  // Symbol8_RF scale (LP)
+    9: 0.1,  // Symbol9_RF scale (LP)
+    10: 0.05,  // Symbol10_RF scale (multiplier)
+  };
+
   // Store current symbol data for reset purposes
   public currentSymbolData: number[][] | null = null;
 
@@ -147,6 +178,8 @@ export class Symbols {
     this.scene = scene;
     initVariables(this);
     createContainer(this);
+    prewarmSymbolSpinePools(this);
+    prewarmSparkSpinePool(this);
     onStart(this);
     onSpinDataReceived(this);
     this.onSpinDone(this.scene);
@@ -356,18 +389,59 @@ export class Symbols {
    */
   public getSpineSymbolScale(symbolValue: number): number {
     // clamp the value of symbolValue to the max value of spineSymbolScales
-    symbolValue = Math.min(symbolValue, Object.keys(this.spineSymbolScales).length - 1);
+    symbolValue = Math.min(symbolValue, Object.keys(Symbols.SPINE_SYMBOL_SCALES).length - 1);
 
-    return this.spineSymbolScales[symbolValue] || 1; // Default scale if not configured
+    return Symbols.SPINE_SYMBOL_SCALES[symbolValue] || 1; // Default scale if not configured
   }
 
   /**
    * Get the configured origin for a specific symbol's Spine animation
    */
   public getSpineSymbolOrigin(symbolValue: number): { x: number, y: number } {
-    symbolValue = Math.min(symbolValue, Object.keys(this.spineSymbolOrigins).length - 1);
+    symbolValue = Math.min(symbolValue, Object.keys(Symbols.SPINE_SYMBOL_ORIGINS).length - 1);
 
-    return this.spineSymbolOrigins[symbolValue] || { x: 0.5, y: 0.5 }; // Default origin if not configured
+    return Symbols.SPINE_SYMBOL_ORIGINS[symbolValue] || { x: 0.5, y: 0.5 }; // Default origin if not configured
+  }
+
+  /**
+   * Finds the animation name by looping through the multiplier spine animations
+   * and matching the last part after "_" with the multiplierAnimationMapping.
+   * @param spine - The multiplier spine object to search animations in
+   * @param symbolIndex - The symbol index (e.g., 10, 11, 12)
+   * @returns The animation name if found (e.g., "Symbol10_RF_2x"), null otherwise
+   */
+  public findMultiplierAnimationNameByIndex(spine: SpineGameObject, symbolIndex: number): string | null {
+    if (symbolIndex == null || !(symbolIndex in this.multiplierAnimationMapping) || !spine) {
+      return null;
+    }
+
+    const multiplierValue = this.multiplierAnimationMapping[symbolIndex];
+
+    try {
+      const animations = (spine as any)?.skeleton?.data?.animations as Array<{ name: string }> | undefined;
+      
+      if (animations) {
+        // Loop through all animations
+        for (const animation of animations) {
+          if (!animation.name || !animation.name.includes('_')) {
+            continue;
+          }
+
+          // Get the last part after "_"
+          const parts = animation.name.split('_');
+          const lastPart = parts[parts.length - 1];
+
+          // Match with the multiplier value from the mapping
+          if (lastPart === multiplierValue) {
+            return animation.name;
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[Symbols] Error accessing spine animations:', error);
+    }
+
+    return null;
   }
 
   public showFreeSpinDialog(freeSpinsCount: number): void {
@@ -984,35 +1058,32 @@ export class Symbols {
 
           try {
             // Get the scatter symbol value (0) and construct the Spine key
-            const symbolValue = 0;
-            const spineKey = `Symbol${symbolValue}_WF`;
-            const spineAtlasKey = spineKey + '-atlas';
-            const hitAnimationName = `symbol${0}_WF`;
+            const spineAtlasKey = Symbols.SCATTER_SPINE_KEY + '-atlas';
 
             // Store original position and scale
             const x = currentSymbol.x;
             const y = currentSymbol.y;
 
-            console.log(`[Symbols] Replacing scatter sprite with Spine animation: ${spineKey} at column ${col}, row ${row}`);
+            console.log(`[Symbols] Replacing scatter sprite with Spine animation: ${Symbols.SCATTER_SPINE_KEY} at column ${col}, row ${row}`);
 
             // Remove the current sprite
             currentSymbol.destroy();
 
             const attemptCreate = (attempts: number) => {
               try {
-                if (!(this.scene.cache.json as any).has(spineKey)) {
+                if (!(this.scene.cache.json as any).has(Symbols.SCATTER_SPINE_KEY)) {
                   if (attempts < 5) {
-                    console.warn(`[Symbols] Spine json '${spineKey}' not ready. Retrying (${attempts + 1}/5)...`);
+                    console.warn(`[Symbols] Spine json '${Symbols.SCATTER_SPINE_KEY}' not ready. Retrying (${attempts + 1}/5)...`);
                     this.scene.time.delayedCall(150, () => attemptCreate(attempts + 1));
                     return;
                   }
                 }
                 // Create Spine animation in its place
-                const spineSymbol = this.scene.add.spine(x, y, spineKey, spineAtlasKey);
+                const spineSymbol = this.scene.add.spine(x, y, Symbols.SCATTER_SPINE_KEY, spineAtlasKey);
                 spineSymbol.setOrigin(0.5, 0.5);
 
                 // Start with the configured base scale
-                const configuredScale = this.getSpineSymbolScale(symbolValue);
+                const configuredScale = this.getSpineSymbolScale(0);
                 spineSymbol.setScale(configuredScale);
 
                 // Add to scene directly (not container) to maintain elevated depth above overlay
@@ -1058,8 +1129,8 @@ export class Symbols {
                 console.log(`[Symbols] Successfully replaced scatter sprite with Spine animation at column ${col}, row ${row} with depth:`, spineSymbol.depth);
 
                 // Play the hit animation (looped)
-                spineSymbol.animationState.setAnimation(0, hitAnimationName, true);
-                console.log(`[Symbols] Playing looped scatter animation: ${hitAnimationName}`);
+                spineSymbol.animationState.setAnimation(0, Symbols.SCATTER_HIT_ANIMATION_NAME, true);
+                console.log(`[Symbols] Playing looped scatter animation: ${Symbols.SCATTER_HIT_ANIMATION_NAME}`);
 
                 // Create smooth scale tween to increase size by 20%
                 const enlargedScale = configuredScale * 1.5; // Increase by 20%
@@ -1147,7 +1218,7 @@ export class Symbols {
                   });
                 });
 
-                console.log(`[Symbols] Applied smooth scale tween: ${configuredScale} → ${enlargedScale} to scatter symbol ${symbolValue}`);
+                console.log(`[Symbols] Applied smooth scale tween: ${configuredScale} → ${enlargedScale} to scatter symbol 0`);
 
                 // Resolve after a short delay to allow animation to start
                 setTimeout(() => resolve(), 100);
@@ -2048,6 +2119,174 @@ function onStart(self: Symbols) {
   });
 }
 
+function prewarmSymbolSpinePools(self: Symbols, countPerSymbol: number = 8) {
+  // Pre-warm Spine instances for symbols 1-9 to avoid first-use hitches.
+  const symbolValues = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+  for (const value of symbolValues) {
+    const spineKey = `symbol${value}_spine`;
+    const atlasKey = `${spineKey}-atlas`;
+
+    for (let i = 0; i < countPerSymbol; i++) {
+      try {
+        const spine = acquireSpineFromPool(self, spineKey, atlasKey);
+        if (spine) {
+          releaseSpineToPool(self, spine);
+        }
+      } catch (e) {
+        console.warn('[Symbols] Failed to prewarm Spine pool for', spineKey, e);
+        break;
+      }
+    }
+  }
+}
+
+function prewarmSparkSpinePool(self: Symbols, count: number = 6) {
+  const spineKey = 'spark_vfx';
+  const atlasKey = `${spineKey}-atlas`;
+  for (let i = 0; i < count; i++) {
+    try {
+      const spine = acquireSpineFromPool(self, spineKey, atlasKey);
+      if (spine) {
+        releaseSpineToPool(self, spine);
+      }
+    } catch (e) {
+      console.warn('[Symbols] Failed to prewarm spark Spine pool', e);
+      break;
+    }
+  }
+}
+
+/**
+ * Spine pooling helpers (for frequently created short-lived Spine effects).
+ */
+function getSpinePoolKey(spineKey: string, atlasKey: string): string {
+  return `${spineKey}|${atlasKey}`;
+}
+
+function acquireSpineFromPool(self: Symbols, spineKey: string, atlasKey: string): SpineGameObject | null {
+  const poolKey = getSpinePoolKey(spineKey, atlasKey);
+  // Fast path: reuse a LIFO stack of available items to avoid O(n) scans
+  const availablePools = (self as any).spineAvailablePools || ((self as any).spineAvailablePools = {});
+  const availableStack: SpineGameObject[] = availablePools[poolKey] || (availablePools[poolKey] = []);
+
+  if (!self.spinePools[poolKey]) {
+    self.spinePools[poolKey] = [];
+  }
+  const pool = self.spinePools[poolKey];
+
+  // Try LIFO stack first; fallback to linear scan to remain backward compatible
+  let available: any = availableStack.pop();
+  if (!available) {
+    available = pool.find((fx: any) => !(fx as any).__pooledActive);
+  }
+  if (available) {
+    (available as any).__pooledActive = true;
+    try {
+      available.setVisible(false);
+      available.setActive(false);
+      // Reset animation state and pose so new animations always start from time 0
+      available.animationState?.clearTracks();
+      try {
+        available.skeleton?.setToSetupPose();
+      } catch { }
+    } catch { }
+    return available;
+  }
+
+  try {
+    const created: SpineGameObject = self.scene.add.spine(0, 0, spineKey, atlasKey);
+    (created as any).__pooledActive = true;
+    (created as any).__spinePoolKey = poolKey;
+    try {
+      created.setVisible(false);
+      created.setActive(false);
+      // Ensure a deterministic initial pose for newly created pooled Spine objects.
+      try {
+        created.skeleton?.setToSetupPose();
+      } catch { }
+    } catch { }
+    pool.push(created);
+    return created;
+  } catch (e) {
+    console.warn('[Symbols] Failed to create pooled Spine:', spineKey, atlasKey, e);
+    return null;
+  }
+}
+
+function releaseSpineToPool(self: Symbols, spine: SpineGameObject | any): void {
+  if (!spine) return;
+  try {
+    self.scene.tweens.killTweensOf(spine);
+  } catch { }
+  try {
+    spine.animationState?.clearTracks();
+  } catch { }
+  try {
+    spine.setVisible(false);
+    spine.setActive(false);
+  } catch { }
+  try {
+    (spine as any).__pooledActive = false;
+    // Push into available stack for O(1) reuse
+    const poolKey = (spine as any).__spinePoolKey;
+    if (poolKey) {
+      const availablePools = (self as any).spineAvailablePools || ((self as any).spineAvailablePools = {});
+      const availableStack: SpineGameObject[] = availablePools[poolKey] || (availablePools[poolKey] = []);
+      availableStack.push(spine);
+    }
+  } catch { }
+}
+
+function releaseSpriteToPool(self: Symbols, sprite: GameObjects.Sprite): void {
+  if (!sprite) return;
+  try { self.scene.tweens.killTweensOf(sprite); } catch { }
+  try {
+    sprite.setVisible(false);
+    sprite.setActive(false);
+    sprite.setAlpha(1);
+  } catch { }
+  self.symbolSpritePool.push(sprite);
+}
+
+/**
+ * Create a plain PNG symbol sprite and add it to the symbols container.
+ */
+function createPngSymbol(self: Symbols, value: number, x: number, y: number, alpha: number = 1): any {
+  const spriteKey = `symbol${value}`;
+
+  // Try to reuse a pooled sprite if available
+  let sprite: GameObjects.Sprite | undefined;
+  if (self.symbolSpritePool.length > 0) {
+    sprite = self.symbolSpritePool.pop();
+  }
+
+  if (sprite) {
+    // Reconfigure an existing pooled sprite
+    try {
+      sprite.setTexture(spriteKey);
+    } catch {
+      // If texture reset fails, drop the sprite and create a new one
+      sprite = undefined;
+    }
+  }
+
+  if (!sprite) {
+    sprite = self.scene.add.sprite(x, y, spriteKey);
+  } else {
+    sprite.setPosition(x, y);
+  }
+
+  try { (sprite as any).symbolValue = value; } catch { }
+  sprite.displayWidth = self.displayWidth;
+  sprite.displayHeight = self.displayHeight;
+  if (typeof sprite.setAlpha === 'function') sprite.setAlpha(alpha);
+  try { sprite.setVisible(true); sprite.setActive(true); } catch { }
+  if (self.container && sprite.parentContainer !== self.container) {
+    self.container.add(sprite);
+  }
+  return sprite;
+}
+
 function createInitialSymbols(self: Symbols) {
   let scene = self.scene;
 
@@ -2112,7 +2351,8 @@ function createInitialSymbols(self: Symbols) {
       const y = startY + row * symbolTotalHeight + symbolTotalHeight * 0.5;
 
       const value = initialRowMajor[row][col];
-      const created = createSpineOrPngSymbol(self, value, x, y, 1);
+      // Use lightweight PNGs at startup to avoid heavy Spine creation on scene load.
+      const created = createPngSymbol(self, value, x, y, 1);
       rows.push(created);
     }
     self.symbols.push(rows);
@@ -2192,7 +2432,7 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   await dropReels(self, mockData);
 
   // Update symbols after animation
-  disposeSymbols(self.symbols);
+  disposeSymbols(self, self.symbols);
   self.symbols = self.newSymbols;
   self.newSymbols = [];
 
@@ -2671,42 +2911,34 @@ function scheduleTranslate(self: Symbols, obj: any, delayMs: number = 500, durat
  * Create a sugar Spine symbol (Symbol1–Symbol9) playing idle, or PNG fallback
  */
 function createSpineOrPngSymbol(self: Symbols, value: number, x: number, y: number, alpha: number = 1): any {
-  // Try sugar spine for Symbol1–Symbol9
   console.log(`[Symbols] Creating spine or PNG symbol for value: ${value}`);
-  if (value >= 1 && value <= 9) {
-    try {
-      const spineKey = `symbol${value}_spine`;
-      console.log(`[Symbols] Creating spine symbol for value: ${value}\nSpine key: ${spineKey}\nAtlas key: ${`${spineKey}-atlas`}`);
-      const spine: SpineGameObject = self.scene.add.spine(x, y, spineKey, `${spineKey}-atlas`);
-      console.log(`[Symbols] Created spine symbol ${value}`);
-      if (spine) {
-        spine.setOrigin(self.getSpineSymbolOrigin(value).x, self.getSpineSymbolOrigin(value).y);
-        spine.setAlpha(alpha);
-        spine.setScale(self.getSpineSymbolScale(value));
 
-        // Play idle animation
+  // Try pooled spine for Symbol1–Symbol9
+  if (value >= 1 && value <= 9) {
+    const spineKey = `symbol${value}_spine`;
+    const atlasKey = `${spineKey}-atlas`;
+    try {
+      const spine = acquireSpineFromPool(self, spineKey, atlasKey);
+      if (spine) {
+        spine.setPosition(x, y);
+        spine.setOrigin(self.getSpineSymbolOrigin(value).x, self.getSpineSymbolOrigin(value).y);
+        spine.setScale(self.getSpineSymbolScale(value));
+        try { spine.setVisible(true); spine.setActive(true); spine.setAlpha(alpha); } catch { }
+        try { (spine as any).symbolValue = value; } catch { }
         try {
           playSpineAnimationSequence(spine, [0], true);
-          // const animationName = isHighPaying ? `symbol${value}_WF_idle` : `symbol${value}_WF`;
-          // if (spine.animationState && spine.animationState.setAnimation) {
-          //   spine.animationState.setAnimation(0, animationName, true);
-          //   if (!isHighPaying) {
-          //     spine.animationState.timeScale = 0;
-          //   }
-          // }
         } catch {
           console.error(`[Symbols] Failed to play idle animation for symbol ${value}`);
         }
-        self.container.add(spine);
+        if (self.container && spine.parentContainer !== self.container) {
+          self.container.add(spine);
+        }
         return spine;
       }
-      else
-        console.warn(`[Symbols] Failed to create spine symbol ${value}: ${spineKey}`);
     } catch {
       console.warn(`[Symbols] Failed to create spine symbol ${value}`);
     }
-  }
-  else if (value >= 10) {
+  } else if (value >= 10) {
     try {
       return createMultiplierSymbol(self, value, x, y, alpha);
     } catch {
@@ -2714,19 +2946,14 @@ function createSpineOrPngSymbol(self: Symbols, value: number, x: number, y: numb
     }
   }
 
-  // Fallback to PNG sprite
-  const sprite = self.scene.add.sprite(x, y, `symbol${value}`);
-  try { (sprite as any).symbolValue = value; } catch { }
-  sprite.displayWidth = self.displayWidth;
-  sprite.displayHeight = self.displayHeight;
-  if (typeof sprite.setAlpha === 'function') sprite.setAlpha(alpha);
-  self.container.add(sprite);
+  // Fallback to PNG sprite (pooled)
+  const sprite = createPngSymbol(self, value, x, y, alpha);
   console.warn(`[Symbols] Created fallback PNG sprite for symbol ${value}`);
   return sprite;
 }
 
 function createNewSymbols(self: Symbols, data: Data) {
-  disposeSymbols(self.newSymbols);
+  disposeSymbols(self, self.newSymbols);
   self.newSymbols = [];
 
   const symbolTotalWidth = self.displayWidth + self.horizontalSpacing;
@@ -3061,22 +3288,34 @@ function tryPlaySparkVFXForColumn(self: Symbols, col: number, symbol: any): void
 }
 
 
-function disposeSymbols(symbols: any[][]) {
+function disposeSymbols(self: Symbols, symbols: any[][]) {
+  if (!symbols) return;
   console.log('[Symbols] Disposing old symbols...');
   let disposedCount = 0;
+
+  // Clear multiplier cache because existing references are about to be released
+  try { self.multiplierSymbolCache.length = 0; } catch { }
 
   for (let col = 0; col < symbols.length; col++) {
     for (let row = 0; row < symbols[col].length; row++) {
       const symbol = symbols[col][row];
-      if (symbol && symbol.destroy && !symbol.destroyed) {
-        try {
-          const symbolType = symbol.animationState ? 'Spine' : 'PNG';
-          const symbolKey = symbol.texture?.key || 'unknown';
+      if (!symbol) continue;
+
+      try { self.scene.tweens.killTweensOf(symbol); } catch { }
+
+      try {
+        if ((symbol as any).__spinePoolKey) {
+          releaseSpineToPool(self, symbol as any);
+        } else if (symbol.animationState) {
           symbol.destroy();
-          disposedCount++;
-        } catch (error) {
-          console.error(`[Symbols] Error disposing symbol at (${col}, ${row}):`, error);
+        } else {
+          releaseSpriteToPool(self, symbol as any);
         }
+        disposedCount++;
+      } catch (error) {
+        console.error(`[Symbols] Error disposing symbol at (${col}, ${row}):`, error);
+      } finally {
+        symbols[col][row] = null as any;
       }
     }
   }
@@ -3108,38 +3347,21 @@ function playDropAnimationIfAvailable(obj: any): void {
  * @param timeScale - Time scale for the animation (default: 1)
  */
 function acquireSparkVFXFromPool(self: Symbols): SpineGameObject | null {
-  if (!Array.isArray(self.sparkVFXPool)) {
-    self.sparkVFXPool = [];
+  const fx = acquireSpineFromPool(self, 'spark_vfx', 'spark_vfx-atlas');
+  if (fx && self.container) {
+    try { self.container.add(fx); } catch { }
+    try {
+      fx.setOrigin(0.5, 0.5);
+      fx.setVisible(false);
+      fx.setActive(false);
+    } catch { }
   }
-
-  const available = self.sparkVFXPool.find((fx: any) => !fx.__sparkActive);
-  if (available) {
-    (available as any).__sparkActive = true;
-    return available;
-  }
-
-  try {
-    const created: SpineGameObject = self.scene.add.spine(0, 0, 'spark_vfx', 'spark_vfx-atlas');
-    created.setOrigin(0.5, 0.5);
-    created.setVisible(false);
-    created.setActive(false);
-    (created as any).__sparkActive = true;
-    self.sparkVFXPool.push(created);
-    self.container.add(created);
-    return created;
-  } catch (e) {
-    console.warn('[Symbols] Failed to create Spark_VFX spine:', e);
-    return null;
-  }
+  return fx;
 }
 
 function releaseSparkVFXToPool(self: Symbols, sparkVFX: SpineGameObject): void {
-  try {
-    (sparkVFX as any).__sparkActive = false;
-    sparkVFX.setVisible(false);
-    sparkVFX.setActive(false);
-    try { sparkVFX.animationState?.clearTracks(); } catch { }
-  } catch { }
+  try { sparkVFX.animationState?.clearTracks(); } catch { }
+  releaseSpineToPool(self, sparkVFX);
 }
 
 function playSparkVFXOnSymbol(self: Symbols, symbol: any, timeScale: number = 1, scale: number = 0.5): void {
@@ -3271,329 +3493,331 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
   try {
     const cols = self.symbols?.length || 0;
     const rows = cols > 0 && self.symbols[0] ? self.symbols[0].length : 0;
-    const numCols = self.symbols?.length || 0;
-    const scale = self.getSpineSymbolScale(10);
-    if (cols > 0 && rows > 0) {
-      const isTurbo = (self.scene as any)?.gameData?.isTurbo || gameStateManager.isTurbo;
-      const baseTimeScale = self.getSymbolWinTimeScale(10);
-      const timeScale = isTurbo
-        ? baseTimeScale * TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER
-        : baseTimeScale;
 
-      let maxDurationMs = 0;
-      for (let col = 0; col < cols; col++) {
-        for (let row = 0; row < rows; row++) {
-          const value = self.currentSymbolData?.[row]?.[col];
-          if (typeof value === 'number' && value >= 10) {
-            const originalObj: any = self.symbols[col]?.[row];
+    const isTurbo = (self.scene as any)?.gameData?.isTurbo || gameStateManager.isTurbo;
+    const baseTimeScale = self.getSymbolWinTimeScale(10);
+    const timeScale = isTurbo
+      ? baseTimeScale * TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER
+      : baseTimeScale;
 
-            // Base position for the multiplier visuals
-            const baseX = originalObj?.x ?? 0;
-            const baseY = originalObj?.y ?? getYPos(self, row);
+    let maxDurationMs = 0;
+    const flyOutPromises: Promise<void>[] = [];
 
-            // Shared references/parameters so value image can follow the dove
-            let valueImage: any = null;
-            let leaveTargetX = 0;
-            let leaveTargetY = 0;
-            let leaveDelay = 0;
-            let leaveDuration = 0;
-            let returnStartingX = 0;
-            let returnStartingY = 0;
-            let returnTargetX = 0;
-            let returnTargetY = 0;
-            let returnDelay = 0;
-            let returnDuration = 0;
-            // Vertical offset for the value image relative to the dove (about 50px)
-            const returnValueOffsetY = 150 * scale;
+    // Prefer cached multiplier symbols to avoid scanning the full grid.
+    const cachedMultipliers = self.multiplierSymbolCache ?? [];
+    const hasCache = cachedMultipliers.length > 0;
 
-            // Remove the original multiplier object – it will be replaced by the new assets
-            if (originalObj) {
-              try { self.scene.tweens.killTweensOf(originalObj); } catch { }
-              try { originalObj.destroy(); } catch { }
-            }
+    const processSymbol = (symbolObj: any, fallbackValue?: number) => {
+      const symbolValue = typeof fallbackValue === 'number'
+        ? fallbackValue
+        : (symbolObj as any)?.symbolValue;
 
-            // Container that will hold frame, dove and value – also used for tweening
-            const multContainer = self.scene.add.container(baseX, baseY);
-            // Ensure multiplier visuals render above all other symbols/overlays
-            try { multContainer.setDepth(700); } catch { }
-            // Replace grid reference with the new container so cleanup logic still works
-            try { self.symbols[col][row] = multContainer as any; } catch { }
+      if (typeof symbolValue !== 'number' || symbolValue < 10) return;
 
-            let localMaxDurationMs = 0;
+      const state = symbolObj?.animationState;
+      const skeletonData: any = symbolObj?.skeleton?.data;
+      if (!state) return;
 
-            // Helper to update the maximum duration
-            const updateDurationFromSpine = (spineObj: any, animNameFallback?: string) => {
-              try {
-                const state = spineObj?.animationState;
-                if (!state) return;
+      // Prefer the currently assigned animation, otherwise find one that matches the multiplier value.
+      let animationName = state.tracks?.[0]?.animation?.name;
+      if (!animationName) {
+        animationName =
+          self.findMultiplierAnimationNameByIndex(symbolObj, symbolValue) ??
+          skeletonData?.animations?.[0]?.name ??
+          null;
+      }
 
-                // Try to set an explicit animation if provided
-                if (animNameFallback) {
-                  try { state.setAnimation(0, animNameFallback, false); } catch { }
-                }
-
-                let durSec: number | undefined;
-                const data = spineObj?.skeleton?.data;
-                if (data?.findAnimation && animNameFallback) {
-                  durSec = data.findAnimation(animNameFallback)?.duration;
-                }
-
-                // Fallback: use first animation in the skeleton, if any
-                if ((durSec === undefined || durSec <= 0) && Array.isArray(data?.animations) && data.animations.length > 0) {
-                  durSec = (data.animations[0] as any).duration;
-                }
-
-                const ts = state.timeScale || 1;
-                if (typeof durSec === 'number' && durSec > 0 && ts > 0) {
-                  const durMs = (durSec * 1000) / ts;
-                  if (durMs > localMaxDurationMs) {
-                    localMaxDurationMs = durMs;
-                  }
-                }
-              } catch { }
-            };
-
-            // Create shatter spine 
-            try {
-              const shatterKey = 'shatter_frame';
-              const shatterAtlasKey = `${shatterKey}-atlas`;
-              const shatterSpine: SpineGameObject = self.scene.add.spine(0, 0, shatterKey, shatterAtlasKey);
-              if (shatterSpine) {
-                try {
-                  shatterSpine.setOrigin(0.5, 0.5);
-                  shatterSpine.setScale(scale * 0.4);
-                  shatterSpine.setVisible(false);
-                  multContainer.add(shatterSpine);
-
-                  const shatterDelay = 500 / (isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
-                  self.scene.time.delayedCall(shatterDelay, () => {
-                    shatterSpine.setVisible(true);
-                    // get first animation in skeleton
-                    const animationName = shatterSpine.skeleton?.data?.animations[0]?.name ?? 'animation';
-                    shatterSpine.animationState.setAnimation(0, animationName, false);
-                    shatterSpine.animationState.timeScale = 1;
-                  });
-                } catch { }
-              }
-            } catch (e) {
-              console.warn('[Symbols] Failed to create shatter spine:', e);
-            }
-
-            // Create multiplier frame spine
-            try {
-              const frameKey = 'multiplier_frame';
-              const frameAtlasKey = `${frameKey}-atlas`;
-              const frameSpine: any = (self.scene.add as any).spine(0, 0, frameKey, frameAtlasKey);
-              if (frameSpine) {
-                try {
-                  const origin = self.getSpineSymbolOrigin(value);
-                  frameSpine.setOrigin(origin.x, origin.y);
-                  frameSpine.setScale(scale);
-                  multContainer.add(frameSpine);
-                  if (frameSpine.animationState) {
-                    frameSpine.animationState.setAnimation(0, `symbol${value}_WF`, false);
-                    frameSpine.animationState.timeScale = timeScale;
-                  }
-                } catch { }
-                updateDurationFromSpine(frameSpine, `symbol${value}_WF`);
-              }
-            } catch (e) {
-              console.warn('[Symbols] Failed to create multiplier frame spine:', e);
-            }
-
-            // Create multiplier dove spine
-            try {
-              const doveKey = 'multiplier_dove';
-              const doveAtlasKey = `${doveKey}-atlas`;
-              const doveSpine: any = (self.scene.add as any).spine(0, 0, doveKey, doveAtlasKey);
-              if (doveSpine) {
-                try {
-                  doveSpine.setOrigin(0.5, 0.5);
-                  doveSpine.setDepth(999);
-                  multContainer.add(doveSpine);
-                  if (doveSpine.animationState) {
-                    doveSpine.animationState.setAnimation(0, `symbol10_WF`, true);
-
-                    // Play spin sound effect
-                    if ((window as any).audioManager) {
-                      (window as any).audioManager.playOneShot(SoundEffectType.MULTI);
-                      console.log('[Symbols] Playing multiplier sound effect');
-                    }
-
-                    // Pre‑compute path parameters so both dove and value image can share them
-                    leaveTargetX = col < numCols / 2 ? -self.scene.scale.width * 0.6 : self.scene.scale.width * 0.6;
-                    leaveTargetY = -self.scene.scale.height * 0.3;
-                    leaveDelay = Math.random() * 100 + 150 / (isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
-                    leaveDuration = 1250 / (isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
-                    const leaveFacingDirection = col < numCols / 2 ? 1 : -1;
-                    doveSpine.setScale(leaveFacingDirection * scale, scale);
-                    scheduleTranslate(self, doveSpine, leaveDelay, leaveDuration, leaveTargetX, leaveTargetY);
-
-                    returnStartingX = Math.random() * self.scene.scale.width * 1.1 - self.scene.scale.width * 0.1;
-                    returnStartingY = -50;
-
-                    returnTargetX = self.scene.scale.width * 0.68 + Math.random() * self.scene.scale.width * 0.07;
-                    returnTargetY = self.scene.scale.height * 0.1;
-                    returnDelay = leaveDelay + leaveDuration;
-                    returnDuration = (Math.random() * 400 + 600) / (isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
-
-                    // Ensure the awaited duration also covers the full leave + return tweens,
-                    // including the final value-image drop/fade sequence that runs after the
-                    // dove has reached its target.
-                    //
-                    //  - Outbound:  leaveDelay + leaveDuration
-                    //  - Return:    returnDelay + returnDuration (where returnDelay already
-                    //               includes leaveDelay + leaveDuration)
-                    //  - Tail:      ~400ms for the drop (250ms) + fade (150ms, delayed by 250ms)
-                    //
-                    // We only care about when everything is visually finished, so use the
-                    // actual tween timings (already turbo-adjusted above).
-                    const tweenTailMs = 400;
-                    const extraDelayMs = 150;
-                    const totalTweenDurationMs = returnDelay + returnDuration + tweenTailMs + extraDelayMs;
-                    if (totalTweenDurationMs > localMaxDurationMs) {
-                      localMaxDurationMs = totalTweenDurationMs;
-                    }
-
-                    console.log('[Symbols] returnStartingX ', returnStartingX);
-                    self.scene.time.delayedCall(returnDelay - 50, () => {
-                      multContainer.remove(doveSpine);
-                      doveSpine.animationState.setAnimation(0, `symbol10_WF`, true);
-                      doveSpine.setPosition(returnStartingX, returnStartingY);
-
-                      const returnFacingDirection = returnStartingX > returnTargetX ? 1 : -1;
-                      doveSpine.setScale(returnFacingDirection * scale, scale);
-
-                      // Detach value image and place it under the dove before the return flight
-                      if (valueImage) {
-                        try {
-                          multContainer.remove(valueImage);
-                        } catch { }
-                        try {
-                          valueImage.setPosition(returnStartingX, returnStartingY + returnValueOffsetY);
-                        } catch { }
-                        // Start the value image return tween slightly after this callback,
-                        // so it lines up with the dove's return tween start.
-                        try {
-                          scheduleTranslate(
-                            self,
-                            valueImage,
-                            50,
-                            returnDuration,
-                            returnTargetX,
-                            returnTargetY + returnValueOffsetY,
-                            true
-                          );
-                        } catch { }
-                      }
-                    });
-
-                    const onComplete = () => {
-                      // Final white-flash on dove, then drop and fade out the value image
-                      doveSpine.animationState.setAnimation(0, `symbol10_WF_white`, true);
-
-                      if (valueImage) {
-                        try {
-                          // Drop the value image by ~50px over 300ms
-                          self.scene.tweens.add({
-                            targets: valueImage,
-                            y: valueImage.y + 20,
-                            duration: 250,
-                            ease: Phaser.Math.Easing.Cubic.In,
-                          });
-
-                          // Fade out quickly while (or just after) dropping, then destroy
-                          self.scene.tweens.add({
-                            targets: valueImage,
-                            alpha: 0,
-                            duration: 150,
-                            delay: 250,
-                            ease: Phaser.Math.Easing.Quadratic.Out,
-                            onComplete: () => {
-                              // play multiplier_added_wf sound effect
-                              if ((window as any).audioManager) {
-                                (window as any).audioManager.playSoundEffect(SoundEffectType.MULTIPLIER_ADDED);
-                                console.log('[Symbols] Playing multiplier_added_wf sound effect');
-                              }
-                              
-                              // call event here to update multiplier value in normal or bonus header
-                              const multiplierValue = self.multiplierIndexMapping[value];
-
-                              gameEventManager.emit(GameEventType.UPDATE_MULTIPLIER_VALUE,
-                                { multiplier: multiplierValue } as UpdateMultiplierValueEventData
-                              );
-                            try { valueImage.destroy(); } catch { }
-                            }
-                          });
-                        } catch { }
-                      }
-
-                      self.scene.time.delayedCall(300, () => {
-                        try { doveSpine.destroy(); } catch { }
-                      });
-                    };
-                    scheduleTranslate(self, doveSpine, returnDelay, returnDuration, returnTargetX, returnTargetY, true, onComplete);
-
-                    doveSpine.animationState.timeScale = timeScale;
-                  }
-                } catch { }
-                updateDurationFromSpine(doveSpine, `symbol10_WF`);
-              }
-            } catch (e) {
-              console.warn('[Symbols] Failed to create multiplier dove spine:', e);
-            }
-
-            // Create multiplier value sprite (image key derived from symbol value)
-            try {
-              // Symbol 10 is missing in documentation and backend so we start at 11 for multiplier indices
-              // Map backend multiplier value (>=11) into the available sprite indices (multiplier_0..multiplier_14)
-              let spriteIndex = Number(value) - 11;
-              if (!Number.isFinite(spriteIndex) || spriteIndex < 0) spriteIndex = 0;
-
-              const valueKey = `multiplier_${spriteIndex}`;
-              valueImage = self.scene.add.image(0, 0, valueKey);
-              if (valueImage) {
-                try {
-                  valueImage.setOrigin(0.5, 1);
-                  valueImage.setPosition(55 * scale, 70 * scale);
-                  valueImage.setScale(scale);
-                  multContainer.add(valueImage);
-
-                  // Make the value image follow the dove on the outbound flight
-                  try {
-                    scheduleTranslate(self, valueImage, leaveDelay, leaveDuration, leaveTargetX, leaveTargetY);
-                  } catch { }
-                } catch { }
-              }
-            } catch (e) {
-              console.warn('[Symbols] Failed to create multiplier value sprite for value', value, e);
-            }
-
-            // Apply subtle scale and translate tweens to the whole multiplier container
-            try { scheduleScaleUp(self, multContainer, 20, 200, 1.05); } catch { }
-            try { scheduleTranslate(self, multContainer, 20, 200, 0, -3); } catch { }
-
-            // Update global maximum duration
-            if (localMaxDurationMs > maxDurationMs) {
-              maxDurationMs = localMaxDurationMs;
-            }
+      let animDurationMs: number | null = null;
+      if (animationName) {
+        try { state.setAnimation(0, animationName, false); } catch { }
+        // Estimate duration so we can await the longest-running animation.
+        const animDurationSec =
+          skeletonData?.findAnimation?.(animationName)?.duration ??
+          skeletonData?.animations?.[0]?.duration;
+        if (typeof animDurationSec === 'number' && animDurationSec > 0 && timeScale > 0) {
+          animDurationMs = (animDurationSec * 1000) / timeScale;
+          if (animDurationMs > maxDurationMs) {
+            maxDurationMs = animDurationMs;
           }
         }
       }
 
-      console.log(
-        `[Symbols] Multiplier symbol timeScale set to ${timeScale} after tumbles (turbo=${isTurbo}), maxDurationMs=${maxDurationMs}`
-      );
+      try { state.timeScale = timeScale; } catch { }
 
-      // Wait until the (longest) multiplier animation finishes
-      if (maxDurationMs > 0) {
-        await delay(maxDurationMs);
+      // After the spine animation completes, fly the multiplier value to the header
+      const symbolX = (symbolObj as any)?.x;
+      const symbolY = (symbolObj as any)?.y;
+      if (typeof symbolX === 'number' && typeof symbolY === 'number') {
+        const delayMs = Math.max(0, animDurationMs ?? 0);
+        flyOutPromises.push((async () => {
+          try {
+            if (delayMs > 0) {
+              await delay(delayMs);
+            }
+            await animateMultiplierValueToPosition(self, symbolValue, symbolX, symbolY);
+          } catch (err) {
+            console.warn('[Symbols] Failed to animate multiplier fly-out:', err);
+          }
+        })());
+      }
+    };
+
+    if (hasCache) {
+      for (const symbolObj of cachedMultipliers) {
+        processSymbol(symbolObj);
+      }
+    } else if (cols && rows) {
+      // Fallback: scan the grid when cache is unavailable.
+      for (let col = 0; col < cols; col++) {
+        for (let row = 0; row < rows; row++) {
+          const gridValue = self.currentSymbolData?.[row]?.[col];
+          const symbolObj: any = self.symbols[col]?.[row];
+          processSymbol(symbolObj, gridValue);
+        }
       }
     }
+
+    const waitAnimations = maxDurationMs > 0 ? delay(maxDurationMs) : Promise.resolve();
+    const waitFlyOuts = flyOutPromises.length ? Promise.all(flyOutPromises) : Promise.resolve();
+    await Promise.all([waitAnimations, waitFlyOuts]);
   } catch (err) {
-    console.warn('[Symbols] Failed to update multiplier symbol timeScale after tumbles:', err);
+    console.warn('[Symbols] Failed to play multiplier symbol animations:', err);
   }
 }
+
+async function animateMultiplierValueToPosition(self: Symbols, value: number, x: number, y: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    try {
+      const scene = self?.scene;
+      if (!scene) {
+        resolve();
+        return;
+      }
+
+      // Use the header multiplier bar position directly (see Header.createHeaderElements)
+      const targetX = scene.scale.width * 0.775;
+      const targetY = scene.scale.height * 0.1725;
+
+      // Reuse the multiplier bar texture so we know the asset is available
+      const baseScale = (((scene.gameData as any)?.symbolScale) ?? 1) * 0.55;
+      const floatImage = scene.add.image(x, y, 'multiplier-bar')
+        .setOrigin(0.5, 0.5)
+        .setScale(baseScale)
+        .setDepth(900);
+
+      // Keep the value attached for debugging/telemetry if needed
+      try { floatImage.setData?.('multiplierValue', value); } catch { }
+
+      // Randomized start delay for all but the first animated image
+      const hasAnimatedOnce = (animateMultiplierValueToPosition as any)._hasAnimatedOnce === true;
+      const startDelayMs = hasAnimatedOnce ? Phaser.Math.Between(50, 200) : 0;
+      (animateMultiplierValueToPosition as any)._hasAnimatedOnce = true;
+
+      const kickOff = () => {
+        // Pick a tween variant (structure allows adding more variants later)
+        const variant = MULTIPLIER_TWEEN_VARIANTS[
+          Math.floor(Math.random() * MULTIPLIER_TWEEN_VARIANTS.length)
+        ] || tweenMultiplierArc;
+
+        variant(scene, floatImage, { startX: x, startY: y, targetX, targetY, baseScale })
+          .then(() => resolve())
+          .catch((err: any) => {
+            console.warn('[Symbols] Multiplier tween variant failed:', err);
+            try { floatImage.destroy(); } catch { }
+            resolve();
+          });
+      };
+
+      if (startDelayMs > 0) {
+        delay(startDelayMs).then(kickOff);
+      } else {
+        kickOff();
+      }
+    } catch (err) {
+      console.warn('[Symbols] Failed to animate multiplier value to header:', err);
+      resolve();
+    }
+  });
+}
+
+type MultiplierTweenParams = {
+  startX: number;
+  startY: number;
+  targetX: number;
+  targetY: number;
+  baseScale: number;
+};
+
+// Variant 1: basketball-style arc shot toward the multiplier bar (ring)
+function tweenMultiplierArc(scene: any, floatImage: any, params: MultiplierTweenParams): Promise<void> {
+  const { startX: x, startY: y, targetX, targetY, baseScale } = params;
+
+  return new Promise<void>((resolve) => {
+    const dx = targetX - x;
+    const dy = targetY - y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const arcLift = Math.max(80, Math.min(200, distance * 0.25));
+    const apexX = x + dx * 0.5 + dx * 0.08; // slight additional X drift near apex
+    const apexY = Math.min(y, targetY) - arcLift;
+    const spin = dx >= 0 ? 540 : -540;
+    const driftAtApex = dx * 0.12;
+    const tinyFall = Math.min(8, arcLift * 0.03);
+
+    // Phase 1: quick shoot upward
+    scene.tweens.add({
+      targets: floatImage,
+      duration: 240,
+      x: x + dx * 0.45,
+      y: apexY,
+      angle: spin * 0.4,
+      ease: Phaser.Math.Easing.Sine.Out,
+      onComplete: () => {
+        // Phase 2: brief rest at apex (minimal vertical movement, slight X drift)
+        scene.tweens.add({
+          targets: floatImage,
+          duration: 180,
+          x: apexX + driftAtApex,
+          y: apexY + tinyFall,
+          angle: spin * 0.55,
+          ease: Phaser.Math.Easing.Sine.InOut,
+          onComplete: () => {
+            // Phase 3: controlled drop toward the ring
+            scene.tweens.add({
+              targets: floatImage,
+              duration: 580,
+              x: targetX,
+              y: targetY,
+              angle: spin,
+              scale: baseScale,
+              alpha: 1,
+              ease: Phaser.Math.Easing.Cubic.Out,
+              onComplete: () => {
+                scene.tweens.add({
+                  targets: floatImage,
+                  duration: 180,
+                  scale: baseScale * 1.15,
+                  alpha: 0,
+                  ease: Phaser.Math.Easing.Cubic.Out,
+                  onComplete: () => {
+                    try { floatImage.destroy(); } catch { }
+                    resolve();
+                  },
+                });
+              },
+            });
+          },
+        });
+      },
+    });
+  });
+}
+
+// Variant 2: ricochet bounce off screen edges, then a top bounce, then into the ring
+function tweenMultiplierRicochet(scene: any, floatImage: any, params: MultiplierTweenParams): Promise<void> {
+  const { startX: x, startY: y, targetX, targetY, baseScale } = params;
+
+  return new Promise<void>((resolve) => {
+    try {
+      const width = scene.scale?.width ?? 720;
+      const height = scene.scale?.height ?? 1280;
+      const margin = 8; // tighter buffer so ricochets appear near the edge
+
+      // Row-based ricochet count: fewer on top half, slightly more on bottom half
+      const startRatio = height > 0 ? y / height : 0.5;
+      let bounceCount = 2;
+      if (startRatio < 0.5) {
+        bounceCount = 1 + Math.floor(Math.random() * 2); // 1-2 ricochets
+      } else {
+        bounceCount = 2 + Math.floor(Math.random() * 2); // 2-3 ricochets
+      }
+
+      const points: Array<{ x: number; y: number }> = [];
+      let currentX = x;
+      let currentY = y;
+
+      // Ensure starting direction alternates between calls
+      const startLeft = (() => {
+        if (typeof (tweenMultiplierRicochet as any)._lastStartLeft === 'boolean') {
+          return !(tweenMultiplierRicochet as any)._lastStartLeft;
+        }
+        return x >= width * 0.5; // initial seed based on position
+      })();
+      (tweenMultiplierRicochet as any)._lastStartLeft = startLeft;
+
+      let nextSideLeft = startLeft;
+
+      // Side ricochets
+      for (let i = 0; i < bounceCount; i++) {
+        const towardLeft = nextSideLeft; // alternate sides
+        const targetSideX = towardLeft ? margin : width - margin;
+        const ascent = Phaser.Math.Between(Math.floor(height * 0.08), Math.floor(height * 0.16));
+        const targetSideY = Math.max(margin + 4, currentY - ascent); // always move up with tiny buffer
+        points.push({ x: targetSideX, y: targetSideY });
+        currentX = targetSideX;
+        currentY = targetSideY;
+        nextSideLeft = !nextSideLeft; // flip for the next bounce
+      }
+
+      // One last ricochet at the top, then to the ring
+      const topX = Phaser.Math.Between(Math.floor(width * 0.2), Math.floor(width * 0.8));
+      const topY = margin;
+      points.push({ x: topX, y: topY });
+      points.push({ x: targetX, y: targetY });
+
+      const tweenToPoint = (toX: number, toY: number, ease: any, isFinalLeg: boolean) => {
+        const dx = (floatImage.x ?? 0) - toX;
+        const dy = (floatImage.y ?? 0) - toY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const speedFactor = isFinalLeg ? 1.0 : 0.8; // faster on side hops, normal on final leg
+        const duration = Phaser.Math.Clamp(dist * speedFactor, 160, isFinalLeg ? 520 : 420);
+        return new Promise<void>((res) => {
+          scene.tweens.add({
+            targets: floatImage,
+            x: toX,
+            y: toY,
+            duration,
+            ease,
+            angle: (floatImage.angle ?? 0) + (Math.random() < 0.5 ? -180 : 180),
+            onComplete: () => res(),
+          });
+        });
+      };
+
+      (async () => {
+        for (let i = 0; i < points.length; i++) {
+          const isLastLeg = i === points.length - 1;
+          const isTopBounce = i === points.length - 2;
+          const useEase = isLastLeg ? Phaser.Math.Easing.Cubic.Out : Phaser.Math.Easing.Linear;
+          await tweenToPoint(points[i].x, points[i].y, useEase, isLastLeg);
+        }
+
+        scene.tweens.add({
+          targets: floatImage,
+          duration: 160,
+          scale: baseScale * 1.1,
+          alpha: 0,
+          ease: Phaser.Math.Easing.Cubic.Out,
+          onComplete: () => {
+            try { floatImage.destroy(); } catch { }
+            resolve();
+          },
+        });
+      })().catch(() => {
+        try { floatImage.destroy(); } catch { }
+        resolve();
+      });
+    } catch {
+      try { floatImage.destroy(); } catch { }
+      resolve();
+    }
+  });
+}
+
+// Register available tween variants here to allow easy randomization/expansion.
+const MULTIPLIER_TWEEN_VARIANTS: Array<(scene: any, floatImage: any, params: MultiplierTweenParams) => Promise<void>> = [
+  tweenMultiplierArc,
+  // tweenMultiplierRicochet,
+];
 
 
 /**
@@ -3662,23 +3886,27 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
   const numCols = self.symbols.length;
   const numRows = self.symbols[0].length;
 
-  // Match manual drop timings and staggering for visual consistency
-  const MANUAL_STAGGER_MS: number = (self.scene?.gameData?.tumbleStaggerMs ?? 100);
+  // Cache frequently accessed values for performance
+  const gameData = self.scene?.gameData;
+  const currentSymbolData = self.currentSymbolData;
+  const MANUAL_STAGGER_MS: number = (gameData?.tumbleStaggerMs ?? 100);
 
-  // Debug: log incoming tumble payload
-  try {
-    const totalOutRequested = outs.reduce((s, o) => s + (Number(o?.count) || 0), 0);
-    const totalInProvided = (Array.isArray(ins) ? ins.flat().length : 0);
-    console.log('[Symbols] Tumble payload:', {
-      outs,
-      insColumns: Array.isArray(ins) ? ins.map((col, idx) => ({ col: idx, count: Array.isArray(col) ? col.length : 0 })) : [],
-      totals: { totalOutRequested, totalInProvided }
-    });
-  } catch { }
-
-  // Build a removal mask per cell
+  // Build / reuse a removal mask per cell
   // removeMask[col][row]
-  const removeMask: boolean[][] = Array.from({ length: numCols }, () => Array<boolean>(numRows).fill(false));
+  if (!Array.isArray(self.tumbleRemoveMask)) {
+    self.tumbleRemoveMask = [];
+  }
+  for (let col = 0; col < numCols; col++) {
+    const colArr = self.tumbleRemoveMask[col] || (self.tumbleRemoveMask[col] = []);
+    for (let row = 0; row < numRows; row++) {
+      colArr[row] = false;
+    }
+    // Trim any stale rows from previous larger grids
+    colArr.length = numRows;
+  }
+  // Trim any extra columns from previous larger grids
+  self.tumbleRemoveMask.length = numCols;
+  const removeMask: boolean[][] = self.tumbleRemoveMask;
 
   // Identify symbols that meet the high-count threshold (>=8)
   const highCountSymbols = new Set<number>();
@@ -3691,35 +3919,48 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
   }
 
   // Build position indices by symbol (topmost-first per column)
-  const positionsBySymbol: { [key: number]: Array<{ col: number; row: number }> } = {};
+  // Use Map for better performance than object with string keys
+  const positionsBySymbol = new Map<number, Array<{ col: number; row: number }>>();
   let sequenceIndex = 0; // ensures 1-by-1 ordering across columns left-to-right
   for (let col = 0; col < numCols; col++) {
     for (let row = 0; row < numRows; row++) {
-      const val = self.currentSymbolData?.[row]?.[col];
+      const val = currentSymbolData?.[row]?.[col];
       if (typeof val !== 'number') continue;
-      if (!positionsBySymbol[val]) positionsBySymbol[val] = [];
-      positionsBySymbol[val].push({ col, row });
+      let list = positionsBySymbol.get(val);
+      if (!list) {
+        list = [];
+        positionsBySymbol.set(val, list);
+      }
+      list.push({ col, row });
     }
   }
   // Sort each symbol's positions top-to-bottom (row asc), then left-to-right (col asc)
-  Object.keys(positionsBySymbol).forEach(k => {
-    positionsBySymbol[Number(k)].sort((a, b) => a.row - b.row || a.col - b.col);
-  });
+  for (const list of positionsBySymbol.values()) {
+    list.sort((a, b) => a.row - b.row || a.col - b.col);
+  }
 
   // Determine per-column incoming counts
   const insCountByCol: number[] = Array.from({ length: numCols }, (_, c) => (Array.isArray(ins?.[c]) ? ins[c].length : 0));
   let targetRemovalsPerCol: number[] = insCountByCol.slice();
 
   // Helper to pick and mark a position for a symbol in a preferred column
+  // Optimized: use index tracking instead of splice (O(n) -> O(1))
+  const usedIndicesBySymbol = new Map<number, Set<number>>();
   function pickAndMark(symbol: number, preferredCol: number | null): boolean {
-    const list = positionsBySymbol[symbol] || [];
+    const list = positionsBySymbol.get(symbol);
+    if (!list) return false;
+    let usedIndices = usedIndicesBySymbol.get(symbol);
+    if (!usedIndices) {
+      usedIndices = new Set<number>();
+      usedIndicesBySymbol.set(symbol, usedIndices);
+    }
     for (let i = 0; i < list.length; i++) {
+      if (usedIndices.has(i)) continue; // already used
       const p = list[i];
       if (removeMask[p.col][p.row]) continue; // already marked
       if (preferredCol !== null && p.col !== preferredCol) continue;
       removeMask[p.col][p.row] = true;
-      // Remove from list for efficiency
-      list.splice(i, 1);
+      usedIndices.add(i); // Mark as used instead of removing
       return true;
     }
     return false;
@@ -3755,33 +3996,35 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
   }
 
   // Debug: per-column removal vs incoming
-  try {
-    const removedPerCol: number[] = Array.from({ length: numCols }, () => 0);
-    for (let col = 0; col < numCols; col++) {
-      for (let row = 0; row < numRows; row++) {
-        if (removeMask[col][row]) removedPerCol[col]++;
-      }
-    }
-    console.log('[Symbols] Tumble per-column removal vs incoming:', removedPerCol.map((r, c) => ({ col: c, removed: r, incoming: insCountByCol[c] })));
-  } catch { }
-
-  // Debug: report which cells are marked for removal per symbol
-  try {
-    const removedBySymbol: { [key: number]: Array<{ col: number; row: number }> } = {};
-    let totalRemoved = 0;
-    for (let col = 0; col < numCols; col++) {
-      for (let row = 0; row < numRows; row++) {
-        if (removeMask[col][row]) {
-          const val = self.currentSymbolData?.[row]?.[col];
-          const key = typeof val === 'number' ? val : -1;
-          if (!removedBySymbol[key]) removedBySymbol[key] = [];
-          removedBySymbol[key].push({ col, row });
-          totalRemoved++;
+  if (DEBUG_SYMBOLS_TUMBLES) {
+    try {
+      const removedPerCol: number[] = Array.from({ length: numCols }, () => 0);
+      for (let col = 0; col < numCols; col++) {
+        for (let row = 0; row < numRows; row++) {
+          if (removeMask[col][row]) removedPerCol[col]++;
         }
       }
-    }
-    console.log('[Symbols] Tumble removal mask summary:', { totalRemoved, removedBySymbol });
-  } catch { }
+      console.log('[Symbols] Tumble removedPerCol:', removedPerCol, 'insCountByCol:', insCountByCol);
+    } catch { }
+
+    // Debug: report which cells are marked for removal per symbol
+    try {
+      const removedBySymbol: { [key: number]: Array<{ col: number; row: number }> } = {};
+      let totalRemoved = 0;
+      for (let col = 0; col < numCols; col++) {
+        for (let row = 0; row < numRows; row++) {
+          if (removeMask[col][row]) {
+            const val = currentSymbolData?.[row]?.[col];
+            const key = typeof val === 'number' ? val : -1;
+            if (!removedBySymbol[key]) removedBySymbol[key] = [];
+            removedBySymbol[key].push({ col, row });
+            totalRemoved++;
+          }
+        }
+      }
+      console.log('[Symbols] Tumble removal mask summary:', { totalRemoved, removedBySymbol });
+    } catch { }
+  }
 
   // Animate removal: for high-count sugar symbols (1..9), play SW_Win before destroy; otherwise fade out
   const removalPromises: Promise<void>[] = [];
@@ -4390,27 +4633,73 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
   }
 }
 
-function createMultiplierSymbol(self: Symbols, value: number, x: number, y: number, alpha: number = 1): SpineGameObject {
-  value = value - 1; // Symbol 10 is missing in documentation and backend so we start at 11 for multiplier indices
+function createMultiplierSymbol(self: Symbols, value: number, x: number, y: number, alpha: number = 1): any {
+  console.log(`[Symbols] Creating multiplier symbol: ${value}`);
 
-  const spineKey = `multiplier_WF`;
-  const spineAtlasKey = spineKey + '-atlas';
-  const spineSymbol = self.scene.add.spine(x, y, spineKey, spineAtlasKey);
-
-  const origin = self.getSpineSymbolOrigin(value);
-  spineSymbol.setOrigin(origin.x, origin.y);
-  spineSymbol.setScale(self.getSpineSymbolScale(value));
-  spineSymbol.setAlpha(alpha);
-  self.container.add(spineSymbol);
-
+  let spine: SpineGameObject | null = null;
   try {
-    spineSymbol.animationState.setAnimation(0, `symbol${value}_WF`, false);
-    spineSymbol.animationState.timeScale = 0;
-  } catch {
-    console.error('[Symbols] Failed to set animation for multiplier symbol: ', value);
+    spine = acquireSpineFromPool(self, Symbols.MULTIPLIER_SPINE_KEY, `${Symbols.MULTIPLIER_SPINE_KEY}-atlas`);
+  } catch (e) {
+    console.warn('[Symbols] Failed to acquire pooled multiplier Spine, falling back to PNG:', e);
   }
 
-  return spineSymbol;
+  // Fallback: if Spine could not be acquired/created, use the existing PNG path
+  if (!spine) {
+    return createPngSymbol(self, value, x, y, alpha);
+  }
+
+  try {
+    const origin = self.getSpineSymbolOrigin(value);
+    const scale = self.getSpineSymbolScale(value);
+
+    spine.setOrigin(origin.x, origin.y);
+    spine.setScale(scale);
+    spine.setPosition(x, y);
+
+    try {
+      spine.setVisible(true);
+      spine.setActive(true);
+      spine.setAlpha(alpha);
+    } catch { }
+
+    try { (spine as any).symbolValue = value; } catch { }
+
+    try {
+      if (self.container && spine.parentContainer !== self.container) {
+        self.container.add(spine);
+      }
+    } catch { }
+
+    try {
+      const state = spine.animationState;
+      if (state) {
+        const animName = self.findMultiplierAnimationNameByIndex(spine, value);
+        const fallbackAnimName = spine.skeleton?.data?.animations?.[0]?.name;
+        const nameToPlay = animName ?? fallbackAnimName;
+
+        if (nameToPlay) {
+          state.setAnimation(0, nameToPlay, false);
+        }
+
+        state.timeScale = 0;
+      }
+    } catch {
+      console.error('[Symbols] Failed to set animation for multiplier symbol: ', value);
+    }
+
+    // Track multiplier symbols so we can replay them later without scanning the grid.
+    try {
+      if (!self.multiplierSymbolCache.includes(spine)) {
+        self.multiplierSymbolCache.push(spine);
+      }
+    } catch { }
+
+    return spine;
+  } catch (configureError) {
+    console.warn('[Symbols] Failed to configure multiplier Spine, falling back to PNG:', configureError);
+    try { releaseSpineToPool(self, spine as any); } catch { }
+    return createPngSymbol(self, value, x, y, alpha);
+  }
 }
 
 /**
