@@ -216,7 +216,7 @@ export class Game extends Scene
 		this.winTracker = new WinTracker();
 		this.winTracker.create(this);
 		// Reduce symbol icon size in WinTracker
-		this.winTracker.setLayout({ iconScale: 0.05 });
+		this.winTracker.setLayout({ iconScale: 0.13 });
 		(this as any).winTracker = this.winTracker;
 
 		//Create symbols

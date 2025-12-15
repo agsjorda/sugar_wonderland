@@ -3,13 +3,13 @@ import { Scene } from 'phaser';
 /**
  * LoadingSpinner Component
  * 
- * A cute candy overlay that spins in the center of the symbols grid
+ * A simple graphic spinner that spins in the center of the symbols grid
  * when fetching spin data takes more than 2 seconds (after symbols clear).
  */
 export class LoadingSpinner {
 	private scene: Scene;
 	private container: Phaser.GameObjects.Container | null = null;
-	private candyImage: Phaser.GameObjects.Image | null = null;
+	private spinnerGraphics: Phaser.GameObjects.Graphics | null = null;
 	private spinnerTween: Phaser.Tweens.Tween | null = null;
 	private showTimeout: any | null = null;
 	private isVisible: boolean = false;
@@ -17,16 +17,21 @@ export class LoadingSpinner {
 	// Position where the spinner should appear (center of symbols grid)
 	private centerX: number = 0;
 	private centerY: number = 0;
+	
+	// Spinner properties
+	private readonly spinnerRadius: number = 30;
+	private readonly spinnerLineCount: number = 8;
+	private readonly spinnerLineWidth: number = 4;
 
 	constructor(scene: Scene, centerX: number, centerY: number) {
 		this.scene = scene;
-		this.centerX = centerX;
-		this.centerY = centerY;
+		this.centerX = centerX + 10;
+		this.centerY = centerY -5;
 		this.createSpinner();
 	}
 
 	/**
-	 * Create the candy spinner
+	 * Create the graphic spinner
 	 */
 	private createSpinner(): void {
 		// Create container for the spinner
@@ -35,13 +40,45 @@ export class LoadingSpinner {
 		this.container.setVisible(false);
 		this.container.setAlpha(0);
 
-		// Create the candy overlay image
-		this.candyImage = this.scene.add.image(0, 0, 'candy-overlay');
-		this.candyImage.setOrigin(0.5, 0.5);
-		this.candyImage.setScale(0.15); // Scale down the candy to fit nicely
-		this.container.add(this.candyImage);
+		// Create the spinner graphics
+		this.spinnerGraphics = this.scene.add.graphics();
+		this.drawSpinner();
+		this.container.add(this.spinnerGraphics);
 
-		console.log('[LoadingSpinner] Candy spinner created at position:', this.centerX, this.centerY);
+		console.log('[LoadingSpinner] Graphic spinner created at position:', this.centerX, this.centerY);
+	}
+
+	/**
+	 * Draw the spinner with radial lines
+	 */
+	private drawSpinner(): void {
+		if (!this.spinnerGraphics) return;
+
+		this.spinnerGraphics.clear();
+		
+		const centerX = 0;
+		const centerY = 0;
+		const radius = this.spinnerRadius;
+		const lineCount = this.spinnerLineCount;
+		const lineWidth = this.spinnerLineWidth;
+		
+		// Draw 8 lines radiating from center
+		// Each line has varying opacity to create spinning effect
+		for (let i = 0; i < lineCount; i++) {
+			const angle = (i / lineCount) * Math.PI * 2 - Math.PI / 2; // Start from top
+			const opacity = 0.2 + (i / lineCount) * 0.8; // Gradient opacity
+			
+			const x1 = centerX + Math.cos(angle) * radius * 0.3;
+			const y1 = centerY + Math.sin(angle) * radius * 0.3;
+			const x2 = centerX + Math.cos(angle) * radius;
+			const y2 = centerY + Math.sin(angle) * radius;
+			
+			this.spinnerGraphics.lineStyle(lineWidth, 0x00ced1, opacity); // Blue-green color (dark turquoise)
+			this.spinnerGraphics.beginPath();
+			this.spinnerGraphics.moveTo(x1, y1);
+			this.spinnerGraphics.lineTo(x2, y2);
+			this.spinnerGraphics.strokePath();
+		}
 	}
 
 	/**
@@ -80,13 +117,13 @@ export class LoadingSpinner {
 			return;
 		}
 
-		console.log('[LoadingSpinner] Showing candy spinner');
+		console.log('[LoadingSpinner] Showing spinner');
 		this.isVisible = true;
 		this.container.setVisible(true);
 
-		// Reset candy angle to 0 before starting
-		if (this.candyImage) {
-			this.candyImage.setAngle(0);
+		// Reset spinner angle to 0 before starting
+		if (this.spinnerGraphics) {
+			this.spinnerGraphics.setAngle(0);
 		}
 
 		// Fade in animation
@@ -97,9 +134,9 @@ export class LoadingSpinner {
 			ease: 'Power2'
 		});
 
-		// Rotate the candy continuously with smooth linear motion (counter-clockwise)
+		// Rotate the spinner continuously with smooth linear motion (counter-clockwise)
 		this.spinnerTween = this.scene.tweens.add({
-			targets: this.candyImage,
+			targets: this.spinnerGraphics,
 			angle: -360,
 			duration: 1200, // Slightly slower for smoother rotation
 			ease: 'Linear',
@@ -127,8 +164,8 @@ export class LoadingSpinner {
 		// This prevents an awkward empty moment before new symbols drop
 		setTimeout(() => {
 			// Stop rotation smoothly at the nearest complete rotation (0 or -360 degrees)
-			if (this.spinnerTween && this.candyImage) {
-				const currentAngle = this.candyImage.angle % 360;
+			if (this.spinnerTween && this.spinnerGraphics) {
+				const currentAngle = this.spinnerGraphics.angle % 360;
 				// For counter-clockwise, rotate to 0 or -360
 				const targetAngle = currentAngle > -180 ? 0 : -360;
 				const angleToRotate = targetAngle - currentAngle;
@@ -139,14 +176,14 @@ export class LoadingSpinner {
 				
 				// Smoothly rotate to 0 or 360 degrees
 				this.scene.tweens.add({
-					targets: this.candyImage,
+					targets: this.spinnerGraphics,
 					angle: `+=${angleToRotate}`,
 					duration: Math.abs(angleToRotate) * 2, // Proportional duration
 					ease: 'Linear',
 					onComplete: () => {
 						// Reset to 0 degrees after completing rotation
-						if (this.candyImage) {
-							this.candyImage.setAngle(0);
+						if (this.spinnerGraphics) {
+							this.spinnerGraphics.setAngle(0);
 						}
 					}
 				});
@@ -211,7 +248,7 @@ export class LoadingSpinner {
 			this.container = null;
 		}
 
-		this.candyImage = null;
+		this.spinnerGraphics = null;
 		this.isVisible = false;
 	}
 }

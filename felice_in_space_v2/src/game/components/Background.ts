@@ -66,16 +66,16 @@ export class Background {
 			}
 
 			this.bgDefaultSpine = (scene.add as any).spine(
-				scene.scale.width * 0.5,
-				scene.scale.height * 0.5,
+				scene.scale.width * 0.5 - 3.5,
+				scene.scale.height * 0.5 + 93,
 				'BG-Default',
 				'BG-Default-atlas'
 			) as SpineGameObject;
 			this.bgDefaultSpine.setOrigin(0.5, 0.5);
 			this.bgDefaultSpine.setScale(assetScale);
 			
-			// Play Normal_Mode_FIS animation (loop it)
-			this.bgDefaultSpine.animationState.setAnimation(0, 'Normal_BG_FIS', true);
+			// Play Default_BG_FIS animation (loop it)
+			this.bgDefaultSpine.animationState.setAnimation(0, 'Default_BG_FIS', true);
 			
 			this.bgContainer.add(this.bgDefaultSpine);
 			console.log('[Background] Created BG-Default spine animation');
@@ -150,8 +150,9 @@ export class Background {
 				.setOrigin(0.5, 0.5)
 				.setScale(0)
 				.setAlpha(1)
-				.setDepth(3) // Below UI elements
+				.setDepth(0) // Behind reel-container (depth 1)
 				.setVisible(false);
+			this.bgContainer.add(shine); // Add to bgContainer for proper layering with reel-container
 			this.shineInstances.push(shine);
 		}
 		
@@ -186,7 +187,7 @@ export class Background {
 		const minX = scene.scale.width * 0;
 		const maxX = scene.scale.width * 1;
 		const minY = scene.scale.height * 0;
-		const maxY = scene.scale.height * 0.25;
+		const maxY = scene.scale.height * 0.6;
 
 		// Random position within the defined area
 		const randomX = Phaser.Math.Between(minX, maxX);

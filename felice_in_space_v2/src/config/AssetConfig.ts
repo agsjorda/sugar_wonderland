@@ -32,7 +32,6 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				'candy-overlay': `assets/portrait/high/background/candy-overlay.png`,
 				'shine': `assets/portrait/high/background/shine.png`,
 				'reel-container': `assets/portrait/high/background/reel-container.png`,
 				'reel-container-frame': `assets/portrait/high/background/reel-container-frame.png`
@@ -457,34 +456,32 @@ export class AssetConfig {
 			audio: {
 				// Menu/UI clicks
 				'click_sfx': 'assets/sounds/click_sw.ogg',
-				'mainbg_sfx': 'assets/sounds/BG/mainbg_sw.ogg',
-				'bonusbg_sfx': 'assets/sounds/BG/bonusbg_sw.ogg',
-				'freeSpin_sfx': 'assets/sounds/BG/freespinbg_sw.ogg',
+				'mainbg_sfx': 'assets/sounds/BG/mainbg_fis.ogg',
+				'bonusbg_sfx': 'assets/sounds/BG/bonusbg_fis.ogg',
+				'freeSpin_sfx': 'assets/sounds/BG/freespinbg_fis.ogg',
 				// 'ambience_sfx': 'assets/sounds/SFX/ambience_sw.ogg',
-				'spin_sfx': 'assets/sounds/SFX/spin_sw.ogg',
-				'reeldrop_sfx': 'assets/sounds/SFX/reeldrop_sw.ogg',
-				'turboDrop_sfx': 'assets/sounds/SFX/turbodrop_sw.ogg',
+				'spin_sfx': 'assets/sounds/SFX/spin_fis.ogg',
+				'reeldrop_sfx': 'assets/sounds/SFX/reeldrop_fis.ogg',
+				'turboDrop_sfx': 'assets/sounds/SFX/turbodrop_fis.ogg',
 				// Candy explosion transition SFX (used by SymbolExplosionTransition)
 				'candy_transition_sw': 'assets/sounds/SFX/candy_transition.ogg',
-				// Scatter win "nom nom" SFX – played when scatter win animation runs
-				'nomnom_sw': 'assets/sounds/SFX/nomnom_sw.ogg',
 				'coin_throw_ka': 'assets/sounds/SFX/coin_throw_ka.ogg',
 				'coin_drop_ka': 'assets/sounds/SFX/coin_drop_ka.ogg',
 				// Multiplier trigger / bomb SFX (bonus-mode multipliers)
-				'bomb_sw': 'assets/sounds/SFX/bomb_sw.ogg',
-				'scatter_sw': 'assets/sounds/SFX/scatter_sw.ogg',
+				'bomb_sw': 'assets/sounds/SFX/texplo_fis.ogg',
+				'scatter_sw': 'assets/sounds/SFX/scatter_fis.ogg',
 				// Tumble symbol-win SFX (play per tumble index)
-				'twin1_sfx': 'assets/sounds/SFX/symbol_win/twin1_sw.ogg',
-				'twin2_sfx': 'assets/sounds/SFX/symbol_win/twin2_sw.ogg',
-				'twin3_sfx': 'assets/sounds/SFX/symbol_win/twin3_sw.ogg',
-				'twin4_sfx': 'assets/sounds/SFX/symbol_win/twin4_sw.ogg',
+				'twin1_sfx': 'assets/sounds/SFX/symbol_win/twin1_fis.ogg',
+				'twin2_sfx': 'assets/sounds/SFX/symbol_win/twin2_fis.ogg',
+				'twin3_sfx': 'assets/sounds/SFX/symbol_win/twin3_fis.ogg',
+				'twin4_sfx': 'assets/sounds/SFX/symbol_win/twin4_fis.ogg',
 				// Win dialog SFX
-				'bigWin_sfx': 'assets/sounds/Wins/bigw_sw.ogg',
-				'megaWin_sfx': 'assets/sounds/Wins/megaw_sw.ogg',
-				'superWin_sfx': 'assets/sounds/Wins/superw_sw.ogg',
-				'epicWin_sfx': 'assets/sounds/Wins/epicw_sw.ogg',
-				'freeSpinDialog_sfx': 'assets/sounds/BG/freespinbg_sw.ogg',
-				'congratsDialog_sfx': 'assets/sounds/Wins/congrats_sw.ogg',
+				'bigWin_sfx': 'assets/sounds/Wins/bigw_fis.ogg',
+				'megaWin_sfx': 'assets/sounds/Wins/megaw_fis.ogg',
+				'superWin_sfx': 'assets/sounds/Wins/superw_fis.ogg',
+				'epicWin_sfx': 'assets/sounds/Wins/epicw_fis.ogg',
+				'freeSpinDialog_sfx': 'assets/sounds/BG/freespinbg_fis.ogg',
+				'congratsDialog_sfx': 'assets/sounds/Wins/congrats_fis.ogg',
 				'megawskip_ka': 'assets/sounds/Wins/megawskip_ka.ogg',
 				'superwskip_ka': 'assets/sounds/Wins/superwskip_ka.ogg',
 				'epicwskip_ka': 'assets/sounds/Wins/epicwskip_ka.ogg'

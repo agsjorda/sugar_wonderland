@@ -11,8 +11,6 @@ export enum SoundEffectType {
 	REEL_DROP = 'reeldrop',
 	TURBO_DROP = 'turbodrop',
 	CANDY_TRANSITION = 'candy_transition',
-	// Scatter win "nom nom" SFX (Symbol0 win animation)
-	SCATTER_NOMNOM = 'scatter_nomnom',
 	WHEEL_SPIN = 'wheelspin',
 	MENU_CLICK = 'menu_click',
 	HIT_WIN = 'hitwin',
@@ -48,7 +46,7 @@ export class AudioManager {
 	private scene: Phaser.Scene;
 	private currentMusic: MusicType | null = null;
 	private musicVolume: number = 1;
-	private sfxVolume: number = 0.55;
+	private sfxVolume: number = 1;
 	private ambientVolume: number = 0.3; // Volume for ambient audio layer
 	private isMuted: boolean = false;
 	private musicInstances: Map<MusicType, Phaser.Sound.BaseSound> = new Map();
@@ -89,7 +87,6 @@ export class AudioManager {
 		this.scene.load.audio('click_sfx', 'assets/sounds/click_sw.ogg');
 		this.scene.load.audio('reeldrop_sfx', 'assets/sounds/SFX/reeldrop_sfx.ogg');
 		this.scene.load.audio('turboDrop_sfx', 'assets/sounds/SFX/turbodrop_sw.ogg');
-		this.scene.load.audio('nomnom_sw', 'assets/sounds/SFX/nomnom_sw.ogg');
 		this.scene.load.audio('coin_throw_ka', 'assets/sounds/SFX/coin_throw_ka.ogg');
 		this.scene.load.audio('coin_drop_ka', 'assets/sounds/SFX/coin_drop_ka.ogg');
 		
@@ -223,15 +220,6 @@ export class AudioManager {
 				console.log('[AudioManager] Scatter SFX instance created');
 			} catch (e) {
 				console.warn('[AudioManager] Failed to create scatter_sw SFX instance:', e);
-			}
-
-			// Create scatter win "nom nom" SFX instance
-			try {
-				const scatterNomnom = this.scene.sound.add('nomnom_sw', { volume: this.sfxVolume, loop: false });
-				this.sfxInstances.set(SoundEffectType.SCATTER_NOMNOM, scatterNomnom);
-				console.log('[AudioManager] Scatter nomnom SFX instance created');
-			} catch (e) {
-				console.warn('[AudioManager] Failed to create nomnom_sw SFX instance:', e);
 			}
 
 			// Create win dialog SFX instances

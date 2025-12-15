@@ -228,7 +228,7 @@ import { SoundEffectType } from '../../managers/AudioManager';
 			// Scale up and fly outward
 			const initialScale = particle.scaleX || 0.4;
 			// Gentle, slightly random scale-up so symbols stay similar in size
-			const explosionScaleMultiplier = Phaser.Math.FloatBetween(1.2, 1.6);
+			const explosionScaleMultiplier = Phaser.Math.FloatBetween(3, 3.4);
 			const finalScale = initialScale * explosionScaleMultiplier;
 
 			// Precompute a second outward target for the disperse phase.

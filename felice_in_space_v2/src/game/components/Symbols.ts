@@ -32,7 +32,6 @@ export class Symbols {
   public winLineDrawer: any | null;
   private overlayRect?: Phaser.GameObjects.Graphics;
   public currentSpinData: any = null; // Store current spin data for access by other components
-  private scatterCandyOverlay?: Phaser.GameObjects.Image | null;
   private overlayContainer: Phaser.GameObjects.Container | null = null;
 
   // Track whether any wins occurred during the current spin item (including all tumbles)
@@ -1299,9 +1298,6 @@ export class Symbols {
 
     console.log(`[Symbols] Starting scatter symbol Spine animation for ${scatterGrids.length} symbols`);
 
-    // Ensure we only trigger the scatter win "nom nom" SFX once for this sequence
-    let scatterWinNomnomPlayed: boolean = false;
-
     // Replace scatter symbols with Spine animations
     const animationPromises = scatterGrids.map(grid => {
       return new Promise<void>((resolve) => {
@@ -1473,42 +1469,6 @@ export class Symbols {
       const gatherDuration = 600;
       const symbolValue = 0; // Scatter symbol index
       
-      // Create candy overlay that appears and rotates while scatters gather
-      let candyOverlay: Phaser.GameObjects.Image | null = null;
-      try {
-        // Clean up any existing overlay before creating a new one
-        try {
-          if (this.scatterCandyOverlay) {
-            this.scene.tweens.killTweensOf(this.scatterCandyOverlay);
-            this.scatterCandyOverlay.destroy();
-            this.scatterCandyOverlay = null;
-          }
-        } catch {}
-        candyOverlay = this.scene.add.image(centerX, centerY, 'candy-overlay')
-          .setOrigin(0.5, 0.5)
-          .setAlpha(0)
-          .setScale(0.4);
-        // Place overlay outside the masked container to avoid masking, but set depth between overlayRect (500) and symbols (600)
-        candyOverlay.setDepth(550);
-        // Store reference for cleanup on next reset
-        this.scatterCandyOverlay = candyOverlay;
-        // Fade in during gather
-        this.scene.tweens.add({
-          targets: candyOverlay,
-          alpha: 1,
-          duration: gatherDuration,
-          ease: 'Sine.easeInOut'
-        });
-        // Continuous rotation (keeps spinning during and after enlargement)
-        this.scene.tweens.add({
-          targets: candyOverlay,
-          rotation: '-=6.283185307179586', // 2 * PI
-          duration: 4000,
-          ease: 'Linear',
-          repeat: -1
-        });
-      } catch {}
-      
       const gatherPromises = scatterGrids.map(grid => {
         return new Promise<void>((resolve) => {
           const col = grid.x;
@@ -1649,27 +1609,6 @@ export class Symbols {
                       } catch {}
                     }
 
-                    // Play the scatter "nom nom" SFX once for this sequence.
-                    // Use the global game timeScale (so it respects turbo/slow-mo) but
-                    // do NOT inherit the extra per-symbol animation speed-up, to avoid
-                    // the SFX sounding too fast.
-                    if (!scatterWinNomnomPlayed) {
-                      scatterWinNomnomPlayed = true;
-                      try {
-                        const audio = (window as any)?.audioManager;
-                        if (audio && typeof audio.playSoundEffect === 'function') {
-                          const globalScale = (typeof (gameStateManager as any)?.timeScale === 'number'
-                            ? (gameStateManager as any).timeScale || 1
-                            : 1);
-                          const clampedScale = Math.max(0.5, Math.min(1.25, globalScale));
-                          audio.playSoundEffect(SoundEffectType.SCATTER_NOMNOM, clampedScale);
-                          console.log('[Symbols] Played scatter nomnom SFX with global timescale:', clampedScale);
-                        }
-                      } catch (e) {
-                        console.warn('[Symbols] Failed to play scatter nomnom SFX:', e);
-                      }
-                    }
-
                     // Safety timeout: if complete never fires, still return to idle animation
                     this.scene.time.delayedCall(2500, () => {
                       if (finished) return;
@@ -1702,29 +1641,6 @@ export class Symbols {
             });
           });
         });
-        // Also scale the candy overlay to its final size in the same time window
-        if ((this as any) && (this.scene) && typeof this.scene.tweens?.add === 'function') {
-          const overlayTween = new Promise<void>((resolve) => {
-            try {
-              const overlayRef = (this.scatterCandyOverlay ?? ((typeof candyOverlay !== 'undefined') ? candyOverlay : null));
-              if (overlayRef) {
-                this.scene.tweens.add({
-                  targets: overlayRef,
-                  scaleX: 0.95,
-                  scaleY: 0.95,
-                  duration: 400,
-                  ease: 'Sine.easeOut',
-                  onComplete: () => resolve()
-                });
-              } else {
-                resolve();
-              }
-            } catch {
-              resolve();
-            }
-          });
-          scaleTweens.push(overlayTween);
-        }
         await Promise.all(scaleTweens);
         console.log('[Symbols] Scatter symbols scaled up and win animation started');
       } catch (e2) {
@@ -1752,9 +1668,6 @@ export class Symbols {
     const symbolValue = 0; // Scatter symbol id
     const winAnimationName = `Symbol${symbolValue}_FIS_Win`;
 
-    // Ensure we only trigger the scatter win "nom nom" SFX once for this retrigger sequence
-    let retriggerNomnomPlayed: boolean = false;
-    
     // Prepare overlay container (above mask) and restore tracking
     if (!this.overlayContainer) {
       try {
@@ -1884,25 +1797,6 @@ export class Symbols {
                     state.setAnimation(0, winAnimationName, false);
                   } catch {}
 
-                  // Play the scatter "nom nom" SFX once for the retrigger sequence.
-                  // Use the global game timeScale (turbo/slow-mo) but do NOT inherit
-                  // any extra per-symbol animation speed-up, to keep SFX at a natural pace.
-                  if (!retriggerNomnomPlayed) {
-                    retriggerNomnomPlayed = true;
-                    try {
-                      const audio = (window as any)?.audioManager;
-                      if (audio && typeof audio.playSoundEffect === 'function') {
-                        const globalScale = (typeof (gameStateManager as any)?.timeScale === 'number'
-                          ? (gameStateManager as any).timeScale || 1
-                          : 1);
-                        const clampedScale = Math.max(0.5, Math.min(1.25, globalScale));
-                        audio.playSoundEffect(SoundEffectType.SCATTER_NOMNOM, clampedScale);
-                        console.log('[Symbols] Played scatter nomnom SFX (retrigger) with global timescale:', clampedScale);
-                      }
-                    } catch (e) {
-                      console.warn('[Symbols] Failed to play scatter nomnom SFX (retrigger):', e);
-                    }
-                  }
                   // Safety timeout in case 'complete' never fires
                   this.scene.time.delayedCall(2500, () => {
                     if (finished) return;
@@ -2233,8 +2127,6 @@ export class Symbols {
     let resetCount = 0;
     const tweenPromises: Promise<void>[] = [];
     
-    let overlayTweenStarted = false;
-    
     for (let col = 0; col < this.symbols.length; col++) {
       for (let row = 0; row < this.symbols[col].length; row++) {
         const symbol: any = this.symbols[col][row];
@@ -2244,37 +2136,6 @@ export class Symbols {
         const isScatter = (symbol as any)?.symbolValue === 0;
         const isSpine = !!(symbol as any)?.animationState;
         if (!isSpine || !isScatter) continue;
-        
-        // Start overlay shrink/fade once, in sync with the first scatter reset tween
-        if (!overlayTweenStarted) {
-          overlayTweenStarted = true;
-          try {
-            const ov = this.scatterCandyOverlay;
-            if (ov) {
-              // Shrink during scatter shrink phase
-              this.scene.tweens.add({
-                targets: ov,
-                scaleX: 0.4,
-                scaleY: 0.4,
-                duration: shrinkDuration,
-                ease: 'Sine.easeInOut',
-                onComplete: () => {
-                  // Then fade out while scatters return to grid
-                  this.scene.tweens.add({
-                    targets: ov,
-                    alpha: 0,
-                    duration: moveDuration,
-                    ease: 'Sine.easeInOut',
-                    onComplete: () => {
-                      try { ov.destroy(); } catch {}
-                      this.scatterCandyOverlay = null;
-                    }
-                  });
-                }
-              });
-            }
-          } catch {}
-        }
         
         // Stop any running tweens on this symbol
         this.scene.tweens.killTweensOf(symbol);
@@ -3448,6 +3309,7 @@ function getMultiplierAnimationBase(value: number): string | null {
 /**
  * Get the win animation name for multiplier symbols (10-22)
  * Symbols 10-16 use Symbol10_FIS, symbols 17-20 use Symbol11_FIS, symbols 21-22 use Symbol12_FIS
+ * Note: Multiplier symbols don't have a _Win suffix, they use the base animation name
  */
 function getMultiplierWinAnimationName(value: number): string | null {
   if (value >= 10 && value <= 16) return 'Symbol10_FIS';
@@ -3885,15 +3747,6 @@ async function playMultiplierWinThenIdle(self: Symbols, obj: any, base: string):
     let finished = false;
     const safeResolve = () => { if (!finished) { finished = true; resolve(); } };
     const isTurbo = !!self.scene.gameData?.isTurbo;
-    // Fire dedicated multiplier trigger SFX right as the Win animation starts
-    try {
-      const audio = (window as any)?.audioManager;
-      if (audio && typeof audio.playSoundEffect === 'function' && gameStateManager.isBonus) {
-        try {
-          audio.playSoundEffect(SoundEffectType.MULTIPLIER_TRIGGER);
-        } catch {}
-      }
-    } catch {}
     try {
       const animState = obj?.animationState;
       if (!animState || !animState.setAnimation) {
@@ -3906,6 +3759,7 @@ async function playMultiplierWinThenIdle(self: Symbols, obj: any, base: string):
       
       // Get the win animation name for this multiplier symbol
       // Symbols 10-16 use Symbol10_FIS, symbols 17-20 use Symbol11_FIS, symbols 21-22 use Symbol12_FIS
+      // Note: Multiplier symbols don't have a _Win suffix, they use the base animation name
       const winAnim = value !== null ? (getMultiplierWinAnimationName(value) || 'animation') : 'animation';
       
       // Check if animation exists in skeleton
@@ -3971,6 +3825,18 @@ async function playMultiplierWinThenIdle(self: Symbols, obj: any, base: string):
               } catch {}
             }
             console.log(`[Symbols] Playing multiplier win animation "${winAnim}" for symbol ${value} (after scale-up), entry:`, entry);
+            
+            // Fire dedicated multiplier trigger SFX 1 second after the win animation starts
+            try {
+              const audio = (window as any)?.audioManager;
+              if (audio && typeof audio.playSoundEffect === 'function' && gameStateManager.isBonus) {
+                self.scene.time.delayedCall(1000, () => {
+                  try {
+                    audio.playSoundEffect(SoundEffectType.MULTIPLIER_TRIGGER);
+                  } catch {}
+                });
+              }
+            } catch {}
             
             if (!entry) {
               console.warn(`[Symbols] Failed to set animation "${winAnim}" for multiplier symbol ${value} - animation may not exist`);
@@ -5190,14 +5056,16 @@ async function applySingleTumble(self: Symbols, tumble: any, tumbleIndex: number
               const canPlaySugarWin = typeof value === 'number' && value >= 1 && value <= 9 && highCountSymbols.has(value) && obj.animationState && obj.animationState.setAnimation;
               // For multipliers, allow win animation only when this item actually had wins
               const canPlayMultiplierWin = !!multiBase && !!(self as any).hadWinsInCurrentItem && obj.animationState && obj.animationState.setAnimation;
-              // Get the win animation name: symbols 0-9 use "animation", multipliers 10-22 use Symbol{10|11|12}_FIS
+              // Get the win animation name: symbols 0-9 use Symbol{value}_FIS_Win, multipliers 10-22 use Symbol{10|11|12}_FIS_Win
               if (canPlaySugarWin || canPlayMultiplierWin) {
                 try { if (obj.animationState.clearTracks) obj.animationState.clearTracks(); } catch {}
-                // For multipliers, use the specific win animation name (Symbol10_FIS, Symbol11_FIS, or Symbol12_FIS)
-                // For sugar symbols (0-9), use "animation"
+                // For multipliers, use the specific win animation name (Symbol10_FIS_Win, Symbol11_FIS_Win, or Symbol12_FIS_Win)
+                // For sugar symbols (0-9), use Symbol{value}_FIS_Win
                 const winAnim = (typeof value === 'number' && value >= 10 && value <= 22)
                   ? (getMultiplierWinAnimationName(value) || 'animation')
-                  : 'animation';
+                  : (typeof value === 'number' && value >= 0 && value <= 9)
+                    ? `Symbol${value}_FIS_Win`
+                    : 'animation';
                 let completed = false;
                 try {
                   // Resume animation if it was frozen (for symbols 0-12)

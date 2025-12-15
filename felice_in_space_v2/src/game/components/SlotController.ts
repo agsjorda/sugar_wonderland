@@ -127,9 +127,9 @@ export class SlotController {
 			return;
 		}
 
-		// Get the center position of the symbols grid
-		const centerX = this.scene.scale.width * 0.5;
-		const centerY = this.scene.scale.height * 0.25;
+		// Get the center position of the symbols grid (matching Symbols component positioning)
+		const centerX = this.scene.scale.width * 0.5 - 5;
+		const centerY = this.scene.scale.height * 0.405;
 
 		this.loadingSpinner = new LoadingSpinner(this.scene, centerX, centerY);
 		console.log('[SlotController] Loading spinner initialized');
@@ -384,9 +384,9 @@ export class SlotController {
 		// Store scene reference for event listening
 		this.scene = scene;
 		
-		// Initialize loading spinner at center of symbols grid
-		const centerX = scene.scale.width * 0.5;
-		const centerY = scene.scale.height * 0.42;
+		// Initialize loading spinner at center of symbols grid (matching Symbols component positioning)
+		const centerX = scene.scale.width * 0.5 - 5;
+		const centerY = scene.scale.height * 0.405;
 		this.loadingSpinner = new LoadingSpinner(scene, centerX, centerY);
 		
 		// Get GameData from the scene
@@ -4277,57 +4277,16 @@ public updateAutoplayButtonState(): void {
 			this.disableAutoplayButton();
 			this.disableAmplifyButton();
 			
+			// Skip retriggers - they are handled by the second listener in setupBonusModeEventListener
+			if (data?.isRetrigger) {
+				console.log('[SlotController] Scatter bonus retrigger detected in first listener - skipping (handled by second listener)');
+				return;
+			}
+			
 			console.log(`[SlotController] Scatter bonus activated with index ${data.scatterIndex} and ${data.actualFreeSpins} free spins - hiding primary controller, free spin display will appear after dialog closes`);
 			this.hidePrimaryControllerWithScatter(data.scatterIndex);
 			// Store the free spins data for later display after dialog closes
 			this.pendingFreeSpinsData = data;
-			
-			// If this is a retrigger, add +5 to remaining spins in the frontend and override display
-			try {
-				if (data?.isRetrigger) {
-					// Determine current remaining free spins
-					let currentRemaining = 0;
-					// Prefer the current displayed number if available
-					try {
-						const txt = (this.freeSpinNumber?.text || '').toString().trim();
-						const val = parseInt(txt, 10);
-						if (!isNaN(val) && val >= 0) currentRemaining = val;
-					} catch {}
-					// Fallback to Symbols' internal tracker
-					if (currentRemaining <= 0) {
-						const sym = (this.scene as any)?.symbols;
-						if (sym && typeof sym.freeSpinAutoplaySpinsRemaining === 'number') {
-							currentRemaining = sym.freeSpinAutoplaySpinsRemaining;
-						}
-					}
-					// Fallback to computing from API data
-					if (currentRemaining <= 0) {
-						try {
-							const apiSpinData = this.gameAPI?.getCurrentSpinData();
-							if (apiSpinData) {
-								currentRemaining = this.computeDisplaySpinsLeft(apiSpinData);
-							}
-						} catch {}
-					}
-					
-					const newRemaining = Math.max(0, currentRemaining + 5);
-					this.freeSpinDisplayOverride = newRemaining;
-					
-					// Sync Symbols' tracker
-					try {
-						const symbolsComponent = (this.scene as any)?.symbols;
-						if (symbolsComponent && typeof symbolsComponent.setFreeSpinAutoplaySpinsRemaining === 'function') {
-							symbolsComponent.setFreeSpinAutoplaySpinsRemaining(newRemaining);
-						}
-					} catch {}
-					
-					// Update UI immediately
-					this.updateFreeSpinNumber(newRemaining);
-					console.log(`[SlotController] Retrigger detected - increased remaining free spins by +5: ${currentRemaining} -> ${newRemaining}`);
-				}
-			} catch (e) {
-				console.warn('[SlotController] Failed to apply +5 override on retrigger:', e);
-			}
 		});
 
 		// Listen for dialog animations completion to show free spin display
