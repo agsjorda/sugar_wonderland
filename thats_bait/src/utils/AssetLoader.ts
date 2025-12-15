@@ -187,6 +187,17 @@ export class AssetLoader {
         console.log('[AssetLoader] Scatter win overlay assets loaded');
     }
 
+    loadFreeSpinOverlayAssets(scene: Scene): void {
+        console.log('[AssetLoader] Loading free spin overlay assets...');
+        const anyConfig: any = this.assetConfig as any;
+        if (typeof anyConfig.getFreeSpinOverlayAssets === 'function') {
+            this.loadAssetGroup(scene, anyConfig.getFreeSpinOverlayAssets());
+        } else {
+            console.warn('[AssetLoader] getFreeSpinOverlayAssets not available on AssetConfig');
+        }
+        console.log('[AssetLoader] Free spin overlay assets loaded');
+    }
+
     loadAudioAssets(scene: Scene): void {
         console.log('[AssetLoader] Loading audio assets...');
         this.loadAssetGroup(scene, this.assetConfig.getAudioAssets());

@@ -74,6 +74,37 @@ export const PhaserGame = forwardRef<IRefPhaserGame, IProps>(function PhaserGame
 		}
 	}, [currentActiveScene, ref]);
 
+	useEffect(() =>
+	{
+		const onRestart = (e: Event) =>
+		{
+			try
+			{
+				const anyE: any = e as any;
+				const restartedGame: Phaser.Game | undefined = anyE?.detail?.game;
+				if (!restartedGame) return;
+
+				game.current = restartedGame;
+				setScene(null);
+
+				if (typeof ref === 'function')
+				{
+					ref({ game: game.current, scene: null });
+				} else if (ref)
+				{
+					ref.current = { game: game.current, scene: null };
+				}
+			}
+			catch {}
+		};
+
+		window.addEventListener('phaser-game-restarted', onRestart as any);
+		return () =>
+		{
+			try { window.removeEventListener('phaser-game-restarted', onRestart as any); } catch {}
+		}
+	}, [ref]);
+
 	return (
 		<>
 			<div id="game-container"></div>

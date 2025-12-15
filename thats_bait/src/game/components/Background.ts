@@ -28,6 +28,7 @@ export class Background {
 	private bgFog?: Phaser.GameObjects.Image;
 	private bgSurface?: Phaser.GameObjects.Image;
 	private bgSky?: Phaser.GameObjects.Image;
+	private seaEdge?: Phaser.GameObjects.Image;
 	private reelBottomSpine?: any;
 	private characterSpine?: any;
 	private depthWavePipeline?: WaterWavePipeline;
@@ -299,6 +300,7 @@ export class Background {
 			seaEdgeY,
 			'Sea-Edge'
 		).setOrigin(0.5, 5.0);
+		this.seaEdge = seaEdge;
 		const seaEdgeScaleBase = scene.scale.width / seaEdge.width;
 		const seaEdgeScale = seaEdgeScaleBase * assetScale;
 		seaEdge.setScale(seaEdgeScale * this.seaEdgeWidthMultiplier, seaEdgeScale);
@@ -766,6 +768,22 @@ export class Background {
 
 	getCharacterSpine(): any | undefined {
 		return this.characterSpine;
+	}
+
+	setVisible(visible: boolean): void {
+		try { this.bgContainer?.setVisible(visible); } catch {}
+		try { this.bgFog?.setVisible(visible); } catch {}
+		try { this.seaEdge?.setVisible(visible); } catch {}
+		try { this.reelBottomSpine?.setVisible(visible); } catch {}
+		try { this.characterSpine?.setVisible(visible); } catch {}
+		try { this.bubbleSystem?.getContainer?.()?.setVisible(visible); } catch {}
+		try {
+			if (Array.isArray(this.bubbleStreamSystems)) {
+				for (const stream of this.bubbleStreamSystems) {
+					try { stream?.getContainer?.()?.setVisible(visible); } catch {}
+				}
+			}
+		} catch {}
 	}
 
 	getContainer(): Phaser.GameObjects.Container {

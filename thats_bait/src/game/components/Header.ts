@@ -1,7 +1,6 @@
 import { Scene } from "phaser";
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
-import { Data } from "../../tmp_backend/Data";
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { PaylineData } from '../../backend/SpinData';
@@ -11,13 +10,17 @@ import { HEADER_YOUWIN_OFFSET_X, HEADER_YOUWIN_OFFSET_Y, HEADER_AMOUNT_OFFSET_X,
 
 
 export class Header {
-	private headerContainer: Phaser.GameObjects.Container;
+	private headerContainer!: Phaser.GameObjects.Container;
+	private headerOffsetX: number = 0;
+	private headerOffsetY: number = 470;
+	private headerScale: number = 1.0;
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
-	private amountText: Phaser.GameObjects.Text;
-	private youWonText: Phaser.GameObjects.Text;
+	private amountText!: Phaser.GameObjects.Text;
+	private youWonText!: Phaser.GameObjects.Text;
 	private currentWinnings: number = 0;
 	private pendingWinnings: number = 0;
+	private hasSeenSpinEvent: boolean = false;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -34,56 +37,44 @@ export class Header {
 		
 		// Create main container for all header elements
 		this.headerContainer = scene.add.container(0, 0);
+		this.headerContainer.setDepth(900);
 		
 		const screenConfig = this.screenModeManager.getScreenConfig();
 		const assetScale = this.networkManager.getAssetScale();
+		const width = scene.scale.width;
+		const height = scene.scale.height;
+		const headerCenterX = width * 0.5 + this.headerOffsetX;
+		const headerCenterY = height * 0.12 + this.headerOffsetY;
 		
 		console.log(`[Header] Creating header with scale: ${assetScale}x`);
+		this.createWinBarText(scene, headerCenterX, headerCenterY, assetScale);
 		// Set up event listeners for winnings updates
 		this.setupWinningsEventListener();
+		this.initializeWinnings();
 	}
 
-
-	private createCharacterSpineAnimation(scene: Scene, assetScale: number): void {
-		try {
-			if (!ensureSpineFactory(scene, '[Header] createCharacterSpineAnimation')) {
-				console.warn('[Header] Spine factory unavailable. Skipping character spine creation.');
-				return;
-			}
-			const width = scene.scale.width;
-			const height = scene.scale.height;
-
-			// Create the Spine animation object
-			const spineObject = scene.add.spine(width * 0.78, height * 0.175, "kobiass", "kobiass-atlas");
-			spineObject.setOrigin(0.5, 0.5);
-			spineObject.setScale(-0.13, 0.13); // Negative X scale to flip horizontally
-			spineObject.setDepth(5); // Set explicit depth below win bar (10)
-			spineObject.animationState.setAnimation(0, "idle", true);
-			
-			this.headerContainer.add(spineObject);
-
-			console.log('[Header] Spine character animation created successfully');
-		} catch (error) {
-			console.error('[Header] Error creating Spine character animation:', error);
-		}
-	}
-
-
-	private createWinBarText(scene: Scene, x: number, y: number): void {
+	private createWinBarText(scene: Scene, x: number, y: number, assetScale: number): void {
+		const fontScale = assetScale * this.headerScale;
+		const headerTopOffset = -7 * fontScale;
+		const headerAmountOffset = 14 * fontScale;
+		const shadowOffsetY = 2 * fontScale;
+		const shadowBlur = 4 * fontScale;
 		// Line 1: "YOU WON"
-		this.youWonText = scene.add.text(x + HEADER_YOUWIN_OFFSET_X, y - 7 + HEADER_YOUWIN_OFFSET_Y, 'YOU WIN', {
-			fontSize: '16px',
+		this.youWonText = scene.add.text(x + HEADER_YOUWIN_OFFSET_X, y + headerTopOffset + HEADER_YOUWIN_OFFSET_Y, 'YOU WIN', {
+			fontSize: `${16 * fontScale}px`,
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
 		}).setOrigin(0.5, 0.5).setDepth(11); // Higher depth than win bar
+		this.youWonText.setShadow(0, shadowOffsetY, '#000000', shadowBlur, true, true);
 		this.headerContainer.add(this.youWonText);
-
+		
 		// Line 2: "$ 160.00" with bold formatting
-		this.amountText = scene.add.text(x + HEADER_AMOUNT_OFFSET_X, y + 14 + HEADER_AMOUNT_OFFSET_Y, '$ 0.00', {
-			fontSize: '20px',
+		this.amountText = scene.add.text(x + HEADER_AMOUNT_OFFSET_X, y + headerAmountOffset + HEADER_AMOUNT_OFFSET_Y, '$ 0.00', {
+			fontSize: `${20 * fontScale}px`,
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
 		}).setOrigin(0.5, 0.5).setDepth(11); // Higher depth than win bar
+		this.amountText.setShadow(0, shadowOffsetY, '#000000', shadowBlur, true, true);
 		this.headerContainer.add(this.amountText);
 	}
 
@@ -108,6 +99,7 @@ export class Header {
 		// Listen for spin events to hide winnings display at start of manual spin
 		gameEventManager.on(GameEventType.SPIN, () => {
 			console.log('[Header] Manual spin started - showing winnings display');
+			this.hasSeenSpinEvent = true;
 			
 			// CRITICAL: Block autoplay spin actions if win dialog is showing, but allow manual spins
 			// This fixes the timing issue where manual spin winnings display was blocked
@@ -125,6 +117,7 @@ export class Header {
 		// Listen for autoplay start to hide winnings display
 		gameEventManager.on(GameEventType.AUTO_START, () => {
 			console.log('[Header] Auto play started - showing winnings display');
+			this.hasSeenSpinEvent = true;
 			this.hideWinningsDisplay();
 		});
 
@@ -137,6 +130,12 @@ export class Header {
 		// Listen for reel done events to show winnings display
 		gameEventManager.on(GameEventType.REELS_STOP, (data: any) => {
 			console.log(`[Header] REELS_STOP received - checking for wins`);
+			// Guard: ignore any REELS_STOP emitted during initialization before the first actual spin.
+			if (!this.hasSeenSpinEvent) {
+				console.log('[Header] Ignoring REELS_STOP before first spin event');
+				this.hideWinningsDisplay();
+				return;
+			}
 			
 			// Get the current spin data from the Symbols component
 			const symbolsComponent = (this.headerContainer.scene as any).symbols;
@@ -144,8 +143,21 @@ export class Header {
 				const spinData = symbolsComponent.currentSpinData;
 				console.log(`[Header] Found current spin data:`, spinData);
 				
-				if (spinData.slot && spinData.slot.paylines && spinData.slot.paylines.length > 0) {
-					const totalWin = this.calculateTotalWinningsFromPaylines(spinData.slot.paylines);
+				const slot = spinData?.slot;
+				const hasTotalWin = slot && typeof slot.totalWin === 'number' && isFinite(slot.totalWin);
+				if (hasTotalWin) {
+					const totalWin = Number(slot.totalWin);
+					console.log(`[Header] Total winnings read from SpinData slot.totalWin: ${totalWin}`);
+					if (totalWin > 0) {
+						this.showWinningsDisplay(totalWin);
+					} else {
+						this.hideWinningsDisplay();
+					}
+					return;
+				}
+
+				if (slot && slot.paylines && slot.paylines.length > 0) {
+					const totalWin = this.calculateTotalWinningsFromPaylines(slot.paylines);
 					console.log(`[Header] Total winnings calculated from paylines: ${totalWin}`);
 					
 					if (totalWin > 0) {
@@ -154,7 +166,7 @@ export class Header {
 						this.hideWinningsDisplay();
 					}
 				} else {
-					console.log('[Header] No paylines in current spin data - hiding winnings display');
+					console.log('[Header] No totalWin and no paylines in current spin data - hiding winnings display');
 					this.hideWinningsDisplay();
 				}
 			} else {
@@ -184,6 +196,14 @@ export class Header {
 			// Hide both texts
 			this.youWonText.setVisible(false);
 			this.amountText.setVisible(false);
+			try {
+				const scene: any = this.headerContainer?.scene as any;
+				if (scene && scene.tweens) {
+					try { scene.tweens.killTweensOf([this.youWonText, this.amountText]); } catch {}
+				}
+				try { this.youWonText.setScale(1); } catch {}
+				try { this.amountText.setScale(1); } catch {}
+			} catch {}
 			
 			console.log('[Header] Winnings display hidden');
 		} else {
@@ -209,6 +229,7 @@ export class Header {
 			// Update amount text with winnings
 			this.amountText.setText(formattedWinnings);
 			
+			this.playBounceEffect();
 			console.log(`[Header] Winnings display shown: ${formattedWinnings} (raw: ${winnings})`);
 		} else {
 			console.warn('[Header] Cannot show winnings display - text objects not available', {
@@ -216,6 +237,40 @@ export class Header {
 				youWonText: !!this.youWonText
 			});
 		}
+	}
+
+	private playBounceEffect(): void {
+		try {
+			if (!this.headerContainer) {
+				return;
+			}
+			const scene: any = this.headerContainer.scene as any;
+			if (!scene || !scene.tweens) {
+				return;
+			}
+			const targets: any[] = [];
+			if (this.youWonText) {
+				targets.push(this.youWonText);
+			}
+			if (this.amountText) {
+				targets.push(this.amountText);
+			}
+			if (targets.length === 0) {
+				return;
+			}
+			try {
+				scene.tweens.killTweensOf(targets);
+			} catch {}
+			scene.tweens.add({
+				targets,
+				scaleX: 1.12,
+				scaleY: 1.12,
+				duration: 400,
+				ease: 'Sine.easeInOut',
+				yoyo: true,
+				repeat: -1
+			});
+		} catch {}
 	}
 
 

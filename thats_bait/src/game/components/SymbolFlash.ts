@@ -176,8 +176,8 @@ export function flashAllSymbolsOverlay(host: SymbolFlashHost): void {
             const key = `${col}_${row}`;
             if (flashedPositions.has(key)) continue;
 
-            const centerX = startX + row * symbolTotalWidth + symbolTotalWidth * 0.5;
-            const centerY = startY + col * symbolTotalHeight + symbolTotalHeight * 0.5;
+            const centerX = startX + col * symbolTotalWidth + symbolTotalWidth * 0.5;
+            const centerY = startY + row * symbolTotalHeight + symbolTotalHeight * 0.5;
             const w = Math.max(2, host.displayWidth);
             const h = Math.max(2, host.displayHeight);
 

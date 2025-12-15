@@ -49,10 +49,10 @@ function normalizeMoneyGrid(rawMoney: any): number[][] {
 
   if (outer === SLOT_ROWS && inner === SLOT_COLUMNS) {
     const transposed: number[][] = [];
-    for (let c = 0; c < SLOT_COLUMNS; c++) {
-      transposed[c] = [];
-      for (let r = 0; r < SLOT_ROWS; r++) {
-        transposed[c][r] = rawMoney[r][c];
+    for (let r = 0; r < SLOT_COLUMNS; r++) {
+      transposed[r] = [];
+      for (let c = 0; c < SLOT_ROWS; c++) {
+        transposed[r][c] = rawMoney[c][r];
       }
     }
     return transposed;

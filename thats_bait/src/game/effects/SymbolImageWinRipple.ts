@@ -1,5 +1,22 @@
 import Phaser from 'phaser';
 
+function getSymbolWorldCenter(symbol: any): { x: number; y: number } {
+  try {
+    if (symbol && typeof symbol.getBounds === 'function') {
+      const b = symbol.getBounds();
+      if (b && isFinite(b.centerX) && isFinite(b.centerY)) {
+        return { x: b.centerX, y: b.centerY };
+      }
+    }
+  } catch {}
+  try {
+    const anySymbol: any = symbol as any;
+    return { x: (anySymbol?.x ?? 0) as number, y: (anySymbol?.y ?? 0) as number };
+  } catch {
+    return { x: 0, y: 0 };
+  }
+}
+
 export function applyImageSymbolWinRipple(scene: Phaser.Scene, symbol: any): void {
   try {
     if (!scene || !symbol || (symbol as any).destroyed) {
@@ -19,7 +36,8 @@ export function applyImageSymbolWinRipple(scene: Phaser.Scene, symbol: any): voi
     if (!radius || radius <= 0) {
       radius = 50;
     }
-    const ring = scene.add.circle(anySymbol.x, anySymbol.y, radius, 0xffffff, 0);
+    const p0 = getSymbolWorldCenter(anySymbol);
+    const ring = scene.add.circle(p0.x, p0.y, radius, 0xffffff, 0);
     try { (ring as any).setStrokeStyle?.(radius * 0.12, 0xffffff, 1); } catch {}
     try {
       const depth = (anySymbol.depth as number) ?? 0;
@@ -33,8 +51,42 @@ export function applyImageSymbolWinRipple(scene: Phaser.Scene, symbol: any): voi
       }
     } catch {}
     anySymbol.__winRippleRing = ring;
+
+    // Keep ripple ring positioned on the symbol as it moves (e.g. collector being pulled).
     try {
-      scene.tweens.add({
+      const updateFn = () => {
+        try {
+          const isSymbolVisible = (() => {
+            try {
+              if (!anySymbol || anySymbol.destroyed) return false;
+              if (anySymbol.visible === false) return false;
+              const a = (anySymbol.alpha ?? 1) as number;
+              if (typeof a === 'number' && isFinite(a) && a <= 0.01) return false;
+              return true;
+            } catch {
+              return false;
+            }
+          })();
+
+          if (!anySymbol || anySymbol.destroyed || !ring || (ring as any).destroyed || !isSymbolVisible) {
+            try { clearImageSymbolWinRipple(scene, anySymbol); } catch {}
+            return;
+          }
+          const p = getSymbolWorldCenter(anySymbol);
+          ring.x = p.x;
+          ring.y = p.y;
+          try {
+            const depth = (anySymbol.depth as number) ?? 0;
+            ring.setDepth(depth + 1);
+          } catch {}
+        } catch {}
+      };
+      anySymbol.__winRippleUpdateFn = updateFn;
+      scene.events.on('update', updateFn);
+    } catch {}
+
+    try {
+      const ringTween = scene.tweens.add({
         targets: ring,
         scale: { from: 0, to: 1.4 },
         alpha: { from: 0.9, to: 0 },
@@ -42,6 +94,7 @@ export function applyImageSymbolWinRipple(scene: Phaser.Scene, symbol: any): voi
         repeat: -1,
         ease: Phaser.Math.Easing.Sine.Out,
       });
+      anySymbol.__winRippleRingTween = ringTween;
     } catch {}
 
     // Add a subtle size pulse on the symbol itself.
@@ -51,9 +104,15 @@ export function applyImageSymbolWinRipple(scene: Phaser.Scene, symbol: any): voi
       const baseScaleY = (anySymbol.scaleY ?? 1) as number;
       (anySymbol as any).__winRippleBaseScaleX = baseScaleX;
       (anySymbol as any).__winRippleBaseScaleY = baseScaleY;
-      // Kill any existing scale tweens targeting this symbol to avoid stacking pulses
-      try { scene.tweens.killTweensOf(anySymbol); } catch {}
-      scene.tweens.add({
+      try {
+        const prevPulse: any = (anySymbol as any).__winRipplePulseTween;
+        if (prevPulse) {
+          try { prevPulse.stop?.(); } catch {}
+          try { prevPulse.remove?.(); } catch {}
+          try { delete (anySymbol as any).__winRipplePulseTween; } catch {}
+        }
+      } catch {}
+      const pulseTween = scene.tweens.add({
         targets: anySymbol,
         scaleX: baseScaleX * 1.15,
         scaleY: baseScaleY * 1.15,
@@ -62,6 +121,7 @@ export function applyImageSymbolWinRipple(scene: Phaser.Scene, symbol: any): voi
         repeat: -1,
         ease: Phaser.Math.Easing.Sine.InOut,
       });
+      (anySymbol as any).__winRipplePulseTween = pulseTween;
     } catch {}
   } catch {}
 }
@@ -72,9 +132,33 @@ export function clearImageSymbolWinRipple(scene: Phaser.Scene, symbol: any): voi
       return;
     }
     const anySymbol: any = symbol as any;
+    try {
+      const pulseTween: any = (anySymbol as any).__winRipplePulseTween;
+      if (pulseTween) {
+        try { pulseTween.stop?.(); } catch {}
+        try { pulseTween.remove?.(); } catch {}
+        try { delete (anySymbol as any).__winRipplePulseTween; } catch {}
+      }
+    } catch {}
+    try {
+      const updateFn = anySymbol.__winRippleUpdateFn;
+      if (updateFn) {
+        try { scene.events.off('update', updateFn); } catch {}
+        try { delete anySymbol.__winRippleUpdateFn; } catch {}
+      }
+    } catch {}
     const ring = anySymbol.__winRippleRing;
     if (ring) {
-      try { scene.tweens.killTweensOf(ring); } catch {}
+      try {
+        const ringTween: any = (anySymbol as any).__winRippleRingTween;
+        if (ringTween) {
+          try { ringTween.stop?.(); } catch {}
+          try { ringTween.remove?.(); } catch {}
+          try { delete (anySymbol as any).__winRippleRingTween; } catch {}
+        } else {
+          try { scene.tweens.killTweensOf(ring); } catch {}
+        }
+      } catch {}
       try { ring.destroy(); } catch {}
       try { delete anySymbol.__winRippleRing; } catch {}
     }
@@ -83,7 +167,6 @@ export function clearImageSymbolWinRipple(scene: Phaser.Scene, symbol: any): voi
       const baseX = (anySymbol as any).__winRippleBaseScaleX;
       const baseY = (anySymbol as any).__winRippleBaseScaleY;
       if (typeof baseX === 'number' && typeof baseY === 'number') {
-        try { scene.tweens.killTweensOf(anySymbol); } catch {}
         try { anySymbol.setScale(baseX, baseY); } catch {}
       }
       try { delete (anySymbol as any).__winRippleBaseScaleX; } catch {}

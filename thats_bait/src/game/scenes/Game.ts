@@ -11,8 +11,15 @@ import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { RopeCable } from '../components/RopeCable';
 import { Background } from '../components/Background';
+import { BonusBackground } from '../components/BonusBackground';
 import { FullScreenManager } from '../../managers/FullScreenManager';
 import { AutoplayOptions } from '../components/AutoplayOptions';
+import { Header } from '../components/Header';
+import { WinTracker } from '../components/WinTracker';
+import { FreeSpinOverlay } from '../components/FreeSpinOverlay';
+import { ScatterAnimationManager } from '../../managers/ScatterAnimationManager';
+import { BonusHeader } from '../components/BonusHeader';
+import { GaugeMeter } from '../components/GaugeMeter';
 
 export class Game extends Phaser.Scene {
 	private networkManager!: NetworkManager;
@@ -38,29 +45,53 @@ export class Game extends Phaser.Scene {
 	private hookImage?: Phaser.GameObjects.Image;
 	private readonly hookTextureKey = 'hook';
 	private readonly hookScale = 0.20;
+	private readonly hookTipAttachFactor: number = 0.78;
 	private isHookScatterEventActive: boolean = false;
 	private hookScatterPointer?: Phaser.GameObjects.Arc;
 	private hookScatterTarget?: Phaser.Math.Vector2;
 	private hookScatterTween?: Phaser.Tweens.Tween;
 	private wasInputEnabledBeforeHookScatter: boolean = true;
 	private hookPointerOffsetX: number = 0;
-	private hookPointerOffsetY: number = -80;
+	private hookPointerOffsetY: number = 0;
 	private wasRopeEndInitiallyPinned: boolean = true;
 	private hookScatterCol: number = -1;
 	private hookScatterRow: number = -1;
 	private hookScatterSymbol?: any;
 	private hookOffscreenOffsetY: number = 200;
 	private hookOriginalDepth: number = 0;
+	private hookCollectorRopeGraphics?: Phaser.GameObjects.Graphics;
+	private hookCollectorRopeOriginalDepth: number = 0;
+	private hookCollectorCollectorOriginalDepth: number = 0;
+	private hookCollectorRaisedCollector?: any;
+	private hookCollectorOverlayContainer?: Phaser.GameObjects.Container;
+	private hookCollectorCollectorOriginalParent?: Phaser.GameObjects.Container;
+	private hookCollectorCollectorOriginalParentIndex: number = -1;
+	private hookCollectorRaisedParentContainer?: Phaser.GameObjects.Container;
+	private hookCollectorParentContainerOriginalDepth: number = 0;
+	private hookCollectorRaisedSymbolsContainer?: Phaser.GameObjects.Container;
+	private hookCollectorSymbolsContainerOriginalDepth: number = 0;
+	private hookCollectorSymbolsContainerOriginalMask?: any;
+	private hookCollectorCollectorOriginalMask?: any;
+	private hookCollectorRaisedDepths: boolean = false;
 	private hookScatterStartTimingMultiplier: number = 0.5;
 	private hookScatterEndTimingMultiplier: number = 0.35;
 	private enableRope: boolean = true;
+	private reelsStopListener?: (data?: any) => void;
+	private winStopListener?: (data?: any) => void;
+	private winTrackerHideListener?: () => void;
 
 	public readonly gameData: GameData;
 	public readonly gameAPI: GameAPI;
 	private background!: Background;
+	private bonusBackground!: BonusBackground;
 	private slotBackground?: Phaser.GameObjects.Image;
 	private fullscreenBtn?: Phaser.GameObjects.Image;
 	private symbols!: Symbols;
+	private header!: Header;
+	private bonusHeader!: BonusHeader;
+	private gaugeMeter!: GaugeMeter;
+	private winTracker!: WinTracker;
+	private freeSpinOverlay?: FreeSpinOverlay;
 	private readonly slotBackgroundModifiers = {
 		offsetX: 0,
 		offsetY: 40,
@@ -90,6 +121,11 @@ export class Game extends Phaser.Scene {
 		this.createBackground();
 		this.createSlotBackground();
 
+		this.gaugeMeter = new GaugeMeter();
+		this.gaugeMeter.create(this);
+		this.gaugeMeter.setVisible(false);
+		(this as any).gaugeMeter = this.gaugeMeter;
+
 		const assetScale = this.networkManager.getAssetScale();
 		this.fullscreenBtn = FullScreenManager.addToggle(this, {
 			margin: 16 * assetScale,
@@ -112,6 +148,27 @@ export class Game extends Phaser.Scene {
 		(this as any).symbols = this.symbols;
 		this.symbols.create(this as any);
 		this.slotController.setSymbols(this.symbols);
+		this.header = new Header(this.networkManager, this.screenModeManager);
+		(this as any).header = this.header;
+		this.header.create(this);
+		this.bonusHeader = new BonusHeader(this.networkManager, this.screenModeManager);
+		(this as any).bonusHeader = this.bonusHeader;
+		this.bonusHeader.create(this);
+		this.winTracker = new WinTracker();
+		(this as any).winTracker = this.winTracker;
+		this.winTracker.create(this);
+		// Initialize free spin overlay for scatter bonus entry
+		this.freeSpinOverlay = new FreeSpinOverlay(this, this.networkManager, this.screenModeManager);
+		(this as any).freeSpinOverlay = this.freeSpinOverlay;
+		// Initialize ScatterAnimationManager with scene and symbol container so it can drive the overlay
+		try {
+			const scatterManager = ScatterAnimationManager.getInstance();
+			const symbolsContainer = this.symbols && this.symbols.container ? this.symbols.container : this.add.container(0, 0);
+			// Spinner and dialogs are not used for the new mechanic; pass a hidden dummy container for spinner
+			const dummySpinner = this.add.container(0, 0);
+			dummySpinner.setVisible(false);
+			scatterManager.initialize(this, symbolsContainer, dummySpinner, undefined, undefined, undefined, this.freeSpinOverlay);
+		} catch {}
 	
 		// Create rope and draggable handles after the main UI so they sit on top visually.
 		if (this.enableRope) {
@@ -122,14 +179,68 @@ export class Game extends Phaser.Scene {
 
 		this.registerUiEventListeners();
 		this.events.on('hook-scatter', this.handleHookScatter, this);
+		this.events.on('hook-collector', this.handleHookCollector, this);
+		this.registerBonusUiEventListeners();
 		
 		// Let any downstream listeners know the simple scene is ready.
 		gameEventManager.emit(GameEventType.START);
 	}
 
+	private registerBonusUiEventListeners(): void {
+		this.events.on('showBonusBackground', () => {
+			try { this.bonusBackground?.setVisible(true); } catch {}
+			try { this.background?.setVisible(false); } catch {}
+			try { this.gaugeMeter?.setVisible(true); } catch {}
+		});
+		this.events.on('hideBonusBackground', () => {
+			try { this.bonusBackground?.setVisible(false); } catch {}
+			try { this.background?.setVisible(true); } catch {}
+			try { this.gaugeMeter?.setVisible(false); } catch {}
+		});
+		this.events.on('showBonusHeader', () => {
+			try { this.bonusHeader?.setVisible(true); } catch {}
+			try { this.header?.getContainer()?.setVisible(false); } catch {}
+		});
+		this.events.on('hideBonusHeader', () => {
+			try { this.bonusHeader?.setVisible(false); } catch {}
+			try { this.header?.getContainer()?.setVisible(true); } catch {}
+		});
+		this.events.on('activateBonusMode', () => {
+			try { this.events.emit('setBonusMode', true); } catch {}
+			try { this.events.emit('showBonusBackground'); } catch {}
+			try { this.events.emit('showBonusHeader'); } catch {}
+			try { this.events.emit('enableSymbols'); } catch {}
+		});
+		this.events.on('deactivateBonusMode', () => {
+			try { this.events.emit('setBonusMode', false); } catch {}
+			try { this.events.emit('hideBonusBackground'); } catch {}
+			try { this.events.emit('hideBonusHeader'); } catch {}
+		});
+	}
+
+	public updateGaugeMeterModifiers(mods: { offsetX?: number; offsetY?: number; spacingX?: number; barThickness?: number; indicatorOffsetX?: number; indicatorOffsetY?: number; indicatorScale?: number; indicatorIntroDuration?: number; stage1OffsetX?: number; stage1OffsetY?: number; stage1Scale?: number; stage1Gap?: number; stage1ShadowOffsetX?: number; stage1ShadowOffsetY?: number; stage1ShadowAlpha?: number; stage1ShadowScale?: number; stage1GlowTint?: number; stage1GlowAlpha?: number; stage1GlowScale?: number; stage1GlowDuration?: number; stage1UnlockDuration?: number; stage1UnlockYOffset?: number; stage1FloatAmplitude?: number; stage1FloatDuration?: number; scale?: number; depth?: number }): void {
+		try { (this.gaugeMeter as any)?.updateModifiers(mods); } catch {}
+	}
+
+	private getActiveCharacterSpine(): any | undefined {
+		try {
+			const bonusVisible = !!(this.bonusBackground as any)?.getContainer?.()?.visible;
+			if (bonusVisible) {
+				return (this.bonusBackground as any)?.getCharacterSpine?.() || (this.background as any)?.getCharacterSpine?.();
+			}
+		} catch {}
+		try {
+			return (this.background as any)?.getCharacterSpine?.() || (this.bonusBackground as any)?.getCharacterSpine?.();
+		} catch {}
+		return undefined;
+	}
+
 	private createBackground(): void {
 		this.background = new Background(this.networkManager, this.screenModeManager);
 		this.background.create(this);
+		this.bonusBackground = new BonusBackground(this.networkManager, this.screenModeManager);
+		this.bonusBackground.create(this);
+		this.bonusBackground.setVisible(false);
 	}
 
 	private createSlotBackground(): void {
@@ -227,8 +338,8 @@ export class Game extends Phaser.Scene {
 			this.slotController?.setExternalControlLock(true);
 		} catch {}
 
-		const pointerX = worldX + this.hookPointerOffsetX;
-		const pointerY = worldY + this.hookPointerOffsetY;
+		const pointerX = worldX;
+		const pointerY = worldY;
 		const offscreenX = pointerX;
 		const offscreenY = this.scale.height + this.hookOffscreenOffsetY;
 
@@ -249,6 +360,578 @@ export class Game extends Phaser.Scene {
 			this.hookImage.setDepth(891);
 		}
 		this.startHookScatterWithCharacter(pointerX, pointerY, offscreenX, offscreenY);
+	}
+
+	private handleHookCollector(worldX: number, worldY: number, col?: number, row?: number): void {
+		if (!this.rope || !this.hookImage) {
+			try { this.events.emit('hook-collector-complete'); } catch {}
+			return;
+		}
+		if (this.isHookScatterEventActive) {
+			try { this.events.emit('hook-collector-complete'); } catch {}
+			return;
+		}
+		if (typeof col !== 'number' || typeof row !== 'number') {
+			try { this.events.emit('hook-collector-complete'); } catch {}
+			return;
+		}
+
+		this.hookScatterCol = col;
+		this.hookScatterRow = row;
+
+		this.isHookScatterEventActive = true;
+		gameStateManager.isHookScatterActive = true;
+		this.wasInputEnabledBeforeHookScatter = this.input.enabled;
+		this.input.enabled = false;
+		try {
+			this.slotController?.setExternalControlLock(true);
+		} catch {}
+
+		let collectorObj: any = null;
+		let centerX = worldX;
+		let centerY = worldY;
+		try {
+			const grid: any[][] = (this.symbols as any)?.symbols;
+			collectorObj = grid && grid[col] ? grid[col][row] : null;
+			this.hookScatterSymbol = collectorObj;
+			if (collectorObj && typeof collectorObj.getBounds === 'function') {
+				const b = collectorObj.getBounds();
+				centerX = b.centerX;
+				centerY = b.centerY;
+			} else if (collectorObj && typeof collectorObj.x === 'number' && typeof collectorObj.y === 'number') {
+				let px = collectorObj.x;
+				let py = collectorObj.y;
+				try {
+					const parent: any = collectorObj.parentContainer;
+					if (parent) {
+						px = (parent.x ?? 0) + px;
+						py = (parent.y ?? 0) + py;
+					}
+				} catch {}
+				centerX = px;
+				centerY = py;
+			}
+		} catch {}
+
+		let hookTipOffsetY = 0;
+		try {
+			const h = (this.hookImage?.displayHeight ?? 0) as number;
+			if (isFinite(h) && h > 0) {
+				hookTipOffsetY = h * (this.hookTipAttachFactor || 0.78);
+			}
+		} catch {}
+
+		const pointerX = centerX + this.hookPointerOffsetX;
+		const pointerY = centerY - hookTipOffsetY + this.hookPointerOffsetY;
+
+		const points = this.rope.getPoints();
+		const count = points.length;
+		const end = count > 0 ? points[count - 1] : this.endAnchor;
+		const homeX = end.x;
+		const homeY = end.y;
+		this.hookScatterTarget = new Phaser.Math.Vector2(homeX, homeY);
+
+		this.rope.setCurveAmount(1);
+
+		if (this.hookImage) {
+			this.hookOriginalDepth = this.hookImage.depth;
+		}
+		this.raiseHookCollectorDepths(collectorObj);
+
+		this.startHookCollectorWithCharacter(pointerX, pointerY, homeX, homeY);
+	}
+
+	private raiseHookCollectorDepths(collectorObj: any): void {
+		if (this.hookCollectorRaisedDepths) return;
+		this.hookCollectorRaisedDepths = true;
+		try {
+			const existing: any = this.hookCollectorOverlayContainer as any;
+			if (!existing || existing.destroyed) {
+				this.hookCollectorOverlayContainer = this.add.container(0, 0);
+				try { this.hookCollectorOverlayContainer.setScrollFactor(0); } catch {}
+			}
+			try {
+				this.hookCollectorOverlayContainer?.setDepth(20000);
+				if (this.hookCollectorOverlayContainer) {
+					try { this.children.bringToTop(this.hookCollectorOverlayContainer); } catch {}
+				}
+			} catch {}
+		} catch {}
+		try {
+			const ropeAny: any = this.rope as any;
+			const g: any = ropeAny?.ropeGraphics || ropeAny?.options?.graphics;
+			if (g && typeof g.setDepth === 'function') {
+				this.hookCollectorRopeGraphics = g as any;
+				this.hookCollectorRopeOriginalDepth = typeof g.depth === 'number' ? g.depth : 0;
+				g.setDepth(20006);
+				try { this.children.bringToTop(g); } catch {}
+			}
+		} catch {}
+		try {
+			if (this.hookImage) {
+				this.hookImage.setDepth(20008);
+				try { this.children.bringToTop(this.hookImage); } catch {}
+			}
+		} catch {}
+		try {
+			if (collectorObj && typeof collectorObj.setDepth === 'function') {
+				this.hookCollectorRaisedCollector = collectorObj;
+				this.hookCollectorCollectorOriginalDepth = typeof collectorObj.depth === 'number' ? collectorObj.depth : 0;
+				try {
+					this.hookCollectorCollectorOriginalMask = (collectorObj as any).mask;
+					if (typeof (collectorObj as any).setMask === 'function') {
+						(collectorObj as any).setMask(null);
+					}
+				} catch {}
+				collectorObj.setDepth(20004);
+				try { this.children.bringToTop(collectorObj); } catch {}
+			}
+		} catch {}
+		try {
+			const overlay = this.hookCollectorOverlayContainer;
+			const parent: any = collectorObj?.parentContainer;
+			if (collectorObj && overlay && parent && parent !== overlay) {
+				this.hookCollectorCollectorOriginalParent = parent as Phaser.GameObjects.Container;
+				try {
+					const list: any[] = Array.isArray((parent as any).list) ? (parent as any).list : [];
+					this.hookCollectorCollectorOriginalParentIndex = list.indexOf(collectorObj);
+				} catch {
+					this.hookCollectorCollectorOriginalParentIndex = -1;
+				}
+
+				let wx = (collectorObj?.x ?? 0) as number;
+				let wy = (collectorObj?.y ?? 0) as number;
+				try {
+					if (typeof collectorObj.getBounds === 'function') {
+						const b = collectorObj.getBounds();
+						wx = b.centerX;
+						wy = b.centerY;
+					}
+				} catch {}
+
+				try { (parent as any).remove?.(collectorObj); } catch {}
+				try { overlay.add(collectorObj); } catch {}
+				try { collectorObj.x = wx; collectorObj.y = wy; } catch {}
+			}
+		} catch {}
+		try {
+			let parent: any = collectorObj?.parentContainer;
+			try {
+				while (parent && parent.parentContainer) {
+					parent = parent.parentContainer;
+				}
+			} catch {}
+			try {
+				const symbolsContainer: any = (this.symbols as any)?.container;
+				if (symbolsContainer && parent === symbolsContainer) {
+					return;
+				}
+			} catch {}
+			if (parent && typeof parent.setDepth === 'function') {
+				this.hookCollectorRaisedParentContainer = parent;
+				this.hookCollectorParentContainerOriginalDepth = typeof parent.depth === 'number' ? parent.depth : 0;
+				parent.setDepth(20000);
+				try { this.children.bringToTop(parent); } catch {}
+				try { parent.bringToTop?.(collectorObj); } catch {}
+			}
+		} catch {}
+	}
+
+	private restoreHookCollectorDepths(): void {
+		if (!this.hookCollectorRaisedDepths) return;
+		this.hookCollectorRaisedDepths = false;
+		try {
+			if (this.hookCollectorRaisedSymbolsContainer) {
+				try {
+					if (typeof (this.hookCollectorRaisedSymbolsContainer as any).setMask === 'function') {
+						(this.hookCollectorRaisedSymbolsContainer as any).setMask(this.hookCollectorSymbolsContainerOriginalMask ?? null);
+					}
+				} catch {}
+				this.hookCollectorRaisedSymbolsContainer.setDepth(this.hookCollectorSymbolsContainerOriginalDepth);
+			}
+		} catch {}
+		this.hookCollectorSymbolsContainerOriginalMask = undefined;
+		this.hookCollectorRaisedSymbolsContainer = undefined;
+		try {
+			if (this.hookCollectorRopeGraphics) {
+				this.hookCollectorRopeGraphics.setDepth(this.hookCollectorRopeOriginalDepth);
+			}
+		} catch {}
+		this.hookCollectorRopeGraphics = undefined;
+		try {
+			const collectorObj: any = this.hookCollectorRaisedCollector;
+			const originalParent: any = this.hookCollectorCollectorOriginalParent;
+			const overlay: any = this.hookCollectorOverlayContainer;
+			const idx = this.hookCollectorCollectorOriginalParentIndex;
+			if (collectorObj && originalParent && overlay && collectorObj.parentContainer === overlay) {
+				let wx = (collectorObj?.x ?? 0) as number;
+				let wy = (collectorObj?.y ?? 0) as number;
+				try {
+					if (typeof collectorObj.getBounds === 'function') {
+						const b = collectorObj.getBounds();
+						wx = b.centerX;
+						wy = b.centerY;
+					}
+				} catch {}
+				try { overlay.remove?.(collectorObj); } catch {}
+				try {
+					if (typeof originalParent.addAt === 'function' && typeof idx === 'number' && idx >= 0) {
+						originalParent.addAt(collectorObj, idx);
+					} else {
+						originalParent.add(collectorObj);
+					}
+				} catch {}
+				try {
+					if (typeof originalParent.getWorldTransformMatrix === 'function') {
+						const m: any = originalParent.getWorldTransformMatrix();
+						if (m && typeof m.applyInverse === 'function') {
+							const pt: any = m.applyInverse(wx, wy);
+							collectorObj.x = pt.x;
+							collectorObj.y = pt.y;
+						} else {
+							collectorObj.x = wx - (originalParent.x ?? 0);
+							collectorObj.y = wy - (originalParent.y ?? 0);
+						}
+					} else {
+						collectorObj.x = wx - (originalParent.x ?? 0);
+						collectorObj.y = wy - (originalParent.y ?? 0);
+					}
+				} catch {}
+			}
+		} catch {}
+		this.hookCollectorCollectorOriginalParent = undefined;
+		this.hookCollectorCollectorOriginalParentIndex = -1;
+		try {
+			if (this.hookCollectorRaisedCollector && typeof this.hookCollectorRaisedCollector.setDepth === 'function') {
+				try {
+					if (typeof (this.hookCollectorRaisedCollector as any).setMask === 'function') {
+						(this.hookCollectorRaisedCollector as any).setMask(this.hookCollectorCollectorOriginalMask ?? null);
+					}
+				} catch {}
+				this.hookCollectorRaisedCollector.setDepth(this.hookCollectorCollectorOriginalDepth);
+			}
+		} catch {}
+		this.hookCollectorCollectorOriginalMask = undefined;
+		this.hookCollectorRaisedCollector = undefined;
+		try {
+			if (this.hookCollectorRaisedParentContainer) {
+				this.hookCollectorRaisedParentContainer.setDepth(this.hookCollectorParentContainerOriginalDepth);
+			}
+		} catch {}
+		this.hookCollectorRaisedParentContainer = undefined;
+	}
+
+	private startHookCollectorWithCharacter(pointerX: number, pointerY: number, homeX: number, homeY: number): void {
+		const hookToCollector = () => {
+			if (!this.isHookScatterEventActive || !this.rope) {
+				try { this.completeHookCollectorEvent(); } catch {}
+				return;
+			}
+			try {
+				const points = this.rope.getPoints();
+				const count = points.length;
+				if (count > 0) {
+					const endPoint = points[count - 1];
+					if (this.hookScatterTarget) {
+						this.hookScatterTarget.set(endPoint.x, endPoint.y);
+					} else {
+						this.hookScatterTarget = new Phaser.Math.Vector2(endPoint.x, endPoint.y);
+					}
+				}
+			} catch {}
+			if (!this.hookScatterTarget) {
+				try { this.completeHookCollectorEvent(); } catch {}
+				return;
+			}
+			this.rope.setPinnedEnds(true, true);
+			this.hookScatterTween = this.tweens.add({
+				targets: this.hookScatterTarget,
+				x: pointerX,
+				y: pointerY,
+				duration: 1000,
+				ease: 'Sine.easeIn',
+				onComplete: () => {
+					try {
+						if (this.hookScatterTarget) {
+							this.hookScatterTarget.set(pointerX, pointerY);
+						}
+					} catch {}
+					try {
+						this.time.delayedCall(120, () => {
+							if (!this.isHookScatterEventActive) {
+								try { this.completeHookCollectorEvent(); } catch {}
+								return;
+							}
+							this.handleHookCollectorPullWithCharacter(homeX, homeY);
+						});
+					} catch {
+						this.handleHookCollectorPullWithCharacter(homeX, homeY);
+					}
+				}
+			});
+		};
+		this.playCharacterStartThenMiddle(hookToCollector);
+	}
+
+	private handleHookCollectorPullWithCharacter(homeX: number, homeY: number): void {
+		const pullHook = () => {
+			if (!this.isHookScatterEventActive) {
+				try { this.completeHookCollectorEvent(); } catch {}
+				return;
+			}
+			this.startHookCollectorReturnSequence(homeX, homeY);
+		};
+		this.playCharacterEndThenIdle(pullHook);
+	}
+
+	private startHookCollectorReturnSequence(homeX: number, homeY: number): void {
+		if (!this.rope || !this.hookScatterTarget) {
+			this.completeHookCollectorEvent();
+			return;
+		}
+
+		const curveProxy = { value: 1 };
+		this.tweens.add({
+			targets: curveProxy,
+			value: 0,
+			duration: 1000,
+			ease: 'Sine.easeInOut',
+			onUpdate: () => {
+				if (this.rope) {
+					this.rope.setCurveAmount(curveProxy.value);
+				}
+			}
+		});
+
+		let collectorObj: any = null;
+		try {
+			const grid: any[][] = this.symbols?.symbols;
+			const col = this.hookScatterCol;
+			const row = this.hookScatterRow;
+			collectorObj = grid && grid[col] ? grid[col][row] : null;
+			if (collectorObj) {
+				this.hookScatterSymbol = collectorObj;
+			}
+		} catch {}
+
+		const setCollectorWorldPos = (wx: number, wy: number) => {
+			if (!collectorObj) return;
+			try {
+				const parent: any = collectorObj.parentContainer;
+				if (parent && typeof parent.getWorldTransformMatrix === 'function') {
+					let m: any = null;
+					try { m = parent.getWorldTransformMatrix(); } catch {}
+					if (m && typeof m.applyInverse === 'function') {
+						const pt: any = m.applyInverse(wx, wy);
+						collectorObj.x = pt.x;
+						collectorObj.y = pt.y;
+						return;
+					}
+					if (m && typeof m.clone === 'function' && typeof m.transformPoint === 'function') {
+						try {
+							const inv = m.clone();
+							if (inv && typeof inv.invert === 'function') {
+								inv.invert();
+								const p = inv.transformPoint(wx, wy);
+								collectorObj.x = p.x;
+								collectorObj.y = p.y;
+								return;
+							}
+						} catch {}
+					}
+				}
+			} catch {}
+			try {
+				const parent: any = collectorObj.parentContainer;
+				if (parent) {
+					const psx = parent && typeof parent.scaleX === 'number' && isFinite(parent.scaleX) && parent.scaleX !== 0 ? parent.scaleX : 1;
+					const psy = parent && typeof parent.scaleY === 'number' && isFinite(parent.scaleY) && parent.scaleY !== 0 ? parent.scaleY : 1;
+					collectorObj.x = (wx - (parent.x ?? 0)) / psx;
+					collectorObj.y = (wy - (parent.y ?? 0)) / psy;
+					return;
+				}
+			} catch {}
+			collectorObj.x = wx;
+			collectorObj.y = wy;
+		};
+
+		this.hookScatterTween = this.tweens.add({
+			targets: this.hookScatterTarget,
+			x: homeX,
+			y: homeY,
+			duration: 1000,
+			ease: 'Sine.easeOut',
+			onUpdate: () => {
+				try {
+					if (this.hookScatterTarget) {
+						setCollectorWorldPos(this.hookScatterTarget.x, this.hookScatterTarget.y);
+					}
+				} catch {}
+			},
+			onComplete: () => {
+				try {
+					if (this.hookScatterTarget) {
+						setCollectorWorldPos(this.hookScatterTarget.x, this.hookScatterTarget.y);
+					}
+				} catch {}
+				try {
+					const p = this.playCollectorDisintegrateToLevel1();
+					if (p && typeof (p as any).then === 'function') {
+						Promise.resolve(p).then(() => {
+							this.completeHookCollectorEvent();
+						}).catch(() => {
+							this.completeHookCollectorEvent();
+						});
+						return;
+					}
+				} catch {}
+				this.completeHookCollectorEvent();
+			}
+		});
+	}
+
+	private playCollectorDisintegrateToLevel1(): Promise<void> {
+		return new Promise<void>((resolve) => {
+			const gm: any = (this as any)?.gaugeMeter;
+			let bonusVisible = false;
+			try {
+				bonusVisible = !!(this.bonusBackground as any)?.getContainer?.()?.visible;
+			} catch {}
+			if (!bonusVisible) {
+				resolve();
+				return;
+			}
+			const target = gm && typeof gm.getLevel1WorldPosition === 'function' ? gm.getLevel1WorldPosition() : undefined;
+			if (!target || typeof target.x !== 'number' || typeof target.y !== 'number') {
+				resolve();
+				return;
+			}
+
+			let finished = false;
+			let incremented = false;
+			const complete = () => {
+				if (finished) {
+					return;
+				}
+				if (!incremented) {
+					incremented = true;
+					let p: any = undefined;
+					try {
+						if (gm && typeof gm.incrementStage1Progress === 'function') {
+							p = gm.incrementStage1Progress();
+						}
+					} catch {}
+					if (p && typeof p.then === 'function') {
+						Promise.resolve(p).then(() => {
+							if (!finished) {
+								finished = true;
+								resolve();
+							}
+						}).catch(() => {
+							if (!finished) {
+								finished = true;
+								resolve();
+							}
+						});
+						return;
+					}
+				}
+				finished = true;
+				resolve();
+			};
+
+			const collectorObj: any = this.hookScatterSymbol;
+			let sx = 0;
+			let sy = 0;
+			try {
+				if (collectorObj && typeof collectorObj.getBounds === 'function') {
+					const b = collectorObj.getBounds();
+					sx = b.centerX;
+					sy = b.centerY;
+				} else if (collectorObj && typeof collectorObj.x === 'number' && typeof collectorObj.y === 'number') {
+					sx = collectorObj.x;
+					sy = collectorObj.y;
+				}
+			} catch {}
+			if (!isFinite(sx) || !isFinite(sy)) {
+				resolve();
+				return;
+			}
+
+			try {
+				if (collectorObj) {
+					this.tweens.killTweensOf(collectorObj);
+					this.tweens.add({ targets: collectorObj, alpha: 0.2, duration: 70, yoyo: true, repeat: 2, ease: 'Sine.easeInOut' });
+					try {
+						this.time.delayedCall(260, () => {
+							try { collectorObj.setVisible(false); } catch {}
+							try { collectorObj.alpha = 0; } catch {}
+						});
+					} catch {}
+				}
+			} catch {}
+
+			const count = 14;
+			let done = 0;
+			const finish = () => {
+				done += 1;
+				if (done >= count) {
+					complete();
+				}
+			};
+
+			for (let i = 0; i < count; i++) {
+				let star: Phaser.GameObjects.Arc | undefined;
+				try {
+					const ox = (Math.random() - 0.5) * 40;
+					const oy = (Math.random() - 0.5) * 40;
+					const r = 2 + Math.random() * 2;
+					star = this.add.circle(sx + ox, sy + oy, r, 0xffffff, 1);
+					star.setDepth(960);
+					star.setAlpha(0.95);
+				} catch {
+					finish();
+					continue;
+				}
+
+				try {
+					this.tweens.add({
+						targets: star,
+						x: target.x,
+						y: target.y,
+						scale: 0.2,
+						alpha: 0,
+						duration: 420 + Math.floor(Math.random() * 160),
+						ease: 'Sine.easeIn',
+						onComplete: () => {
+							try { star?.destroy(); } catch {}
+							finish();
+						}
+					});
+				} catch {
+					try { star?.destroy(); } catch {}
+					finish();
+				}
+			}
+
+			try {
+				this.time.delayedCall(900, () => {
+					complete();
+				});
+			} catch {}
+		});
+	}
+
+	private completeHookCollectorEvent(): void {
+		try {
+			this.completeHookScatterEvent();
+		} catch {
+			try {
+				this.isHookScatterEventActive = false;
+				gameStateManager.isHookScatterActive = false;
+			} catch {}
+		}
+		try { this.events.emit('hook-collector-complete'); } catch {}
 	}
 
 	private startHookScatterWithCharacter(pointerX: number, pointerY: number, offscreenX: number, offscreenY: number): void {
@@ -298,8 +981,7 @@ export class Game extends Phaser.Scene {
 
 	private playCharacterStartThenMiddle(onReady: () => void): void {
 		try {
-			const bgAny: any = this.background as any;
-			const spine: any = bgAny?.getCharacterSpine?.();
+			const spine: any = this.getActiveCharacterSpine();
 			if (!spine || !spine.skeleton || !spine.animationState) {
 				onReady();
 				return;
@@ -373,8 +1055,7 @@ export class Game extends Phaser.Scene {
 
 	private playCharacterEndThenIdle(onReady: () => void): void {
 		try {
-			const bgAny: any = this.background as any;
-			const spine: any = bgAny?.getCharacterSpine?.();
+			const spine: any = this.getActiveCharacterSpine();
 			if (!spine || !spine.skeleton || !spine.animationState) {
 				onReady();
 				return;
@@ -470,6 +1151,10 @@ export class Game extends Phaser.Scene {
 			this.rope.setCurveAmount(0);
 		}
 
+		try {
+			this.restoreHookCollectorDepths();
+		} catch {}
+
 		if (this.hookImage && this.hookOriginalDepth) {
 			this.hookImage.setDepth(this.hookOriginalDepth);
 		}
@@ -517,8 +1202,8 @@ export class Game extends Phaser.Scene {
 		const slotY = this.symbols.slotY;
 		const startX = slotX - totalGridWidth * 0.5;
 		const startY = slotY - totalGridHeight * 0.5;
-		const cellX = startX + row * symbolTotalWidth + symbolTotalWidth * 0.5;
-		const cellY = startY + col * symbolTotalHeight + symbolTotalHeight * 0.5;
+		const cellX = startX + col * symbolTotalWidth + symbolTotalWidth * 0.5;
+		const cellY = startY + row * symbolTotalHeight + symbolTotalHeight * 0.5;
 
 		const spawnX = this.hookScatterTarget.x;
 		const spawnY = this.hookScatterTarget.y;
@@ -579,6 +1264,21 @@ export class Game extends Phaser.Scene {
 		});
 	}
 
+	private handleReelsStopForWinTracker(_data?: any): void {
+		if (!this.winTracker) {
+			return;
+		}
+		const symbolsAny: any = (this as any).symbols;
+		const spinData: any = symbolsAny?.currentSpinData ?? null;
+		try {
+			this.winTracker.updateFromSpinData(spinData);
+			this.winTracker.showLatest();
+			this.winTracker.autoHideAfter(3000);
+		} catch {
+			// Fail silently to avoid impacting the main game loop.
+		}
+	}
+
 	private finishHookScatterWithSymbol(targetX: number, targetY: number): void {
 		const col = this.hookScatterCol;
 		const row = this.hookScatterRow;
@@ -615,6 +1315,39 @@ export class Game extends Phaser.Scene {
 			}
 		}
 		this.completeHookScatterEvent();
+		try {
+			const symbolsAny: any = (this as any).symbols;
+			const spinData: any = symbolsAny?.currentSpinData ?? null;
+			const fs: any = spinData?.slot?.freespin || spinData?.slot?.freeSpin;
+			let spinsLeft = 0;
+			if (fs?.items && Array.isArray(fs.items) && fs.items.length > 0) {
+				const itemWithSpins = fs.items.find((it: any) => (it?.spinsLeft ?? 0) > 0) ?? fs.items[0];
+				spinsLeft = Number(itemWithSpins?.spinsLeft) || 0;
+			}
+			if (!spinsLeft && typeof fs?.count === 'number') {
+				spinsLeft = fs.count;
+			}
+			if (typeof spinsLeft !== 'number' || spinsLeft <= 0) {
+				return;
+			}
+
+			try {
+				const scatterMgr = ScatterAnimationManager.getInstance();
+				if (gameStateManager.isBonus || gameStateManager.isScatter || scatterMgr.isAnimationInProgress()) {
+					return;
+				}
+			} catch {}
+
+			try { gameStateManager.isScatter = true; } catch {}
+			try { (this.events as any)?.emit?.('scatterTransitionStart'); } catch {}
+			try {
+				(this.symbols as any)?.startScatterAnimationSequence?.();
+			} catch {
+				try {
+					ScatterAnimationManager.getInstance().playScatterAnimation();
+				} catch {}
+			}
+		} catch {}
 	}
 
 	private async initializeTokenAndBalance(): Promise<void> {
@@ -640,12 +1373,43 @@ export class Game extends Phaser.Scene {
 		EventBus.on('menu', this.handleMenuRequest, this);
 		EventBus.on('show-bet-options', this.handleBetOptionsRequest, this);
 		EventBus.on('autoplay', this.handleAutoplayRequest, this);
+		this.reelsStopListener = (data?: any) => this.handleReelsStopForWinTracker(data);
+		gameEventManager.on(GameEventType.REELS_STOP, this.reelsStopListener);
+		this.winStopListener = () => {
+			try {
+				this.winTracker?.hideWithFade(250);
+			} catch {}
+		};
+		gameEventManager.on(GameEventType.WIN_STOP, this.winStopListener);
+		this.winTrackerHideListener = () => {
+			try {
+				this.winTracker?.hideWithFade(250);
+			} catch {}
+		};
+		gameEventManager.on(GameEventType.SPIN, this.winTrackerHideListener);
+		gameEventManager.on(GameEventType.AUTO_START, this.winTrackerHideListener);
+		gameEventManager.on(GameEventType.REELS_START, this.winTrackerHideListener);
 
 		this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
 			EventBus.off('menu', this.handleMenuRequest, this);
 			EventBus.off('show-bet-options', this.handleBetOptionsRequest, this);
 			EventBus.off('autoplay', this.handleAutoplayRequest, this);
 			this.events.off('hook-scatter', this.handleHookScatter, this);
+			this.events.off('hook-collector', this.handleHookCollector, this);
+			if (this.reelsStopListener) {
+				gameEventManager.off(GameEventType.REELS_STOP, this.reelsStopListener);
+				this.reelsStopListener = undefined;
+			}
+			if (this.winStopListener) {
+				gameEventManager.off(GameEventType.WIN_STOP, this.winStopListener);
+				this.winStopListener = undefined;
+			}
+			if (this.winTrackerHideListener) {
+				gameEventManager.off(GameEventType.SPIN, this.winTrackerHideListener);
+				gameEventManager.off(GameEventType.AUTO_START, this.winTrackerHideListener);
+				gameEventManager.off(GameEventType.REELS_START, this.winTrackerHideListener);
+				this.winTrackerHideListener = undefined;
+			}
 		});
 	}
 
@@ -725,7 +1489,7 @@ export class Game extends Phaser.Scene {
 			depth: this.ropeDepth
 		});
 
-		const characterSpine = (this.background as any)?.getCharacterSpine?.();
+		const characterSpine = this.getActiveCharacterSpine();
 		const useCharacterAnchor = !!characterSpine;
 		this.wasRopeEndInitiallyPinned = !useCharacterAnchor;
 		if (useCharacterAnchor) {
@@ -752,7 +1516,7 @@ export class Game extends Phaser.Scene {
 		if (useCharacterAnchor) {
 			this.rope.setAnchorProviders(
 				() => {
-					const spine: any = (this.background as any)?.getCharacterSpine?.();
+					const spine: any = this.getActiveCharacterSpine();
 					if (!spine) {
 						return this.startAnchor;
 					}

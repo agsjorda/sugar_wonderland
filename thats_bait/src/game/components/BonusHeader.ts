@@ -6,11 +6,14 @@ import { gameStateManager } from '../../managers/GameStateManager';
 import { HEADER_YOUWIN_OFFSET_X, HEADER_YOUWIN_OFFSET_Y, HEADER_AMOUNT_OFFSET_X, HEADER_AMOUNT_OFFSET_Y } from '../../config/UIPositionConfig';
 
 export class BonusHeader {
-    private bonusHeaderContainer: Phaser.GameObjects.Container;
+    private bonusHeaderContainer!: Phaser.GameObjects.Container;
     private networkManager: NetworkManager;
     private screenModeManager: ScreenModeManager;
-    private amountText: Phaser.GameObjects.Text;
-    private youWonText: Phaser.GameObjects.Text;
+	private headerOffsetX: number = 0;
+	private headerOffsetY: number = 470;
+	private headerScale: number = 1.0;
+	private amountText!: Phaser.GameObjects.Text;
+	private youWonText!: Phaser.GameObjects.Text;
 	private currentWinnings: number = 0;
 	// Tracks cumulative total during bonus mode by incrementing each spin's subtotal
 	private cumulativeBonusWin: number = 0;
@@ -31,62 +34,57 @@ export class BonusHeader {
 		
 		// Create main container for all bonus header elements
 		this.bonusHeaderContainer = scene.add.container(0, 0);
+		this.bonusHeaderContainer.setDepth(900);
+		this.bonusHeaderContainer.setVisible(false);
 		
-		const screenConfig = this.screenModeManager.getScreenConfig();
 		const assetScale = this.networkManager.getAssetScale();
+		const width = scene.scale.width;
+		const height = scene.scale.height;
+		const headerCenterX = width * 0.5 + this.headerOffsetX;
+		const headerCenterY = height * 0.12 + this.headerOffsetY;
 		
 		console.log(`[BonusHeader] Creating bonus header with scale: ${assetScale}x`);
+		this.createPortraitBonusHeader(scene, assetScale, headerCenterX, headerCenterY);
 		
 		// Set up event listeners for winnings updates (like regular header)
 		this.setupWinningsEventListener();
+		this.initializeWinnings();
 	}
 
-	private createPortraitBonusHeader(scene: Scene, assetScale: number): void {
+	setVisible(visible: boolean): void {
+		try { this.bonusHeaderContainer?.setVisible(visible); } catch {}
+	}
+
+	private createPortraitBonusHeader(scene: Scene, assetScale: number, x: number, y: number): void {
 		console.log("[BonusHeader] Creating portrait bonus header layout");
-		// Add base logo in bonus scene (same as base header)
-		const logoY = scene.scale.height * 0.13;
-		const logo = scene.add.image(
-			scene.scale.width * 0.5,
-			logoY,
-			'thats-bait-logo'
-		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(1);
-		this.bonusHeaderContainer.add(logo);
-
-		// Wave-like floating animation for the bonus header logo
-		try {
-			const waveOffset = scene.scale.height * 0.012;
-			scene.tweens.add({
-				targets: logo,
-				y: { from: logoY - waveOffset, to: logoY + waveOffset },
-				rotation: { from: -0.035, to: 0.035 },
-				duration: 2400,
-				ease: 'Sine.easeInOut',
-				yoyo: true,
-				repeat: -1
-			});
-		} catch {}
-
 		// Add win text at same position as base header (0.51w, 0.237h)
-		this.createWinBarText(scene, scene.scale.width * 0.51, scene.scale.height * 0.237);
+		this.createWinBarText(scene, x, y, assetScale);
 		// Spotlight removed
 	}
 
 
-	private createWinBarText(scene: Scene, x: number, y: number): void {
+	private createWinBarText(scene: Scene, x: number, y: number, assetScale: number): void {
+		const fontScale = assetScale * this.headerScale;
+		const headerTopOffset = -7 * fontScale;
+		const headerAmountOffset = 14 * fontScale;
+		const shadowOffsetY = 2 * fontScale;
+		const shadowBlur = 4 * fontScale;
 		// Line 1: "YOU WON"
-		this.youWonText = scene.add.text(x + HEADER_YOUWIN_OFFSET_X, y - 7 + HEADER_YOUWIN_OFFSET_Y, 'YOU WON', {
-			fontSize: '16px',
+		this.youWonText = scene.add.text(x + HEADER_YOUWIN_OFFSET_X, y + headerTopOffset + HEADER_YOUWIN_OFFSET_Y, 'YOU WIN', {
+			fontSize: `${16 * fontScale}px`,
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
 		}).setOrigin(0.5, 0.5).setDepth(11); // Higher depth than win bar
+		this.youWonText.setShadow(0, shadowOffsetY, '#000000', shadowBlur, true, true);
 		this.bonusHeaderContainer.add(this.youWonText);
 
 		// Line 2: "$ 0.00" with bold formatting
-		this.amountText = scene.add.text(x + HEADER_AMOUNT_OFFSET_X, y + 14 + HEADER_AMOUNT_OFFSET_Y, '$ 0.00', {
-			fontSize: '20px',
+		this.amountText = scene.add.text(x + HEADER_AMOUNT_OFFSET_X, y + headerAmountOffset + HEADER_AMOUNT_OFFSET_Y, '$ 0.00', {
+			fontSize: `${20 * fontScale}px`,
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
 		}).setOrigin(0.5, 0.5).setDepth(11); // Higher depth than win bar
+		this.amountText.setShadow(0, shadowOffsetY, '#000000', shadowBlur, true, true);
 		this.bonusHeaderContainer.add(this.amountText);
 	}
 

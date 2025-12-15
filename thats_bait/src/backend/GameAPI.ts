@@ -4,13 +4,10 @@ import { gameStateManager } from "../managers/GameStateManager";
 import { SoundEffectType } from "../managers/AudioManager";
 import { Scene } from "phaser";
 import { SLOT_COLUMNS, SLOT_ROWS } from "../config/GameConfig";
+import { fakeBonusAPI } from "./FakeBonusAPI";
 
 const TOKEN_DISABLER = false;
-/**
- * Function to parse URL query parameters
- * @param name - The name of the parameter to retrieve
- * @returns The value of the parameter or null if not found
- */
+
 function getUrlParameter(name: string): string {
     const urlParams = new URLSearchParams(window.location.search);
     let str : string = '';
@@ -23,21 +20,13 @@ function getUrlParameter(name: string): string {
     return str;
 }
 
-/**
- * Function to log all URL parameters for debugging
- * Only logs if there are any parameters present
- */
 function logUrlParameters(): void {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.toString()) {
-        console.log('🔍 URL Parameters:', Object.fromEntries(urlParams.entries()));
+        console.log(' URL Parameters:', Object.fromEntries(urlParams.entries()));
     }
 }
 
-/**
- * Function to get the API base URL
- * @returns The API base URL
- */
 const getApiBaseUrl = (): string => {
     const configuredUrl = (window as any)?.APP_CONFIG?.['game-url'];
     if (typeof configuredUrl === 'string' && configuredUrl.length > 0) {
@@ -46,7 +35,15 @@ const getApiBaseUrl = (): string => {
     return 'https://game-launcher.torrospins.com';
 }
 
-function normalizeArea(rawArea: any): number[][] {
+function normalizeSymbolId(raw: any): number {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) {
+        return 0;
+    }
+    return n === 18 ? 11 : n;
+}
+
+export function normalizeArea(rawArea: any): number[][] {
     if (!Array.isArray(rawArea) || !Array.isArray(rawArea[0])) {
         return [];
     }
@@ -54,45 +51,119 @@ function normalizeArea(rawArea: any): number[][] {
     const outer = rawArea.length;
     const inner = Array.isArray(rawArea[0]) ? rawArea[0].length : 0;
 
-    // If the area already matches the expected dimensions (SLOT_COLUMNS x SLOT_ROWS), use it as-is
+    // Canonical grid is [col][row] (outer = SLOT_COLUMNS, inner = SLOT_ROWS).
     if (outer === SLOT_COLUMNS && inner === SLOT_ROWS) {
-        return rawArea;
+        const mapped: number[][] = [];
+        for (let col = 0; col < SLOT_COLUMNS; col++) {
+            mapped[col] = [];
+            for (let row = 0; row < SLOT_ROWS; row++) {
+                mapped[col][row] = normalizeSymbolId(rawArea[col][row]);
+            }
+        }
+        return mapped;
     }
 
-    // If the area is transposed (SLOT_ROWS x SLOT_COLUMNS), transpose it to match the game grid
     if (outer === SLOT_ROWS && inner === SLOT_COLUMNS) {
         const transposed: number[][] = [];
-        for (let c = 0; c < SLOT_COLUMNS; c++) {
-            transposed[c] = [];
-            for (let r = 0; r < SLOT_ROWS; r++) {
-                transposed[c][r] = rawArea[r][c];
+        for (let col = 0; col < SLOT_COLUMNS; col++) {
+            transposed[col] = [];
+            for (let row = 0; row < SLOT_ROWS; row++) {
+                transposed[col][row] = normalizeSymbolId(rawArea[row][col]);
             }
         }
         return transposed;
     }
 
-    console.warn(`[GameAPI] Unexpected slot.area dimensions: ${outer} x ${inner}, expected ${SLOT_COLUMNS} x ${SLOT_ROWS} or transposed. Using raw area as-is.`);
-    return rawArea;
+    console.warn(`Unexpected slot.area dimensions: ${outer} x ${inner}, expected ${SLOT_COLUMNS} x ${SLOT_ROWS} or transposed. Using raw area as-is.`);
+    try {
+        const mapped: number[][] = [];
+        for (let c = 0; c < outer; c++) {
+            mapped[c] = [];
+            for (let r = 0; r < inner; r++) {
+                mapped[c][r] = normalizeSymbolId(rawArea[c][r]);
+            }
+        }
+        return mapped;
+    } catch {
+        return rawArea;
+    }
 }
 
-function normalizeSpinResponse(raw: any, bet: number): SpinData {
+export function normalizeMoney(rawMoney: any): number[][] | undefined {
+    if (!Array.isArray(rawMoney) || !Array.isArray(rawMoney[0])) {
+        return undefined;
+    }
+
+    const outer = rawMoney.length;
+    const inner = Array.isArray(rawMoney[0]) ? rawMoney[0].length : 0;
+
+    if (outer === SLOT_COLUMNS && inner === SLOT_ROWS) {
+        return rawMoney;
+    }
+
+    if (outer === SLOT_ROWS && inner === SLOT_COLUMNS) {
+        const transposed: number[][] = [];
+        for (let col = 0; col < SLOT_COLUMNS; col++) {
+            transposed[col] = [];
+            for (let row = 0; row < SLOT_ROWS; row++) {
+                transposed[col][row] = rawMoney[row][col];
+            }
+        }
+        return transposed;
+    }
+
+    return rawMoney;
+}
+
+export function normalizeSpinResponse(raw: any, bet: number): SpinData {
     const rawSlot = raw && raw.slot ? raw.slot : {};
     const freespinSource = rawSlot.freespin || rawSlot.freeSpin || {};
     const rawFreeSpinItems = Array.isArray(freespinSource.items) ? freespinSource.items : [];
 
+    let minRawLineKey = Number.POSITIVE_INFINITY;
+    if (Array.isArray(rawSlot.paylines)) {
+        for (const pl of rawSlot.paylines) {
+            const k = Number(pl?.lineKey);
+            if (Number.isFinite(k)) {
+                if (k < minRawLineKey) minRawLineKey = k;
+            }
+        }
+    }
+    for (const item of rawFreeSpinItems) {
+        if (!item || !Array.isArray(item.payline)) continue;
+        for (const pl of item.payline) {
+            const k = Number(pl?.lineKey);
+            if (Number.isFinite(k)) {
+                if (k < minRawLineKey) minRawLineKey = k;
+            }
+        }
+    }
+
+    const useOneBasedLineKeys = minRawLineKey !== Number.POSITIVE_INFINITY && minRawLineKey >= 1;
+
     const basePaylines = Array.isArray(rawSlot.paylines)
-        ? rawSlot.paylines.map((pl: any) => ({
-            lineKey: Number(pl.lineKey) || 0,
-            symbol: Number(pl.symbol) || 0,
-            count: Number(pl.count) || 0,
-            win: Number(pl.win) || 0,
-            multipliers: Array.isArray(pl.multipliers)
-                ? pl.multipliers.map((m: any) => ({
-                    symbol: Number(m.symbol) || 0,
-                    count: Number(m.count) || 0
-                }))
-                : []
-        }))
+        ? rawSlot.paylines.map((pl: any) => {
+            const rawKey = Number(pl.lineKey);
+            let lineKey = Number.isFinite(rawKey) ? rawKey : 0;
+            if (useOneBasedLineKeys) {
+                lineKey = lineKey - 1;
+            }
+            if (!Number.isFinite(lineKey) || lineKey < 0) {
+                lineKey = 0;
+            }
+            return {
+                lineKey,
+                symbol: normalizeSymbolId(pl.symbol),
+                count: Number(pl.count) || 0,
+                win: Number(pl.win) || 0,
+                multipliers: Array.isArray(pl.multipliers)
+                    ? pl.multipliers.map((m: any) => ({
+                        symbol: normalizeSymbolId(m.symbol),
+                        count: Number(m.count) || 0
+                    }))
+                    : []
+            };
+        })
         : [];
 
     const freeSpinItems = rawFreeSpinItems.map((item: any) => ({
@@ -100,20 +171,37 @@ function normalizeSpinResponse(raw: any, bet: number): SpinData {
         subTotalWin: Number(item.subTotalWin) || 0,
         collectorCount: typeof item.collectorCount === 'number' ? item.collectorCount : undefined,
         area: normalizeArea(item.area),
-        money: Array.isArray(item.money) ? item.money : undefined,
+        money: normalizeMoney(item.money),
+        special: (item?.special && item.special.action)
+            ? {
+                action: String(item.special.action),
+                position: item.special.position,
+                items: normalizeMoney(item.special.items) || item.special.items
+            }
+            : undefined,
         payline: Array.isArray(item.payline)
-            ? item.payline.map((pl: any) => ({
-                lineKey: Number(pl.lineKey) || 0,
-                symbol: Number(pl.symbol) || 0,
-                count: Number(pl.count) || 0,
-                win: Number(pl.win) || 0,
-                multipliers: Array.isArray(pl.multipliers)
-                    ? pl.multipliers.map((m: any) => ({
-                        symbol: Number(m.symbol) || 0,
-                        count: Number(m.count) || 0
-                    }))
-                    : []
-            }))
+            ? item.payline.map((pl: any) => {
+                const rawKey = Number(pl.lineKey);
+                let lineKey = Number.isFinite(rawKey) ? rawKey : 0;
+                if (useOneBasedLineKeys) {
+                    lineKey = lineKey - 1;
+                }
+                if (!Number.isFinite(lineKey) || lineKey < 0) {
+                    lineKey = 0;
+                }
+                return {
+                    lineKey,
+                    symbol: normalizeSymbolId(pl.symbol),
+                    count: Number(pl.count) || 0,
+                    win: Number(pl.win) || 0,
+                    multipliers: Array.isArray(pl.multipliers)
+                        ? pl.multipliers.map((m: any) => ({
+                            symbol: normalizeSymbolId(m.symbol),
+                            count: Number(m.count) || 0
+                        }))
+                        : []
+                };
+            })
             : []
     }));
 
@@ -134,16 +222,19 @@ function normalizeSpinResponse(raw: any, bet: number): SpinData {
         freeSpin: freeSpinData
     };
 
-    if (Array.isArray(rawSlot.money)) {
-        slot.money = rawSlot.money;
+    const normalizedMoney = normalizeMoney(rawSlot.money);
+    if (normalizedMoney) {
+        slot.money = normalizedMoney;
     }
+
     if (typeof rawSlot.totalWin === 'number') {
         slot.totalWin = rawSlot.totalWin;
     }
     if (rawSlot.special && rawSlot.special.action) {
         slot.special = {
             action: String(rawSlot.special.action),
-            position: rawSlot.special.position
+            position: rawSlot.special.position,
+            items: normalizeMoney(rawSlot.special.items) || rawSlot.special.items
         };
     }
 
@@ -163,17 +254,24 @@ export class GameAPI {
     gameData: GameData;
     exitURL: string = '';
     private currentSpinData: SpinData | null = null;
-    private isFirstSpin: boolean = false; // Flag to track first spin
-    private currentFreeSpinIndex: number = 0; // Track current free spin item index
-    
+    private isFirstSpin: boolean = false;
+    private currentFreeSpinIndex: number = 0;
+
+    private isAbortError(error: any): boolean {
+        try {
+            if (!error) return false;
+            if (error?.name === 'AbortError') return true;
+            const msg = String(error?.message || '').toLowerCase();
+            return msg.includes('aborted');
+        } catch {
+            return false;
+        }
+    }
+
     constructor(gameData: GameData) {
         this.gameData = gameData;
     }   
 
-    /**
-     * 1. Generate game URL token upon game initialization
-     * This method generates a game token that can be used for subsequent API calls
-     */
     public async generateGameUrlToken(): Promise<{url: string, token: string}> {
         const apiUrl = `${getApiBaseUrl()}/api/v1/generate_url`;
         
@@ -210,12 +308,8 @@ export class GameAPI {
                 body: JSON.stringify(requestBody)
             });
 
-            //console.log('Response status:', response.status);
-            //console.log('Response ok:', response.ok);
-
             if (!response.ok) {
                 const errorText = await response.text();
-                //console.error('Response error text:', errorText);
                 throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
             }
 
@@ -226,25 +320,17 @@ export class GameAPI {
                 token: data.data.token 
             };
         } catch (error) {
-            //console.error('Error generating game URL:', error);
             throw error;
         }
     }
 
-    /**
-     * Initialize the game with token generation
-     * This method should be called when the game starts to get the game token
-     * Only generates a new token if token URL parameter is not present
-     */
     public async initializeGame(): Promise<string> {
         try {
-            // Check if token is already in the URL parameters
             const existingToken = getUrlParameter('token');
             
             if (existingToken) {
                 console.log('Game token found in URL parameters:', existingToken);
                 
-                // Store the existing token in localStorage and sessionStorage
                 localStorage.setItem('token', existingToken);
                 sessionStorage.setItem('token', existingToken);
                 
@@ -254,7 +340,6 @@ export class GameAPI {
                 console.log('No game token in URL, generating new token...');
                 const { token } = await this.generateGameUrlToken();
                 
-                // Store the token in localStorage and sessionStorage
                 localStorage.setItem('token', token);
                 sessionStorage.setItem('token', token);
                 
@@ -314,10 +399,13 @@ export class GameAPI {
                 throw new Error();
             }
         } catch (error) {
-            throw new Error();
+            console.error('Error in gameLauncher:', error);
+            throw error;
         }
     }
+
     public async getBalance(): Promise<any> {
+        let timeout: any;
         try {
             const token = localStorage.getItem('token');
             if (!token) {
@@ -326,7 +414,7 @@ export class GameAPI {
             }
 
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 8000);
+            timeout = setTimeout(() => controller.abort(), 8000);
             const response = await fetch(`${getApiBaseUrl()}/api/v1/slots/balance`, {
                 method: 'POST',
                 headers: {
@@ -335,45 +423,39 @@ export class GameAPI {
                 },
                 signal: controller.signal
             });
-            clearTimeout(timeout);
+            try { clearTimeout(timeout); } catch {}
 
             if (!response.ok) {
                 const error = new Error(`HTTP error! status: ${response.status}`);
-                
-                // Show token expired popup for 400 or 401 status
                 if (response.status === 400 || response.status === 401) {
                     this.showTokenExpiredPopup();
                     localStorage.removeItem('token');
                 }
-                
                 throw error;
             }
 
             const data = await response.json();
             return data;
         } catch (error) {
-            console.error('Error in getBalance:', error);
-            
-            // Handle network errors or other issues
-            if (this.isTokenExpiredError(error)) {
-                this.showTokenExpiredPopup();
+            if (!this.isAbortError(error)) {
+                console.error('Error in getBalance:', error);
+
+                if (this.isTokenExpiredError(error)) {
+                    this.showTokenExpiredPopup();
+                }
             }
-            
+
             throw error;
+        } finally {
+            try { clearTimeout(timeout); } catch {}
         }
     }
 
-    /**
-     * 2. Post a spin request to the server
-     * This method sends a spin request and returns the server response
-     */
     private showTokenExpiredPopup(): void {
         if(TOKEN_DISABLER)
             return;
-        // Find the game scene
         const gameScene = (window as any).game?.scene?.getScene('Game') as Phaser.Scene;
         if (gameScene) {
-            // Import dynamically to avoid circular dependency
             import('../game/components/TokenExpiredPopup').then(module => {
                 const TokenExpiredPopup = module.TokenExpiredPopup;
                 const popup = new TokenExpiredPopup(gameScene);
@@ -387,8 +469,8 @@ export class GameAPI {
     private isTokenExpiredError(error: any): boolean {
         const errorMessage = error?.message?.toLowerCase() || '';
         return (
-            errorMessage.includes('token') || 
-            errorMessage.includes('expired') || 
+            errorMessage.includes('token') ||
+            errorMessage.includes('expired') ||
             errorMessage.includes('unauthorized') ||
             errorMessage.includes('401') ||
             errorMessage.includes('400')
@@ -405,9 +487,10 @@ export class GameAPI {
         let responseData: any;
 
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000);
+        let timeout: any = setTimeout(() => controller.abort(), 10000);
 
         try {
+
             const response = await fetch(`${getApiBaseUrl()}/api/v1/slots/bet`, {
                 method: 'POST',
                 headers: {
@@ -423,7 +506,7 @@ export class GameAPI {
                 }),
                 signal: controller.signal
             });
-            clearTimeout(timeout);
+            try { clearTimeout(timeout); } catch {}
 
             if (!response.ok) {
                 const errorText = await response.text();
@@ -437,14 +520,17 @@ export class GameAPI {
 
             responseData = await response.json();
         } catch (error) {
-            clearTimeout(timeout);
-            console.error('[GameAPI] doSpin error:', error);
+            try { clearTimeout(timeout); } catch {}
+            if (!this.isAbortError(error)) {
+                console.error('Error in doSpin:', error);
+            }
             throw error;
+        } finally {
+            try { clearTimeout(timeout); } catch {}
         }
 
         const normalizedData = normalizeSpinResponse(responseData, bet);
 
-        // Decide whether to overwrite currentSpinData or preserve existing free spin data
         if (normalizedData.slot && normalizedData.slot.freespin &&
             Array.isArray(normalizedData.slot.freespin.items) && normalizedData.slot.freespin.items.length > 0) {
             this.currentSpinData = normalizedData;
@@ -456,158 +542,199 @@ export class GameAPI {
             Array.isArray(this.currentSpinData.slot.freespin.items) &&
             this.currentSpinData.slot.freespin.items.length > 0
         ) {
-            // Preserve original free spin data during bonus mode
+            // Keep existing freespin items when in bonus mode
         } else {
             this.currentSpinData = normalizedData;
         }
 
-        console.log('🎰 ===== SERVER RESPONSE DEBUG =====');
-        console.log('📊 Raw server response:', responseData);
-        console.log('📊 Normalized SpinData:', normalizedData);
-        console.log('🎲 Grid symbols:', normalizedData.slot?.area);
-        console.log('💰 Paylines:', normalizedData.slot?.paylines);
-        console.log('🎰 ===== END SERVER RESPONSE =====');
+        console.log(' ===== SERVER RESPONSE DEBUG =====');
+        console.log(' Raw server response:', responseData);
+        console.log(' Normalized SpinData:', normalizedData);
+        console.log(' Grid symbols:', normalizedData.slot?.area);
+        console.log(' Paylines:', normalizedData.slot?.paylines);
+        console.log(' ===== END SERVER RESPONSE =====');
 
         return this.currentSpinData as SpinData;
     }
 
-    /**
-     * Simulate a free spin using pre-determined data from SpinData.freespin.items
-     * This method uses the area and paylines from the freespin items instead of calling the API
-     */
     public async simulateFreeSpin(): Promise<SpinData> {
+        // Check if fake API is enabled and we're in bonus mode
+        if (gameStateManager.isBonus && fakeBonusAPI.isEnabled()) {
+            console.log('Using Fake API for bonus free spins');
+            
+            // Initialize fake data if not already done
+            if (!fakeBonusAPI.getCurrentSpinData()) {
+                await fakeBonusAPI.initializeBonusData();
+            }
+            
+            // Use fake API if available
+            if (fakeBonusAPI.hasMoreFreeSpins()) {
+                return await fakeBonusAPI.simulateFreeSpin();
+            }
+        }
+
+        // Fall back to original implementation
         if (!this.currentSpinData || (!this.currentSpinData.slot?.freespin?.items && !this.currentSpinData.slot?.freeSpin?.items)) {
-            console.error('[GameAPI] No free spin data available. Current spin data:', this.currentSpinData);
-            console.error('[GameAPI] Available freespin data:', this.currentSpinData?.slot?.freespin);
+            console.error('No free spin data available. Current spin data:', this.currentSpinData);
+            console.error('Available freespin data:', this.currentSpinData?.slot?.freespin);
             throw new Error('No free spin data available. Please ensure SpinData contains freespin items.');
         }
 
         const freespinData = this.currentSpinData.slot.freespin || this.currentSpinData.slot.freeSpin;
         const items = freespinData.items;
-        
-        // Check if we have more items to process
+
         if (this.currentFreeSpinIndex >= items.length) {
             throw new Error('No more free spins available');
         }
-        
-        // Get the current item based on index
-        const currentItem = items[this.currentFreeSpinIndex];
-        
+
+        const currentItem: any = items[this.currentFreeSpinIndex];
+
         if (!currentItem || currentItem.spinsLeft <= 0) {
             throw new Error('No more free spins available');
         }
 
-        // Play spin sound effect for free spin simulation
-        if ((window as any).audioManager) {
-            (window as any).audioManager.playSoundEffect(SoundEffectType.SPIN);
-            console.log('[GameAPI] Playing spin sound effect for free spin simulation');
-        }
+        try {
+            if ((window as any).audioManager) {
+                (window as any).audioManager.playSoundEffect(SoundEffectType.SPIN);
+                console.log('Playing spin sound effect for free spin simulation');
+            }
+        } catch {}
 
-        console.log('🎰 ===== SIMULATING FREE SPIN =====');
-        console.log('📊 Using pre-determined free spin data');
-        console.log('🎯 Current free spin index:', this.currentFreeSpinIndex);
-        console.log('🎯 Spins left:', currentItem.spinsLeft);
-        console.log('💰 Sub total win:', currentItem.subTotalWin);
-        console.log('🎲 Area:', currentItem.area);
-        console.log('💎 Paylines:', currentItem.payline);
+        console.log(' ===== SIMULATING FREE SPIN =====');
+        console.log(' Using pre-determined free spin data');
+        console.log(' Current free spin index:', this.currentFreeSpinIndex);
+        console.log(' Spins left:', currentItem.spinsLeft);
+        console.log(' Sub total win:', currentItem.subTotalWin);
+        console.log(' Area:', currentItem.area);
+        console.log(' Paylines:', currentItem.payline);
+        console.log(' Collector count:', currentItem.collectorCount);
+        console.log(' Money:', currentItem.money);
 
-        // Create a new SpinData object for this free spin
+        const normalizedArea = normalizeArea(currentItem.area);
+        const normalizedMoney = normalizeMoney(currentItem.money);
+
+        try {
+            const has11 = Array.isArray(normalizedArea)
+                && normalizedArea.some((col: any) => Array.isArray(col) && col.some((v: any) => v === 11));
+            if (has11) {
+                console.log('[GameAPI] Free spin area contains symbol 11.');
+            }
+        } catch {}
+
+        let slotSpecial: any = undefined;
+        try {
+            if (currentItem?.special && currentItem.special.action) {
+                slotSpecial = {
+                    action: String(currentItem.special.action),
+                    position: currentItem.special.position,
+                    items: normalizeMoney(currentItem.special.items) || currentItem.special.items
+                };
+            }
+        } catch {}
+
         const freeSpinData: SpinData = {
             playerId: this.currentSpinData.playerId,
             bet: this.currentSpinData.bet,
             slot: {
-                area: currentItem.area,
-                paylines: currentItem.payline,
-                money: Array.isArray((currentItem as any).money) ? (currentItem as any).money : undefined,
+                area: normalizedArea,
+                paylines: Array.isArray(currentItem.payline) ? currentItem.payline : [],
+                money: normalizedMoney,
+                special: slotSpecial,
                 freespin: {
-                    count: freespinData.count, // Preserve original count from API response
+                    count: freespinData.count,
                     totalWin: freespinData.totalWin,
-                    items: items // Keep all items as they are
+                    items
+                },
+                freeSpin: {
+                    count: freespinData.count,
+                    totalWin: freespinData.totalWin,
+                    items
                 }
             }
         };
 
-        // Update the current spin data
         this.currentSpinData = freeSpinData;
-        
-        // Increment the index for the next free spin
         this.currentFreeSpinIndex++;
 
-        console.log('🎰 ===== FREE SPIN SIMULATION COMPLETE =====');
-        console.log('📊 New SpinData:', freeSpinData);
-        console.log('🎯 Remaining free spins:', freeSpinData.slot.freespin.count);
-        console.log('🎯 Next free spin will use index:', this.currentFreeSpinIndex);
-        console.log('🎰 ===== END FREE SPIN SIMULATION =====');
+        console.log(' ===== FREE SPIN SIMULATION COMPLETE =====');
+        console.log(' New SpinData:', freeSpinData);
+        console.log(' Remaining free spins:', freeSpinData.slot.freespin.count);
+        console.log(' Next free spin will use index:', this.currentFreeSpinIndex);
+        console.log(' ===== END FREE SPIN SIMULATION =====');
 
         return freeSpinData;
     }
 
-    /**
-     * Get the current spin data
-     * Returns the last spin data that was received from the server
-     */
     public getCurrentSpinData(): SpinData | null {
         return this.currentSpinData;
     }
 
-    /**
-     * Reset the free spin index when starting a new scatter bonus
-     * This should be called when a new scatter bonus is triggered
-     */
     public resetFreeSpinIndex(): void {
-        console.log('🎰 Resetting free spin index to 0');
+        console.log('Resetting free spin index to 0');
         this.currentFreeSpinIndex = 0;
     }
 
-    /**
-     * Clear the current spin data
-     * Useful for resetting state between spins
-     */
     public clearCurrentSpinData(): void {
         this.currentSpinData = null;
     }
 
-    /**
-     * Set the free spin data for simulation
-     * This method should be called when free spins are triggered to provide the data for simulation
-     */
     public setFreeSpinData(spinData: SpinData): void {
-        console.log('[GameAPI] Setting free spin data for simulation:', spinData);
+        console.log('Setting free spin data for simulation:', spinData);
         this.currentSpinData = spinData;
-        this.resetFreeSpinIndex(); // Reset the index when setting new data
+        this.resetFreeSpinIndex();
     }
 
     /**
-     * Initialize the player's balance on game start
-     * This method calls getBalance and updates the GameData with the current balance
+     * Initialize fake API for bonus mode - easily removable
      */
+    public async initializeFakeBonusAPI(): Promise<void> {
+        if (gameStateManager.isBonus && fakeBonusAPI.isEnabled()) {
+            console.log('Initializing Fake Bonus API for bonus scene');
+            try {
+                await fakeBonusAPI.initializeBonusData();
+                console.log('Fake Bonus API initialized successfully');
+            } catch (error) {
+                console.error('Failed to initialize Fake Bonus API:', error);
+                throw error;
+            }
+        } else {
+            console.log('Fake API disabled or not in bonus mode');
+        }
+    }
+
+    /**
+     * Check if fake API is available for bonus mode
+     */
+    public isFakeAPIAvailable(): boolean {
+        return gameStateManager.isBonus && fakeBonusAPI.isEnabled() && fakeBonusAPI.getCurrentSpinData() !== null;
+    }
+
     public async initializeBalance(): Promise<number> {
         try {
-            console.log('[GameAPI] Initializing player balance...');
-            
+            console.log('Initializing player balance...');
+
             const balanceResponse = await this.getBalance();
-            console.log('[GameAPI] Balance response received:', balanceResponse);
-            
-            // Extract balance from response - adjust this based on actual API response structure
+            console.log('Balance response received:', balanceResponse);
+
             let balance = 0;
             if (balanceResponse && balanceResponse.data && balanceResponse.data.balance !== undefined) {
                 balance = parseFloat(balanceResponse.data.balance);
             } else if (balanceResponse && balanceResponse.balance !== undefined) {
                 balance = parseFloat(balanceResponse.balance);
             } else {
-                console.warn('[GameAPI] Unexpected balance response structure:', balanceResponse);
-                // Fallback to a default balance if structure is unexpected
+                console.warn('Unexpected balance response structure:', balanceResponse);
                 balance = 0;
             }
-            
-            console.log(`[GameAPI] Initialized balance: $${balance}`);
+
+            console.log(`Initialized balance: $${balance}`);
             return balance;
-            
+
         } catch (error) {
-            console.error('[GameAPI] Error initializing balance:', error);
-            // Return a default balance if API call fails
+            if (!this.isAbortError(error)) {
+                console.error('Error initializing balance:', error);
+            }
             const defaultBalance = 0;
-            console.log(`[GameAPI] Using default balance: $${defaultBalance}`);
+            console.log(`Using default balance: $${defaultBalance}`);
             return defaultBalance;
         }
     }
@@ -619,7 +746,7 @@ export class GameAPI {
             || '';
 
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000);
+        let timeout: any = setTimeout(() => controller.abort(), 10000);
         try {
             const response = await fetch(`${apiUrl}?limit=${limit}&page=${page}`,{
                 method: 'GET',

@@ -37,7 +37,7 @@ export class StudioLoadingScreen {
     private timeUpdateTimer?: Phaser.Time.TimerEvent;
     private progressBarBg?: Phaser.GameObjects.Graphics;
     private progressBarFill?: Phaser.GameObjects.Graphics;
-	private progressBarX?: number;
+    private progressBarX?: number;
     private progressBarY?: number;
     private progressBarWidth?: number;
     private progressBarHeight?: number;
@@ -60,6 +60,11 @@ export class StudioLoadingScreen {
             textScale: 1.0,
             textColor: '#FFFFFF',
         };
+    }
+
+    public beginLoading(assetLoader: AssetLoader): void {
+        queueGameAssetLoading(this.scene, assetLoader);
+        console.log('[StudioLoadingScreen] Queued game assets (optimized)');
     }
 
     public show(): void {
@@ -428,15 +433,15 @@ export class StudioLoadingScreen {
         const elapsed = this.scene.time.now - this.shownAtMs;
         const wait = Math.max(0, minVisibleMs - elapsed);
         this.scene.time.delayedCall(wait, () => {
-			// Detach progress listener and hide progress bar before fade
-			try {
-				if (this.onProgressHandler) {
-					this.scene.load.off('progress', this.onProgressHandler as any);
-					this.onProgressHandler = undefined;
-				}
-				this.progressBarFill?.setVisible(false);
-				this.progressBarBg?.setVisible(false);
-			} catch {}
+            // Detach progress listener and hide progress bar before fade
+            try {
+                if (this.onProgressHandler) {
+                    this.scene.load.off('progress', this.onProgressHandler as any);
+                    this.onProgressHandler = undefined;
+                }
+                this.progressBarFill?.setVisible(false);
+                this.progressBarBg?.setVisible(false);
+            } catch {}
 
             // Stop time update timer
             try {
@@ -521,11 +526,6 @@ export class StudioLoadingScreen {
         
         console.log(`[StudioLoadingScreen] Dot grid created: ${cols}x${rows} dots, spacing: ${dotSpacing}px, radius: ${dotRadius}px`);
     }
-
-    public beginLoading(assetLoader: AssetLoader): void {
-        queueGameAssetLoading(this.scene, assetLoader);
-        console.log('[StudioLoadingScreen] Queued game assets (optimized)');
-    }
 }
 
 export function queueGameAssetLoading(scene: Scene, assetLoader: AssetLoader): void {
@@ -541,11 +541,11 @@ export function queueGameAssetLoading(scene: Scene, assetLoader: AssetLoader): v
     assetLoader.loadSymbolAssets(scene);
     assetLoader.loadNumberAssets(scene);
     assetLoader.loadScatterWinOverlayAssets(scene);
+    // New free spin overlay (FreeSpin_TB) assets
+    try { (assetLoader as any).loadFreeSpinOverlayAssets?.(scene); } catch {}
     assetLoader.loadDialogAssets(scene);
     try { (assetLoader as any).loadTransitionAssets?.(scene); } catch {}
     assetLoader.loadAudioAssets(scene);
     assetLoader.loadSpinCardAssets(scene);
     console.log('[StudioLoadingScreen] Queued game asset loading (optimized)');
 }
-
-// ... (rest of the code remains the same)

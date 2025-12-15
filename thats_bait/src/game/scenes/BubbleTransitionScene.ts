@@ -5,6 +5,11 @@ interface BubbleTransitionData {
 	fromSceneKey?: string;
 	toSceneKey?: string;
 	gameStartData?: any;
+	stopFromScene?: boolean;
+	toSceneEvent?: string;
+	toSceneEventData?: any;
+	toSceneEventOnFinish?: string;
+	toSceneEventOnFinishData?: any;
 }
 
 export class BubbleTransitionScene extends Scene {
@@ -14,6 +19,9 @@ export class BubbleTransitionScene extends Scene {
 	private transitionSpine?: any;
 	private overlayRect?: Phaser.GameObjects.Rectangle;
 	private gameCamera?: Phaser.Cameras.Scene2D.Camera;
+	private didFadeGameCamera: boolean = false;
+	private toSceneKey?: string;
+	private hardStopTimer?: Phaser.Time.TimerEvent;
 
 	constructor() {
 		super('BubbleTransition');
@@ -24,10 +32,25 @@ export class BubbleTransitionScene extends Scene {
 	}
 
 	create(): void {
+		console.log('[BubbleTransitionScene] create');
 		this.cameras.main.setBackgroundColor(0x050d18);
 		try {
 			// Make camera background fully transparent so we can see scenes underneath
 			(this.cameras.main.backgroundColor as any).alpha = 0;
+		} catch {}
+		try { this.hardStopTimer?.destroy(); } catch {}
+		try {
+			this.hardStopTimer = this.time.delayedCall(4500, () => {
+				if (this.hasFinished) return;
+				console.warn('[BubbleTransitionScene] Hard stop fallback triggered');
+				try { this.hasFinished = true; } catch {}
+				try {
+					if (this.gameCamera && this.didFadeGameCamera) {
+						this.gameCamera.setAlpha(1);
+					}
+				} catch {}
+				this.cleanupAndStop();
+			});
 		} catch {}
 
 		this.overlayRect = this.add.rectangle(
@@ -44,11 +67,33 @@ export class BubbleTransitionScene extends Scene {
 		this.playBubbleAnimation();
 	}
 
+	private cleanupAndStop(): void {
+		try {
+			const toKey = this.toSceneKey || this.transitionData?.toSceneKey || 'Game';
+			const toScene: any = this.scene.get(toKey) as any;
+			const evt = this.transitionData?.toSceneEventOnFinish;
+			if (evt && toScene?.events && typeof toScene.events.emit === 'function') {
+				console.log('[BubbleTransitionScene] emit toSceneEventOnFinish', evt);
+				toScene.events.emit(evt, this.transitionData?.toSceneEventOnFinishData);
+			}
+		} catch {}
+		try { this.transitionSpine?.destroy(); } catch {}
+		try { this.overlayRect?.destroy(); } catch {}
+		try { this.hardStopTimer?.destroy(); } catch {}
+		try { this.hardStopTimer = undefined; } catch {}
+		try { this.scene.stop(); } catch {}
+	}
+
 	private playBubbleAnimation(): void {
 		const hasFactory = ensureSpineFactory(this as any, '[BubbleTransitionScene] playBubbleAnimation');
 		if (!hasFactory) {
-			this.startGameIfNeeded();
-			this.finishTransition();
+			const targets: any[] = [];
+			if (this.overlayRect) targets.push(this.overlayRect);
+			if (targets.length > 0) {
+				this.tweens.add({ targets, alpha: 1, duration: 350, ease: 'Power2' });
+			}
+			this.time.delayedCall(600, () => { this.startGameIfNeeded(); });
+			this.time.delayedCall(1200, () => { this.finishTransition(); });
 			return;
 		}
 
@@ -57,8 +102,13 @@ export class BubbleTransitionScene extends Scene {
 
 		const jsonCache: any = (this.cache as any).json;
 		if (!jsonCache?.has?.(spineKey)) {
-			this.startGameIfNeeded();
-			this.finishTransition();
+			const targets: any[] = [];
+			if (this.overlayRect) targets.push(this.overlayRect);
+			if (targets.length > 0) {
+				this.tweens.add({ targets, alpha: 1, duration: 350, ease: 'Power2' });
+			}
+			this.time.delayedCall(600, () => { this.startGameIfNeeded(); });
+			this.time.delayedCall(1200, () => { this.finishTransition(); });
 			return;
 		}
 
@@ -126,11 +176,20 @@ export class BubbleTransitionScene extends Scene {
 			}
 		} catch {}
 
-		const timeScale = Math.max(0.0001, state?.timeScale || 1);
-		const totalMs = (durationSec / timeScale) * 1000;
-		const midMs = totalMs * 0.5;
+		const rawTimeScale = state?.timeScale;
+		const timeScale = (typeof rawTimeScale === 'number' && isFinite(rawTimeScale) && rawTimeScale > 0.05)
+			? rawTimeScale
+			: 1;
+		let totalMs = (durationSec / timeScale) * 1000;
+		if (!isFinite(totalMs) || totalMs <= 0) totalMs = 2000;
+		const fromKey = this.transitionData?.fromSceneKey || 'Preloader';
+		const toKey = this.transitionData?.toSceneKey || 'Game';
+		const sameScene = fromKey === toKey;
+		if (sameScene) totalMs = 2000;
+		totalMs = Math.min(totalMs, 2400);
+		const midMs = sameScene ? 650 : totalMs * 0.5;
 		// Start fade-out a bit earlier so Game cross-fades in while bubbles are still visible
-		const endMs = totalMs * 0.6;
+		const endMs = sameScene ? 1200 : totalMs * 0.6;
 
 		this.time.delayedCall(midMs, () => {
 			this.startGameIfNeeded();
@@ -148,9 +207,13 @@ export class BubbleTransitionScene extends Scene {
 		const toKey = this.transitionData?.toSceneKey || 'Game';
 		const fromKey = this.transitionData?.fromSceneKey || 'Preloader';
 		const startData = this.transitionData?.gameStartData || {};
+		this.toSceneKey = toKey;
+		this.didFadeGameCamera = false;
 
 		try {
-			if (fromKey && this.scene.isActive(fromKey)) {
+			const stopFrom = this.transitionData?.stopFromScene;
+			const shouldStopFrom = stopFrom !== false;
+			if (shouldStopFrom && fromKey && fromKey !== toKey && this.scene.isActive(fromKey)) {
 				this.scene.stop(fromKey);
 			}
 		} catch {}
@@ -163,10 +226,20 @@ export class BubbleTransitionScene extends Scene {
 			toScene = this.scene.get(toKey) as any;
 		} catch {}
 		try {
+			const evt = this.transitionData?.toSceneEvent;
+			if (evt && toScene?.events && typeof toScene.events.emit === 'function') {
+				console.log('[BubbleTransitionScene] emit toSceneEvent', evt);
+				toScene.events.emit(evt, this.transitionData?.toSceneEventData);
+			}
+		} catch {}
+		try {
 			const cam = toScene?.cameras?.main;
 			if (cam) {
 				this.gameCamera = cam;
-				this.gameCamera?.setAlpha(0);
+				if (fromKey !== toKey) {
+					this.didFadeGameCamera = true;
+					this.gameCamera?.setAlpha(0);
+				}
 			}
 		} catch {}
 	}
@@ -183,7 +256,7 @@ export class BubbleTransitionScene extends Scene {
 			if (this.gameCamera) {
 				try { this.gameCamera.setAlpha(1); } catch {}
 			}
-			this.scene.stop();
+			this.cleanupAndStop();
 			return;
 		}
 
@@ -193,13 +266,11 @@ export class BubbleTransitionScene extends Scene {
 			duration: 800,
 			ease: 'Power2',
 			onComplete: () => {
-				try { this.transitionSpine?.destroy(); } catch {}
-				try { this.overlayRect?.destroy(); } catch {}
-				this.scene.stop();
+				this.cleanupAndStop();
 			}
 		});
 
-		if (this.gameCamera) {
+		if (this.gameCamera && this.didFadeGameCamera) {
 			this.tweens.add({
 				targets: this.gameCamera,
 				alpha: 1,

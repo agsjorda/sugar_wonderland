@@ -2,8 +2,8 @@ import { Boot } from './scenes/Boot';
 import { Game as MainGame } from './scenes/Game';
 import { AUTO, Game } from 'phaser';
 import { Preloader } from './scenes/Preloader';
-import { TemporaryScene } from './scenes/TemporaryScene';
 import { BubbleTransitionScene } from './scenes/BubbleTransitionScene';
+import { BubbleOverlayTransitionScene } from './scenes/BubbleOverlayTransitionScene';
 // Import Spine runtime and plugin
 import * as Spine from '@esotericsoftware/spine-phaser-v3';
 
@@ -33,7 +33,7 @@ const config: Phaser.Types.Core.GameConfig = {
         Boot,
         Preloader,
         BubbleTransitionScene,
-        TemporaryScene,
+        BubbleOverlayTransitionScene,
         MainGame,
     ],
     plugins: {
@@ -63,8 +63,130 @@ const StartGame = (parent: string) => {
         }
     };
 
-    const game = new Game({ ...config, parent });
+    let game: Phaser.Game = new Game({ ...config, parent });
     (window as any).game = game;
+
+    let isRestarting = false;
+    let lastRestartAt = 0;
+    let boundToCanvas: HTMLCanvasElement | null = null;
+
+    const rebindPerGameHandlers = () => {
+        try {
+            if (isMobile()) {
+                try {
+                    const appElement = document.getElementById('root');
+                    const container = document.getElementById(parent) || appElement;
+                    const canvas = game.canvas as HTMLCanvasElement | null;
+                    if (canvas) {
+                        const noopPrevent = (e: Event) => { e.preventDefault(); };
+                        canvas.addEventListener('touchstart', noopPrevent, { passive: false });
+                        canvas.addEventListener('touchmove', noopPrevent, { passive: false });
+                        canvas.addEventListener('touchend', noopPrevent, { passive: false });
+                        canvas.addEventListener('touchcancel', noopPrevent, { passive: false });
+                    }
+                    const applyTouchSafeStyles = (el: HTMLElement | null | undefined) => {
+                        if (!el) return;
+                        el.style.touchAction = 'none';
+                        (el.style as any).msTouchAction = 'none';
+                        el.style.userSelect = 'none';
+                        (el.style as any).webkitUserSelect = 'none';
+                        (el.style as any).webkitTapHighlightColor = 'transparent';
+                        (el.style as any).overscrollBehavior = 'contain';
+                    };
+                    applyTouchSafeStyles(appElement as HTMLElement);
+                    applyTouchSafeStyles(container as HTMLElement);
+                    applyTouchSafeStyles(canvas as unknown as HTMLElement);
+                    if (game.canvas && !game.canvas.hasAttribute('tabindex')) {
+                        game.canvas.setAttribute('tabindex', '0');
+                    }
+                } catch {}
+            }
+
+            const appElement = document.getElementById('root');
+            if (appElement) {
+                (game.scale as any).fullscreenTarget = appElement as unknown as HTMLElement;
+            }
+
+            game.scale.on('leavefullscreen', () => {
+                try { game.canvas?.focus(); } catch {}
+            });
+
+            const lockPortraitIfPossible = async () => {
+                try {
+                    if ((screen as any) && (screen as any).orientation && (screen as any).orientation.lock) {
+                        await (screen as any).orientation.lock('portrait');
+                    }
+                } catch {}
+            };
+            game.scale.on('enterfullscreen', lockPortraitIfPossible);
+            game.scale.on('resize', () => {
+                try {
+                    const root = document.getElementById('root');
+                    if (root) {
+                        const vv = (window as any).visualViewport;
+                        const height = vv && vv.height ? Math.round(vv.height) : window.innerHeight;
+                        (root as HTMLElement).style.height = `${height}px`;
+                    }
+                } catch {}
+            });
+        } catch {}
+    };
+
+    const restartGame = () => {
+        try {
+            const now = Date.now();
+            if (isRestarting) return;
+            if (now - lastRestartAt < 1500) return;
+            isRestarting = true;
+            lastRestartAt = now;
+
+            const old = game;
+            try {
+                if (boundToCanvas) {
+                    boundToCanvas.removeEventListener('webglcontextlost', onWebGLContextLost as any);
+                    boundToCanvas.removeEventListener('webglcontextrestored', onWebGLContextRestored as any);
+                }
+            } catch {}
+
+            try { old.destroy(true); } catch {}
+
+            game = new Game({ ...config, parent });
+            (window as any).game = game;
+            (window as any).phaserGame = game;
+            boundToCanvas = game.canvas as HTMLCanvasElement | null;
+            if (boundToCanvas) {
+                boundToCanvas.addEventListener('webglcontextlost', onWebGLContextLost as any, { passive: false } as any);
+                boundToCanvas.addEventListener('webglcontextrestored', onWebGLContextRestored as any);
+            }
+
+            rebindPerGameHandlers();
+            try {
+                window.dispatchEvent(new CustomEvent('phaser-game-restarted', { detail: { game } }));
+            } catch {}
+        } catch {
+        } finally {
+            isRestarting = false;
+        }
+    };
+
+    const onWebGLContextLost = (e: Event) => {
+        try {
+            const anyE: any = e as any;
+            if (typeof anyE?.preventDefault === 'function') {
+                anyE.preventDefault();
+            }
+        } catch {}
+        restartGame();
+    };
+    const onWebGLContextRestored = () => {
+        restartGame();
+    };
+
+    boundToCanvas = game.canvas as HTMLCanvasElement | null;
+    if (boundToCanvas) {
+        boundToCanvas.addEventListener('webglcontextlost', onWebGLContextLost as any, { passive: false } as any);
+        boundToCanvas.addEventListener('webglcontextrestored', onWebGLContextRestored as any);
+    }
 
     if (isMobile()) {
         try {
@@ -154,11 +276,11 @@ const StartGame = (parent: string) => {
         (game.scale as any).fullscreenTarget = appElement as unknown as HTMLElement;
     }
     game.scale.on('leavefullscreen', () => {
-        game.canvas?.focus();
+        try { game.canvas?.focus(); } catch (_e) {}
     });
     const onFsChange = () => {
         if (!game.scale.isFullscreen) {
-            game.canvas?.focus();
+            try { game.canvas?.focus(); } catch (_e) {}
         }
     };
     document.addEventListener('fullscreenchange', onFsChange);

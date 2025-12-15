@@ -58,14 +58,33 @@ export class AssetConfig {
 	}
 
 	getBonusBackgroundAssets(): AssetGroup {
-		const prefix = this.getAssetPrefix();
+		const forcedPortraitHighPrefix = `assets/portrait/high`;
 		
 		return {
 			images: {
-				'BG-Bonus': `${prefix}/bonus_background/BG-Bonus.png`
+				'BG-Bonus-Depth': `${forcedPortraitHighPrefix}/bonus_background/BG-Bonus-Depth.webp`,
+				'BG-Bonus-Sky': `${forcedPortraitHighPrefix}/bonus_background/BG-Bonus-Sky.webp`,
+				'BG-Bonus-Surface': `${forcedPortraitHighPrefix}/bonus_background/BG-Bonus-Surface.webp`,
+				'Sea-Edge-Bonus': `${forcedPortraitHighPrefix}/bonus_background/Sea-Edge-Bonus.webp`,
+				'level1-meter': `${forcedPortraitHighPrefix}/gauge-meter/level1-meter.webp`,
+				'level2-meter': `${forcedPortraitHighPrefix}/gauge-meter/level2-meter.webp`,
+				'level3-meter': `${forcedPortraitHighPrefix}/gauge-meter/level3-meter.webp`,
+				'meter-indicator': `${forcedPortraitHighPrefix}/gauge-meter/meter-indicator.webp`,
+				'stage1_1': `${forcedPortraitHighPrefix}/gauge-meter/stage1_1.webp`,
+				'stage1_2': `${forcedPortraitHighPrefix}/gauge-meter/stage1_2.webp`,
+				'stage1_3': `${forcedPortraitHighPrefix}/gauge-meter/stage1_3.webp`,
+				'stage1_4': `${forcedPortraitHighPrefix}/gauge-meter/stage1_4.webp`,
+				'stage1_5': `${forcedPortraitHighPrefix}/gauge-meter/stage1_5.webp`,
+				'win-10-free-spins': `${forcedPortraitHighPrefix}/gauge-meter/win-10-free-spins.webp`,
+				'2x_multiplier': `${forcedPortraitHighPrefix}/gauge-meter/2x_multiplier.webp`
 			},
 			// Bonus dragon & fireworks spine assets were removed for this game
-			spine: {}
+			spine: {
+				'ReelBottom_Bonus_TB': {
+					atlas: `${forcedPortraitHighPrefix}/bonus_background/ReelBottom_Bonus_TB.atlas`,
+					json: `${forcedPortraitHighPrefix}/bonus_background/ReelBottom_Bonus_TB.json`
+				}
+			}
 		};
 	}
 
@@ -117,7 +136,7 @@ export class AssetConfig {
 		const tbSpineSymbols = new Set<number>([0, 1, 2, 3, 4, 5, 6, 7, 11, 12, 13, 14]);
 		
 		// Symbols that have dedicated WEBP art in public/assets/portrait/high/symbols
-		const webpSymbolsFolder = new Set<number>([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+		const webpSymbolsFolder = new Set<number>([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
 		
 		// Higher indices fall back to WEBP exported alongside Spine in spine_symbols (none today)
 		const webpSpineFolderFallback = new Set<number>([]);
@@ -125,11 +144,11 @@ export class AssetConfig {
 		// Force TB symbols to portrait/high paths for now
 		const spinePrefix = `assets/portrait/high`;
 		
-		// Register symbols 0-14 using a single, consistent naming scheme:
+		// Register symbols 0-17 using a single, consistent naming scheme:
 		//  - Spine key:   symbol_{i}_spine
 		//  - Image key:   symbol_{i}
 		//  - File names:  spine_symbols/Symbol{i}_TB.(atlas|json), symbols/Symbol{i}_TB.webp
-		for (let i = 0; i <= 14; i++) {
+		for (let i = 0; i <= 17; i++) {
 			const symbolNameTB = `Symbol${i}_TB`;
 			const spineKey = `symbol_${i}_spine`;
 			
@@ -161,7 +180,7 @@ export class AssetConfig {
 				console.log(`[AssetConfig] Symbol ${i}: image=${imagePath}`);
 			}
 		}
-		
+
 		return {
 			images: symbolImages,
 			spine: symbolSpine
@@ -422,6 +441,20 @@ export class AssetConfig {
 		};
 	}
 
+	/** Free spin overlay Spine assets (FreeSpin_TB in overlays folder). */
+	getFreeSpinOverlayAssets(): AssetGroup {
+		const forcedPortraitHighPrefix = `assets/portrait/high`;
+		console.log('[AssetConfig] Loading free spin overlay assets');
+		return {
+			spine: {
+				'FreeSpin_TB': {
+					atlas: `${forcedPortraitHighPrefix}/overlays/FreeSpin_TB.atlas`,
+					json: `${forcedPortraitHighPrefix}/overlays/FreeSpin_TB.json`
+				}
+			}
+		};
+	}
+
 	getAudioAssets(): AssetGroup {
 		console.log(`[AssetConfig] Loading audio assets`);
 		
@@ -504,6 +537,7 @@ export class AssetConfig {
 			coin: this.getCoinAssets(),
 			buyFeature: this.getBuyFeatureAssets(),
 			scatterWin: this.getScatterWinOverlayAssets(),
+			freeSpinOverlay: this.getFreeSpinOverlayAssets(),
 			audio: this.getAudioAssets(),
 		};
 	}

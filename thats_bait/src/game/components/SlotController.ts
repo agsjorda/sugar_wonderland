@@ -14,7 +14,6 @@ import { Symbols } from './Symbols';
 import { SoundEffectType } from '../../managers/AudioManager';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
-import { SymbolGenerator } from '../../tmp_backend/SymbolGenerator';
 import {
   TURBO_OFFSET_X, TURBO_OFFSET_Y,
   AUTOPLAY_OFFSET_X, AUTOPLAY_OFFSET_Y,
@@ -3772,6 +3771,7 @@ public updateAutoplayButtonState(): void {
 	 * Handle spin logic - either normal API call or free spin simulation
 	 */
 	private async handleSpin(): Promise<void> {
+		try { gameStateManager.isBuyFeatureSpin = false; } catch {}
 		// Pre-spin cleanup: stop any active winline animations and reset symbols
 		try {
 			const scene: any = this.scene as any;
@@ -3950,41 +3950,11 @@ public updateAutoplayButtonState(): void {
 				return;
 			} catch (fallbackError) {
 				console.error('[SlotController] Fallback normal spin failed:', fallbackError);
-				// Offline/dev fallback: generate a local spin and emit SPIN_DATA_RESPONSE
-				try {
-					const generator = new SymbolGenerator();
-					const colsByRows = generator.generate(); // [columns][rows]
-					const rows: number[][] = [];
-					const numRows = colsByRows[0]?.length || 0;
-					const numCols = colsByRows.length;
-					for (let r = 0; r < numRows; r++) {
-						const row: number[] = [];
-						for (let c = 0; c < numCols; c++) {
-							row.push(colsByRows[c][r]);
-						}
-						rows.push(row);
-					}
-					const currentBetStr = (this.getBaseBetAmount?.() || 10).toString();
-					const localSpinData: any = {
-						playerId: 'local',
-						bet: currentBetStr,
-						slot: {
-							area: rows,
-							paylines: [],
-							freespin: { count: 0, totalWin: 0, items: [] }
-						}
-					};
-					console.warn('[SlotController] Using local fallback spin data');
-					gameEventManager.emit(GameEventType.SPIN_DATA_RESPONSE, { spinData: localSpinData });
-					return;
-				} catch (localError) {
-					console.error('[SlotController] Local fallback spin generation failed:', localError);
-					// As a last resort, restore controls so the UI is not stuck
-					this.enableSpinButton();
-					this.enableAutoplayButton();
-					this.enableBetButtons();
-					this.enableAmplifyButton();
-				}
+				// As a last resort, restore controls so the UI is not stuck
+				this.enableSpinButton();
+				this.enableAutoplayButton();
+				this.enableBetButtons();
+				this.enableAmplifyButton();
 			}
 		}
 	}
@@ -4076,6 +4046,7 @@ public updateAutoplayButtonState(): void {
 				this.forceApplyTurboToSceneGameData();
 				this.applyTurboToWinlineAnimations();
 			} catch {}
+			try { gameStateManager.isBuyFeatureSpin = true; } catch {}
 			
 			// Call doSpin with buy feature parameters
 			console.log('[SlotController] Calling doSpin for buy feature...');
@@ -4093,6 +4064,7 @@ public updateAutoplayButtonState(): void {
 			
 		} catch (error) {
 			console.error('[SlotController] Error processing buy feature purchase:', error);
+			try { gameStateManager.isBuyFeatureSpin = false; } catch {}
 			// Re-enable controls on error to avoid locking the UI
 			this.enableSpinButton();
 			this.enableAutoplayButton();

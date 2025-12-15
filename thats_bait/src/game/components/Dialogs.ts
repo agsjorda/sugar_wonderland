@@ -1,22 +1,23 @@
 import { Scene } from 'phaser';
-import { MusicType, SoundEffectType } from '../../managers/AudioManager';
-import { ensureSpineLoader, ensureSpineFactory } from '../../utils/SpineGuard';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { NumberDisplay, NumberDisplayConfig } from './NumberDisplay';
+import { IrisTransition } from './IrisTransition';
+import { SymbolExplosionTransition } from './SymbolExplosionTransition';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
-import { resolveAssetUrl } from '../../utils/AssetLoader';
 
 export interface DialogConfig {
-	type: 'Congrats';
+	type: 'Congrats_KA' | 'FreeSpinDialog_KA' | 'largeW_KA' | 'LargeW_KA' | 'MediumW_KA' | 'SmallW_KA' | 'SuperW_KA';
 	position?: { x: number; y: number };
 	scale?: number;
 	duration?: number;
 	onComplete?: () => void;
 	winAmount?: number; // Amount to display in the dialog
 	freeSpins?: number; // Number of free spins won
+	isRetrigger?: boolean; // For FreeSpinDialog_KA: whether this is a retrigger case
+	betAmount?: number; // Base bet amount for staged win animations
 }
 
 export class Dialogs {
@@ -26,30 +27,20 @@ export class Dialogs {
 	// Black background overlay
 	private blackOverlay: Phaser.GameObjects.Graphics;
 	
-	// Effects container (confetti, explosion, paint)
-	private effectsContainer: Phaser.GameObjects.Container;
-	
-	// Optional background container for certain dialogs (e.g., Congrats)
-	private dialogBackgroundContainer: Phaser.GameObjects.Container;
-	// Separate container for the congrats character (independent of background)
-	private dialogCharacterContainer: Phaser.GameObjects.Container;
-	
 	// Dialog content container (the actual dialog animations)
 	private dialogContentContainer: Phaser.GameObjects.Container;
 	
 	// Continue text
 	private continueText: Phaser.GameObjects.Text | null = null;
-	private continueTextOffsetX: number = 0;
-	private continueTextOffsetY: number = 330;
 	
 	// Number display container
 	private numberDisplayContainer: Phaser.GameObjects.Container | null = null;
-	private numberDisplayRef: NumberDisplay | null = null;
-	// Number display position offsets (modifiers)
-	private numberDisplayOffsetX: number = 0;
-	private numberDisplayOffsetY: number = 25;
-	
+	private numberDisplay: NumberDisplay | null = null;
+	private numberTargetValue: number = 0;
 
+	// Secondary number display for congrats dialog (e.g., free spins used)
+	private congratsFreeSpinsContainer: Phaser.GameObjects.Container | null = null;
+	private congratsFreeSpinsDisplay: NumberDisplay | null = null;
 	
 	// Click handler area
 	private clickArea: Phaser.GameObjects.Rectangle | null = null;
@@ -58,318 +49,88 @@ export class Dialogs {
 	private currentDialog: any = null; // Spine object type
 	private isDialogActive: boolean = false;
 	private currentDialogType: string | null = null;
+	private isRetriggerFreeSpin: boolean = false; // Tracks if current FreeSpinDialog is a retrigger
 	
 	// Auto-close timer for win dialogs during autoplay
 	private autoCloseTimer: Phaser.Time.TimerEvent | null = null;
+	
+	// Number display Y positions per dialog group (overrides). If null, default will be used.
+	private numberYWin: number | null = 490;
+	private numberYFreeSpin: number | null = null;
+	private numberYCongrats: number | null = null;
 	
 	// Managers
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
 	private currentScene: Scene | null = null;
 
-	// Congrats-specific extras
-	private congratsBgImage: Phaser.GameObjects.Image | null = null;
-	private congratsBgScale: number = 1.0;
-	private congratsBgOffsetX: number = 0;
-	private congratsBgOffsetY: number = 0;
-	// Congrats background fire spine behind the PNG bg
-	private congratsFireSpine: any | null = null;
-	private congratsFireScale: number = 0.70; // tuned for fireanimation01_HTBH
-	private congratsFireOffsetX: number = 0;  // tuned for fireanimation01_HTBH
-	private congratsFireOffsetY: number = -35; // tuned for fireanimation01_HTBH
-	private congratsFireTimeScale: number = 1;
-	private congratsFireAnimName: string = 'animation';
-	// Congrats title image (PNG) with breathing animation
-	private congratsWinTitleImage: Phaser.GameObjects.Image | null = null;
-	private congratsWinTitleScale: number = 1.0;
-	private congratsWinTitleOffsetX: number = 0;
-	private congratsWinTitleOffsetY: number = 15;
-	private congratsWinTitleBreathDurationMs: number = 120;
-	private congratsWinTitleTween: Phaser.Tweens.Tween | null = null;
-
-	// Congrats numbers defaults (editable in code)
-	private congratsNumberSpacing: number = -30 ;
-
-	// End-of-bonus fire transition (before Congrats)
-	private endTransitionContainer: Phaser.GameObjects.Container | null = null;
-	private endTransitionBg: Phaser.GameObjects.Rectangle | null = null;
-	private endTransitionSpine: any | null = null;
-	private endFireTransitionLoadState: 'unloaded' | 'loading' | 'loaded' | 'failed' = 'unloaded';
-	private endFireTransitionLoadPromise: Promise<boolean> | null = null;
-	private endFireTransitionTimeScale: number = 0.85;
-	private endFireTransitionMidTriggerRatio: number = 0.5;
-	private endBlackOverlay: Phaser.GameObjects.Rectangle | null = null;
-	// Black overlay timing to feel slightly longer than fire transition
-	private endBlackOverlayLeadMs: number = 120; // start before spine anim
-	private endBlackOverlayTailMs: number = 140; // end after spine anim
-	private endBlackOverlayFadeInMs: number = 80;
-	private endBlackOverlayHoldMs: number = 0;
-	private endBlackOverlayFadeOutMs: number = 110;
-
-	// Pre-Congrats fire transition: hold the black mask after fire completes (ms)
-	private startFireBlackHoldMs: number = 120;
-
-	// Congrats number counting speed modifier (>1 is faster, <1 is slower)
-	private congratsNumberSpeedMul: number = 1.0;
-
-	// Extra settle timers to eliminate scene glimpse
-	private blackCoverPreCleanupDelayMs: number = 50; // wait after black reaches 1 before cleanup/switch
-	private postSwitchSettleMs: number = 100; // wait after switching to base before revealing anything
-	private preFireRevealMs: number = 50; // wait after fire starts before reducing black from 1 to 0.7
-
-	// Embers anticipation (rising flakes over black)
-	private embersContainer: Phaser.GameObjects.Container | null = null;
-	private embersSpawnTimer: Phaser.Time.TimerEvent | null = null;
-	private emberParticles: Array<{ graphics: Phaser.GameObjects.Graphics; x: number; y: number; vx: number; vy: number; size: number; color: number; alpha: number; lifetime: number; age: number; } > = [];
-	private emberUpdateHandler: ((time: number, delta: number) => void) | null = null;
-
-    private congratsCharSpine: SpineGameObject | null = null;
-    private congratsCharScale: number = 0.75;
-    private congratsCharX: number | null = null;
-    private congratsCharY: number | null = null;
-    private congratsCharOffsetX: number = 120;
-    private congratsCharOffsetY: number = 40;
-    private congratsCharTimeScale: number = 1.0;
-	// Nested containers for precise transforms
-	private congratsCharRoot: Phaser.GameObjects.Container | null = null; // base position
-	private congratsCharOffsetContainer: Phaser.GameObjects.Container | null = null; // pixel offsets
-	private congratsCharScaleContainer: Phaser.GameObjects.Container | null = null; // scale/rotation
+	// Staged win animation state (Big -> Mega -> Epic -> Super with incremental number steps)
+	private isStagedWinNumberAnimation: boolean = false;
+	private stagedWinStages: Array<{ type: 'SmallW_KA' | 'MediumW_KA' | 'LargeW_KA' | 'SuperW_KA'; target: number }> = [];
+	private stagedWinCurrentStageIndex: number = 0;
+	private stagedWinStageTimer: Phaser.Time.TimerEvent | null = null;
+	
+	// Iris transition for scatter animation
+	private irisTransition: IrisTransition | null = null;
+	// Symbol explosion transition for free spin dialog dismissal
+	private candyTransition: SymbolExplosionTransition | null = null;
 
 	// Dialog configuration
-	private dialogScales: Record<string, number> = {};
+	private dialogScales: Record<string, number> = {
+		'Congrats_KA': 0.45,
+		'FreeSpinDialog_KA': 0.45,
+		'largeW_KA': 0.45,
+		'LargeW_KA': 0.45,
+		'MediumW_KA':0.45,
+		'SmallW_KA':0.45,
+		'SuperW_KA': 0.45
+	};
 
 	// Dialog positions (relative: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom)
-	private dialogPositions: Record<string, { x: number; y: number }> = {};
+	private dialogPositions: Record<string, { x: number; y: number }> = {
+		'Congrats_KA': { x:0.55, y: 0.55 },
+		'FreeSpinDialog_KA': { x: 0.55, y: 0.55 },
+		'largeW_KA': { x:0.55, y: 0.55 },
+		'LargeW_KA': { x: 0.55, y:0.55 },
+		'MediumW_KA': { x:0.55, y: 0.55 },
+		'SmallW_KA': { x: 0.55, y: 0.55 },
+		'SuperW_KA': { x: 0.55, y: 0.55 }
+	};
 
-	private dialogLoops: Record<string, boolean> = {};
+	private dialogLoops: Record<string, boolean> = {
+		'Congrats_KA': true,
+		'FreeSpinDialog_KA': true,
+		'largeW_KA': true,
+		'LargeW_KA': true,
+		'MediumW_KA': true,
+		'SmallW_KA': true,
+		'SuperW_KA': true
+	};
 
-	private getAssetPrefix(): string {
-		try {
-			const isPortrait = !!this.screenModeManager?.getScreenConfig?.().isPortrait;
-			const isHigh = !!this.networkManager?.getNetworkSpeed?.();
-			const orientation = isPortrait ? 'portrait' : 'landscape';
-			const quality = isHigh ? 'high' : 'low';
-			return `assets/${orientation}/${quality}`;
-		} catch { return 'assets/portrait/high'; }
-	}
+	// Global toggle to disable intro animations for dialogs (win, free spin, congrats)
+	// When true, dialogs will start directly in their idle loop.
+	private disableIntroAnimations: boolean = true;
+
+	// Remember the intended scale for the current dialog so we can tween from 0 -> target
+	private lastDialogScale: number = 1;
+
+	// Tracks whether we've already shown at least one win dialog. Used to fix an edge
+	// case where the *first* win dialog could occasionally miss the scale "pop" tween.
+	private hasShownAnyWinDialog: boolean = false;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
 		this.screenModeManager = screenModeManager;
 	}
 
-	// ===== End-of-bonus Fire Transition before Congrats =====
-	private loadEndFireTransitionIfNeeded(): Promise<boolean> {
-		if (!this.currentScene) return Promise.resolve(false);
-		if (this.endFireTransitionLoadState === 'loaded') return Promise.resolve(true);
-		if (this.endFireTransitionLoadState === 'failed') return Promise.resolve(false);
-		if (this.endFireTransitionLoadState === 'loading' && this.endFireTransitionLoadPromise) return this.endFireTransitionLoadPromise;
-
-		this.endFireTransitionLoadState = 'loading';
-		this.endFireTransitionLoadPromise = new Promise<boolean>((resolve) => {
-			try {
-				if (!ensureSpineLoader(this.currentScene!, '[Dialogs] end fire transition dynamic load')) {
-					this.endFireTransitionLoadState = 'failed';
-					resolve(false);
-					return;
-				}
-                const loader = (this.currentScene as any).load;
-                const prefix = this.getAssetPrefix();
-				try { loader?.spineAtlas?.('fire_transition_atlas', resolveAssetUrl(`${prefix}/fire_animations/Fire_Transition.atlas`)); } catch {}
-				try { loader?.spineJson?.('fire_transition', resolveAssetUrl(`${prefix}/fire_animations/Fire_Transition.json`)); } catch {}
-				const onComplete = () => { this.endFireTransitionLoadState = 'loaded'; resolve(true); };
-				const onError = () => { this.endFireTransitionLoadState = 'failed'; resolve(false); };
-				try { (this.currentScene as any).load?.once('complete', onComplete); } catch {}
-				try { (this.currentScene as any).load?.once('loaderror', onError); } catch {}
-				try { (this.currentScene as any).load?.start(); } catch {}
-			} catch (e) {
-				console.warn('[Dialogs] End fire transition dynamic load failed:', e);
-				this.endFireTransitionLoadState = 'failed';
-				resolve(false);
-			}
-		});
-		return this.endFireTransitionLoadPromise;
-	}
-
-	private playEndFireTransitionThen(next: () => void): void {
-		const scene = this.currentScene;
-		if (!scene || !ensureSpineFactory(scene, '[Dialogs] end fire transition factory')) { next(); return; }
-		this.loadEndFireTransitionIfNeeded().then((loaded) => {
-			if (!loaded) { next(); return; }
-			try {
-				// Prepare elements
-				if (!this.endTransitionBg) {
-					this.endTransitionBg = scene.add.rectangle(
-						scene.cameras.main.width / 2,
-						scene.cameras.main.height / 2,
-						scene.cameras.main.width * 2,
-						scene.cameras.main.height * 2,
-						0x000000,
-						1
-					);
-					this.endTransitionBg.setOrigin(0.5);
-					this.endTransitionBg.setAlpha(1);
-					try { this.endTransitionBg.setInteractive(); } catch {}
-					this.endTransitionContainer?.add(this.endTransitionBg);
-				}
-				if (this.endTransitionSpine) { try { this.endTransitionSpine.destroy(); } catch {} this.endTransitionSpine = null; }
-				this.endTransitionSpine = (scene.add as any).spine(
-					scene.cameras.main.width * 0.5,
-					scene.cameras.main.height * 0.5,
-					'fire_transition',
-					'fire_transition_atlas'
-				);
-				try { this.endTransitionSpine.setOrigin(0.5, 0.5); } catch {}
-				try { (this.endTransitionSpine as any).setDepth?.(1); } catch {}
-				// Pin to camera space
-				try { (this.endTransitionSpine as any).setScrollFactor?.(0); } catch {}
-				try { this.endTransitionContainer?.setScrollFactor?.(0); } catch {}
-				try { this.endTransitionBg?.setScrollFactor?.(0); } catch {}
-				this.endTransitionContainer?.add(this.endTransitionSpine);
-				// Show on top
-				this.endTransitionContainer?.setVisible(true);
-				this.endTransitionContainer?.setAlpha(1);
-				try { scene.children.bringToTop(this.endTransitionContainer!); } catch {}
-				// Fast fade-in for black mask behind fire transition
-					try {
-						if (this.endTransitionBg) {
-							// Delay black mask fade until after the fire transition completes
-							this.endTransitionBg.setAlpha(0);
-						}
-					} catch {}
-				// Cover-fit scaling with slight overscan to avoid any gaps
-				try {
-					const w = scene.cameras.main.width;
-					const h = scene.cameras.main.height;
-					let bw = 0; let bh = 0;
-					try {
-						const b = (this.endTransitionSpine as any).getBounds?.();
-						bw = (b && (b.size?.x || (b as any).width)) || 0;
-						bh = (b && (b.size?.y || (b as any).height)) || 0;
-					} catch {}
-					if (!bw || !bh) { bw = (this.endTransitionSpine as any).displayWidth || 0; bh = (this.endTransitionSpine as any).displayHeight || 0; }
-					if (bw > 0 && bh > 0) {
-						const scaleToCover = Math.max(w / bw, h / bh) * 2.0;
-						(this.endTransitionSpine as any).setScale(scaleToCover);
-					}
-				} catch {}
-				// Stop any currently playing BGM defensively to avoid overlaps
-				try {
-					const audio = (window as any).audioManager;
-					if (audio && typeof audio.stopAllMusic === 'function') {
-						audio.stopAllMusic();
-					}
-				} catch {}
-				// Play blaze SFX consistently with Fire_Transition
-				try {
-					const audio = (window as any).audioManager;
-					if (audio && typeof audio.playSoundEffect === 'function') {
-						audio.playSoundEffect('blaze_hh' as any);
-					} else {
-						try { (scene as any).sound?.play?.('blaze_hh'); } catch {}
-					}
-				} catch {}
-				// timeScale
-				try { (this.endTransitionSpine as any).animationState.timeScale = Math.max(0.05, this.endFireTransitionTimeScale); } catch {}
-				// Keep opaque mask behind spine to ensure no gaps
-				// Play animation
-				let finished = false;
-				let congratsShown = false;
-				const showCongratsIfNeeded = () => {
-					if (congratsShown) return; congratsShown = true; next();
-				};
-				const fadeOutMaskAndEmit = () => {
-					// Fade out blaze SFX as transition ends
-					try {
-						const audio = (window as any).audioManager;
-						if (audio && typeof audio.fadeOutSfx === 'function') {
-							audio.fadeOutSfx('blaze_hh' as any, 200);
-						}
-					} catch {}
-					scene.tweens.add({
-						targets: this.endTransitionContainer,
-						alpha: 0,
-						duration: 200,
-						ease: 'Cubic.easeIn',
-						onComplete: () => {
-							try {
-								this.endTransitionContainer?.setVisible(false);
-								this.endTransitionContainer?.setAlpha(1);
-								if (this.endTransitionSpine) { this.endTransitionSpine.destroy(); this.endTransitionSpine = null; }
-								if (this.endTransitionBg) { this.endTransitionBg.setAlpha(0); }
-							} catch {}
-							// Mask gone → tell Congrats to start number counting
-							try { scene.events.emit('preCongratsMaskGone'); } catch {}
-							// Ensure congrats is shown
-							showCongratsIfNeeded();
-						}
-					});
-				};
-
-					const finish = () => {
-					if (finished) return; finished = true;
-						// Now bring in the black overlay for congrats after fire completes
-						try {
-							if (this.endBlackOverlay && scene?.tweens) {
-								try { scene.tweens.killTweensOf(this.endBlackOverlay); } catch {}
-								this.endBlackOverlay.setVisible(true);
-								this.endBlackOverlay.setAlpha(0);
-								scene.tweens.add({
-									targets: this.endBlackOverlay,
-									alpha: 0.7,
-									duration: Math.max(20, this.endBlackOverlayFadeInMs),
-									ease: 'Cubic.easeOut'
-								});
-							}
-						} catch {}
-					const hold = Math.max(0, this.startFireBlackHoldMs || 0);
-					if (hold > 0) {
-						scene.time.delayedCall(hold, fadeOutMaskAndEmit);
-					} else {
-						fadeOutMaskAndEmit();
-					}
-				};
-				try {
-					const state = (this.endTransitionSpine as any).animationState;
-					let entry: any = null;
-					let played = false;
-					try { entry = state.setAnimation(0, 'animation', false); played = true; } catch {}
-					if (!played) {
-						try {
-							const anims = (this.endTransitionSpine as any)?.skeleton?.data?.animations || [];
-							const first = anims[0]?.name; if (first) { entry = state.setAnimation(0, first, false); played = true; }
-						} catch {}
-					}
-					// mid trigger to show congrats
-					try {
-						const rawDurationSec = Math.max(0.1, entry?.animation?.duration || 1.2);
-						const ratio = Math.min(0.95, Math.max(0.05, this.endFireTransitionMidTriggerRatio));
-						const midDelayMs = Math.max(50, (rawDurationSec / Math.max(0.0001, this.endFireTransitionTimeScale)) * 1000 * ratio);
-						scene.time.delayedCall(midDelayMs, showCongratsIfNeeded);
-					} catch {}
-					try { state?.setListener?.({ complete: finish } as any); } catch {}
-					// Fallback complete
-					scene.time.delayedCall(1200, finish);
-				} catch {
-					finish();
-				}
-			} catch {
-				next();
-			}
-		});
-	}
-
-	public setEndFireTransitionTimeScale(scale: number = 0.85): void {
-		this.endFireTransitionTimeScale = Math.max(0.05, scale);
-	}
-
-	public setEndFireTransitionMidTriggerRatio(ratio: number = 0.5): void {
-		this.endFireTransitionMidTriggerRatio = Math.min(0.95, Math.max(0.05, ratio));
-	}
-
 	create(scene: Scene): void {
 		// Store scene reference for later use
-		this.currentScene = scene
+		this.currentScene = scene;
+		
+		// Initialize iris transition for scatter animation
+		this.irisTransition = new IrisTransition(scene);
+		// Initialize symbol explosion transition for free spin dialog dismissal
+		this.candyTransition = new SymbolExplosionTransition(scene);
 		
 		// Create main dialog overlay container
 		this.dialogOverlay = scene.add.container(0, 0);
@@ -383,44 +144,10 @@ export class Dialogs {
 		this.blackOverlay.setDepth(100); // Very low depth to be behind everything
 		this.dialogOverlay.add(this.blackOverlay);
 		
-		// Create effects container (higher depth = in front of black overlay)
-		this.effectsContainer = scene.add.container(0, 0);
-		this.effectsContainer.setDepth(200); // Higher depth to be in front
-		this.dialogOverlay.add(this.effectsContainer);
-		
-		// Create background container between black overlay and effects
-		this.dialogBackgroundContainer = scene.add.container(0, 0);
-		this.dialogBackgroundContainer.setDepth(150);
-		this.dialogOverlay.add(this.dialogBackgroundContainer);
-		
-		// Create character container above background (separate, not anchored to bg)
-		this.dialogCharacterContainer = scene.add.container(0, 0);
-		this.dialogCharacterContainer.setDepth(250);
-		this.dialogOverlay.add(this.dialogCharacterContainer);
-		
 		// Create dialog content container (highest depth = in front of everything)
 		this.dialogContentContainer = scene.add.container(0, 0);
 		this.dialogContentContainer.setDepth(300); // Highest depth to be in front
 		this.dialogOverlay.add(this.dialogContentContainer);
-
-		// End-of-bonus fire transition container (above everything, hidden by default)
-		this.endTransitionContainer = scene.add.container(0, 0);
-		this.endTransitionContainer.setDepth(20000);
-		this.endTransitionContainer.setVisible(false);
-		// Add shared black overlay for quick fade between congrats and base
-		this.endBlackOverlay = scene.add.rectangle(
-			scene.scale.width * 0.5,
-			scene.scale.height * 0.5,
-			scene.scale.width * 2,
-			scene.scale.height * 2,
-			0x000000,
-			1
-		);
-		this.endBlackOverlay.setOrigin(0.5);
-		this.endBlackOverlay.setAlpha(0);
-		this.endBlackOverlay.setVisible(false);
-		this.endTransitionContainer.add(this.endBlackOverlay);
-		try { this.endTransitionContainer.sendToBack(this.endBlackOverlay); } catch {}
 		
 		console.log('[Dialogs] Dialog system created');
 	}
@@ -431,6 +158,11 @@ export class Dialogs {
 	 * Show a dialog with the specified configuration
 	 */
 	public showDialog(scene: Scene, config: DialogConfig): void {
+		// Reset staged win state for each new dialog
+		this.isStagedWinNumberAnimation = false;
+		this.stagedWinStages = [];
+		this.stagedWinCurrentStageIndex = 0;
+
 		if (this.isDialogActive) {
 			this.hideDialog();
 		}
@@ -439,15 +171,45 @@ export class Dialogs {
 		
 		// Track current dialog type for bonus mode detection
 		this.currentDialogType = config.type;
-
-	// Safety: ensure Congrats-only fire is gone when not in Congrats
-		if (this.currentDialogType !== 'Congrats' && this.congratsFireSpine) {
-			try { this.congratsFireSpine.destroy(); } catch {}
-			this.congratsFireSpine = null;
-		}
+		// Track retrigger state only for Free Spin dialog
+		this.isRetriggerFreeSpin = (config.type === 'FreeSpinDialog_KA') ? !!config.isRetrigger : false;
+		
+		// If this is a win dialog, mark global state so autoplay systems can wait
+		try {
+			if (this.isWinDialog()) {
+				gameStateManager.isShowingWinDialog = true;
+			}
+		} catch {}
 		
 		// Debug dialog type detection
 		console.log(`[Dialogs] Dialog type: ${config.type}, isWinDialog(): ${this.isWinDialog()}`);
+		if (this.currentDialogType === 'FreeSpinDialog_KA') {
+			console.log('[Dialogs] FreeSpinDialog retrigger state:', this.isRetriggerFreeSpin);
+		}
+		
+		// If congrats dialog is appearing, suppress the SlotController's spins-left display
+		if (config.type === 'Congrats_KA') {
+			try {
+				const gameSceneAny = scene as any;
+				const slotController = gameSceneAny?.slotController;
+				if (slotController && typeof slotController.suppressFreeSpinDisplay === 'function') {
+					slotController.suppressFreeSpinDisplay();
+					console.log('[Dialogs] Congrats dialog shown - suppressing SlotController free spin display');
+				}
+			} catch {}
+		}
+
+		// If free spin dialog is appearing, clear any prior suppression to allow showing again
+		if (config.type === 'FreeSpinDialog_KA') {
+			try {
+				const gameSceneAny = scene as any;
+				const slotController = gameSceneAny?.slotController;
+				if (slotController && typeof slotController.clearFreeSpinDisplaySuppression === 'function') {
+					slotController.clearFreeSpinDisplaySuppression();
+					console.log('[Dialogs] FreeSpinDialog shown - cleared suppression for SlotController free spin display');
+				}
+			} catch {}
+		}
 		
 		// Ensure dialog overlay is visible and reset alpha for new dialog
 		this.dialogOverlay.setVisible(true);
@@ -501,6 +263,28 @@ export class Dialogs {
 		// Create the dialog content
 		this.createDialogContent(scene, config);
 
+		// Ensure the very first win dialog always gets the scale pop animation.
+		// On some devices the initial tween applied during createDialogContent can
+		// be skipped when the Win spine is created for the first time, so we force
+		// a second pop once the dialog is fully initialized.
+		if (!this.hasShownAnyWinDialog && this.isWinDialogType(config.type)) {
+			this.hasShownAnyWinDialog = true;
+			try {
+				const sceneRef = scene;
+				sceneRef.time.delayedCall(0, () => {
+					if (!this.currentDialog || !this.isDialogActive) {
+						return;
+					}
+					this.applyDialogScalePop(sceneRef);
+				});
+			} catch {}
+		}
+
+		// Notify the scene that a dialog has been shown (type included)
+		try {
+			scene.events.emit('dialogShown', this.currentDialogType);
+		} catch {}
+
         // Play dialog-specific SFX (FreeSpin/ Congrats) when shown
 		try {
 			const audioManager = (window as any).audioManager;
@@ -522,96 +306,10 @@ export class Dialogs {
 			}
 		} catch {}
 		
-		// Play win dialog SFX if applicable
-		try {
-			if (this.isWinDialog()) {
-				const audioManager = (window as any).audioManager;
-				if (audioManager && typeof audioManager.playWinDialogSfx === 'function') {
-					audioManager.playWinDialogSfx(this.currentDialogType);
-				}
-				// Duck background music while win dialog is visible
-				if (audioManager && typeof audioManager.duckBackground === 'function') {
-					audioManager.duckBackground(0.3);
-				}
-			}
-		} catch (e) {
-			console.warn('[Dialogs] Failed to play win dialog SFX:', e);
-		}
-
-		// Create effects based on dialog type
-		this.createEffects(scene, config.type);
-		// Add Congrats fire AFTER effects are created (effects container is cleared inside createEffects)
-		if (config.type === 'Congrats') {
-			try {
-				if (this.congratsFireSpine) { try { this.congratsFireSpine.destroy(); } catch {} this.congratsFireSpine = null; }
-				if (ensureSpineFactory(scene, '[Dialogs] congrats fire spine (post-effects)')) {
-					const centerX = scene.scale.width * 0.5;
-					const centerY = scene.scale.height * 0.5;
-					const fire = (scene.add as any).spine(centerX + this.congratsFireOffsetX, centerY + this.congratsFireOffsetY, 'fireanimation01_HTBH', 'fireanimation01_HTBH-atlas');
-					try { fire.setOrigin(0.5, 0.5); } catch {}
-					try { fire.setScale(Math.max(0.05, this.congratsFireScale)); } catch {}
-					try {
-						const animName = this.congratsFireAnimName || 'animation';
-						let played = false;
-						try { fire.animationState.setAnimation(0, animName, true); played = true; } catch {}
-						if (!played) {
-							try {
-								const anims = (fire as any)?.skeleton?.data?.animations || [];
-								const first = anims[0]?.name; if (first) { fire.animationState.setAnimation(0, first, true); played = true; }
-							} catch {}
-						}
-					} catch {}
-					try { fire.animationState.timeScale = Math.max(0.0001, this.congratsFireTimeScale || 1.0); } catch {}
-					// Place in content container so title added later sits above it automatically
-					try { this.dialogContentContainer.add(fire); } catch {}
-					try { (this.dialogContentContainer as any).sendToBack?.(fire); } catch {}
-					this.congratsFireSpine = fire;
-				}
-			} catch {}
-		}
-		// Expose runtime setter for background fire spine options (debug)
-		try {
-			const self = this;
-			(window as any).setCongratsFire = function(opts: { offsetX?: number; offsetY?: number; scale?: number; timeScale?: number; anim?: string }) {
-				self.setCongratsFireOptions(opts || {});
-				return { offsetX: self.congratsFireOffsetX, offsetY: self.congratsFireOffsetY, scale: self.congratsFireScale, timeScale: self.congratsFireTimeScale, anim: self.congratsFireAnimName };
-			};
-		} catch {}
-		
-		// If Congrats, add the PNG title with breathing tween (after main content is created)
-		if (config.type === 'Congrats') {
-			try {
-				// Clean any prior title image instance
-				if (this.congratsWinTitleImage) { try { this.congratsWinTitleImage.destroy(); } catch {} this.congratsWinTitleImage = null; }
-				if (this.congratsWinTitleTween) { try { this.congratsWinTitleTween.stop(); } catch {} this.congratsWinTitleTween = null; }
-				const centerX = scene.scale.width * 0.5;
-				const centerY = scene.scale.height * 0.5;
-				const img = scene.add.image(centerX + this.congratsWinTitleOffsetX, centerY + this.congratsWinTitleOffsetY, 'congratulations-you-won');
-				img.setOrigin(0.5, 0.5);
-				img.setScale(Math.max(0.05, this.congratsWinTitleScale));
-				img.setAlpha(1);
-				this.dialogContentContainer.add(img);
-				this.dialogContentContainer.bringToTop(img);
-				this.congratsWinTitleImage = img;
-				// Breathing tween
-				this.congratsWinTitleTween = scene.tweens.add({
-					targets: img,
-					scaleX: img.scaleX * 1.045,
-					scaleY: img.scaleY * 1.045,
-					duration: Math.max(100, this.congratsWinTitleBreathDurationMs),
-					ease: 'Sine.inOut',
-					yoyo: true,
-					repeat: -1
-				});
-			} catch (e) {
-				console.warn('[Dialogs] Failed to create congrats title image', e);
-			}
-		}
-
-		// Fade in dialog content and effects
+		// Fade dialog content in (scale pop is applied whenever idle starts)
 		if (this.currentDialog) {
 			this.currentDialog.setAlpha(0);
-			
+
 			// Adjust timing based on dialog type
 			const contentDelay = this.isWinDialog() ? 0 : 200; // No delay for win dialogs
 			
@@ -620,33 +318,56 @@ export class Dialogs {
 				alpha: 1,
 				duration: 800,
 				ease: 'Power2',
-				delay: contentDelay, // Start immediately for win dialogs
+				delay: contentDelay,
 				onComplete: () => {
 					console.log('[Dialogs] Dialog content fade-in complete');
 				}
 			});
 		}
 		
-		// Fade in effects with slight delay
-		this.effectsContainer.setAlpha(0);
-		
-		// Adjust timing based on dialog type
-		const effectsDelay = this.isWinDialog() ? 200 : 400; // Shorter delay for win dialogs
-		
-		scene.tweens.add({
-			targets: this.effectsContainer,
-			alpha: 1,
-			duration: 600,
-			ease: 'Power2',
-			delay: effectsDelay, // Shorter delay for win dialogs
-			onComplete: () => {
-				console.log('[Dialogs] Effects fade-in complete');
-			}
-		});
-		
-		// Create number display if win amount or free spins are provided (AFTER effects)
+		// Create number display(s) if win amount or free spins are provided
 		if (config.winAmount !== undefined || config.freeSpins !== undefined) {
-			this.createNumberDisplay(scene, config.winAmount || 0, config.freeSpins);
+			if (config.type === 'Congrats_KA') {
+				// Congrats dialog: primary total win + secondary free spins used (if provided)
+				if (config.winAmount !== undefined) {
+					this.createNumberDisplay(scene, config.winAmount || 0, undefined);
+				}
+				if (config.freeSpins !== undefined) {
+					this.createCongratsFreeSpinsDisplay(scene, config.freeSpins);
+				}
+			} else {
+				// Other dialogs: existing single number behavior
+				this.createNumberDisplay(scene, config.winAmount || 0, config.freeSpins);
+
+				// Configure staged win number animation (Big -> Mega -> Epic -> Super)
+				if (config.winAmount !== undefined && config.betAmount !== undefined && this.isWinDialogType(config.type)) {
+					this.setupStagedWinNumberAnimation(config);
+				}
+			}
+
+			// Fade in number display(s) after a short delay (replacing paint effect trigger)
+			scene.time.delayedCall(500, () => {
+				console.log('[Dialogs] Fading in number display(s)');
+				this.fadeInNumberDisplay(scene);
+			});
+		}
+
+		// Play win dialog SFX at the correct time (after staged setup decides the first tier)
+		try {
+			if (this.isWinDialog()) {
+				const audioManager = (window as any).audioManager;
+				// Always duck background while a win dialog is visible
+				if (audioManager && typeof audioManager.duckBackground === 'function') {
+					audioManager.duckBackground(0.3);
+				}
+				// If we're doing staged tiers, let the staged runner trigger SFX per tier.
+				// Otherwise, play the SFX for the current (single) dialog type now.
+				if (!this.isStagedWinNumberAnimation && audioManager && typeof audioManager.playWinDialogSfx === 'function') {
+					audioManager.playWinDialogSfx(this.currentDialogType);
+				}
+			}
+		} catch (e) {
+			console.warn('[Dialogs] Failed to play win dialog SFX (post-setup):', e);
 		}
 		
 		// Create continue text (delayed)
@@ -660,6 +381,44 @@ export class Dialogs {
 	}
 
 	/**
+	 * Map old dialog types to new Win.json animation names
+	 */
+	private getAnimationNameForDialogType(dialogType: string): { intro: string; idle: string; outro?: string } | null {
+		const animationMap: Record<string, { intro: string; idle: string; outro?: string }> = {
+			// Win dialog animations
+			'SmallW_KA': { intro: 'BigWin-Intro', idle: 'BigWin-Idle', outro: 'BigWin-Outro' },
+			'MediumW_KA': { intro: 'MegaWin-Intro', idle: 'MegaWin-Idle' },
+			'LargeW_KA': { intro: 'EpicWin-Intro', idle: 'EpicWin-Idle' },
+			'SuperW_KA': { intro: 'SuperWin-Intro', idle: 'SuperWin-Idle' },
+			'FreeSpinDialog_KA': { intro: 'FreeSpin-Intro', idle: 'FreeSpin-Idle' },
+
+			// Congrats dialog should also use the Win spine (shared Win.json)
+			// Expecting dedicated "Congrats" animations to be present in the Win asset.
+			// If the intro animation is missing, we will gracefully fall back to the idle animation.
+			'Congrats_KA': { intro: 'Congrats-Intro', idle: 'Congrats-Idle' }
+		};
+		
+		return animationMap[dialogType] || null;
+	}
+
+	/**
+	 * Check if dialog type should use the new Win.json asset
+	 */
+	private shouldUseWinAsset(dialogType: string): boolean {
+		// These dialog types all share the common Win.json spine asset
+		// including Congrats_KA which should now use the "congrats" animations
+		// from the Win spine instead of its legacy Congrats_KA-specific spine.
+		return [
+			'SmallW_KA',
+			'MediumW_KA',
+			'LargeW_KA',
+			'SuperW_KA',
+			'FreeSpinDialog_KA',
+			'Congrats_KA'
+		].includes(dialogType);
+	}
+
+	/**
 	 * Create the main dialog content (FreeSpinDialog_KA, LargeW_KA, etc.)
 	 */
 	private createDialogContent(scene: Scene, config: DialogConfig): void {
@@ -669,151 +428,95 @@ export class Dialogs {
 			this.currentDialog = null;
 		}
 
-		// Clear any congrats-specific background/character from previous dialog
-		if (this.congratsBgImage) { try { this.congratsBgImage.destroy(); } catch {} this.congratsBgImage = null; }
-		if (this.congratsFireSpine) { try { this.congratsFireSpine.destroy(); } catch {} this.congratsFireSpine = null; }
-		if (this.congratsCharSpine) { try { this.congratsCharSpine.destroy(); } catch {} this.congratsCharSpine = null; }
-		if (this.congratsWinTitleImage) { try { this.congratsWinTitleImage.destroy(); } catch {} this.congratsWinTitleImage = null; }
-		// Reset nested containers references
-		this.congratsCharRoot = null;
-		this.congratsCharOffsetContainer = null;
-		this.congratsCharScaleContainer = null;
-
 		const position = config.position || this.getDialogPosition(config.type, scene);
 		const scale = config.scale || this.getDialogScale(config.type);
+		this.lastDialogScale = scale;
 		
-		// If Congrats dialog, add background fire spine, background image, and character
-		if (config.type === 'Congrats') {
-			try {
-				const centerX = scene.scale.width * 0.5;
-				const centerY = scene.scale.height * 0.5;
-				// (Congrats fire will be added after createEffects to avoid being cleared.)
-				// Background image scaled to cover
-				const bg = scene.add.image(centerX, centerY, 'congrats-bg');
-				bg.setOrigin(0.5, 0.5);
-				const coverScaleX = scene.scale.width / Math.max(1, bg.width);
-				const coverScaleY = scene.scale.height / Math.max(1, bg.height);
-				const coverScale = Math.max(coverScaleX, coverScaleY) * Math.max(0.05, this.congratsBgScale);
-				bg.setScale(coverScale);
-				bg.x = centerX + this.congratsBgOffsetX;
-				bg.y = centerY + this.congratsBgOffsetY;
-				// Depth within background container is relative; container depth is already 150
-				this.dialogBackgroundContainer.add(bg);
-				this.congratsBgImage = bg;
-			} catch (e) {
-				console.warn('[Dialogs] Failed to create congrats background image', e);
-			}
-			try {
-				// Nested containers: base position -> pixel offset -> scale
-				const baseX = (typeof this.congratsCharX === 'number' && isFinite(this.congratsCharX)) ? this.congratsCharX : scene.scale.width * 0.5;
-				const baseY = (typeof this.congratsCharY === 'number' && isFinite(this.congratsCharY)) ? this.congratsCharY : scene.scale.height * 0.5;
-				this.congratsCharRoot = scene.add.container(baseX, baseY);
-				this.congratsCharOffsetContainer = scene.add.container((this.congratsCharOffsetX || 0), (this.congratsCharOffsetY || 0));
-				this.congratsCharScaleContainer = scene.add.container(0, 0);
-				this.congratsCharRoot.add(this.congratsCharOffsetContainer);
-				this.congratsCharOffsetContainer.add(this.congratsCharScaleContainer);
-				this.dialogCharacterContainer.add(this.congratsCharRoot);
-
-				// Character at 0,0 inside the scale container for stable scaling
-				const char = scene.add.spine(0, 0, 'HustleForSpine', 'HustleForSpine-atlas') as SpineGameObject;
-				char.setOrigin(0.5, 0.5);
-				try { char.animationState.setAnimation(0, '_win', true); } catch {}
-				try { char.animationState.timeScale = Math.max(0.0001, this.congratsCharTimeScale); } catch {}
-				this.congratsCharScaleContainer.add(char);
-				this.congratsCharScaleContainer.setScale(Math.max(0.05, this.congratsCharScale));
-				this.congratsCharSpine = char;
-			} catch (e) {
-				console.warn('[Dialogs] Failed to create congrats character spine', e);
-			}
-		}
-
-		// Create Spine animation for the dialog, except for Congrats (now PNG-only)
-		if (config.type !== 'Congrats') {
-			try {
-				console.log(`[Dialogs] Creating Spine animation for dialog: ${config.type}`);
-				console.log(`[Dialogs] Using atlas: ${config.type}-atlas`);
-				this.currentDialog = scene.add.spine(
-					position.x,
-					position.y,
-					config.type,
-					`${config.type}-atlas`
-				);
-				this.currentDialog.setOrigin(0.5, 0.5);
-				
-				// Play intro animation first, then loop idle based on configuration (fallback to idle if intro missing)
-				const shouldLoop = this.getDialogLoop(config.type);
+		// Create Spine animation for the dialog
+		try {
+			// Check if we should use the new Win.json asset
+			const useWinAsset = this.shouldUseWinAsset(config.type);
+			const assetKey = useWinAsset ? 'Win' : config.type;
+			const atlasKey = useWinAsset ? 'Win-atlas' : `${config.type}-atlas`;
+			
+			console.log(`[Dialogs] Creating Spine animation for dialog: ${config.type}`);
+			console.log(`[Dialogs] Using asset: ${assetKey}, atlas: ${atlasKey}`);
+			
+			this.currentDialog = scene.add.spine(
+				position.x,
+				position.y,
+				assetKey,
+				atlasKey
+			);
+			this.currentDialog.setOrigin(0.5, 0.5);
+			// Set the base scale *before* we trigger any pop tweens.
+			// If we do this after applyDialogScalePop, it overrides the tween's
+			// starting scale of 0 and the pop animation can appear to be skipped.
+			this.currentDialog.setScale(scale);
+			
+			// Get animation names based on dialog type
+			const shouldLoop = this.getDialogLoop(config.type);
+			
+			if (useWinAsset) {
+				// Use new Win.json animation names
+				const animations = this.getAnimationNameForDialogType(config.type);
+				if (animations) {
+					try {
+						if (this.disableIntroAnimations) {
+							console.log(`[Dialogs] Intro disabled for dialog ${config.type}, starting idle with pop: ${animations.idle}`);
+							this.currentDialog.animationState.setAnimation(0, animations.idle, shouldLoop);
+							this.applyDialogScalePop(scene);
+						} else {
+							console.log(`[Dialogs] Playing intro animation: ${animations.intro}`);
+							this.currentDialog.animationState.setAnimation(0, animations.intro, false);
+							this.currentDialog.animationState.addAnimation(0, animations.idle, shouldLoop, 0);
+							this.applyDialogScalePop(scene);
+						}
+					} catch (error) {
+						console.log(`[Dialogs] Intro/idle animation failed, falling back to idle with pop: ${animations.idle}`);
+						// Fallback to idle animation if something goes wrong
+						this.currentDialog.animationState.setAnimation(0, animations.idle, shouldLoop);
+						this.applyDialogScalePop(scene);
+					}
+				} else {
+					console.error(`[Dialogs] No animation mapping found for dialog type: ${config.type}`);
+					return;
+				}
+			} else {
+				// Use old animation format for other dialogs that still rely on the
+				// "{spine-keyname}_win" / "{spine-keyname}_idle" naming convention.
+				// We also apply the same pop-in effect so these dialogs visually
+				// match the new Win.json-based dialogs.
 				try {
-					console.log(`[Dialogs] Playing intro animation: ${config.type}_win`);
-					this.currentDialog.animationState.setAnimation(0, `${config.type}_win`, false);
-					this.currentDialog.animationState.addAnimation(0, `${config.type}_idle`, shouldLoop, 0);
+					if (this.disableIntroAnimations) {
+						console.log(`[Dialogs] (legacy) Intro disabled for dialog ${config.type}, starting idle with pop: ${config.type}_idle`);
+						this.currentDialog.animationState.setAnimation(0, `${config.type}_idle`, shouldLoop);
+						this.applyDialogScalePop(scene);
+					} else {
+						console.log(`[Dialogs] Playing legacy intro animation: ${config.type}_win`);
+						this.currentDialog.animationState.setAnimation(0, `${config.type}_win`, false);
+						this.currentDialog.animationState.addAnimation(0, `${config.type}_idle`, shouldLoop, 0);
+						this.applyDialogScalePop(scene);
+					}
 				} catch (error) {
-					console.log(`[Dialogs] Intro animation failed, falling back to idle: ${config.type}_idle`);
+					console.log(`[Dialogs] Legacy intro animation failed, falling back to idle with pop: ${config.type}_idle`);
 					// Fallback to idle animation if intro is missing
 					this.currentDialog.animationState.setAnimation(0, `${config.type}_idle`, shouldLoop);
+					this.applyDialogScalePop(scene);
 				}
-			} catch (error) {
-				console.error(`[Dialogs] Error creating dialog content: ${config.type}`, error);
-				console.error(`[Dialogs] This might be due to missing assets for ${config.type}`);
-				return;
 			}
-			
-			this.currentDialog.setScale(scale);
-			this.currentDialog.setDepth(101);
-			
-			// Add to dialog content container
-			this.dialogContentContainer.add(this.currentDialog);
-			
-			console.log(`[Dialogs] Created dialog content: ${config.type}`);
-		} else {
-			// For Congrats, no Spine dialog; handled by PNG + effects
-			this.currentDialog = null;
-			console.log('[Dialogs] Skipping Congrats Spine creation (PNG-based congrats title in use)');
+		} catch (error) {
+			console.error(`[Dialogs] Error creating dialog content: ${config.type}`, error);
+			console.error(`[Dialogs] This might be due to missing assets for ${config.type}`);
+			return;
 		}
-
-		// Expose console helpers when showing Congrats dialog
-		if (config.type === 'Congrats') {
-			try {
-				const self = this;
-				(window as any).setCongratsBg = function(opts: { scale?: number; offsetX?: number; offsetY?: number }) {
-					self.setCongratsBgOptions(opts);
-					return { scale: self.congratsBgScale, offsetX: self.congratsBgOffsetX, offsetY: self.congratsBgOffsetY };
-				};
-                (window as any).setCongratsChar = function(opts: { x?: number; y?: number; offsetX?: number; offsetY?: number; scale?: number; timeScale?: number }) {
-					self.setCongratsCharacterOptions(opts);
-                    return { x: self.congratsCharX, y: self.congratsCharY, offsetX: self.congratsCharOffsetX, offsetY: self.congratsCharOffsetY, scale: self.congratsCharScale, timeScale: self.congratsCharTimeScale };
-				};
-                (window as any).setCongratsCharOffset = function(opts: { offsetX?: number; offsetY?: number }) {
-                    self.setCongratsCharacterOffset(opts);
-                    return { offsetX: self.congratsCharOffsetX, offsetY: self.congratsCharOffsetY };
-                };
-				(window as any).setCongratsTitle = function(opts: { offsetX?: number; offsetY?: number; scale?: number; durationMs?: number }) {
-					self.setCongratsTitleOptions(opts);
-					return { offsetX: self.congratsWinTitleOffsetX, offsetY: self.congratsWinTitleOffsetY, scale: self.congratsWinTitleScale, durationMs: self.congratsWinTitleBreathDurationMs };
-				};
-				(window as any).setCongratsTitleOffset = function(opts: { offsetX?: number; offsetY?: number }) {
-					self.setCongratsTitleOptions({ offsetX: opts.offsetX, offsetY: opts.offsetY });
-					return { offsetX: self.congratsWinTitleOffsetX, offsetY: self.congratsWinTitleOffsetY };
-				};
-				(window as any).setCongratsNumberSpacing = function(spacing: number) {
-					self.setCongratsNumberSpacing(spacing);
-					return { spacing };
-				};
-				(window as any).getCongratsNodes = function() {
-					return { bg: self.congratsBgImage, char: self.congratsCharSpine, title: self.congratsWinTitleImage };
-				};
-				(window as any).setEndBlackOverlayTiming = function(opts: { fadeInMs?: number; holdMs?: number; fadeOutMs?: number; leadMs?: number; tailMs?: number }) {
-					self.setEndBlackOverlayTiming(opts);
-					return {
-						fadeInMs: self.endBlackOverlayFadeInMs,
-						holdMs: self.endBlackOverlayHoldMs,
-						fadeOutMs: self.endBlackOverlayFadeOutMs,
-						leadMs: self.endBlackOverlayLeadMs,
-						tailMs: self.endBlackOverlayTailMs
-					};
-				};
-				console.log('[Dialogs] Console helpers available: setCongratsBg({...}), setCongratsChar({...}), setCongratsCharOffset({...}), setCongratsTitle({...}), setCongratsTitleOffset({...}), setCongratsNumberSpacing(n), getCongratsNodes()');
-			} catch {}
-		}
+		
+		this.currentDialog.setDepth(101);
+		
+		// Add to dialog content container
+		this.dialogContentContainer.add(this.currentDialog);
+		
+		console.log(`[Dialogs] Created dialog content: ${config.type}`);
 	}
 
 	/**
@@ -834,50 +537,71 @@ export class Dialogs {
 			currentDialogType: this.currentDialogType
 		});
 		
-		const shouldAutoClose = this.isWinDialog() && (gameStateManager.isAutoPlaying || gameStateManager.isScatter);
+		// Detect free spin autoplay (bonus autoplay) via Symbols component on the scene
+		let isFreeSpinAutoplay = false;
+		try {
+			const gameScene: any = scene as any;
+			const symbolsComponent = gameScene?.symbols;
+			if (symbolsComponent && typeof symbolsComponent.isFreeSpinAutoplayActive === 'function') {
+				isFreeSpinAutoplay = !!symbolsComponent.isFreeSpinAutoplayActive();
+			}
+		} catch {}
+
+		// If a win dialog appears exactly when bonus spins are exhausted, do NOT auto-close it.
+		// We want the normal (non-autoplay) dwell time so the flow can proceed cleanly to Congrats.
+		if (this.isWinDialog() && gameStateManager.isBonusFinished) {
+			console.log('[Dialogs] End-of-bonus win dialog detected - skipping auto-close to allow congrats flow');
+			return;
+		}
+
+		// Also auto-close FreeSpinDialog when it's a retrigger during bonus mode
+		const isRetriggerFreeSpinDialog = (this.currentDialogType === 'FreeSpinDialog_KA') && this.isRetriggerFreeSpin;
+		const shouldAutoClose = (this.isWinDialog() && (gameStateManager.isAutoPlaying || isFreeSpinAutoplay || gameStateManager.isScatter))
+			|| isRetriggerFreeSpinDialog;
 		
 		if (shouldAutoClose) {
-			const reason = gameStateManager.isAutoPlaying ? 'autoplay' : 'scatter hit';
-			console.log(`[Dialogs] Setting up auto-close timer for win dialog during ${reason} (2 seconds)`);
-			console.log(`[Dialogs] Win dialog will automatically close in 2 seconds due to ${reason}`);
+			const reason = isRetriggerFreeSpinDialog
+				? 'retrigger'
+				: (gameStateManager.isAutoPlaying || isFreeSpinAutoplay ? 'autoplay' : 'scatter hit');
+			// Base auto-close delay (ms). Previously ~2.5s. Extend by +1s when autoplaying (normal or free spin).
+			let baseDelayMs = 2500;
+
+			// If we're running a staged win sequence (Big -> Mega -> Epic -> Super),
+			// align the auto-close timing with the per-stage dwell timing used in
+			// startStagedWinNumberSequence so that the FINAL tier gets a full dwell
+			// window as well, instead of closing early.
+			//
+			// Each stage starts every ~3s (perStageDwellMs), so we want the overall
+			// auto-close delay to be: stages * perStageDwellMs. That way, the time
+			// between the last stage starting and the dialog auto-closing is also
+			// ~perStageDwellMs, matching the earlier tiers.
+			if (this.isStagedWinNumberAnimation && this.stagedWinStages.length > 1) {
+				const perStageDwellMs = 2000; // Keep in sync with startStagedWinNumberSequence
+				// Give the final staged win tier an extra 1s of dwell time before auto-close.
+				baseDelayMs = perStageDwellMs * this.stagedWinStages.length + 1500;
+			}
+
+			const extraAutoplayDelayMs = 0;
+			// For retrigger FreeSpinDialog, use the same timing as win dialogs in autoplay for consistency
+			const delayMs = (reason === 'autoplay' || reason === 'retrigger') ? (baseDelayMs + extraAutoplayDelayMs) : baseDelayMs;
+			console.log(`[Dialogs] Setting up auto-close timer during ${reason} (${Math.round(delayMs/2000)} seconds)`);
+			console.log(`[Dialogs] Dialog will automatically close in ${Math.round(delayMs/2000)} seconds due to ${reason}`);
 			
-			this.autoCloseTimer = scene.time.delayedCall(2500, () => {
-				console.log(`[Dialogs] Auto-close timer triggered for win dialog during ${reason} - closing dialog`);
-				this.handleDialogClick(scene);
+			this.autoCloseTimer = scene.time.delayedCall(delayMs, () => {
+				console.log(`[Dialogs] Auto-close timer triggered during ${reason} - closing dialog`);
+				// Auto-close should immediately close the dialog rather than advancing
+				// staged tiers one by one, so pass fromAutoClose = true.
+				this.handleDialogClick(scene, true);
 			});
 		} else {
 			console.log('[Dialogs] No auto-close timer needed:', {
 				isWinDialog: this.isWinDialog(),
-				isAutoPlaying: gameStateManager.isAutoPlaying,
+				isAutoPlaying: gameStateManager.isAutoPlaying || isFreeSpinAutoplay,
 				isScatter: gameStateManager.isScatter
 			});
 		}
 	}
 
-	/**
-	 * Create effects (confetti, explosion, paint)
-	 */
-	private createEffects(scene: Scene, dialogType: string): void {
-		// Clear existing effects
-		this.effectsContainer.removeAll();
-		// Effects removed from project (confetti/explosion/paint)
-		try { console.log('[Dialogs] Skipping effects (confetti/explosion/paint removed)'); } catch {}
-	}
-
-	/**
-	 * Create confetti effect
-	 */
-// removed: confetti effect no longer supported
-
-	/**
-	 * Create explosion effect
-	 */
-// removed: explosion effect no longer supported
-
-	/**
-	 * Create paint effect
-	 */
-// removed: paint effect no longer supported
 
 	/**
 	 * Create the "Press anywhere to continue" text
@@ -893,8 +617,8 @@ export class Dialogs {
 		
 		// Create the text with your original styling
 		this.continueText = scene.add.text(
-			scene.scale.width / 2 + this.continueTextOffsetX,
-			scene.scale.height / 2 + this.continueTextOffsetY,
+			scene.scale.width / 2,
+			scene.scale.height / 2 + 300,
 			'Press anywhere to continue',
 			{
 				fontFamily: 'Poppins-Bold',
@@ -944,95 +668,136 @@ export class Dialogs {
 			this.numberDisplayContainer = null;
 		}
 		
+		// Determine if this is the Congrats dialog showing a total win amount
+		const isCongratsTotalWin = this.currentDialogType === 'Congrats_KA' && freeSpins === undefined;
+
 		// Create number display configuration
-		const isCongrats = (this.currentDialogType === 'Congrats');
 		const numberConfig: NumberDisplayConfig = {
 			x: scene.scale.width / 2,
-			y: scene.scale.height / 2 + 200,
-			scale: isCongrats ? 0.085 : 0.15,
-			spacing: isCongrats ? this.congratsNumberSpacing : -8,
+			y: this.getNumberDisplayY(scene, this.currentDialogType),
+			scale: 0.65,
+			spacing: 0,
 			alignment: 'center',
 			decimalPlaces: freeSpins !== undefined ? 0 : 2, // No decimals for free spins
 			showCommas: freeSpins !== undefined ? false : true, // No commas for free spins
-			prefix: '', // No prefix for any number display
+			// For Congrats dialog totals, show a dollar sign prefix.
+			// Other dialogs remain unchanged.
+			prefix: isCongratsTotalWin ? '$ ' : '',
 			suffix: '', // No suffix - only display numbers
 			commaYOffset: 12,
 			dotYOffset: 10
 		};
 
-		// Create the number display
+		// Create the number display (primary win amount / free spins, depending on dialog)
 		const numberDisplay = new NumberDisplay(this.networkManager, this.screenModeManager, numberConfig);
 		numberDisplay.create(scene);
 		// Display free spins if provided, otherwise display win amount
 		const displayValue = freeSpins !== undefined ? freeSpins : winAmount;
-		// For non-animated cases, we set the final value immediately. For Congrats, we'll animate below
-		if (this.currentDialogType !== 'Congrats') {
-			numberDisplay.displayValue(displayValue);
-		}
-		// Keep a reference for live spacing updates
-		this.numberDisplayRef = numberDisplay;
-		
+		// Start from 0 (or current) and animate on fade-in
+		numberDisplay.displayValue(0);
+		this.numberDisplay = numberDisplay;
+		this.numberTargetValue = displayValue;
 
-		
-		// Create container for number displays (apply offsets via container position)
+		// Create container for number display
 		this.numberDisplayContainer = scene.add.container(0, 0);
 		this.numberDisplayContainer.setDepth(103);
 		this.numberDisplayContainer.add(numberDisplay.getContainer());
-		// Apply current offsets
-		this.numberDisplayContainer.x = this.numberDisplayOffsetX;
-		this.numberDisplayContainer.y = this.numberDisplayOffsetY;
 		
-		// Start with alpha 0 (invisible) - will be faded in; for Congrats we handle fade-in here
+		// Start with alpha 0 (invisible) - will be faded in after delay
 		this.numberDisplayContainer.setAlpha(0);
 		
 		// Add to dialog overlay
 		this.dialogOverlay.add(this.numberDisplayContainer);
 		
 		console.log('[Dialogs] Created number display');
-
-		// If Congrats overlay, wait for pre-Congrats mask to finish, then fade in and animate counting
-		if (this.currentDialogType === 'Congrats') {
-			const startCounting = () => {
-				// Fade in the number display quickly
-				scene.tweens.add({ targets: this.numberDisplayContainer, alpha: 1, duration: 250, ease: 'Power2' });
-				// Animate the number from 0 to displayValue
-				try {
-					const decimals = Math.max(0, numberConfig.decimalPlaces || 0);
-					const counter = { v: 0 };
-					const baseDuration = 1500;
-					const speed = Math.max(0.05, this.congratsNumberSpeedMul || 1.0);
-					const duration = Math.max(50, Math.floor(baseDuration / speed));
-					scene.tweens.add({
-						targets: counter,
-						v: displayValue,
-						duration,
-						ease: 'Cubic.easeOut',
-						onUpdate: () => {
-							const shown = parseFloat(counter.v.toFixed(decimals));
-							numberDisplay.displayValue(shown);
-						}
-					});
-				} catch {}
-			};
-			try {
-				// Start when the pre-Congrats fire mask has fully faded out
-				scene.events.once('preCongratsMaskGone', startCounting);
-				// Fallback: if event never arrives, start after a small delay
-				scene.time.delayedCall(1200, startCounting);
-			} catch {
-				startCounting();
-			}
-		}
 	}
 
-	/** Public API: set offset modifiers for number display position (applied as container offset). */
-	public setNumberDisplayOffset(offsetX: number = 0, offsetY: number = 0): void {
-		this.numberDisplayOffsetX = offsetX | 0;
-		this.numberDisplayOffsetY = offsetY | 0;
-		if (this.numberDisplayContainer) {
-			try { this.numberDisplayContainer.x = this.numberDisplayOffsetX; } catch {}
-			try { this.numberDisplayContainer.y = this.numberDisplayOffsetY; } catch {}
+	/**
+	 * Create secondary number display for congrats dialog (free spins used)
+	 */
+	private createCongratsFreeSpinsDisplay(scene: Scene, freeSpins: number): void {
+		// Clean up existing secondary display
+		if (this.congratsFreeSpinsContainer) {
+			this.congratsFreeSpinsContainer.destroy();
+			this.congratsFreeSpinsContainer = null;
 		}
+
+		// Only applicable to Congrats dialog
+		if (this.currentDialogType !== 'Congrats_KA') {
+			return;
+		}
+
+		const numberConfig: NumberDisplayConfig = {
+			x: scene.scale.width / 2 - 50,
+			// Place slightly below the main total win display
+			y: this.getNumberDisplayY(scene, this.currentDialogType) + 70,
+			scale: 0.3,
+			spacing: 0,
+			alignment: 'center',
+			decimalPlaces: 0,
+			showCommas: false,
+			prefix: '',
+			suffix: '',
+			commaYOffset: 12,
+			dotYOffset: 10
+		};
+
+		const fsDisplay = new NumberDisplay(this.networkManager, this.screenModeManager, numberConfig);
+		fsDisplay.create(scene);
+		fsDisplay.displayValue(freeSpins);
+
+		this.congratsFreeSpinsDisplay = fsDisplay;
+
+		this.congratsFreeSpinsContainer = scene.add.container(0, 0);
+		this.congratsFreeSpinsContainer.setDepth(103);
+		this.congratsFreeSpinsContainer.add(fsDisplay.getContainer());
+
+		// Start hidden; will be revealed alongside primary number
+		this.congratsFreeSpinsContainer.setAlpha(0);
+		this.dialogOverlay.add(this.congratsFreeSpinsContainer);
+
+		console.log('[Dialogs] Created congrats free spins display:', freeSpins);
+	}
+	
+	/**
+	 * Compute number display Y based on dialog type with per-group overrides.
+	 */
+	private getNumberDisplayY(scene: Scene, dialogType: string | null): number {
+		const defaultY = scene.scale.height / 2 - 50;
+		if (!dialogType) return defaultY;
+		
+		if (dialogType === 'FreeSpinDialog_KA') {
+			return this.numberYFreeSpin ?? defaultY;
+		}
+		
+		if (dialogType === 'Congrats_KA') {
+			return this.numberYCongrats ?? defaultY;
+		}
+		
+		if (this.isWinDialogType(dialogType)) {
+			return this.numberYWin ?? defaultY;
+		}
+		
+		return defaultY;
+	}
+	
+	/**
+	 * Helper: determine if a type is one of the win dialogs.
+	 */
+	private isWinDialogType(type: string): boolean {
+		return type === 'SmallW_KA' || type === 'MediumW_KA' || type === 'LargeW_KA' || type === 'SuperW_KA';
+	}
+	
+	/**
+	 * Public setters to configure number display Y positions per group at runtime.
+	 */
+	setNumberDisplayYForWin(y: number): void { this.numberYWin = y; }
+	setNumberDisplayYForFreeSpin(y: number): void { this.numberYFreeSpin = y; }
+	setNumberDisplayYForCongrats(y: number): void { this.numberYCongrats = y; }
+	setNumberDisplayYPositions(opts: { win?: number; freeSpin?: number; congrats?: number }): void {
+		if (opts.win !== undefined) this.numberYWin = opts.win;
+		if (opts.freeSpin !== undefined) this.numberYFreeSpin = opts.freeSpin;
+		if (opts.congrats !== undefined) this.numberYCongrats = opts.congrats;
 	}
 	
 	/**
@@ -1042,43 +807,120 @@ export class Dialogs {
 		console.log('[Dialogs] fadeInNumberDisplay called');
 		
 		if (this.numberDisplayContainer) {
-			console.log('[Dialogs] Fading in number display');
+			console.log('[Dialogs] Popping in primary number display');
 			
-			// Fade in over 2 seconds (as set by user)
-			scene.tweens.add({
-				targets: this.numberDisplayContainer,
-				alpha: 1,
-				duration: 4500,
-				ease: 'Power2',
-				onComplete: () => {
-					console.log('[Dialogs] Number display fade-in complete');
+			// Make container visible immediately (no fade)
+			this.numberDisplayContainer.setAlpha(1);
+			
+			// Pop the inner number container so position remains anchored
+			const inner = this.numberDisplay?.getContainer();
+			if (inner) {
+				inner.setScale(0);
+				
+				// Start counting up as the pop begins
+				if (this.isStagedWinNumberAnimation && this.stagedWinStages.length > 0) {
+					this.startStagedWinNumberSequence(scene);
+				} else if (this.numberDisplay) {
+					this.numberDisplay.animateToValue(this.numberTargetValue, {
+						duration: 1500,
+						ease: 'Power2',
+						startFromCurrent: false
+					});
 				}
-			});
-			
-			console.log('[Dialogs] Fade-in tween added');
+				
+				scene.tweens.add({
+					targets: inner,
+					scale: 1.08,
+					duration: 400,
+					ease: 'Back.Out',
+					onComplete: () => {
+						scene.tweens.add({
+							targets: inner,
+							scale: 1.0,
+							duration: 180,
+							ease: 'Power2',
+							onComplete: () => {
+								console.log('[Dialogs] Primary number display pop-in complete');
+							}
+						});
+					}
+				});
+			} else {
+				console.warn('[Dialogs] No inner primary number container found for pop animation');
+			}
 		} else {
 			console.error('[Dialogs] numberDisplayContainer is null, cannot fade in');
+		}
+
+		// If a secondary congrats free spins display exists, pop it in too (no counting animation)
+		if (this.congratsFreeSpinsContainer && this.congratsFreeSpinsDisplay) {
+			console.log('[Dialogs] Popping in congrats free spins display');
+			this.congratsFreeSpinsContainer.setAlpha(1);
+			const innerFs = this.congratsFreeSpinsDisplay.getContainer();
+			if (innerFs) {
+				innerFs.setScale(0);
+				scene.tweens.add({
+					targets: innerFs,
+					scale: 1.0,
+					duration: 350,
+					ease: 'Back.Out'
+				});
+			}
 		}
 	}
 
 	/**
-	 * Handle dialog click event
+	 * Handle dialog click event.
+	 *
+	 * fromAutoClose:
+	 *  - false: user clicked "press anywhere to continue"
+	 *  - true:  internal auto-close timer fired (autoplay / scatter / retrigger)
 	 */
-	private handleDialogClick(scene: Scene): void {
-		console.log('[Dialogs] Dialog clicked, starting fade-out sequence');
+	private handleDialogClick(scene: Scene, fromAutoClose: boolean = false): void {
+		console.log('[Dialogs] Dialog clicked, starting fade-out sequence. fromAutoClose =', fromAutoClose);
 		
 		// Clear auto-close timer if it exists (prevents double-triggering)
 		if (this.autoCloseTimer) {
 			this.autoCloseTimer.destroy();
 			this.autoCloseTimer = null;
-			console.log('[Dialogs] Auto-close timer cleared due to manual click');
+			console.log('[Dialogs] Auto-close timer cleared due to manual/auto close');
+		}
+
+		// When a staged win sequence is running (Big -> Mega -> Epic -> Super),
+		// a MANUAL click should behave like "skip to next win animation":
+		//  - Stop the current staged tier
+		//  - Immediately jump to the next tier's animation (if any)
+		//  - Start the number display from the previous tier's threshold (we use
+		//    startFromCurrent in the NumberDisplay to preserve continuity)
+		//
+		// If there is NO next staged tier, we fall through to the normal
+		// "close dialog" behavior so the win dialog ends.
+		if (!fromAutoClose && this.isWinDialog() && this.stagedWinStages.length > 0) {
+			const lastIndex = this.stagedWinStages.length - 1;
+			const nextIndex = Math.min(this.stagedWinCurrentStageIndex + 1, lastIndex);
+			const hasNextStage = nextIndex > this.stagedWinCurrentStageIndex;
+			
+			if (hasNextStage) {
+				console.log('[Dialogs] Manual click during staged win - skipping to next staged tier index:', nextIndex);
+				this.skipToStagedWinStage(scene, nextIndex);
+				// Do NOT close the dialog here; the player now sees the next tier.
+				return;
+			}
+
+			console.log('[Dialogs] Manual click during staged win - already at final tier, closing dialog normally');
 		}
 		
 		// Start the fade-out sequence first (while isDialogActive is still true)
 		this.startFadeOutSequence(scene);
 		
-		// Apply the same reset logic that happens when a new spin is triggered
-		this.resetGameStateForNewSpin(scene);
+		// Apply the same reset logic that happens when a new spin is triggered,
+		// but ONLY for win dialogs. For non-win dialogs (e.g. FreeSpin / Congrats),
+		// we must preserve the win queue so that any deferred win dialogs (such as
+		// those queued during scatter + autoplay) can still be processed once the
+		// non-win dialog finishes.
+		if (this.isWinDialog()) {
+			this.resetGameStateForNewSpin(scene);
+		}
 		
 		// Note: WIN_DIALOG_CLOSED event will be emitted when fade-out completes
 		// This prevents double emission of the event
@@ -1116,14 +958,6 @@ export class Dialogs {
 			}
 		}
 		
-		// Stop all effect animations immediately
-		this.stopAllEffectAnimations();
-		console.log('[Dialogs] All effect animations stopped');
-		
-		// Hide all effects immediately
-		this.hideAllEffects();
-		console.log('[Dialogs] All effects hidden');
-		
 		// Hide continue text immediately
 		if (this.continueText) {
 			this.continueText.setVisible(false);
@@ -1135,15 +969,11 @@ export class Dialogs {
 			this.numberDisplayContainer.setVisible(false);
 			console.log('[Dialogs] Number display hidden');
 		}
-		// Clear number display reference
-		this.numberDisplayRef = null;
-		// Stop and clear title tween, hide title
-		if (this.congratsWinTitleTween) {
-			try { this.congratsWinTitleTween.stop(); } catch {}
-			this.congratsWinTitleTween = null;
-		}
-		if (this.congratsWinTitleImage) {
-			this.congratsWinTitleImage.setVisible(false);
+
+		// Hide secondary congrats free spins display immediately
+		if (this.congratsFreeSpinsContainer) {
+			this.congratsFreeSpinsContainer.setVisible(false);
+			console.log('[Dialogs] Congrats free spins display hidden');
 		}
 		
 		// Hide the entire dialog overlay container
@@ -1229,9 +1059,6 @@ export class Dialogs {
 			scene.time.delayedCall(1500, () => {
 				if (this.clickArea) {
 					this.clickArea.on('pointerdown', () => {
-						if ((window as any).audioManager) {
-							(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
-						}
 						this.handleDialogClick(scene);
 					});
 					console.log('[Dialogs] Click handler enabled for win dialog');
@@ -1244,9 +1071,6 @@ export class Dialogs {
 				if (this.clickArea) {
 					this.clickArea.on('pointerdown', () => {
 						console.log('[Dialogs] Free spin dialog clicked!');
-						if ((window as any).audioManager) {
-							(window as any).audioManager.playSoundEffect('button_fx' as any);
-						}
 						this.handleDialogClick(scene);
 					});
 					console.log('[Dialogs] Click handler enabled for free spin dialog');
@@ -1257,41 +1081,6 @@ export class Dialogs {
 		console.log('[Dialogs] Click handler created for dialog');
 	}
 
-	/**
-	 * Stop all effect animations without hiding them (for fade-out)
-	 */
-	private stopAllEffectAnimations(): void {
-		console.log('[Dialogs] Stopping all effect animations');
-		
-		// Stop all Spine animations in the effects container
-		this.effectsContainer.getAll().forEach((effect: any) => {
-			if (effect.animationState) {
-				try {
-					effect.animationState.clearTracks();
-					// Don't hide effects immediately - let them fade out naturally
-					// effect.setVisible(false);
-					console.log('[Dialogs] Stopped effect animation:', effect.texture?.key || 'unknown');
-				} catch (error) {
-					console.warn('[Dialogs] Error stopping effect animation:', error);
-				}
-			}
-		});
-	}
-
-	/**
-	 * Hide all effects after fade-out completes
-	 */
-	private hideAllEffects(): void {
-		console.log('[Dialogs] Hiding all effects after fade-out');
-		
-		// Hide all effects in the effects container
-		this.effectsContainer.getAll().forEach((effect: any) => {
-			if (effect && typeof effect.setVisible === 'function') {
-				effect.setVisible(false);
-				console.log('[Dialogs] Hidden effect:', effect.texture?.key || 'unknown');
-			}
-		});
-	}
 
 	/**
 	 * Start the centralized transition when dialog is clicked
@@ -1313,7 +1102,44 @@ export class Dialogs {
 			return;
 		}
 		
-	// Free spin dialog removed
+		// Check if this is a free spin dialog - use candy transition
+		if (this.currentDialogType === 'FreeSpinDialog_KA') {
+			// On retrigger, skip candy transition, use normal transition to avoid extra animation
+			if (this.isRetriggerFreeSpin) {
+				console.log('[Dialogs] Free spin dialog (retrigger) clicked - skipping all transitions and disabling immediately');
+				// Immediately disable/hide everything similar to win dialog handling
+				this.disableAllWinDialogElements();
+				// Fully cleanup dialog elements
+				this.cleanupDialog();
+				// Clear scatter state BEFORE dialog completion so that any queued
+				// win dialogs from the retrigger spin are not indefinitely deferred
+				// by the "scatter + autoplay" check inside Game.checkAndShowWinDialog.
+				try {
+					gameStateManager.isScatter = false;
+					console.log('[Dialogs] Retrigger FreeSpinDialog - cleared isScatter before dialogAnimationsComplete');
+				} catch {}
+				// Re-enable symbols immediately (match win dialog behavior)
+				try {
+					scene.events.emit('enableSymbols');
+				} catch {}
+				// Notify listeners that dialog animations are complete so retrigger flow can continue
+				try {
+					scene.events.emit('dialogAnimationsComplete');
+				} catch {}
+				// Restore background music volume if it was ducked
+				try {
+					const audioManager = (window as any).audioManager;
+					if (audioManager && typeof audioManager.restoreBackground === 'function') {
+						audioManager.restoreBackground();
+					}
+				} catch {}
+				return;
+			}
+			console.log('[Dialogs] Free spin dialog clicked - starting candy transition');
+			// Don't disable dialog elements yet for free spin dialogs - let candy transition handle it
+			this.startCandyTransition(scene);
+			return;
+		}
 		
 		// Use normal transition for other dialogs
 		console.log('[Dialogs] Other dialog type - starting normal transition');
@@ -1325,12 +1151,154 @@ export class Dialogs {
 	/**
 	 * Check if the current dialog is a win dialog
 	 */
-    private isWinDialog(): boolean {
-        // Legacy win dialogs removed; overlays handle wins
-        return false;
-    }
+	private isWinDialog(): boolean {
+		return this.currentDialogType === 'SmallW_KA' || 
+			   this.currentDialogType === 'MediumW_KA' || 
+			   this.currentDialogType === 'LargeW_KA' || 
+			   this.currentDialogType === 'SuperW_KA';
+	}
 	
 	/**
+	 * Start candy transition for free spin dialog
+	 */
+	private startCandyTransition(scene: Scene): void {
+		if (!this.candyTransition) {
+			console.warn('[Dialogs] Candy transition not available, falling back to normal transition');
+			this.startNormalTransition(scene);
+			return;
+		}
+
+		console.log('[Dialogs] Starting candy transition for free spin dialog');
+
+		// Disable spinner immediately when transition starts
+		scene.events.emit('disableSpinner');
+
+		// Start transition animation
+		this.candyTransition.show();
+
+		// Hide dialog content and switch to bonus visuals after a short delay,
+		// giving the symbol explosion time to cover the screen first.
+		scene.time.delayedCall(900, () => {
+			try {
+				const audioManager = (window as any).audioManager;
+				if (audioManager && typeof audioManager.fadeOutSfx === 'function') {
+					audioManager.fadeOutSfx('dialog_congrats', 400);
+				}
+			} catch {}
+			this.disableAllWinDialogElements();
+			this.cleanupDialog();
+			
+			// Apply bonus mode visuals once the dialog is closed, slightly after
+			// the explosion has covered the screen for a smoother transition
+			this.triggerBonusMode(scene);
+		});
+
+		// Attempt to restrict explosion symbols to those currently visible on the grid
+		let allowedSymbols: number[] | undefined;
+		try {
+			const gameSceneAny: any = scene as any;
+			const symbolsComponent = gameSceneAny?.symbols;
+			const grid: any = symbolsComponent?.currentSymbolData;
+			if (Array.isArray(grid)) {
+				const set = new Set<number>();
+				for (const col of grid) {
+					if (!Array.isArray(col)) continue;
+					for (const val of col) {
+						const num = Number(val);
+						if (!isNaN(num)) {
+							set.add(num);
+						}
+					}
+				}
+				if (set.size > 0) {
+					allowedSymbols = Array.from(set);
+				}
+			}
+		} catch {
+			// If anything goes wrong, simply fall back to all available symbols.
+		}
+
+		this.candyTransition.play(() => {
+			// Emit dialog animations complete event after transition
+			scene.events.emit('dialogAnimationsComplete');
+
+			// Restore background music volume
+			try {
+				const audioManager = (window as any).audioManager;
+				if (audioManager && typeof audioManager.restoreBackground === 'function') {
+					audioManager.restoreBackground();
+				}
+			} catch {}
+		}, { allowedSymbols });
+	}
+
+	/**
+	 * Start iris transition for free spin dialog
+	 */
+	private startIrisTransition(scene: Scene): void {
+		if (!this.irisTransition) {
+			console.warn('[Dialogs] Iris transition not available, falling back to normal transition');
+			this.startNormalTransition(scene);
+			return;
+		}
+		
+		console.log('[Dialogs] Starting iris transition for free spin dialog');
+		
+		// Store the dialog type before cleanup for bonus mode check
+		const dialogTypeBeforeCleanup = this.currentDialogType;
+		
+		// Disable spinner immediately when iris transition starts
+		scene.events.emit('disableSpinner');
+		console.log('[Dialogs] Spinner disabled during iris transition');
+		
+		// Show iris transition overlay
+		this.irisTransition.show();
+		
+		// Start iris transition - zoom in to small radius (closing iris effect)
+		this.irisTransition.zoomInToRadius(28, 1500); // Fast transition to 28px radius
+		
+		// Hide dialog content quickly after iris starts closing (200ms delay)
+		scene.time.delayedCall(200, () => {
+			console.log('[Dialogs] Hiding dialog content quickly for better iris visibility');
+			// Fade out FreeSpin dialog SFX if playing
+			try {
+				const audioManager = (window as any).audioManager;
+				if (audioManager && typeof audioManager.fadeOutSfx === 'function') {
+					audioManager.fadeOutSfx('dialog_congrats', 400);
+				}
+			} catch {}
+			// Disable dialog elements before cleanup
+			this.disableAllWinDialogElements();
+			this.cleanupDialog();
+		});
+		
+		// Wait for iris transition to complete, then proceed
+		scene.time.delayedCall(1500, () => {
+			console.log('[Dialogs] Iris closed - triggering bonus mode');
+			
+			// Trigger bonus mode during closed iris
+			console.log('[Dialogs] Triggering bonus mode during closed iris');
+			this.triggerBonusMode(scene);
+			
+			// Wait 0.5 seconds, then open iris (zoom out) - faster for better flow
+			scene.time.delayedCall(500, () => {
+				console.log('[Dialogs] Opening iris transition');
+				this.irisTransition!.zoomInToRadius(1000, 1500); // Open iris to full size
+				
+				// Clean up after iris opens
+				scene.time.delayedCall(1500, () => {
+					console.log('[Dialogs] Iris transition complete');
+					// Hide the iris transition overlay
+					this.irisTransition!.hide();
+					
+					// Emit dialog animations complete event AFTER the full iris transition completes
+					scene.events.emit('dialogAnimationsComplete');
+					console.log('[Dialogs] Dialog animations complete event emitted after full iris transition');
+					// Restore background music volume after dialog completes
+					try {
+						const audioManager = (window as any).audioManager;
+						if (audioManager && typeof audioManager.restoreBackground === 'function') {
+							audioManager.restoreBackground();
 						}
 					} catch {}
 				});
@@ -1343,31 +1311,10 @@ export class Dialogs {
 	 */
 	private startNormalTransition(scene: Scene): void {
 		console.log('[Dialogs] Starting normal black screen transition');
-
-		// Determine current dialog type before cleanup
-		const dialogTypeBeforeCleanup = this.currentDialogType;
-
-		// If closing Congrats, use end fire transition back to base
-		if (dialogTypeBeforeCleanup === 'Congrats') {
-			console.log('[Dialogs] Congrats dialog closed - using end fire transition back to base');
-			// Stop effects but keep Congrats visible until mask covers
-			this.stopAllEffectAnimations();
-			this.playBlackCoverThenBaseThenFire(scene, () => {
-				try { scene.events.emit('dialogAnimationsComplete'); } catch {}
-				try {
-					const audioManager = (window as any).audioManager;
-					if (audioManager && typeof audioManager.restoreBackground === 'function') {
-						audioManager.restoreBackground();
-					}
-				} catch {}
-			});
-			return;
-		}
-		// Store the dialog type before cleanup for other transitions
-		// const dialogTypeBeforeCleanup = this.currentDialogType;
 		
-		// Stop all effect animations immediately
-		this.stopAllEffectAnimations();
+		
+		// Store the dialog type before cleanup for bonus mode check
+		const dialogTypeBeforeCleanup = this.currentDialogType;
 		
 		// Create centralized black screen overlay
 		const blackScreen = scene.add.graphics();
@@ -1392,10 +1339,28 @@ export class Dialogs {
 				// Hide dialog immediately while screen is black
 				this.cleanupDialog();
 
-				// Free spin dialog removed; handle only Congrats branch
-				if (false) { } else {
+				// Check if we need to trigger bonus mode while screen is black
+				if (dialogTypeBeforeCleanup === 'FreeSpinDialog_KA') {
+					console.log('[Dialogs] Triggering bonus mode during black screen');
+					this.triggerBonusMode(scene);
+
+					// If this FreeSpinDialog was a retrigger, remove black screen immediately
+					// so that the next win dialog can appear without delay
+					if (this.isRetriggerFreeSpin) {
+						console.log('[Dialogs] Retrigger FreeSpinDialog - removing black screen immediately for successive win dialog');
+						try {
+							const audioManager = (window as any).audioManager;
+							if (audioManager && typeof audioManager.restoreBackground === 'function') {
+								audioManager.restoreBackground();
+							}
+						} catch {}
+						blackScreen.destroy();
+						console.log('[Dialogs] Black screen removed immediately for retrigger flow');
+						return;
+					}
+				} else {
 					// If congrats closed while in bonus mode, revert to base visuals and reset symbols
-					if (dialogTypeBeforeCleanup === 'Congrats') {
+					if (dialogTypeBeforeCleanup === 'Congrats_KA') {
 						console.log('[Dialogs] Congrats dialog closed - reverting from bonus visuals to base');
 						// Switch off bonus mode visuals and music
 						scene.events.emit('setBonusMode', false);
@@ -1439,7 +1404,7 @@ export class Dialogs {
 							blackScreen.destroy();
 							
 							// Ensure UI is back to normal only when congrats dialog closes
-						if (dialogTypeBeforeCleanup === 'Congrats') {
+							if (dialogTypeBeforeCleanup === 'Congrats_KA') {
 								console.log('[Dialogs] Black screen faded out after congrats - restoring normal background and header');
 								scene.events.emit('hideBonusBackground');
 								scene.events.emit('hideBonusHeader');
@@ -1453,517 +1418,45 @@ export class Dialogs {
 		});
 	}
 
-	// End fire transition used when leaving Congrats and returning to base
-	private playEndFireTransitionOutToBase(scene: Scene, onDone?: () => void): void {
-		let overlayActive = false;
-		let baseSwitchedEarly = false;
-		const showOverlay = () => {
-			if (!this.endBlackOverlay || !scene?.tweens) {
-				overlayActive = false;
-				return;
-			}
-			try { scene.tweens.killTweensOf(this.endBlackOverlay); } catch {}
-			this.endBlackOverlay.setVisible(true);
-			this.endBlackOverlay.setAlpha(0);
-			scene.tweens.add({ targets: this.endBlackOverlay, alpha: 0.7, duration: Math.max(20, this.endBlackOverlayFadeInMs), ease: 'Cubic.easeOut', onComplete: () => {
-				// Once mask fully covers, hide congrats content to avoid snapping
-				try { this.cleanupDialog(); } catch {}
-				// While covered, switch back to base under mask so fire sits between states
-				try { scene.events.emit('setBonusMode', false); } catch {}
-				try { scene.events.emit('hideBonusBackground'); } catch {}
-				try { scene.events.emit('hideBonusHeader'); } catch {}
-				try {
-					const audio = (window as any).audioManager;
-					if (audio && typeof audio.setExclusiveBackground === 'function') {
-						audio.setExclusiveBackground(MusicType.MAIN);
-					}
-				} catch {}
-				try { gameEventManager.emit(GameEventType.WIN_STOP); } catch {}
-				try { scene.events.emit('resetSymbolsForBase'); } catch {}
-				try { scene.events.emit('enableSymbols'); } catch {}
-				baseSwitchedEarly = true;
-			}});
-			overlayActive = true;
-		};
-
-		const fadeOutOverlay = (callback?: () => void) => {
-			if (!overlayActive || !this.endBlackOverlay || !scene?.tweens) {
-				overlayActive = false;
-				if (this.endBlackOverlay) {
-					try { this.endBlackOverlay.setVisible(false); this.endBlackOverlay.setAlpha(0); } catch {}
-				}
-				callback && callback();
-				return;
-			}
-			try { scene.tweens.killTweensOf(this.endBlackOverlay); } catch {}
-			scene.tweens.add({
-				targets: this.endBlackOverlay,
-				alpha: 0,
-				duration: Math.max(20, this.endBlackOverlayFadeOutMs),
-				ease: 'Cubic.easeIn',
-				onComplete: () => {
-					try { this.endBlackOverlay?.setVisible(false); } catch {}
-					overlayActive = false;
-					callback && callback();
-				}
-			});
-		};
-
-		const complete = () => {
-			try {
-				const audio = (window as any).audioManager;
-				if (audio && typeof audio.unlockMusic === 'function') audio.unlockMusic();
-			} catch {}
-			onDone && onDone();
-		};
-
-		const runTransition = () => {
-			if (!ensureSpineFactory(scene, '[Dialogs] end fire transition factory')) {
-				fadeOutOverlay(complete);
-				return;
-			}
-			this.loadEndFireTransitionIfNeeded()
-				.then((loaded) => {
-					if (!loaded) {
-						fadeOutOverlay(complete);
-						return;
-					}
-					try {
-						try {
-							const audio = (window as any).audioManager;
-							if (audio) {
-								if (typeof audio.lockMusicTo === 'function') audio.lockMusicTo(MusicType.MAIN);
-								if (typeof audio.stopAllMusic === 'function') audio.stopAllMusic();
-							}
-						} catch {}
-
-						if (!this.endTransitionContainer) {
-							this.endTransitionContainer = scene.add.container(0, 0);
-							this.endTransitionContainer.setDepth(20000);
-						}
-					if (this.endBlackOverlay && this.endTransitionContainer && this.endBlackOverlay.parentContainer !== this.endTransitionContainer) {
-						try { this.endTransitionContainer.add(this.endBlackOverlay); } catch {}
-					}
-						if (!this.endTransitionBg) {
-						this.endTransitionBg = scene.add.rectangle(
-								scene.cameras.main.width / 2,
-								scene.cameras.main.height / 2,
-								scene.cameras.main.width * 2,
-								scene.cameras.main.height * 2,
-							0x000000,
-							1
-							);
-							this.endTransitionBg.setOrigin(0.5);
-						this.endTransitionBg.setAlpha(1);
-							try { this.endTransitionBg.setInteractive(); } catch {}
-							this.endTransitionContainer.add(this.endTransitionBg);
-						}
-						if (this.endTransitionSpine) { try { this.endTransitionSpine.destroy(); } catch {} this.endTransitionSpine = null; }
-						this.endTransitionSpine = (scene.add as any).spine(
-							scene.cameras.main.width * 0.5,
-							scene.cameras.main.height * 0.5,
-							'fire_transition',
-							'fire_transition_atlas'
-						);
-						try { this.endTransitionSpine.setOrigin(0.5, 0.5); } catch {}
-					try { (this.endTransitionSpine as any).setDepth?.(1); } catch {}
-					// Pin to camera space
-					try { (this.endTransitionSpine as any).setScrollFactor?.(0); } catch {}
-					try { this.endTransitionContainer?.setScrollFactor?.(0); } catch {}
-					try { this.endTransitionBg?.setScrollFactor?.(0); } catch {}
-					this.endTransitionContainer.add(this.endTransitionSpine);
-						this.endTransitionContainer.setVisible(true);
-						this.endTransitionContainer.setAlpha(1);
-						try { scene.children.bringToTop(this.endTransitionContainer); } catch {}
-					// Ensure layering inside the container: black overlay behind, fire spine on top
-					try {
-						if (this.endBlackOverlay) this.endTransitionContainer?.sendToBack(this.endBlackOverlay);
-						if (this.endTransitionSpine) this.endTransitionContainer?.bringToTop(this.endTransitionSpine);
-					} catch {}
-					// Defer showing the endBlackOverlay until after the fire transition
-				// Cover-fit scaling with slight overscan to avoid any gaps
-				try {
-					const w = scene.cameras.main.width;
-					const h = scene.cameras.main.height;
-					let bw = 0; let bh = 0;
-					try {
-						const b = (this.endTransitionSpine as any).getBounds?.();
-						bw = (b && (b.size?.x || (b as any).width)) || 0;
-						bh = (b && (b.size?.y || (b as any).height)) || 0;
-					} catch {}
-					if (!bw || !bh) { bw = (this.endTransitionSpine as any).displayWidth || 0; bh = (this.endTransitionSpine as any).displayHeight || 0; }
-					if (bw > 0 && bh > 0) {
-						const scaleToCover = Math.max(w / bw, h / bh) * 2.0;
-						(this.endTransitionSpine as any).setScale(scaleToCover);
-					}
-				} catch {}
-						// Play blaze SFX consistently with Fire_Transition
-						try {
-							const audio = (window as any).audioManager;
-							if (audio && typeof audio.playSoundEffect === 'function') {
-								audio.playSoundEffect('blaze_hh' as any);
-							} else {
-								try { (scene as any).sound?.play?.('blaze_hh'); } catch {}
-							}
-						} catch {}
-						try { (this.endTransitionSpine as any).animationState.timeScale = Math.max(0.05, this.endFireTransitionTimeScale); } catch {}
-					// Keep opaque mask behind spine to ensure no gaps
-
-						let finished = false;
-						let baseSwitched = false;
-						const switchToBaseIfNeeded = () => {
-							if (baseSwitched || baseSwitchedEarly) return;
-							baseSwitched = true;
-							try { scene.events.emit('setBonusMode', false); } catch {}
-							try { scene.events.emit('hideBonusBackground'); } catch {}
-							try { scene.events.emit('hideBonusHeader'); } catch {}
-							try {
-								const audio = (window as any).audioManager;
-								if (audio && typeof audio.setExclusiveBackground === 'function') {
-									audio.setExclusiveBackground(MusicType.MAIN);
-								}
-							} catch {}
-							try {
-								gameEventManager.emit(GameEventType.WIN_STOP);
-								console.log('[Dialogs] Emitted WIN_STOP during end fire transition');
-							} catch {}
-							try { scene.events.emit('resetSymbolsForBase'); } catch {}
-							try { scene.events.emit('enableSymbols'); } catch {}
-						};
-
-						const finish = () => {
-							if (finished) return;
-							finished = true;
-							scene.tweens.add({
-								targets: this.endTransitionContainer,
-								alpha: 0,
-								duration: 200,
-								ease: 'Cubic.easeIn',
-								onComplete: () => {
-									try {
-										this.endTransitionContainer?.setVisible(false);
-										this.endTransitionContainer?.setAlpha(1);
-										if (this.endTransitionSpine) { this.endTransitionSpine.destroy(); this.endTransitionSpine = null; }
-										if (this.endTransitionBg) { this.endTransitionBg.setAlpha(0); }
-									} catch {}
-									const tail = Math.max(0, this.endBlackOverlayTailMs || 0);
-							// Fade out blaze SFX as transition ends
-							try {
-								const audio = (window as any).audioManager;
-								if (audio && typeof audio.fadeOutSfx === 'function') {
-									audio.fadeOutSfx('blaze_hh' as any, 200);
-								}
-							} catch {}
-							if (tail > 0) {
-										scene.time.delayedCall(tail, () => fadeOutOverlay(complete));
-									} else {
-										fadeOutOverlay(complete);
-									}
-								}
-							});
-						};
-
-						try {
-						const startAnim = () => {
-								const state = (this.endTransitionSpine as any).animationState;
-								let entry: any = null;
-								let played = false;
-								try { entry = state.setAnimation(0, 'animation', false); played = true; } catch {}
-								if (!played) {
-									try {
-										const anims = (this.endTransitionSpine as any)?.skeleton?.data?.animations || [];
-										const first = anims[0]?.name;
-										if (first) { entry = state.setAnimation(0, first, false); played = true; }
-									} catch {}
-								}
-								try {
-									const rawDurationSec = Math.max(0.1, entry?.animation?.duration || 1.2);
-									const ratio = Math.min(0.95, Math.max(0.05, this.endFireTransitionMidTriggerRatio));
-									const midDelayMs = Math.max(50, (rawDurationSec / Math.max(0.0001, this.endFireTransitionTimeScale)) * 1000 * ratio);
-									scene.time.delayedCall(midDelayMs, switchToBaseIfNeeded);
-								} catch {}
-								try { state?.setListener?.({ complete: finish } as any); } catch {}
-								// Fallback complete safety, include lead time
-								scene.time.delayedCall(Math.max(1200, this.endBlackOverlayLeadMs + 1200), finish);
-							};
-							const lead = Math.max(0, this.endBlackOverlayLeadMs || 0);
-							if (lead > 0) {
-								scene.time.delayedCall(lead, startAnim);
-							} else {
-								startAnim();
-							}
-						} catch {
-							switchToBaseIfNeeded();
-							fadeOutOverlay(complete);
-						}
-					} catch {
-						fadeOutOverlay(complete);
-					}
-				})
-				.catch(() => fadeOutOverlay(complete));
-		};
-
-		runTransition();
-	}
-
-	/**
-	 * Flow requested: Fade to black → switch to base under cover → fade black out → play fire (no mask) → done.
-	 */
-	private playBlackCoverThenBaseThenFire(scene: Scene, onDone?: () => void): void {
-		// Ensure container and black overlay exist
-		if (!this.endTransitionContainer) {
-			this.endTransitionContainer = scene.add.container(0, 0);
-			this.endTransitionContainer.setDepth(20000);
-		}
-		if (!this.endBlackOverlay) {
-			this.endBlackOverlay = scene.add.rectangle(
-				scene.scale.width * 0.5,
-				scene.scale.height * 0.5,
-				scene.scale.width * 2,
-				scene.scale.height * 2,
-				0x000000,
-				1
-			);
-			this.endBlackOverlay.setOrigin(0.5);
-			this.endBlackOverlay.setAlpha(0);
-			try { this.endTransitionContainer.add(this.endBlackOverlay); } catch {}
-		}
-		try {
-			if (this.endBlackOverlay.parentContainer !== this.endTransitionContainer) {
-				this.endTransitionContainer.add(this.endBlackOverlay);
-			}
-		} catch {}
-		this.endTransitionContainer.setVisible(true);
-		try { scene.children.bringToTop(this.endTransitionContainer); } catch {}
-		try { scene.tweens.killTweensOf(this.endBlackOverlay); } catch {}
-		this.endBlackOverlay.setVisible(true);
-		this.endBlackOverlay.setAlpha(0);
-		// 1) Fade in to black
-		scene.tweens.add({
-			targets: this.endBlackOverlay,
-			alpha: 1,
-			duration: 350,
-			ease: 'Cubic.easeOut',
-			onComplete: () => {
-				// Small extra wait to ensure draw cycle finishes at full black
-				scene.time.delayedCall(Math.max(1, this.blackCoverPreCleanupDelayMs), () => {
-					// 2) Under full black, cleanup congrats and switch to base visuals/music (embers will run post-fire)
-					try { this.cleanupDialog(); } catch {}
-					try { scene.events.emit('setBonusMode', false); } catch {}
-					try { scene.events.emit('hideBonusBackground'); } catch {}
-					try { scene.events.emit('hideBonusHeader'); } catch {}
-					try {
-						const audio = (window as any).audioManager;
-						if (audio && typeof audio.setExclusiveBackground === 'function') {
-							audio.setExclusiveBackground(MusicType.MAIN);
-						}
-					} catch {}
-					try { gameEventManager.emit(GameEventType.WIN_STOP); } catch {}
-					try { scene.events.emit('resetSymbolsForBase'); } catch {}
-					try { scene.events.emit('enableSymbols'); } catch {}
-					// Allow systems to settle under cover
-					scene.time.delayedCall(Math.max(1, this.postSwitchSettleMs), () => {
-						// 3) Start fire (still fully black) and fade black out over 0.5s simultaneously
-						this.playFireTransitionNoMask(scene, () => {
-							// Fire ended: embers will run for 2s from playFireTransitionNoMask, then container will be hidden
-							try { this.endBlackOverlay!.setVisible(false); } catch {}
-							onDone && onDone();
-						});
-						scene.tweens.add({ targets: this.endBlackOverlay!, alpha: 0, duration: 500, ease: 'Cubic.easeOut' });
-					});
-				});
-			}
-		});
-	}
-
-	// ========= Embers anticipation helpers =========
-	private startEmbers(scene: Scene): void {
-		try {
-			if (!this.endTransitionContainer) {
-				this.endTransitionContainer = scene.add.container(0, 0);
-				this.endTransitionContainer.setDepth(20000);
-			}
-			if (this.embersContainer) { try { this.embersContainer.destroy(true); } catch {} this.embersContainer = null; }
-			this.embersContainer = scene.add.container(0, 0);
-			this.embersContainer.setAlpha(0);
-			scene.tweens.add({ targets: this.embersContainer, alpha: 1, duration: 220, ease: 'Cubic.easeOut' });
-			try { this.endTransitionContainer.add(this.embersContainer); } catch {}
-			// Reset particles and start update loop
-			this.emberParticles = [];
-			if (this.emberUpdateHandler) { try { scene.events.off('update', this.emberUpdateHandler); } catch {} this.emberUpdateHandler = null; }
-			this.emberUpdateHandler = (_t: number, d: number) => this.updateEmbers(scene, d);
-			scene.events.on('update', this.emberUpdateHandler);
-			// Spawn loop
-			if (this.embersSpawnTimer) { try { this.embersSpawnTimer.remove(false); } catch {} this.embersSpawnTimer = null; }
-			this.embersSpawnTimer = scene.time.addEvent({ delay: 90, loop: true, callback: () => this.spawnOneEmber(scene) });
-			// Bring layering: black at back, embers in middle, fire on top later
-			try {
-				if (this.endBlackOverlay) this.endTransitionContainer?.sendToBack(this.endBlackOverlay);
-				this.endTransitionContainer?.bringToTop(this.embersContainer!);
-			} catch {}
-		} catch {}
-	}
-
-	private stopEmbers(): void {
-		try {
-			if (this.embersSpawnTimer) { this.embersSpawnTimer.remove(false); this.embersSpawnTimer = null; }
-			if (this.emberUpdateHandler && this.currentScene) { try { this.currentScene.events.off('update', this.emberUpdateHandler); } catch {} this.emberUpdateHandler = null; }
-			if (this.embersContainer) {
-				const cont = this.embersContainer;
-				this.currentScene?.tweens.add({
-					targets: cont,
-					alpha: 0,
-					duration: 300,
-					ease: 'Cubic.easeOut',
-					onComplete: () => {
-						try { cont.getAll().forEach((child: any) => { try { child.destroy(); } catch {} }); } catch {}
-						try { cont.destroy(true); } catch {}
-						this.embersContainer = null;
-					}
-				});
-			}
-		} catch {}
-	}
-
-private spawnOneEmber(scene: Scene): void {
-    try {
-        if (!this.embersContainer) return;
-        const w = scene.cameras.main.width;
-        const h = scene.cameras.main.height;
-        const g = scene.add.graphics();
-        this.embersContainer.add(g);
-        // Start near bottom, rising up across the whole screen
-        const x = Math.random() * w;
-        const y = h + 30 + Math.random() * 40;
-        // Bigger embers for anticipation
-        const size = Math.random() * 2.5 + 3.0;
-        const colors = [0xffd700, 0xffe04a, 0xfff0a0, 0xffc107];
-        const color = colors[Math.floor(Math.random() * colors.length)];
-        const alpha = Math.random() * 0.5 + 0.4;
-        // Longer life so they traverse screen
-        const lifetime = 1800 + Math.random() * 1200; // 1.8s – 3.0s
-        const totalFramesAt60 = lifetime / (1000 / 60);
-        const vy = -(h + 60) / Math.max(1, totalFramesAt60); // reach above top by end of life
-        const vx = (Math.random() - 0.5) * 0.9; // gentle horizontal drift
-        const particle = { graphics: g, x, y, vx, vy, size, color, alpha, lifetime, age: 0 };
-        this.emberParticles.push(particle);
-        this.drawEmberParticle(particle);
-    } catch {}
-}
-
-private drawEmberParticle(p: { graphics: Phaser.GameObjects.Graphics; x: number; y: number; size: number; color: number; alpha: number; }): void {
-    const { graphics, x, y, size, color, alpha } = p;
-    graphics.clear();
-    const w = size * (Math.random() * 0.8 + 0.6);
-    const h = size * (Math.random() * 1.2 + 0.8);
-    graphics.fillStyle(color, alpha * 0.10); graphics.fillEllipse(x, y, w * 3.0, h * 3.0);
-    graphics.fillStyle(color, alpha * 0.20); graphics.fillEllipse(x, y, w * 2.2, h * 2.2);
-    graphics.fillStyle(color, alpha * 0.40); graphics.fillEllipse(x, y, w * 1.5, h * 1.5);
-    graphics.fillStyle(color, alpha * 0.70); graphics.fillEllipse(x, y, w * 0.8, h * 0.8);
-    graphics.fillStyle(0xffffaa, alpha * 0.30); graphics.fillEllipse(x, y, w * 0.35, h * 0.35);
-}
-
-private updateEmbers(scene: Scene, delta: number): void {
-    // Move, age, fade
-    for (let i = this.emberParticles.length - 1; i >= 0; i--) {
-        const p = this.emberParticles[i];
-        p.age += delta;
-        if (p.age >= p.lifetime) {
-            try { p.graphics.destroy(); } catch {}
-            this.emberParticles.splice(i, 1);
-            continue;
-        }
-        // Integrate (scale velocities by delta vs 60fps)
-        const dt = delta / (1000 / 60);
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
-        // Fade by age
-        const ageRatio = p.age / p.lifetime;
-        p.alpha = Math.max(0.05, 1 - ageRatio);
-        this.drawEmberParticle(p);
-    }
-}
-
-	/** Play the fire transition overlay without internal black mask. */
-	private playFireTransitionNoMask(scene: Scene, onDone?: () => void): void {
-		if (!ensureSpineFactory(scene, '[Dialogs] fire transition (no mask)')) { onDone && onDone(); return; }
-		this.loadEndFireTransitionIfNeeded().then((loaded) => {
-			if (!loaded) { onDone && onDone(); return; }
-			try {
-				if (!this.endTransitionContainer) {
-					this.endTransitionContainer = scene.add.container(0, 0);
-					this.endTransitionContainer.setDepth(20000);
-				}
-				// Ensure any background mask is hidden
-				if (this.endTransitionBg) { try { this.endTransitionBg.setAlpha(0); this.endTransitionBg.setVisible(false); } catch {} }
-				if (this.endTransitionSpine) { try { this.endTransitionSpine.destroy(); } catch {} this.endTransitionSpine = null; }
-				this.endTransitionSpine = (scene.add as any).spine(
-					scene.cameras.main.width * 0.5,
-					scene.cameras.main.height * 0.5,
-					'fire_transition',
-					'fire_transition_atlas'
-				);
-				try { this.endTransitionSpine.setOrigin(0.5, 0.5); } catch {}
-				try { (this.endTransitionSpine as any).setDepth?.(1); } catch {}
-				try { (this.endTransitionSpine as any).setScrollFactor?.(0); } catch {}
-				try { this.endTransitionContainer?.setScrollFactor?.(0); } catch {}
-				this.endTransitionContainer.add(this.endTransitionSpine);
-				this.endTransitionContainer.setVisible(true);
-				this.endTransitionContainer.setAlpha(1);
-				try { scene.children.bringToTop(this.endTransitionContainer); } catch {}
-				// Cover-fit
-				try {
-					const w = scene.cameras.main.width; const h = scene.cameras.main.height;
-					let bw = 0, bh = 0;
-					try { const b = (this.endTransitionSpine as any).getBounds?.(); bw = (b && (b.size?.x || (b as any).width)) || 0; bh = (b && (b.size?.y || (b as any).height)) || 0; } catch {}
-					if (!bw || !bh) { bw = (this.endTransitionSpine as any).displayWidth || 0; bh = (this.endTransitionSpine as any).displayHeight || 0; }
-					if (bw > 0 && bh > 0) { (this.endTransitionSpine as any).setScale(Math.max(w / bw, h / bh) * 2.0); }
-				} catch {}
-                try { (this.endTransitionSpine as any).animationState.timeScale = Math.max(0.05, this.endFireTransitionTimeScale); } catch {}
-                // Play blaze SFX consistently with Fire_Transition (no-mask variant)
-                try {
-                    const audio = (window as any).audioManager;
-                    if (audio && typeof audio.playSoundEffect === 'function') {
-                        audio.playSoundEffect('blaze_hh' as any);
-                    } else {
-                        try { (scene as any).sound?.play?.('blaze_hh'); } catch {}
-                    }
-                } catch {}
-				let finished = false;
-				const finish = () => {
-					if (finished) return; finished = true;
-                    // Fade out blaze SFX as transition ends (no-mask variant)
-                    try {
-                        const audio = (window as any).audioManager;
-                        if (audio && typeof audio.fadeOutSfx === 'function') {
-                            audio.fadeOutSfx('blaze_hh' as any, 200);
-                        }
-                    } catch {}
-					// Remove fire and clean up immediately (embers removed)
-					try { if (this.endTransitionSpine) { this.endTransitionSpine.destroy(); this.endTransitionSpine = null; } } catch {}
-					try { this.endTransitionContainer?.setVisible(false); this.endTransitionContainer?.setAlpha(1); } catch {}
-					onDone && onDone();
-				};
-				try {
-					const state = (this.endTransitionSpine as any).animationState;
-					let entry: any = null; let played = false;
-					try { entry = state.setAnimation(0, 'animation', false); played = true; } catch {}
-					if (!played) {
-						try { const anims = (this.endTransitionSpine as any)?.skeleton?.data?.animations || []; const first = anims[0]?.name; if (first) { entry = state.setAnimation(0, first, false); played = true; } } catch {}
-					}
-					try { state?.setListener?.({ complete: finish } as any); } catch {}
-					scene.time.delayedCall(1200, finish);
-				} catch { finish(); }
-			} catch { onDone && onDone(); }
-		});
-	}
-
 	/**
 	 * Start direct fade-out sequence for win dialogs (no black overlay)
 	 */
 	private startWinDialogFadeOut(scene: Scene): void {
 		console.log('[Dialogs] Starting win dialog direct fade-out');
 
+		// Check if we should play outro animation before fading out
+		const animations = this.currentDialogType ? this.getAnimationNameForDialogType(this.currentDialogType) : null;
+		const hasOutro = animations && animations.outro;
+		
+		if (hasOutro && this.currentDialog && this.currentDialog.animationState) {
+			console.log(`[Dialogs] Playing outro animation: ${animations.outro}`);
+			try {
+				// Play outro animation, then fade out after it completes
+				this.currentDialog.animationState.setAnimation(0, animations.outro!, false);
+				
+				// Get animation duration (estimate 1 second if we can't get it)
+				const outroTrack = this.currentDialog.animationState.getCurrent(0);
+				const outroDuration = outroTrack?.animation?.duration ? outroTrack.animation.duration * 1000 : 0;
+				
+				// Wait for outro to complete, then start fade-out
+				scene.time.delayedCall(outroDuration, () => {
+					this.performWinDialogFadeOut(scene);
+				});
+				return; // Exit early, fade-out will happen after outro
+			} catch (error) {
+				console.warn(`[Dialogs] Failed to play outro animation, proceeding with fade-out:`, error);
+				// Fall through to normal fade-out
+			}
+		}
+		
+		// No outro or outro failed, proceed with normal fade-out
+		this.performWinDialogFadeOut(scene);
+	}
+
+	/**
+	 * Perform the actual fade-out sequence for win dialogs
+	 */
+	private performWinDialogFadeOut(scene: Scene): void {
 		// Fade out any currently playing win SFX
 		try {
 			const audioManager = (window as any).audioManager;
@@ -1977,9 +1470,6 @@ private updateEmbers(scene: Scene, delta: number): void {
 		// Keep the black overlay visible as background - don't hide it
 		// The black overlay provides the dialog background for readability
 		console.log('[Dialogs] Keeping black overlay visible as background for win dialog fade-out');
-		
-		// Don't stop effect animations yet - let them fade out naturally
-		// this.stopAllEffectAnimations();
 		
 		// Re-enable symbols immediately for win dialays
 		scene.events.emit('enableSymbols');
@@ -2013,12 +1503,6 @@ private updateEmbers(scene: Scene, delta: number): void {
 				console.log('[Dialogs] Current dialog has alpha property:', 'alpha' in this.currentDialog);
 				console.log('[Dialogs] Current dialog alpha property type:', typeof this.currentDialog.alpha);
 			}
-		}
-		
-		// Add effects container if it has elements
-		if (this.effectsContainer && this.effectsContainer.length > 0) {
-			fadeOutTargets.push(this.effectsContainer);
-			console.log('[Dialogs] Adding effects container to fade-out targets');
 		}
 		
 		// Add number display if it exists
@@ -2097,14 +1581,6 @@ private updateEmbers(scene: Scene, delta: number): void {
 				scene.time.delayedCall(100, () => {
 					console.log('[Dialogs] Starting cleanup after fade-out completion');
 					
-					// Now stop effect animations after fade-out completes
-					this.stopAllEffectAnimations();
-					console.log('[Dialogs] Effect animations stopped after fade-out');
-					
-					// Hide all effects after fade-out completes
-					this.hideAllEffects();
-					console.log('[Dialogs] All effects hidden after fade-out');
-					
 					// Clean up dialog content after fade-out
 					this.cleanupDialogContent();
 					
@@ -2150,9 +1626,6 @@ private updateEmbers(scene: Scene, delta: number): void {
 	private cleanupDialogContent(): void {
 		console.log('[Dialogs] Cleaning up dialog content (keeping overlay visible)');
 		
-		// Stop all effect animations
-		this.stopAllEffectAnimations();
-		
 		// Don't hide the dialog overlay - keep it visible for next dialog
 		// this.dialogOverlay.setVisible(false);
 		// Don't set isDialogActive to false yet - keep it true until cleanup is complete
@@ -2160,6 +1633,15 @@ private updateEmbers(scene: Scene, delta: number): void {
 		
 		// Reset current dialog type
 		this.currentDialogType = null;
+
+		// Reset staged win state
+		this.isStagedWinNumberAnimation = false;
+		if (this.stagedWinStageTimer) {
+			(this.stagedWinStageTimer as Phaser.Time.TimerEvent).destroy();
+			this.stagedWinStageTimer = null;
+		}
+		this.stagedWinStages = [];
+		this.stagedWinCurrentStageIndex = 0;
 		
 		// Don't call performDialogCleanup here - it destroys elements that are still fading out
 		// Instead, just reset the state and let the fade-out animation complete naturally
@@ -2175,7 +1657,9 @@ private updateEmbers(scene: Scene, delta: number): void {
 	/**
 	 * Check if we should trigger bonus mode based on current dialog type
 	 */
-	private shouldTriggerBonusMode(): boolean { return false; }
+	private shouldTriggerBonusMode(): boolean {
+		return this.currentDialogType === 'FreeSpinDialog_KA';
+	}
 
 	/**
 	 * Trigger bonus mode by enabling bonus background and header
@@ -2189,6 +1673,12 @@ private updateEmbers(scene: Scene, delta: number): void {
 		scene.events.emit('setBonusMode', true);
 		console.log('[Dialogs] Emitted setBonusMode event');
 		
+		// Clear scatter state so win dialogs are not deferred or auto-closed after retrigger
+		try {
+			gameStateManager.isScatter = false;
+			console.log('[Dialogs] Cleared isScatter state on bonus mode trigger');
+		} catch {}
+		
 		// Switch to bonus background
 		scene.events.emit('showBonusBackground');
 		console.log('[Dialogs] Emitted showBonusBackground event');
@@ -2201,10 +1691,6 @@ private updateEmbers(scene: Scene, delta: number): void {
 		scene.events.emit('enableSymbols');
 		console.log('[Dialogs] Emitted enableSymbols event');
 		
-		// Emit dialog animations complete event for scatter bonus reset
-		scene.events.emit('dialogAnimationsComplete');
-		console.log('[Dialogs] Dialog animations complete event emitted for bonus mode');
-		
 		console.log('[Dialogs] ===== BONUS MODE ACTIVATED - BACKGROUND AND HEADER SWITCHED =====');
 	}
 
@@ -2216,15 +1702,21 @@ private updateEmbers(scene: Scene, delta: number): void {
 		
 		console.log('[Dialogs] Cleaning up dialog');
 		
-		// Stop all effect animations
-		this.stopAllEffectAnimations();
-		
 		// Hide the dialog overlay
 		this.dialogOverlay.setVisible(false);
 		this.isDialogActive = false;
 		
 		// Reset current dialog type
 		this.currentDialogType = null;
+
+		// Reset staged win state
+		this.isStagedWinNumberAnimation = false;
+		if (this.stagedWinStageTimer) {
+			(this.stagedWinStageTimer as Phaser.Time.TimerEvent).destroy();
+			this.stagedWinStageTimer = null;
+		}
+		this.stagedWinStages = [];
+		this.stagedWinCurrentStageIndex = 0;
 		
 		// Clean up all dialog elements
 		this.performDialogCleanup();
@@ -2237,35 +1729,6 @@ private updateEmbers(scene: Scene, delta: number): void {
 	 */
 	private performDialogCleanup(): void {
 		console.log('[Dialogs] Starting dialog cleanup');
-		
-		// Clean up congrats-specific extras if present
-		if (this.congratsBgImage) {
-			try { this.congratsBgImage.destroy(); } catch {}
-			this.congratsBgImage = null;
-		}
-		if (this.congratsCharSpine) {
-			try { this.congratsCharSpine.destroy(); } catch {}
-			this.congratsCharSpine = null;
-		}
-		if (this.dialogBackgroundContainer) {
-			try { this.dialogBackgroundContainer.removeAll(true); } catch {}
-		}
-		if (this.dialogCharacterContainer) {
-			try { this.dialogCharacterContainer.removeAll(true); } catch {}
-			// Also clear nested container references to avoid stale pointers
-			this.congratsCharRoot = null;
-			this.congratsCharOffsetContainer = null;
-			this.congratsCharScaleContainer = null;
-		}
-		// Destroy title image if present
-		if (this.congratsWinTitleImage) {
-			try { this.congratsWinTitleImage.destroy(); } catch {}
-			this.congratsWinTitleImage = null;
-		}
-		if (this.congratsFireSpine) {
-			try { this.congratsFireSpine.destroy(); } catch {}
-			this.congratsFireSpine = null;
-		}
 		
 		// Clean up current dialog
 		if (this.currentDialog) {
@@ -2287,7 +1750,6 @@ private updateEmbers(scene: Scene, delta: number): void {
 			this.numberDisplayContainer.destroy();
 			this.numberDisplayContainer = null;
 		}
-		this.numberDisplayRef = null;
 		
 		// Clean up click area
 		if (this.clickArea) {
@@ -2300,18 +1762,14 @@ private updateEmbers(scene: Scene, delta: number): void {
 			this.clickArea = null;
 		}
 		
-		// Destroy all effects in the container
-		console.log('[Dialogs] Destroying effects, count:', this.effectsContainer.length);
-		this.effectsContainer.getAll().forEach((effect: any, index: number) => {
-			if (effect && effect.destroy) {
-				console.log(`[Dialogs] Destroying effect ${index}:`, effect.texture?.key || 'unknown');
-				effect.destroy();
-			}
-		});
-		
-		// Clear effects container
-		this.effectsContainer.removeAll();
-		
+		// Clean up congrats secondary free spins display if present
+		if (this.congratsFreeSpinsContainer) {
+			console.log('[Dialogs] Destroying congrats free spins display');
+			this.congratsFreeSpinsContainer.destroy();
+			this.congratsFreeSpinsContainer = null;
+			this.congratsFreeSpinsDisplay = null;
+		}
+
 		// Clear auto-close timer if it exists
 		if (this.autoCloseTimer) {
 			console.log('[Dialogs] Destroying auto-close timer during cleanup');
@@ -2333,9 +1791,6 @@ private updateEmbers(scene: Scene, delta: number): void {
 		console.log('[Dialogs] Hiding dialog with black overlay transition');
 		
 		if (this.currentScene) {
-			// Stop all effect animations immediately
-			this.stopAllEffectAnimations();
-			
 			// Create a black overlay for transition
 			const transitionOverlay = this.currentScene.add.graphics();
 			transitionOverlay.setDepth(10000); // Very high depth to cover everything
@@ -2390,13 +1845,6 @@ private updateEmbers(scene: Scene, delta: number): void {
 	}
 
 	/**
-	 * Check if congrats dialog is currently showing
-	 */
-	isCongratsShowing(): boolean {
-		return this.isDialogActive && this.currentDialogType === 'Congrats';
-	}
-
-	/**
 	 * Get the current dialog type
 	 */
 	getCurrentDialogType(): string | null {
@@ -2415,37 +1863,6 @@ private updateEmbers(scene: Scene, delta: number): void {
 			this.blackOverlay.fillStyle(0x000000, 0.7);
 			this.blackOverlay.fillRect(0, 0, scene.scale.width, scene.scale.height);
 		}
-		
-		// Re-apply background cover scaling and positions on resize
-		if (this.congratsBgImage) {
-			const centerX = scene.scale.width * 0.5;
-			const centerY = scene.scale.height * 0.5;
-			const coverScaleX = scene.scale.width / Math.max(1, this.congratsBgImage.width);
-			const coverScaleY = scene.scale.height / Math.max(1, this.congratsBgImage.height);
-			const coverScale = Math.max(coverScaleX, coverScaleY) * Math.max(0.05, this.congratsBgScale);
-			this.congratsBgImage.setScale(coverScale);
-			this.congratsBgImage.x = centerX + this.congratsBgOffsetX;
-			this.congratsBgImage.y = centerY + this.congratsBgOffsetY;
-		}
-		// Reposition title image on resize
-		if (this.congratsWinTitleImage) {
-			const centerX = scene.scale.width * 0.5;
-			const centerY = scene.scale.height * 0.5;
-			this.congratsWinTitleImage.x = centerX + this.congratsWinTitleOffsetX;
-			this.congratsWinTitleImage.y = centerY + this.congratsWinTitleOffsetY;
-		}
-		if (this.congratsCharSpine) {
-			const baseX = (typeof this.congratsCharX === 'number' && isFinite(this.congratsCharX)) ? this.congratsCharX : scene.scale.width * 0.5;
-			const baseY = (typeof this.congratsCharY === 'number' && isFinite(this.congratsCharY)) ? this.congratsCharY : scene.scale.height * 0.5;
-			if (this.congratsCharRoot) { this.congratsCharRoot.x = baseX; this.congratsCharRoot.y = baseY; }
-			if (this.congratsCharOffsetContainer) { this.congratsCharOffsetContainer.x = (this.congratsCharOffsetX || 0); this.congratsCharOffsetContainer.y = (this.congratsCharOffsetY || 0); }
-			if (this.congratsCharScaleContainer) { this.congratsCharScaleContainer.setScale(Math.max(0.05, this.congratsCharScale)); }
-		}
-		// Reposition continue text on resize
-		if (this.continueText) {
-			this.continueText.x = scene.scale.width / 2 + this.continueTextOffsetX;
-			this.continueText.y = scene.scale.height / 2 + this.continueTextOffsetY;
-		}
 	}
 
 	/**
@@ -2463,6 +1880,384 @@ private updateEmbers(scene: Scene, delta: number): void {
 		if (this.dialogOverlay) {
 			this.dialogOverlay.destroy();
 		}
+	}
+
+	/**
+	 * Configure staged win number and animation thresholds based on bet and total win.
+	 * Example (bet=0.20, win=0.60, final type=SuperW_KA):
+	 *  - SmallW_KA (BigWin)   -> 0.16 (0.8x)
+	 *  - MediumW_KA (MegaWin) -> 0.20 (1x)
+	 *  - LargeW_KA (EpicWin)  -> 0.40 (2x)
+	 *  - SuperW_KA (SuperWin) -> 0.60 (final win)
+	 */
+	private setupStagedWinNumberAnimation(config: DialogConfig): void {
+		const winAmount = config.winAmount ?? 0;
+		const betAmount = config.betAmount ?? 0;
+
+		if (winAmount <= 0 || betAmount <= 0) {
+			console.log('[Dialogs] Staged win: invalid bet/win, skipping staged animation');
+			this.isStagedWinNumberAnimation = false;
+			this.stagedWinStages = [];
+			this.stagedWinCurrentStageIndex = 0;
+			this.numberTargetValue = winAmount;
+			return;
+		}
+
+		// Order of tiers and their multiplier thresholds
+		const orderedTypes: Array<'SmallW_KA' | 'MediumW_KA' | 'LargeW_KA' | 'SuperW_KA'> = [
+			'SmallW_KA',
+			'MediumW_KA',
+			'LargeW_KA',
+			'SuperW_KA'
+		];
+		const thresholds = [20, 30, 45, 60]; // multipliers relative to bet
+
+		const finalIndex = orderedTypes.indexOf(config.type as any);
+		if (finalIndex <= 0) {
+			// Only apply staged behavior when final tier is at least Medium (MegaWin) or higher
+			console.log('[Dialogs] Staged win: final tier is SmallW_KA or unknown - using simple animation');
+			this.isStagedWinNumberAnimation = false;
+			this.stagedWinStages = [];
+			this.stagedWinCurrentStageIndex = 0;
+			this.numberTargetValue = winAmount;
+			return;
+		}
+
+		let stages: Array<{ type: 'SmallW_KA' | 'MediumW_KA' | 'LargeW_KA' | 'SuperW_KA'; target: number }> = [];
+		let lastTarget = 0;
+
+		// Add intermediate tiers (below the final tier) only at their threshold values,
+		// but only if the win actually reaches those thresholds.
+		for (let i = 0; i < finalIndex && i < thresholds.length; i++) {
+			const type = orderedTypes[i];
+			const multiplier = thresholds[i];
+			const thresholdValue = betAmount * multiplier;
+
+			if (winAmount >= thresholdValue && thresholdValue > lastTarget) {
+				stages.push({ type, target: thresholdValue });
+				lastTarget = thresholdValue;
+			}
+		}
+
+		// Always add exactly one stage for the final tier, targeting the actual win amount.
+		// This prevents showing the same tier twice (once at its threshold and once at the final win).
+		stages.push({ type: config.type as any, target: winAmount });
+		lastTarget = winAmount;
+
+		// If we ended up with only a single stage (no intermediate thresholds crossed),
+		// just use the normal single-number animation on the final tier.
+		if (stages.length <= 1) {
+			console.log('[Dialogs] Staged win: no stages produced, falling back to simple animation');
+			this.isStagedWinNumberAnimation = false;
+			this.stagedWinStages = [];
+			this.stagedWinCurrentStageIndex = 0;
+			this.numberTargetValue = winAmount;
+			return;
+		}
+
+		this.isStagedWinNumberAnimation = true;
+		this.stagedWinStages = stages;
+		this.stagedWinCurrentStageIndex = 0;
+		// For staged animation, the numberTargetValue is only used as a fallback.
+		this.numberTargetValue = winAmount;
+
+		console.log('[Dialogs] Staged win configured. Stages:', stages);
+
+		// Ensure the visual sequence starts from the first tier (e.g. BigWin),
+		// not from the final tier that was passed into showDialog.
+		try {
+			const firstStage = this.stagedWinStages[0];
+			this.currentDialogType = firstStage.type;
+
+			if (this.currentDialog && this.currentDialog.animationState) {
+				const animations = this.getAnimationNameForDialogType(firstStage.type);
+				if (animations) {
+					const shouldLoop = this.getDialogLoop(firstStage.type);
+					console.log('[Dialogs] Staged win: initializing spine animation to first stage', animations);
+					try {
+						if (this.disableIntroAnimations) {
+							this.currentDialog.animationState.setAnimation(0, animations.idle, shouldLoop);
+						} else {
+							this.currentDialog.animationState.setAnimation(0, animations.intro, false);
+							this.currentDialog.animationState.addAnimation(0, animations.idle, shouldLoop, 0);
+						}
+						// Apply scale pop whenever we transition into idle
+						const sceneRef = this.currentScene;
+						if (sceneRef) {
+							this.applyDialogScalePop(sceneRef);
+						}
+					} catch (err) {
+						console.warn('[Dialogs] Staged win: failed to play intro/idle for first stage, using idle only', err);
+						this.currentDialog.animationState.setAnimation(0, animations.idle, shouldLoop);
+						const sceneRef = this.currentScene;
+						if (sceneRef) {
+							this.applyDialogScalePop(sceneRef);
+						}
+					}
+				}
+			}
+		} catch (e) {
+			console.warn('[Dialogs] Staged win: failed to initialize first stage animation sequence', e);
+		}
+	}
+
+	/**
+	 * Run staged win number sequence and switch spine animations per stage.
+	 */
+	private startStagedWinNumberSequence(scene: Scene): void {
+		if (!this.numberDisplay || !this.currentDialog) {
+			console.warn('[Dialogs] Cannot start staged win sequence - missing numberDisplay or currentDialog');
+			this.isStagedWinNumberAnimation = false;
+			return;
+		}
+
+		// Clear any previous staged win timer before starting
+		if (this.stagedWinStageTimer) {
+			(this.stagedWinStageTimer as Phaser.Time.TimerEvent).destroy();
+			this.stagedWinStageTimer = null;
+		}
+
+		this.runStagedWinStage(scene, 0, false);
+	}
+
+	/**
+	 * Execute a single staged win tier and schedule the next one if applicable.
+	 * When fastFromSkip is true, we use a shorter number animation for manual skips.
+	 */
+	private runStagedWinStage(scene: Scene, index: number, fastFromSkip: boolean): void {
+		// Abort if staged sequencing has been disabled (e.g., user manually
+		// closed the dialog).
+		if (!this.isStagedWinNumberAnimation) {
+			console.log('[Dialogs] Staged win: staging disabled, aborting stage run');
+			return;
+		}
+
+		// Abort if dialog has been deactivated (e.g., user clicked to close)
+		if (!this.isDialogActive) {
+			console.log('[Dialogs] Staged win: dialog inactive, aborting stage run');
+			this.isStagedWinNumberAnimation = false;
+			return;
+		}
+
+		if (!this.numberDisplay || !this.currentDialog) {
+			console.warn('[Dialogs] Staged win: display or dialog missing during stage run');
+			this.isStagedWinNumberAnimation = false;
+			return;
+		}
+
+		if (index >= this.stagedWinStages.length) {
+			console.log('[Dialogs] Staged win: all stages complete');
+			this.isStagedWinNumberAnimation = false;
+			return;
+		}
+
+		this.stagedWinCurrentStageIndex = index;
+		const stage = this.stagedWinStages[index];
+
+		console.log('[Dialogs] Staged win: running stage', {
+			index,
+			type: stage.type,
+			target: stage.target,
+			fastFromSkip
+		});
+
+		// Play correct audio for the current tier and fade out any previous tier SFX
+		try {
+			if (!this.isDialogActive) {
+				console.log('[Dialogs] Staged win: dialog inactive before SFX, skipping audio');
+				this.isStagedWinNumberAnimation = false;
+				return;
+			}
+			const audioManager = (window as any).audioManager;
+			if (audioManager) {
+				if (typeof audioManager.fadeOutCurrentWinSfx === 'function') {
+					audioManager.fadeOutCurrentWinSfx(200);
+				}
+				if (typeof audioManager.playWinDialogSfx === 'function') {
+					audioManager.playWinDialogSfx(stage.type);
+				}
+				if (typeof audioManager.duckBackground === 'function') {
+					audioManager.duckBackground(0.3);
+				}
+			}
+		} catch (e) {
+			console.warn('[Dialogs] Failed to trigger staged tier SFX:', e);
+		}
+
+		// Switch the spine animation to match the current tier.
+		// For the first stage, the animation was already initialized in setupStagedWinNumberAnimation,
+		// so avoid resetting it here to prevent the "first tier plays twice" effect.
+		if (index > 0 || fastFromSkip) {
+			try {
+				const animations = this.getAnimationNameForDialogType(stage.type);
+				if (animations && this.currentDialog.animationState) {
+					const shouldLoop = this.getDialogLoop(stage.type);
+					console.log('[Dialogs] Staged win: switching spine animation to', animations);
+					try {
+						if (this.disableIntroAnimations) {
+							this.currentDialog.animationState.setAnimation(0, animations.idle, shouldLoop);
+						} else {
+							this.currentDialog.animationState.setAnimation(0, animations.intro, false);
+							this.currentDialog.animationState.addAnimation(0, animations.idle, shouldLoop, 0);
+						}
+						// Apply scale pop whenever we transition into idle
+						const sceneRef = this.currentScene || scene;
+						if (sceneRef) {
+							this.applyDialogScalePop(sceneRef);
+						}
+					} catch (err) {
+						console.warn('[Dialogs] Staged win: intro/idle animation failed, using idle only', err);
+						this.currentDialog.animationState.setAnimation(0, animations.idle, shouldLoop);
+						const sceneRef = this.currentScene || scene;
+						if (sceneRef) {
+							this.applyDialogScalePop(sceneRef);
+						}
+					}
+				}
+			} catch (e) {
+				console.warn('[Dialogs] Staged win: failed to switch spine animation for stage', stage.type, e);
+			}
+		}
+
+		// Animate the number to this stage target
+		const isFirstStage = index === 0;
+		const defaultDurationMs = 2500; // time for the counter animation
+		const fastDurationMs = 2500; // shorter animation when skipping
+		const numberAnimDurationMs = fastFromSkip ? fastDurationMs : defaultDurationMs;
+		const perStageDwellMs = 2000; // approximate dwell time per tier (matches original auto-close)
+
+		this.numberDisplay!.animateToValue(stage.target, {
+			duration: numberAnimDurationMs,
+			ease: 'Power2',
+			startFromCurrent: !isFirstStage || fastFromSkip
+		});
+
+		const lastIndex = this.stagedWinStages.length - 1;
+
+		// Schedule next stage after the per-stage dwell time so that, visually,
+		// each tier behaves like its own win dialog before the next one appears.
+		if (index + 1 < this.stagedWinStages.length) {
+			// Cancel any previous stage timer before scheduling the next one
+			const timer = this.stagedWinStageTimer;
+			if (timer) {
+				timer.destroy();
+				this.stagedWinStageTimer = null;
+			}
+
+			this.stagedWinStageTimer = scene.time.delayedCall(perStageDwellMs, () => {
+				// Guard again in case dialog was closed during the dwell
+				if (!this.isDialogActive || !this.isStagedWinNumberAnimation) {
+					console.log('[Dialogs] Staged win: dialog inactive during dwell, stopping sequence');
+					this.isStagedWinNumberAnimation = false;
+					this.stagedWinStageTimer = null;
+					return;
+				}
+				this.stagedWinStageTimer = null;
+				this.runStagedWinStage(scene, index + 1, false);
+			});
+		} else {
+			console.log('[Dialogs] Staged win: last stage scheduled, will end at full win amount');
+
+			// If we're in autoplay and the original auto-close timer was cleared due to a manual
+			// skip, ensure the final staged tier still auto-closes after a sensible dwell.
+			try {
+				if (!this.autoCloseTimer && this.isWinDialog()) {
+					// Detect free spin autoplay (bonus autoplay) via Symbols component on the scene
+					let isFreeSpinAutoplay = false;
+					try {
+						const gameScene: any = scene as any;
+						const symbolsComponent = gameScene?.symbols;
+						if (symbolsComponent && typeof symbolsComponent.isFreeSpinAutoplayActive === 'function') {
+							isFreeSpinAutoplay = !!symbolsComponent.isFreeSpinAutoplayActive();
+						}
+					} catch {}
+
+					const isAutoplaying = gameStateManager.isAutoPlaying || isFreeSpinAutoplay;
+					if (isAutoplaying) {
+						const perStageDwellFinalMs = 2000; // Keep in sync with setupAutoCloseTimer
+						const finalStageDwellMs = perStageDwellFinalMs + 1500;
+
+						console.log('[Dialogs] Creating auto-close timer for final staged tier during autoplay', {
+							delayMs: finalStageDwellMs,
+							currentStageIndex: this.stagedWinCurrentStageIndex,
+							totalStages: this.stagedWinStages.length
+						});
+
+						this.autoCloseTimer = scene.time.delayedCall(finalStageDwellMs, () => {
+							console.log('[Dialogs] Auto-close after final staged tier during autoplay - closing dialog');
+							this.handleDialogClick(scene, true);
+						});
+					}
+				}
+			} catch (e) {
+				console.warn('[Dialogs] Failed to create auto-close timer for final staged tier:', e);
+			}
+		}
+	}
+
+	/**
+	 * Skip directly to a specific staged win tier (used for manual "press anywhere"
+	 * skips while a staged win dialog is playing).
+	 */
+	private skipToStagedWinStage(scene: Scene, nextIndex: number): void {
+		if (!this.numberDisplay || !this.currentDialog) {
+			console.warn('[Dialogs] skipToStagedWinStage: missing numberDisplay or currentDialog - closing dialog instead');
+			// Fallback: behave like a normal close
+			this.startFadeOutSequence(scene);
+			this.resetGameStateForNewSpin(scene);
+			return;
+		}
+
+		if (nextIndex < 0 || nextIndex >= this.stagedWinStages.length) {
+			console.warn('[Dialogs] skipToStagedWinStage: invalid staged index', nextIndex);
+			this.isStagedWinNumberAnimation = false;
+			// Fallback: close dialog normally
+			this.startFadeOutSequence(scene);
+			this.resetGameStateForNewSpin(scene);
+			return;
+		}
+
+		// Cancel any pending staged win timer from the previous stage so we can
+		// take over progression from this skipped-to tier.
+		if (this.stagedWinStageTimer) {
+			this.stagedWinStageTimer.destroy();
+			this.stagedWinStageTimer = null;
+		}
+
+		console.log('[Dialogs] Skipping to staged win tier', {
+			index: nextIndex,
+			type: this.stagedWinStages[nextIndex].type,
+			target: this.stagedWinStages[nextIndex].target
+		});
+
+		// Ensure staged sequencing remains active for this dialog and run the
+		// requested tier with a faster number animation.
+		this.isStagedWinNumberAnimation = true;
+		this.runStagedWinStage(scene, nextIndex, true);
+	}
+
+	/**
+	 * Apply a scale "pop-in" from 0 -> lastDialogScale on the current dialog.
+	 * Called whenever we transition into an idle animation so it also applies
+	 * to subsequent dialogs / staged win tiers.
+	 */
+	private applyDialogScalePop(scene: Scene): void {
+		if (!this.currentDialog) {
+			return;
+		}
+
+		const targetScale = this.lastDialogScale || 1;
+		try {
+			(this.currentDialog as any).setScale?.(0);
+		} catch {}
+
+		scene.tweens.add({
+			targets: this.currentDialog,
+			scaleX: targetScale,
+			scaleY: targetScale,
+			duration: 800,
+			ease: 'Back.Out'
+		});
 	}
 
 	// Helper methods for dialog configuration
@@ -2487,277 +2282,28 @@ private updateEmbers(scene: Scene, delta: number): void {
 		return this.dialogLoops[dialogType] || false;
 		}
 		
-	// Public modifiers for Congrats extras
-	public setStartFireBlackHoldMs(ms: number): void {
-		this.startFireBlackHoldMs = Math.max(0, ms | 0);
-	}
-
-	public setCongratsNumberSpeed(speedMul: number): void {
-		this.congratsNumberSpeedMul = Math.max(0.05, speedMul);
-	}
-	public setEndBlackOverlayTiming(opts: { fadeInMs?: number; holdMs?: number; fadeOutMs?: number; leadMs?: number; tailMs?: number }): void {
-		if (opts.fadeInMs !== undefined) this.endBlackOverlayFadeInMs = Math.max(20, opts.fadeInMs);
-		if (opts.holdMs !== undefined) this.endBlackOverlayHoldMs = Math.max(0, opts.holdMs);
-		if (opts.fadeOutMs !== undefined) this.endBlackOverlayFadeOutMs = Math.max(20, opts.fadeOutMs);
-		if (opts.leadMs !== undefined) this.endBlackOverlayLeadMs = Math.max(0, opts.leadMs);
-		if (opts.tailMs !== undefined) this.endBlackOverlayTailMs = Math.max(0, opts.tailMs);
-		console.log('[Dialogs] Updated end black overlay timing:', {
-			fadeInMs: this.endBlackOverlayFadeInMs,
-			holdMs: this.endBlackOverlayHoldMs,
-			fadeOutMs: this.endBlackOverlayFadeOutMs,
-			leadMs: this.endBlackOverlayLeadMs,
-			tailMs: this.endBlackOverlayTailMs
-		});
-	}
-	public setCongratsBgOptions(opts: { scale?: number; offsetX?: number; offsetY?: number }): void {
-		if (opts.scale !== undefined) this.congratsBgScale = Math.max(0.05, opts.scale);
-		if (opts.offsetX !== undefined) this.congratsBgOffsetX = opts.offsetX;
-		if (opts.offsetY !== undefined) this.congratsBgOffsetY = opts.offsetY;
-		// Apply live if image exists
-		if (this.currentScene && this.congratsBgImage) {
-			const coverScaleX = this.currentScene.scale.width / Math.max(1, this.congratsBgImage.width);
-			const coverScaleY = this.currentScene.scale.height / Math.max(1, this.congratsBgImage.height);
-			const coverScale = Math.max(coverScaleX, coverScaleY) * Math.max(0.05, this.congratsBgScale);
-			this.congratsBgImage.setScale(coverScale);
-			this.congratsBgImage.x = this.currentScene.scale.width * 0.5 + this.congratsBgOffsetX;
-			this.congratsBgImage.y = this.currentScene.scale.height * 0.5 + this.congratsBgOffsetY;
-		}
-	}
-
-	public setCongratsNumberSpacing(spacing: number): void {
-		if (!this.numberDisplayRef) return;
-		try {
-			(this.numberDisplayRef as any).updateConfig({ spacing });
-			console.log('[Dialogs] Updated congrats number spacing to', spacing);
-		} catch (e) {
-			console.warn('[Dialogs] Failed to update number spacing:', e);
-		}
-	}
-
-	public setCongratsTitleOptions(opts: { offsetX?: number; offsetY?: number; scale?: number; durationMs?: number }): void {
-		if (opts.offsetX !== undefined) this.congratsWinTitleOffsetX = opts.offsetX;
-		if (opts.offsetY !== undefined) this.congratsWinTitleOffsetY = opts.offsetY;
-		if (opts.scale !== undefined) this.congratsWinTitleScale = Math.max(0.05, opts.scale);
-		if (opts.durationMs !== undefined) this.congratsWinTitleBreathDurationMs = Math.max(100, opts.durationMs);
-		if (this.currentScene && this.congratsWinTitleImage) {
-			const centerX = this.currentScene.scale.width * 0.5;
-			const centerY = this.currentScene.scale.height * 0.5;
-			this.congratsWinTitleImage.x = centerX + this.congratsWinTitleOffsetX;
-			this.congratsWinTitleImage.y = centerY + this.congratsWinTitleOffsetY;
-			this.congratsWinTitleImage.setScale(Math.max(0.05, this.congratsWinTitleScale));
-			// Rebuild tween with new speed if provided
-			if (this.congratsWinTitleTween) { try { this.congratsWinTitleTween.stop(); } catch {} this.congratsWinTitleTween = null; }
-			this.congratsWinTitleTween = this.currentScene.tweens.add({
-				targets: this.congratsWinTitleImage,
-				scaleX: this.congratsWinTitleImage.scaleX * 1.045,
-				scaleY: this.congratsWinTitleImage.scaleY * 1.045,
-				duration: Math.max(100, this.congratsWinTitleBreathDurationMs),
-				ease: 'Sine.inOut',
-				yoyo: true,
-				repeat: -1
-			});
-		}
-	}
-
-	public setCongratsFireOptions(opts: { offsetX?: number; offsetY?: number; scale?: number; timeScale?: number; anim?: string }): void {
-		if (opts.offsetX !== undefined) this.congratsFireOffsetX = opts.offsetX;
-		if (opts.offsetY !== undefined) this.congratsFireOffsetY = opts.offsetY;
-		if (opts.scale !== undefined) this.congratsFireScale = Math.max(0.05, opts.scale);
-		if (opts.timeScale !== undefined) this.congratsFireTimeScale = Math.max(0.0001, opts.timeScale);
-		if (opts.anim !== undefined) this.congratsFireAnimName = opts.anim || 'animation';
-		if (this.currentScene && this.congratsFireSpine) {
-			try { this.congratsFireSpine.x = this.currentScene.scale.width * 0.5 + this.congratsFireOffsetX; } catch {}
-			try { this.congratsFireSpine.y = this.currentScene.scale.height * 0.5 + this.congratsFireOffsetY; } catch {}
-			try { this.congratsFireSpine.setScale(Math.max(0.05, this.congratsFireScale)); } catch {}
-			try { this.congratsFireSpine.animationState.timeScale = Math.max(0.0001, this.congratsFireTimeScale); } catch {}
-			try { if (opts.anim) this.congratsFireSpine.animationState.setAnimation(0, this.congratsFireAnimName, true); } catch {}
-		}
-	}
-
-    public setCongratsCharacterOptions(opts: { x?: number; y?: number; offsetX?: number; offsetY?: number; scale?: number; timeScale?: number }): void {
-        if (opts.x !== undefined) this.congratsCharX = opts.x;
-        if (opts.y !== undefined) this.congratsCharY = opts.y;
-        if (opts.offsetX !== undefined) this.congratsCharOffsetX = opts.offsetX;
-        if (opts.offsetY !== undefined) this.congratsCharOffsetY = opts.offsetY;
-        if (opts.scale !== undefined) this.congratsCharScale = Math.max(0.05, opts.scale);
-        if (opts.timeScale !== undefined) this.congratsCharTimeScale = Math.max(0.0001, opts.timeScale);
-        if (this.currentScene && this.congratsCharSpine) {
-            const baseX = (typeof this.congratsCharX === 'number' && isFinite(this.congratsCharX)) ? this.congratsCharX : this.currentScene.scale.width * 0.5;
-            const baseY = (typeof this.congratsCharY === 'number' && isFinite(this.congratsCharY)) ? this.congratsCharY : this.currentScene.scale.height * 0.5;
-            if (this.congratsCharRoot) { this.congratsCharRoot.x = baseX; this.congratsCharRoot.y = baseY; }
-            if (this.congratsCharOffsetContainer) { this.congratsCharOffsetContainer.x = (this.congratsCharOffsetX || 0); this.congratsCharOffsetContainer.y = (this.congratsCharOffsetY || 0); }
-            if (this.congratsCharScaleContainer) { this.congratsCharScaleContainer.setScale(Math.max(0.05, this.congratsCharScale)); }
-            try { this.congratsCharSpine.animationState.timeScale = Math.max(0.0001, this.congratsCharTimeScale); } catch {}
-        }
-    }
-
-    /** Convenience: set only offset for congrats character. */
-	public setCongratsCharacterOffset(opts: { offsetX?: number; offsetY?: number }): void {
-        if (opts.offsetX !== undefined) this.congratsCharOffsetX = opts.offsetX;
-        if (opts.offsetY !== undefined) this.congratsCharOffsetY = opts.offsetY;
-        if (this.currentScene && this.congratsCharSpine) {
-            const baseX = (typeof this.congratsCharX === 'number' && isFinite(this.congratsCharX)) ? this.congratsCharX : this.currentScene.scale.width * 0.5;
-            const baseY = (typeof this.congratsCharY === 'number' && isFinite(this.congratsCharY)) ? this.congratsCharY : this.currentScene.scale.height * 0.5;
-            if (this.congratsCharRoot) { this.congratsCharRoot.x = baseX; this.congratsCharRoot.y = baseY; }
-            if (this.congratsCharOffsetContainer) { this.congratsCharOffsetContainer.x = (this.congratsCharOffsetX || 0); this.congratsCharOffsetContainer.y = (this.congratsCharOffsetY || 0); }
-        }
-    }
-
-    /** Set offset position for continue text. */
-    public setContinueTextOffset(offsetX: number = 0, offsetY: number = 300): void {
-        this.continueTextOffsetX = offsetX;
-        this.continueTextOffsetY = offsetY;
-        if (this.currentScene && this.continueText) {
-            this.continueText.x = this.currentScene.scale.width / 2 + this.continueTextOffsetX;
-            this.continueText.y = this.currentScene.scale.height / 2 + this.continueTextOffsetY;
-        }
-    }
-		
-	/** Entering Congrats with new flow: fade to black → build Congrats under cover → fade out with fire + embers. */
-	private playEnterFireTransitionThen(next: () => void): void {
-		const scene = this.currentScene;
-		if (!scene || !ensureSpineFactory(scene, '[Dialogs] enter fire transition')) { next(); return; }
-		this.loadEndFireTransitionIfNeeded().then((loaded) => {
-			if (!loaded) { next(); return; }
-			try {
-				if (!this.endTransitionContainer) {
-					this.endTransitionContainer = scene.add.container(0, 0);
-					this.endTransitionContainer.setDepth(20000);
-				}
-				if (!this.endBlackOverlay) {
-					this.endBlackOverlay = scene.add.rectangle(
-						scene.scale.width * 0.5,
-						scene.scale.height * 0.5,
-						scene.scale.width * 2,
-						scene.scale.height * 2,
-						0x000000,
-						1
-					);
-					this.endBlackOverlay.setOrigin(0.5);
-					this.endBlackOverlay.setAlpha(0);
-					try { this.endTransitionContainer.add(this.endBlackOverlay); } catch {}
-				} else {
-					try {
-						if (this.endBlackOverlay.parentContainer !== this.endTransitionContainer) {
-							this.endTransitionContainer.add(this.endBlackOverlay);
-						}
-					} catch {}
-				}
-				this.endTransitionContainer.setVisible(true);
-				try { scene.children.bringToTop(this.endTransitionContainer!); } catch {}
-				try { scene.tweens.killTweensOf(this.endBlackOverlay); } catch {}
-				this.endBlackOverlay.setVisible(true);
-				this.endBlackOverlay.setAlpha(0);
-
-				// Fade to black (0.35s)
-				scene.tweens.add({
-					targets: this.endBlackOverlay!,
-					alpha: 1,
-					duration: 350,
-					ease: 'Cubic.easeOut',
-					onComplete: () => {
-						// small wait to ensure full black is painted
-						scene.time.delayedCall(Math.max(1, this.blackCoverPreCleanupDelayMs), () => {
-							// build Congrats under cover
-							try { next(); } catch {}
-							// settle
-							scene.time.delayedCall(Math.max(1, this.postSwitchSettleMs), () => {
-								// start fire (no mask) and fade black out over 0.5s
-							this.playFireTransitionNoMask(scene, () => {
-								try { this.endBlackOverlay!.setVisible(false); } catch {}
-								try { scene.events.emit('preCongratsMaskGone'); } catch {}
-							});
-								scene.tweens.add({ targets: this.endBlackOverlay!, alpha: 0, duration: 500, ease: 'Cubic.easeOut' });
-							});
-						});
-					}
-				});
-			} catch {
-				next();
-			}
-		});
-	}
-
 	// Convenience methods for specific dialog types
 	showCongrats(scene: Scene, config?: Partial<DialogConfig>): void {
-		// New flow: fade to black → build Congrats under cover → fade out with fire + embers
-		this.playEnterFireTransitionThen(() => {
-			this.showDialog(scene, { type: 'Congrats', ...config });
-		});
+		this.showDialog(scene, { type: 'Congrats_KA', ...config });
 	}
 
-// Removed: FreeSpinDialog_KA is no longer used in the project
+	showFreeSpinDialog(scene: Scene, config?: Partial<DialogConfig>): void {
+		this.showDialog(scene, { type: 'FreeSpinDialog_KA', ...config });
+	}
 
-showLargeWin(scene: Scene, config?: Partial<DialogConfig>): void {
-		// Redirect Large Win to Super Win overlay
-		try {
-			const amount = (config as any)?.winAmount ?? 0;
-			const overlay = (scene as any)?.superWinOverlay;
-			const mgr = (scene as any)?.winOverlayManager;
-			if (mgr && typeof mgr.enqueueShow === 'function') {
-				mgr.enqueueShow('super', amount);
-				return;
-			}
-			if (overlay && typeof overlay.show === 'function') {
-				overlay.show(amount);
-				return;
-			}
-		} catch {}
-		try { console.warn('[Dialogs] LargeW_KA replaced. SuperWinOverlay unavailable; skipping.'); } catch {}
+	showLargeWin(scene: Scene, config?: Partial<DialogConfig>): void {
+		this.showDialog(scene, { type: 'LargeW_KA', ...config });
 		}
 		
-showMediumWin(scene: Scene, config?: Partial<DialogConfig>): void {
-		// Redirect Medium Win to Mega Win overlay
-		try {
-			const amount = (config as any)?.winAmount ?? 0;
-			const overlay = (scene as any)?.megaWinOverlay;
-			const mgr = (scene as any)?.winOverlayManager;
-			if (mgr && typeof mgr.enqueueShow === 'function') {
-				mgr.enqueueShow('mega', amount);
-				return;
-			}
-			if (overlay && typeof overlay.show === 'function') {
-				overlay.show(amount);
-				return;
-			}
-		} catch {}
-		try { console.warn('[Dialogs] MediumW_KA replaced. MegaWinOverlay unavailable; skipping.'); } catch {}
+	showMediumWin(scene: Scene, config?: Partial<DialogConfig>): void {
+		this.showDialog(scene, { type: 'MediumW_KA', ...config });
 		}
 
-showSmallWin(scene: Scene, config?: Partial<DialogConfig>): void {
-		// Redirect Small Win to Big Win overlay; legacy SmallW_KA replaced
-		try {
-			const amount = (config as any)?.winAmount ?? 0;
-			const overlay = (scene as any)?.bigWinOverlay;
-			const mgr = (scene as any)?.winOverlayManager;
-			if (mgr && typeof mgr.enqueueShow === 'function') {
-				mgr.enqueueShow('big', amount);
-				return;
-			}
-			if (overlay && typeof overlay.show === 'function') {
-				overlay.show(amount);
-				return;
-			}
-		} catch {}
-		try { console.warn('[Dialogs] SmallW_KA replaced. BigWinOverlay unavailable; skipping.'); } catch {}
+	showSmallWin(scene: Scene, config?: Partial<DialogConfig>): void {
+		this.showDialog(scene, { type: 'SmallW_KA', ...config });
 		}
 
-showSuperWin(scene: Scene, config?: Partial<DialogConfig>): void {
-		// Redirect Super Win to Epic Win overlay
-		try {
-			const amount = (config as any)?.winAmount ?? 0;
-			const overlay = (scene as any)?.epicWinOverlay;
-			const mgr = (scene as any)?.winOverlayManager;
-			if (mgr && typeof mgr.enqueueShow === 'function') {
-				mgr.enqueueShow('epic', amount);
-				return;
-			}
-			if (overlay && typeof overlay.show === 'function') {
-				overlay.show(amount);
-				return;
-			}
-		} catch {}
-		try { console.warn('[Dialogs] SuperW_KA replaced. EpicWinOverlay unavailable; skipping.'); } catch {}
+	showSuperWin(scene: Scene, config?: Partial<DialogConfig>): void {
+		this.showDialog(scene, { type: 'SuperW_KA', ...config });
 	}
 }
-

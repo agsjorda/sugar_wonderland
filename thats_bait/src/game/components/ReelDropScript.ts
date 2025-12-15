@@ -1,7 +1,6 @@
-import { Data } from "../../tmp_backend/Data";
 import { GameData } from "./GameData";
 import { gameStateManager } from "../../managers/GameStateManager";
-import { SLOT_ROWS, SLOT_COLUMNS } from "../../config/GameConfig";
+import { SLOT_ROWS, SLOT_COLUMNS, SCATTER_SYMBOL } from "../../config/GameConfig";
 import { SoundEffectType } from "../../managers/AudioManager";
 import { getRandomSymbol5Variant, getSymbol5ImageKeyForVariant } from "./Symbol5VariantHelper";
 
@@ -9,7 +8,7 @@ import { getRandomSymbol5Variant, getSymbol5ImageKeyForVariant } from "./Symbol5
  * Run the reel-drop sequence, including previous symbols, filler symbols, and new symbols.
  * This is extracted from Symbols.ts so it can be reused as an independent script.
  */
-export async function runDropReels(self: any, data: Data, fillerCount: number): Promise<void> {
+export async function runDropReels(self: any, symbols: number[][], fillerCount: number): Promise<void> {
   // Play turbo drop sound effect at the start of reel drop sequence when in turbo mode
   try {
     if (self.scene.gameData.isTurbo && (window as any).audioManager) {
@@ -21,14 +20,13 @@ export async function runDropReels(self: any, data: Data, fillerCount: number): 
   const reelCompletionPromises: Promise<void>[] = [];
 
   // Anticipation: if upcoming SpinData shows a scatter on 1st or 3rd columns (x = 0 or 2),
-  // extend only the last reel's animation (x = SLOT_ROWS - 1)
+  // extend only the last reel's animation (x = SLOT_COLUMNS - 1)
   let extendLastReelDrop = false;
   try {
-    const s: number[][] = data.symbols || [];
-    // symbols is [column][row]. Horizontal reels correspond to row indices.
-    const scatterVal = (Data as any).SCATTER[0];
-    const hasScatterCol1 = s.some(col => Array.isArray(col) && col[0] === scatterVal);
-    const hasScatterCol3 = s.some(col => Array.isArray(col) && col[2] === scatterVal);
+    const s: number[][] = symbols || [];
+    const scatterVal = SCATTER_SYMBOL[0];
+    const hasScatterCol1 = Array.isArray(s[0]) && s[0].some(v => v === scatterVal);
+    const hasScatterCol3 = Array.isArray(s[2]) && s[2].some(v => v === scatterVal);
     extendLastReelDrop = !!(hasScatterCol1 && hasScatterCol3);
     console.log(`[ReelDropScript] Anticipation check (reel 1 AND reel 3 scatter): r1=${hasScatterCol1}, r3=${hasScatterCol3} → extend=${extendLastReelDrop}`);
   } catch (e) {
@@ -39,12 +37,12 @@ export async function runDropReels(self: any, data: Data, fillerCount: number): 
   // Persist anticipation state on scene for cross-function checks
   try { (self.scene as any).__isScatterAnticipationActive = extendLastReelDrop; } catch {}
 
-  for (let row = 0; row < SLOT_ROWS; row++) {
-    console.log(`[ReelDropScript] Processing row ${row}`);
-    const isLastReel = row === (SLOT_ROWS - 1);
-    dropPrevSymbols(self, fillerCount, row, isLastReel && extendLastReelDrop);
-    dropFillers(self, fillerCount, row, isLastReel && extendLastReelDrop);
-    const reelPromise = dropNewSymbols(self, fillerCount, row, isLastReel && extendLastReelDrop);
+  for (let col = 0; col < SLOT_COLUMNS; col++) {
+    console.log(`[ReelDropScript] Processing reel ${col}`);
+    const isLastReel = col === (SLOT_COLUMNS - 1);
+    dropPrevSymbols(self, fillerCount, col, isLastReel && extendLastReelDrop);
+    dropFillers(self, fillerCount, col, isLastReel && extendLastReelDrop);
+    const reelPromise = dropNewSymbols(self, fillerCount, col, isLastReel && extendLastReelDrop);
     reelCompletionPromises.push(reelPromise);
     const delayMs = self.scene.gameData?.dropReelsDelay ?? 0;
     if (delayMs > 0) {
@@ -135,7 +133,7 @@ function dropPrevSymbols(self: any, fillerCount: number, index: number, extendDu
   }
 
   // Check if symbols array has valid structure
-  if (!self.symbols[0] || !self.symbols[0][0]) {
+  if (!Array.isArray(self.symbols) || self.symbols.length === 0 || !Array.isArray(self.symbols[0]) || self.symbols[0].length === 0) {
     console.warn("[ReelDropScript] dropPrevSymbols: symbols array structure is invalid, skipping");
     return;
   }
@@ -150,15 +148,21 @@ function dropPrevSymbols(self: any, fillerCount: number, index: number, extendDu
   const extraRows = extraPixels > 0 ? Math.ceil(extraPixels / height) : 0;
   const DROP_DISTANCE = (fillerCount + extraRows) * height + self.scene.gameData.winUpHeight;
 
-  for (let i = 0; i < self.symbols.length; i++) {
-    // Check if the current row exists and has the required index
-    if (!self.symbols[i] || !self.symbols[i][index]) {
-      console.warn(`[ReelDropScript] dropPrevSymbols: skipping invalid row ${i} or index ${index}`);
+  const column = self.symbols[index];
+  if (!Array.isArray(column)) {
+    console.warn(`[ReelDropScript] dropPrevSymbols: symbols column ${index} is invalid, skipping`);
+    return;
+  }
+
+  for (let row = 0; row < column.length; row++) {
+    const target = column[row];
+    // If a symbol display object is intentionally missing (e.g. unknown symbol id), skip silently.
+    if (target === null || typeof target === 'undefined') {
       continue;
     }
 
     self.scene.tweens.chain({
-      targets: self.symbols[i][index],
+      targets: target,
       tweens: [
         {
           y: `-= ${self.scene.gameData.winUpHeight}`,
@@ -168,7 +172,7 @@ function dropPrevSymbols(self: any, fillerCount: number, index: number, extendDu
         {
           y: `+= ${DROP_DISTANCE}`,
           duration: self.scene.gameData.dropReelsDuration + extraMs,
-          ease: (((self.scene as any)?.__isScatterAnticipationActive) && index === (SLOT_ROWS - 1))
+          ease: (((self.scene as any)?.__isScatterAnticipationActive) && index === (SLOT_COLUMNS - 1))
             ? (window as any).Phaser?.Math?.Easing?.Cubic?.Out
             : (window as any).Phaser?.Math?.Easing?.Bounce?.Out,
         },
@@ -179,28 +183,28 @@ function dropPrevSymbols(self: any, fillerCount: number, index: number, extendDu
 
 function dropFillers(self: any, fillerCount: number, index: number, extendDuration: boolean = false) {
   // Check if symbols array has valid structure
-  if (!self.symbols || !self.symbols[0] || !self.symbols[0][0]) {
+  if (!Array.isArray(self.symbols) || self.symbols.length === 0 || !Array.isArray(self.symbols[0]) || self.symbols[0].length === 0) {
     console.warn("[ReelDropScript] dropFillers: symbols array structure is invalid, skipping");
     return;
   }
 
   const height = self.displayHeight + self.verticalSpacing;
-  const baseTotal = fillerCount + SLOT_COLUMNS;
+  const baseTotal = fillerCount + SLOT_ROWS;
   const baseDropDistance = baseTotal * height + GameData.WIN_UP_HEIGHT;
   const extraMs = extendDuration ? 3000 : 0;
   const baseDropMs = self.scene.gameData.dropDuration * 0.9;
   const extraPixels = extraMs > 0 && baseDropMs > 0 ? (baseDropDistance * (extraMs / baseDropMs)) : 0;
   const extraRows = extraPixels > 0 ? Math.ceil(extraPixels / height) : 0;
-  const TOTAL_ITEMS = fillerCount + SLOT_COLUMNS + extraRows;
+  const TOTAL_ITEMS = fillerCount + SLOT_ROWS + extraRows;
   const EXTRA_VISUAL_ROWS = 4;
   const DROP_DISTANCE = (TOTAL_ITEMS + EXTRA_VISUAL_ROWS) * height + GameData.WIN_UP_HEIGHT;
   const fillerSymbols: any[] = [];
 
-  for (let i = 0; i < TOTAL_ITEMS - SLOT_COLUMNS; i++) {
+  for (let i = 0; i < TOTAL_ITEMS - SLOT_ROWS; i++) {
     const symbolTotalWidth = self.displayWidth + self.horizontalSpacing;
     const startX = self.slotX - self.totalGridWidth * 0.5;
 
-    const START_INDEX_Y = -(TOTAL_ITEMS - SLOT_COLUMNS);
+    const START_INDEX_Y = -(TOTAL_ITEMS - SLOT_ROWS);
     const x = startX + index * symbolTotalWidth + symbolTotalWidth * 0.5;
     const y = getYPos(self, i + START_INDEX_Y);
 
@@ -241,7 +245,7 @@ function dropFillers(self: any, fillerCount: number, index: number, extendDurati
 
     try {
       const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
-      if (isAnticipation && index === (SLOT_ROWS - 1)) {
+      if (isAnticipation && index === (SLOT_COLUMNS - 1)) {
         try { (self as any).ensureScatterForegroundContainer?.(); } catch {}
         const fg: Phaser.GameObjects.Container | undefined = (self as any).scatterForegroundContainer;
         if (fg && typeof fg.add === "function") {
@@ -296,7 +300,7 @@ function dropFillers(self: any, fillerCount: number, index: number, extendDurati
 function dropNewSymbols(self: any, fillerCount: number, index: number, extendDuration: boolean = false): Promise<void> {
   return new Promise<void>((resolve) => {
     // Check if symbols array has valid structure
-    if (!self.symbols || !self.symbols[0] || !self.symbols[0][0]) {
+    if (!Array.isArray(self.symbols) || self.symbols.length === 0 || !Array.isArray(self.symbols[0]) || self.symbols[0].length === 0) {
       console.warn("[ReelDropScript] dropNewSymbols: symbols array structure is invalid, resolving immediately");
       resolve();
       return;
@@ -306,7 +310,7 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
     // land exactly in their cell centers under the mask, independent of any
     // per-symbol scale tweaks from previous spins.
     const height = self.displayHeight + self.verticalSpacing;
-    const START_INDEX_BASE = fillerCount + SLOT_COLUMNS;
+    const START_INDEX_BASE = fillerCount + SLOT_ROWS;
     const baseDropDistance = START_INDEX_BASE * height + self.scene.gameData.winUpHeight;
     const extraMs = extendDuration ? 3000 : 0;
     const baseDropMs = self.scene.gameData.dropDuration * 0.9;
@@ -316,11 +320,17 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
     const DROP_DISTANCE = START_INDEX * height + self.scene.gameData.winUpHeight;
 
     let completedAnimations = 0;
-    const totalAnimations = self.newSymbols.length;
-    const START_INDEX_Y = -(fillerCount + SLOT_COLUMNS + extraRows);
+    const column = self.newSymbols?.[index];
+    const totalAnimations = Array.isArray(column) ? column.length : 0;
+    const START_INDEX_Y = -(fillerCount + SLOT_ROWS + extraRows);
 
-    for (let col = 0; col < self.newSymbols.length; col++) {
-      const symbol = self.newSymbols[col][index];
+    if (!Array.isArray(column) || totalAnimations === 0) {
+      finalize();
+      return;
+    }
+
+    for (let row = 0; row < column.length; row++) {
+      const symbol = column[row];
       if (!symbol) {
         completedAnimations++;
         if (completedAnimations === totalAnimations) {
@@ -329,7 +339,7 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
         continue;
       }
 
-      const startIndex = col + START_INDEX_Y;
+      const startIndex = row + START_INDEX_Y;
       symbol.y = getYPos(self, startIndex);
 
       self.scene.tweens.chain({
@@ -343,7 +353,7 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
           {
             y: `+= ${DROP_DISTANCE}`,
             duration: (self.scene.gameData.dropDuration * 0.9) + extraMs,
-            ease: (((self.scene as any)?.__isScatterAnticipationActive) && index === (SLOT_ROWS - 1))
+            ease: (((self.scene as any)?.__isScatterAnticipationActive) && index === (SLOT_COLUMNS - 1))
               ? (window as any).Phaser?.Math?.Easing?.Cubic?.Out
               : (window as any).Phaser?.Math?.Easing?.Linear,
           },
@@ -411,7 +421,7 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
 
       try {
         const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
-        if (isAnticipation && index === (SLOT_ROWS - 1)) {
+        if (isAnticipation && index === (SLOT_COLUMNS - 1)) {
           const sa = (self.scene as any)?.scatterAnticipation;
           if (sa && typeof sa.hide === "function") { sa.hide(); }
           const sa2 = (self.scene as any)?.scatterAnticipation2;
