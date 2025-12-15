@@ -9,6 +9,8 @@ RUN apk add --no-cache \
     make \
     g++ \
     build-base \
+    autoconf \
+    automake \
     cairo-dev \
     jpeg-dev \
     pango-dev \

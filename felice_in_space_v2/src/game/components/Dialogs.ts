@@ -78,22 +78,22 @@ export class Dialogs {
 
 	// Dialog configuration
 	private dialogScales: Record<string, number> = {
-		'Congrats_Dialog': 0.45,
-		'FreeSpin_Dialog': 0.45,
-		'EpicWin_Dialog': 0.45,
-		'MegaWin_Dialog':0.45,
-		'BigWin_Dialog':0.45,
-		'SuperWin_Dialog': 0.45
+		'Congrats_Dialog': 0.32,
+		'FreeSpin_Dialog': 0.32,
+		'EpicWin_Dialog': 0.32,
+		'MegaWin_Dialog':0.32,
+		'BigWin_Dialog':0.32,
+		'SuperWin_Dialog': 0.32
 	};
 
 	// Dialog positions (relative: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom)
 	private dialogPositions: Record<string, { x: number; y: number }> = {
-		'Congrats_Dialog': { x:0.55, y: 0.55 },
-		'FreeSpin_Dialog': { x: 0.55, y: 0.55 },
-		'EpicWin_Dialog': { x: 0.55, y:0.55 },
-		'MegaWin_Dialog': { x:0.55, y: 0.55 },
-		'BigWin_Dialog': { x: 0.55, y: 0.55 },
-		'SuperWin_Dialog': { x: 0.55, y: 0.55 }
+		'Congrats_Dialog': { x:0.5, y: 0.4 },
+		'FreeSpin_Dialog': { x: 0.5, y: 0.4 },
+		'EpicWin_Dialog': { x: 0.5, y:0.4 },
+		'MegaWin_Dialog': { x:0.5, y: 0.4 },
+		'BigWin_Dialog': { x: 0.5, y: 0.4 },
+		'SuperWin_Dialog': { x: 0.5, y: 0.4 }
 	};
 
 	private dialogLoops: Record<string, boolean> = {
@@ -381,41 +381,64 @@ export class Dialogs {
 	}
 
 	/**
-	 * Map old dialog types to new Win.json animation names
+	 * Map dialog types to their spine keynames
 	 */
-	private getAnimationNameForDialogType(dialogType: string): { intro: string; idle: string; outro?: string } | null {
-		const animationMap: Record<string, { intro: string; idle: string; outro?: string }> = {
-			// Win dialog animations
-			'BigWin_Dialog': { intro: 'BigWin-Intro', idle: 'BigWin-Idle', outro: 'BigWin-Outro' },
-			'MegaWin_Dialog': { intro: 'MegaWin-Intro', idle: 'MegaWin-Idle' },
-			'EpicWin_Dialog': { intro: 'EpicWin-Intro', idle: 'EpicWin-Idle' },
-			'SuperWin_Dialog': { intro: 'SuperWin-Intro', idle: 'SuperWin-Idle' },
-			'FreeSpin_Dialog': { intro: 'FreeSpin-Intro', idle: 'FreeSpin-Idle' },
-
-			// Congrats dialog should also use the Win spine (shared Win.json)
-			// Expecting dedicated "Congrats" animations to be present in the Win asset.
-			// If the intro animation is missing, we will gracefully fall back to the idle animation.
-			'Congrats_Dialog': { intro: 'Congrats-Intro', idle: 'Congrats-Idle' }
+	private getSpineKeynameForDialogType(dialogType: string): string {
+		const keynameMap: Record<string, string> = {
+			'BigWin_Dialog': 'BigW_FIS',
+			'MegaWin_Dialog': 'MegaW_FIS',
+			'EpicWin_Dialog': 'EpicW_FIS',
+			'SuperWin_Dialog': 'SuperW_FIS',
+			'Congrats_Dialog': 'Congrats_FIS',
+			'FreeSpin_Dialog': 'FreeSpin_FIS'
 		};
 		
-		return animationMap[dialogType] || null;
+		return keynameMap[dialogType] || dialogType;
 	}
 
 	/**
-	 * Check if dialog type should use the new Win.json asset
+	 * Get animation names for dialog type
+	 * Based on actual animations in spine files: {spine-keyname}_Idle and {spine-keyname}_Idle2
+	 */
+	private getAnimationNameForDialogType(dialogType: string): { intro: string; idle: string; idleFallback: string; outro?: string } | null {
+		const spineKeyname = this.getSpineKeynameForDialogType(dialogType);
+		
+		// Actual animations in spine files:
+		// - {spine-keyname}_Idle2 (used as intro/transition)
+		// - {spine-keyname}_Idle (used as idle/loop)
+		return {
+			intro: `${spineKeyname}_Idle2`,  // Idle2 is typically the intro/transition animation
+			idle: `${spineKeyname}_Idle`,     // Idle is the looping animation
+			idleFallback: `${spineKeyname}_Idle`, // Fallback to same as idle
+			outro: undefined // No outro animations found in the spine files
+		};
+	}
+
+	/**
+	 * Try to set an animation with fallback options
+	 */
+	private trySetAnimation(animationState: any, trackIndex: number, primaryName: string, fallbackName: string, loop: boolean): boolean {
+		try {
+			animationState.setAnimation(trackIndex, primaryName, loop);
+			return true;
+		} catch (error) {
+			try {
+				console.log(`[Dialogs] Animation '${primaryName}' not found, trying fallback '${fallbackName}'`);
+				animationState.setAnimation(trackIndex, fallbackName, loop);
+				return true;
+			} catch (fallbackError) {
+				console.warn(`[Dialogs] Both animation names failed: '${primaryName}' and '${fallbackName}'`);
+				return false;
+			}
+		}
+	}
+
+	/**
+	 * Check if dialog type should use the shared Win.json asset (now returns false since we use separate assets)
 	 */
 	private shouldUseWinAsset(dialogType: string): boolean {
-		// These dialog types all share the common Win.json spine asset
-		// including Congrats_Dialog which should now use the "congrats" animations
-		// from the Win spine instead of its legacy Congrats_Dialog-specific spine.
-		return [
-			'BigWin_Dialog',
-			'MegaWin_Dialog',
-			'EpicWin_Dialog',
-			'SuperWin_Dialog',
-			'FreeSpin_Dialog',
-			'Congrats_Dialog'
-		].includes(dialogType);
+		// All dialogs now use separate spine assets, so this always returns false
+		return false;
 	}
 
 	/**
@@ -434,10 +457,9 @@ export class Dialogs {
 		
 		// Create Spine animation for the dialog
 		try {
-			// Check if we should use the new Win.json asset
-			const useWinAsset = this.shouldUseWinAsset(config.type);
-			const assetKey = useWinAsset ? 'Win' : config.type;
-			const atlasKey = useWinAsset ? 'Win-atlas' : `${config.type}-atlas`;
+			// Use dialog type as asset key (each dialog has its own separate spine asset)
+			const assetKey = config.type;
+			const atlasKey = `${config.type}-atlas`;
 			
 			console.log(`[Dialogs] Creating Spine animation for dialog: ${config.type}`);
 			console.log(`[Dialogs] Using asset: ${assetKey}, atlas: ${atlasKey}`);
@@ -454,56 +476,48 @@ export class Dialogs {
 			// starting scale of 0 and the pop animation can appear to be skipped.
 			this.currentDialog.setScale(scale);
 			
-			// Get animation names based on dialog type
+			// Get animation names based on dialog type using spine keyname convention
 			const shouldLoop = this.getDialogLoop(config.type);
+			const animations = this.getAnimationNameForDialogType(config.type);
 			
-			if (useWinAsset) {
-				// Use new Win.json animation names
-				const animations = this.getAnimationNameForDialogType(config.type);
-				if (animations) {
-					try {
-						if (this.disableIntroAnimations) {
-							console.log(`[Dialogs] Intro disabled for dialog ${config.type}, starting idle with pop: ${animations.idle}`);
-							this.currentDialog.animationState.setAnimation(0, animations.idle, shouldLoop);
-							this.applyDialogScalePop(scene);
-						} else {
-							console.log(`[Dialogs] Playing intro animation: ${animations.intro}`);
-							this.currentDialog.animationState.setAnimation(0, animations.intro, false);
-							this.currentDialog.animationState.addAnimation(0, animations.idle, shouldLoop, 0);
-							this.applyDialogScalePop(scene);
-						}
-					} catch (error) {
-						console.log(`[Dialogs] Intro/idle animation failed, falling back to idle with pop: ${animations.idle}`);
-						// Fallback to idle animation if something goes wrong
-						this.currentDialog.animationState.setAnimation(0, animations.idle, shouldLoop);
-						this.applyDialogScalePop(scene);
-					}
-				} else {
-					console.error(`[Dialogs] No animation mapping found for dialog type: ${config.type}`);
-					return;
-				}
-			} else {
-				// Use old animation format for other dialogs that still rely on the
-				// "{spine-keyname}_win" / "{spine-keyname}_idle" naming convention.
-				// We also apply the same pop-in effect so these dialogs visually
-				// match the new Win.json-based dialogs.
+			if (animations) {
 				try {
 					if (this.disableIntroAnimations) {
-						console.log(`[Dialogs] (legacy) Intro disabled for dialog ${config.type}, starting idle with pop: ${config.type}_idle`);
-						this.currentDialog.animationState.setAnimation(0, `${config.type}_idle`, shouldLoop);
+						console.log(`[Dialogs] Intro disabled for dialog ${config.type}, starting idle with pop: ${animations.idle}`);
+						// Try _idle first, fallback to _Idle
+						if (!this.trySetAnimation(this.currentDialog.animationState, 0, animations.idle, animations.idleFallback, shouldLoop)) {
+							console.error(`[Dialogs] Failed to set idle animation for ${config.type}`);
+							return;
+						}
 						this.applyDialogScalePop(scene);
 					} else {
-						console.log(`[Dialogs] Playing legacy intro animation: ${config.type}_win`);
-						this.currentDialog.animationState.setAnimation(0, `${config.type}_win`, false);
-						this.currentDialog.animationState.addAnimation(0, `${config.type}_idle`, shouldLoop, 0);
+						console.log(`[Dialogs] Playing intro animation: ${animations.intro}`);
+						this.currentDialog.animationState.setAnimation(0, animations.intro, false);
+						// Queue idle animation after intro - try _idle first, fallback to _Idle
+						try {
+							this.currentDialog.animationState.addAnimation(0, animations.idle, shouldLoop, 0);
+						} catch {
+							try {
+								console.log(`[Dialogs] Animation '${animations.idle}' not found, trying fallback '${animations.idleFallback}'`);
+								this.currentDialog.animationState.addAnimation(0, animations.idleFallback, shouldLoop, 0);
+							} catch (fallbackError) {
+								console.warn(`[Dialogs] Failed to queue idle animation for ${config.type}`);
+							}
+						}
 						this.applyDialogScalePop(scene);
 					}
 				} catch (error) {
-					console.log(`[Dialogs] Legacy intro animation failed, falling back to idle with pop: ${config.type}_idle`);
-					// Fallback to idle animation if intro is missing
-					this.currentDialog.animationState.setAnimation(0, `${config.type}_idle`, shouldLoop);
+					console.log(`[Dialogs] Intro/idle animation failed, falling back to idle with pop: ${animations.idle}`);
+					// Fallback to idle animation if something goes wrong - try both variants
+					if (!this.trySetAnimation(this.currentDialog.animationState, 0, animations.idle, animations.idleFallback, shouldLoop)) {
+						console.error(`[Dialogs] Failed to set fallback idle animation for ${config.type}`);
+						return;
+					}
 					this.applyDialogScalePop(scene);
 				}
+			} else {
+				console.error(`[Dialogs] No animation mapping found for dialog type: ${config.type}`);
+				return;
 			}
 		} catch (error) {
 			console.error(`[Dialogs] Error creating dialog content: ${config.type}`, error);
@@ -1980,34 +1994,76 @@ export class Dialogs {
 
 		// Ensure the visual sequence starts from the first tier (e.g. BigWin),
 		// not from the final tier that was passed into showDialog.
+		// Since each dialog type now has its own separate spine file, we need to
+		// recreate the spine object for the first stage to use the correct asset.
 		try {
 			const firstStage = this.stagedWinStages[0];
 			this.currentDialogType = firstStage.type;
 
-			if (this.currentDialog && this.currentDialog.animationState) {
+			if (this.currentDialog && this.currentScene) {
+				// Get position and scale from the existing dialog before destroying it
+				const currentX = this.currentDialog.x;
+				const currentY = this.currentDialog.y;
+				const currentScale = this.currentDialog.scaleX;
+				
+				// Destroy the old spine object (which was created with the final dialog type)
+				this.currentDialog.destroy();
+				this.currentDialog = null;
+				
+				// Create new spine object with the correct asset for the first stage
+				const assetKey = firstStage.type;
+				const atlasKey = `${firstStage.type}-atlas`;
+				
+				console.log(`[Dialogs] Staged win: recreating spine for first stage (${firstStage.type})`);
+				console.log(`[Dialogs] Using asset: ${assetKey}, atlas: ${atlasKey}`);
+				
+				this.currentDialog = this.currentScene.add.spine(
+					currentX,
+					currentY,
+					assetKey,
+					atlasKey
+				);
+				this.currentDialog.setOrigin(0.5, 0.5);
+				this.currentDialog.setScale(currentScale);
+				
+				// Add to dialog content container if it exists
+				if (this.dialogContentContainer) {
+					this.dialogContentContainer.add(this.currentDialog);
+				}
+				
+				// Play the correct animation for the first stage
 				const animations = this.getAnimationNameForDialogType(firstStage.type);
-				if (animations) {
+				if (animations && this.currentDialog.animationState) {
 					const shouldLoop = this.getDialogLoop(firstStage.type);
-					console.log('[Dialogs] Staged win: initializing spine animation to first stage', animations);
+					console.log('[Dialogs] Staged win: playing spine animation for first stage', animations);
 					try {
 						if (this.disableIntroAnimations) {
-							this.currentDialog.animationState.setAnimation(0, animations.idle, shouldLoop);
+							// Try _idle first, fallback to _Idle
+							if (!this.trySetAnimation(this.currentDialog.animationState, 0, animations.idle, animations.idleFallback, shouldLoop)) {
+								console.warn('[Dialogs] Staged win: failed to set idle animation for first stage');
+							}
 						} else {
 							this.currentDialog.animationState.setAnimation(0, animations.intro, false);
-							this.currentDialog.animationState.addAnimation(0, animations.idle, shouldLoop, 0);
+							// Queue idle animation - try _idle first, fallback to _Idle
+							try {
+								this.currentDialog.animationState.addAnimation(0, animations.idle, shouldLoop, 0);
+							} catch {
+								try {
+									this.currentDialog.animationState.addAnimation(0, animations.idleFallback, shouldLoop, 0);
+								} catch {
+									console.warn('[Dialogs] Staged win: failed to queue idle animation for first stage');
+								}
+							}
 						}
 						// Apply scale pop whenever we transition into idle
-						const sceneRef = this.currentScene;
-						if (sceneRef) {
-							this.applyDialogScalePop(sceneRef);
-						}
+						this.applyDialogScalePop(this.currentScene);
 					} catch (err) {
-						console.warn('[Dialogs] Staged win: failed to play intro/idle for first stage, using idle only', err);
-						this.currentDialog.animationState.setAnimation(0, animations.idle, shouldLoop);
-						const sceneRef = this.currentScene;
-						if (sceneRef) {
-							this.applyDialogScalePop(sceneRef);
+						console.warn('[Dialogs] Staged win: intro/idle animation failed for first stage, using idle only', err);
+						// Try _idle first, fallback to _Idle
+						if (!this.trySetAnimation(this.currentDialog.animationState, 0, animations.idle, animations.idleFallback, shouldLoop)) {
+							console.warn('[Dialogs] Staged win: failed to set fallback idle animation for first stage');
 						}
+						this.applyDialogScalePop(this.currentScene);
 					}
 				}
 			}
@@ -2099,38 +2155,87 @@ export class Dialogs {
 			console.warn('[Dialogs] Failed to trigger staged tier SFX:', e);
 		}
 
-		// Switch the spine animation to match the current tier.
+		// Switch the spine asset and animation to match the current tier.
+		// Since each dialog type now has its own separate spine file, we need to recreate
+		// the spine object for each stage instead of just switching animations.
 		// For the first stage, the animation was already initialized in setupStagedWinNumberAnimation,
 		// so avoid resetting it here to prevent the "first tier plays twice" effect.
 		if (index > 0 || fastFromSkip) {
 			try {
+				// Get position and scale from the existing dialog before destroying it
+				const currentX = this.currentDialog.x;
+				const currentY = this.currentDialog.y;
+				const currentScale = this.currentDialog.scaleX;
+				
+				// Destroy the old spine object
+				if (this.currentDialog) {
+					this.currentDialog.destroy();
+					this.currentDialog = null;
+				}
+				
+				// Create new spine object with the correct asset for this stage
+				const assetKey = stage.type;
+				const atlasKey = `${stage.type}-atlas`;
+				const sceneRef = this.currentScene || scene;
+				
+				console.log(`[Dialogs] Staged win: recreating spine for stage ${index} (${stage.type})`);
+				console.log(`[Dialogs] Using asset: ${assetKey}, atlas: ${atlasKey}`);
+				
+				this.currentDialog = sceneRef.add.spine(
+					currentX,
+					currentY,
+					assetKey,
+					atlasKey
+				);
+				this.currentDialog.setOrigin(0.5, 0.5);
+				this.currentDialog.setScale(currentScale);
+				
+				// Add to dialog content container if it exists
+				if (this.dialogContentContainer) {
+					this.dialogContentContainer.add(this.currentDialog);
+				}
+				
+				// Play the correct animation for this stage
 				const animations = this.getAnimationNameForDialogType(stage.type);
 				if (animations && this.currentDialog.animationState) {
 					const shouldLoop = this.getDialogLoop(stage.type);
-					console.log('[Dialogs] Staged win: switching spine animation to', animations);
+					console.log('[Dialogs] Staged win: playing spine animation for stage', animations);
 					try {
 						if (this.disableIntroAnimations) {
-							this.currentDialog.animationState.setAnimation(0, animations.idle, shouldLoop);
+							// Try _idle first, fallback to _Idle
+							if (!this.trySetAnimation(this.currentDialog.animationState, 0, animations.idle, animations.idleFallback, shouldLoop)) {
+								console.warn('[Dialogs] Staged win: failed to set idle animation for stage', stage.type);
+							}
 						} else {
 							this.currentDialog.animationState.setAnimation(0, animations.intro, false);
-							this.currentDialog.animationState.addAnimation(0, animations.idle, shouldLoop, 0);
+							// Queue idle animation - try _idle first, fallback to _Idle
+							try {
+								this.currentDialog.animationState.addAnimation(0, animations.idle, shouldLoop, 0);
+							} catch {
+								try {
+									this.currentDialog.animationState.addAnimation(0, animations.idleFallback, shouldLoop, 0);
+								} catch {
+									console.warn('[Dialogs] Staged win: failed to queue idle animation for stage', stage.type);
+								}
+							}
 						}
 						// Apply scale pop whenever we transition into idle
-						const sceneRef = this.currentScene || scene;
 						if (sceneRef) {
 							this.applyDialogScalePop(sceneRef);
 						}
 					} catch (err) {
 						console.warn('[Dialogs] Staged win: intro/idle animation failed, using idle only', err);
-						this.currentDialog.animationState.setAnimation(0, animations.idle, shouldLoop);
-						const sceneRef = this.currentScene || scene;
+						// Try _idle first, fallback to _Idle
+						if (!this.trySetAnimation(this.currentDialog.animationState, 0, animations.idle, animations.idleFallback, shouldLoop)) {
+							console.warn('[Dialogs] Staged win: failed to set fallback idle animation for stage', stage.type);
+						}
 						if (sceneRef) {
 							this.applyDialogScalePop(sceneRef);
 						}
 					}
 				}
 			} catch (e) {
-				console.warn('[Dialogs] Staged win: failed to switch spine animation for stage', stage.type, e);
+				console.warn('[Dialogs] Staged win: failed to recreate spine for stage', stage.type, e);
 			}
 		}
 

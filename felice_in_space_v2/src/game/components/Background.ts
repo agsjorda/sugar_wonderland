@@ -75,7 +75,7 @@ export class Background {
 			this.bgDefaultSpine.setScale(assetScale);
 			
 			// Play Normal_Mode_FIS animation (loop it)
-			this.bgDefaultSpine.animationState.setAnimation(0, 'Normal_Mode_FIS', true);
+			this.bgDefaultSpine.animationState.setAnimation(0, 'Normal_BG_FIS', true);
 			
 			this.bgContainer.add(this.bgDefaultSpine);
 			console.log('[Background] Created BG-Default spine animation');

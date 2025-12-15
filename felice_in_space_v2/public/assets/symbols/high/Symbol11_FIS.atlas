@@ -1,98 +1,131 @@
-BLUE ROCK.png
-size:2040,2040
+Symbol11_FIS.webp
+size:2048,2048
 filter:Linear,Linear
-pma:true
-BLUE ROCK_00016
-bounds:1397,845,564,574
-offsets:99,83,752,752
-BLUE ROCK_00020
-bounds:2,643,696,696
-offsets:27,24,752,752
-BLUE ROCK_00021
-bounds:2,1341,696,697
-offsets:27,24,752,752
-BLUE ROCK_00022
-bounds:700,1345,695,693
-offsets:28,24,752,752
-BLUE ROCK_00023
-bounds:700,660,689,683
-offsets:34,24,752,752
-BLUE ROCK_00025
-bounds:700,2,653,656
-offsets:54,62,752,752
-BLUE ROCK_00026
-bounds:1355,6,652,652
-offsets:52,56,752,752
-BLUE ROCK_00027
-bounds:2,8,642,633
-offsets:60,56,752,752
-BLUE ROCK_00028
-bounds:1397,1421,621,617
-offsets:70,49,752,752
+pma:false
+Explosion/Orange_Explosion_00003
+bounds:2002,2042,1,1
+Red/B_Shatter_00026
+bounds:2002,2042,1,1
+Explosion/Orange_Explosion_00008
+bounds:1006,158,407,398
+offsets:40,52,500,500
+Explosion/Orange_Explosion_00009
+bounds:1496,180,441,430
+offsets:23,37,500,500
+Explosion/Orange_Explosion_00010
+bounds:1507,612,466,458
+offsets:10,23,500,500
+Explosion/Orange_Explosion_00011
+bounds:1006,558,488,482
+offsets:0,11,500,500
+Explosion/Orange_Explosion_00012
+bounds:1006,1042,499,499
+offsets:0,1,500,500
+Explosion/Orange_Explosion_00013
+bounds:2,1543,500,500
+Explosion/Orange_Explosion_00014
+bounds:2,1041,500,500
+Explosion/Orange_Explosion_00015
+bounds:504,1543,500,500
+Explosion/Orange_Explosion_00016
+bounds:2,539,500,500
+Explosion/Orange_Explosion_00017
+bounds:504,1041,500,500
+Explosion/Orange_Explosion_00018
+bounds:1006,1543,500,500
+Explosion/Orange_Explosion_00019
+bounds:2,37,500,500
+Explosion/Orange_Explosion_00020
+bounds:504,539,500,500
+Explosion/Orange_Explosion_00021
+bounds:1508,1543,492,500
+offsets:0,0,500,500
+Explosion/Orange_Explosion_00022
+bounds:504,41,486,496
+offsets:1,0,500,500
+Explosion/Orange_Explosion_00023
+bounds:1507,1072,474,469
+offsets:13,23,500,500
+Red/B_Shatter_00006
+bounds:1142,22,132,134
+offsets:184,182,500,500
+Red/B_Shatter_00007
+bounds:1589,19,161,159
+offsets:158,177,500,500
+Red/B_Shatter_00008
+bounds:1415,5,172,173
+offsets:162,170,500,500
+Stage/Surge_00004
+bounds:992,2,148,154
+offsets:176,170,500,500
 
-BLUE ROCK_2.png
-size:2036,2036
+Symbol11_FIS_2.webp
+size:1288,1288
 filter:Linear,Linear
-pma:true
-BLUE ROCK_00007
-bounds:1492,2,485,492
-offsets:138,124,752,752
-BLUE ROCK_00008
-bounds:1002,365,488,496
-offsets:137,122,752,752
-BLUE ROCK_00009
-bounds:688,863,492,500
-offsets:135,120,752,752
-BLUE ROCK_00010
-bounds:504,160,496,504
-offsets:133,118,752,752
-BLUE ROCK_00011
-bounds:2,156,500,508
-offsets:131,116,752,752
-BLUE ROCK_00012
-bounds:1386,994,493,502
-offsets:134,119,752,752
-BLUE ROCK_00013
-bounds:1492,496,487,496
-offsets:137,122,752,752
-BLUE ROCK_00015
-bounds:1386,1498,527,536
-offsets:117,102,752,752
-BLUE ROCK_00017
-bounds:2,1352,684,682
-offsets:39,33,752,752
-BLUE ROCK_00019
-bounds:688,1365,696,669
-offsets:27,30,752,752
-BLUE ROCK_00024
-bounds:2,666,679,684
-offsets:44,25,752,752
-
-BLUE ROCK_3.png
-size:1444,1444
-filter:Linear,Linear
-pma:true
-BLUE ROCK_00000
-bounds:960,492,457,464
-offsets:152,138,752,752
-BLUE ROCK_00001
-bounds:952,6,461,468
-offsets:150,136,752,752
-BLUE ROCK_00002
-bounds:485,2,465,472
-offsets:148,134,752,752
-BLUE ROCK_00003
-bounds:964,966,469,476
-offsets:146,132,752,752
-BLUE ROCK_00004
-bounds:485,476,473,480
-offsets:144,130,752,752
-BLUE ROCK_00005
-bounds:485,958,477,484
-offsets:142,128,752,752
-BLUE ROCK_00006
-bounds:2,462,481,488
-offsets:140,126,752,752
-BLUE ROCK_00014
-bounds:2,952,481,490
-offsets:140,125,752,752
+pma:false
+Explosion/Orange_Explosion_00004
+bounds:777,24,225,221
+offsets:132,136,500,500
+Explosion/Orange_Explosion_00005
+bounds:2,340,279,268
+offsets:105,114,500,500
+Explosion/Orange_Explosion_00006
+bounds:2,610,326,314
+offsets:81,92,500,500
+Explosion/Orange_Explosion_00007
+bounds:2,926,369,360
+offsets:59,70,500,500
+Red/B_Shatter_00009
+bounds:1076,575,205,196
+offsets:156,153,500,500
+Red/B_Shatter_00010
+bounds:1004,32,225,213
+offsets:141,134,500,500
+Red/B_Shatter_00011
+bounds:537,2,238,240
+offsets:139,117,500,500
+Red/B_Shatter_00012
+bounds:264,5,242,233
+offsets:142,134,500,500
+Red/B_Shatter_00013
+bounds:589,505,231,247
+offsets:134,129,500,500
+Red/B_Shatter_00014
+bounds:537,244,237,257
+offsets:125,125,500,500
+Red/B_Shatter_00015
+bounds:283,240,252,261
+offsets:116,123,500,500
+Red/B_Shatter_00016
+bounds:330,503,257,249
+offsets:116,121,500,500
+Red/B_Shatter_00017
+bounds:373,754,262,249
+offsets:117,124,500,500
+Red/B_Shatter_00018
+bounds:932,1029,267,257
+offsets:117,117,500,500
+Red/B_Shatter_00019
+bounds:663,1024,267,262
+offsets:117,116,500,500
+Red/B_Shatter_00020
+bounds:2,72,260,266
+offsets:123,116,500,500
+Red/B_Shatter_00021
+bounds:663,771,252,251
+offsets:118,133,500,500
+Red/B_Shatter_00022
+bounds:1025,256,249,255
+offsets:118,129,500,500
+Red/B_Shatter_00023
+bounds:932,773,251,254
+offsets:118,126,500,500
+Red/B_Shatter_00024
+bounds:776,247,247,256
+offsets:125,126,500,500
+Red/B_Shatter_00025
+bounds:822,513,252,256
+offsets:121,123,500,500
+Shatter
+bounds:373,1005,288,281
+offsets:109,111,500,500

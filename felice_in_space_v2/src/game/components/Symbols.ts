@@ -933,19 +933,47 @@ export class Symbols {
         } catch {}
 
         try {
-          // Freeze on frame 1 (no idle animation for all symbols 0-22)
+          // Determine idle animation name from symbol value
           const value: number | null = typeof obj.symbolValue === 'number' ? obj.symbolValue : null;
-          if (value !== null && value !== undefined && value >= 0 && value <= 22) {
-            // For all symbols 0-22, freeze "animation" on frame 1
-            try {
-              const entry = animState.setAnimation(0, 'animation', false);
-              if (entry) {
-                (entry as any).trackTime = 0;
-                if (animState.timeScale !== undefined) {
-                  animState.timeScale = 0;
+          if (value !== null && value !== undefined) {
+            // For symbols 0-9, use Symbol{number}_FIS_Idle
+            if (value >= 0 && value <= 9) {
+              const idleAnim = `Symbol${value}_FIS_Idle`;
+              try {
+                const entry = animState.setAnimation(0, idleAnim, true);
+                if (entry) {
+                  if (animState.timeScale !== undefined) {
+                    animState.timeScale = 1;
+                  }
+                  // Disable felice gun and felice eyes for Symbol0_FIS during idle
+                  if (value === 0) {
+                    disableFeliceAttachmentsForIdle(obj);
+                  }
                 }
+              } catch {
+                // Fallback to freezing on frame 1 if idle animation doesn't exist
+                try {
+                  const entry = animState.setAnimation(0, 'animation', false);
+                  if (entry) {
+                    (entry as any).trackTime = 0;
+                    if (animState.timeScale !== undefined) {
+                      animState.timeScale = 0;
+                    }
+                  }
+                } catch {}
               }
-            } catch {}
+            } else {
+              // For multipliers (10-22), freeze "animation" on frame 1
+              try {
+                const entry = animState.setAnimation(0, 'animation', false);
+                if (entry) {
+                  (entry as any).trackTime = 0;
+                  if (animState.timeScale !== undefined) {
+                    animState.timeScale = 0;
+                  }
+                }
+              } catch {}
+            }
           }
 
           resumedCount++;
@@ -1335,14 +1363,30 @@ export class Symbols {
                 
                 console.log(`[Symbols] Successfully replaced scatter sprite with Spine animation at column ${col}, row ${row} with depth:`, spineSymbol.depth);
                 
-                // Freeze "animation" on frame 1 (no idle animation)
+                // Enable felice gun and felice eyes when scatter is hit
+                enableFeliceAttachmentsForWin(spineSymbol);
+                
+                // Set idle animation for scatter symbol (symbol 0)
+                // Note: Keep attachments enabled when scatter is hit - they'll stay visible during idle
+                // and remain enabled during win animation. They'll only be disabled when returning to idle
+                // after the win animation completes (handled in the win animation completion callback)
                 try {
                   if (spineSymbol.animationState && spineSymbol.animationState.setAnimation) {
-                    const entry = spineSymbol.animationState.setAnimation(0, 'animation', false);
-                    if (entry) {
-                      (entry as any).trackTime = 0;
-                      if (spineSymbol.animationState.timeScale !== undefined) {
-                        spineSymbol.animationState.timeScale = 0;
+                    const idleAnim = `Symbol0_FIS_Idle`;
+                    try {
+                      const entry = spineSymbol.animationState.setAnimation(0, idleAnim, true);
+                      if (entry && spineSymbol.animationState.timeScale !== undefined) {
+                        spineSymbol.animationState.timeScale = 1;
+                      }
+                      // Keep attachments enabled during idle after hit (don't disable them here)
+                    } catch {
+                      // Fallback to freezing on frame 1 if idle animation doesn't exist
+                      const entry = spineSymbol.animationState.setAnimation(0, 'animation', false);
+                      if (entry) {
+                        (entry as any).trackTime = 0;
+                        if (spineSymbol.animationState.timeScale !== undefined) {
+                          spineSymbol.animationState.timeScale = 0;
+                        }
                       }
                     }
                   }
@@ -1502,7 +1546,8 @@ export class Symbols {
       
       // After gathering: scale each scatter by +100% (2x) then play the win animation
       try {
-        const winAnimationName = `animation`;
+        const symbolValue = 0; // Scatter is symbol 0
+        const winAnimationName = `Symbol${symbolValue}_FIS_Win`;
         const scaleTweens: Promise<void>[] = scatterGrids.map(grid => {
           return new Promise<void>((resolve) => {
             const col = grid.x;
@@ -1540,13 +1585,23 @@ export class Symbols {
                             } catch {}
                             if (finished) return;
                             finished = true;
-                            // Freeze "animation" on frame 1 after win animation completes
+                            // Return to idle animation after win animation completes
                             try {
-                              const entry = state.setAnimation(0, 'animation', false);
-                              if (entry) {
-                                (entry as any).trackTime = 0;
-                                if (state.timeScale !== undefined) {
-                                  state.timeScale = 0;
+                              const idleAnim = `Symbol${symbolValue}_FIS_Idle`;
+                              try {
+                                state.setAnimation(0, idleAnim, true);
+                                // Disable felice gun and felice eyes when returning to idle
+                                if (symbolValue === 0) {
+                                  disableFeliceAttachmentsForIdle(symbol);
+                                }
+                              } catch {
+                                // Fallback to freezing on frame 1 if idle animation doesn't exist
+                                const entry = state.setAnimation(0, 'animation', false);
+                                if (entry) {
+                                  (entry as any).trackTime = 0;
+                                  if (state.timeScale !== undefined) {
+                                    state.timeScale = 0;
+                                  }
                                 }
                               }
                             } catch {}
@@ -1561,23 +1616,35 @@ export class Symbols {
                     if (state.timeScale !== undefined && state.timeScale === 0) {
                       state.timeScale = 1;
                     }
+                    // Enable felice gun and felice eyes for Symbol0_FIS win animation (BEFORE animation is set)
+                    if (symbolValue === 0) {
+                      enableFeliceAttachmentsForWin(symbol);
+                    }
                     const entry = state.setAnimation(0, winAnimationName, false);
+                    // Enable again after animation is set to ensure they're active
+                    if (symbolValue === 0) {
+                      enableFeliceAttachmentsForWin(symbol);
+                      // Also enable on next frame to ensure animation system has processed it
+                      this.scene.time.delayedCall(16, () => {
+                        enableFeliceAttachmentsForWin(symbol);
+                      });
+                    }
                     if (entry) {
-                      // Speed up this track slightly
+                      // Slow down win animation for better visibility
                       try {
                         const base = (typeof (entry as any).timeScale === 'number' && (entry as any).timeScale > 0)
                           ? (entry as any).timeScale
                           : 1;
-                        const newScale = base * 1.3; // +30% speed
+                        const newScale = base * 0.7; // 30% slower for better visibility
                         (entry as any).timeScale = newScale;
                       } catch {}
                     } else {
-                      // Fallback: speed up the whole state if entry not available
+                      // Fallback: slow down the whole state if entry not available
                       try {
                         const baseState = (typeof state.timeScale === 'number' && state.timeScale > 0)
                           ? state.timeScale
                           : 1;
-                        const newStateScale = baseState * 1.5;
+                        const newStateScale = baseState * 0.7; // 30% slower
                         state.timeScale = newStateScale;
                       } catch {}
                     }
@@ -1603,16 +1670,26 @@ export class Symbols {
                       }
                     }
 
-                    // Safety timeout: if complete never fires, still freeze "animation" on frame 1
+                    // Safety timeout: if complete never fires, still return to idle animation
                     this.scene.time.delayedCall(2500, () => {
                       if (finished) return;
                       finished = true;
                       try {
-                        const entry = state.setAnimation(0, 'animation', false);
-                        if (entry) {
-                          (entry as any).trackTime = 0;
-                          if (state.timeScale !== undefined) {
-                            state.timeScale = 0;
+                        const idleAnim = `Symbol${symbolValue}_FIS_Idle`;
+                        try {
+                          state.setAnimation(0, idleAnim, true);
+                          // Disable felice gun and felice eyes when returning to idle (safety timeout)
+                          if (symbolValue === 0) {
+                            disableFeliceAttachmentsForIdle(symbol);
+                          }
+                        } catch {
+                          // Fallback to freezing on frame 1 if idle animation doesn't exist
+                          const entry = state.setAnimation(0, 'animation', false);
+                          if (entry) {
+                            (entry as any).trackTime = 0;
+                            if (state.timeScale !== undefined) {
+                              state.timeScale = 0;
+                            }
                           }
                         }
                       } catch {}
@@ -1673,7 +1750,7 @@ export class Symbols {
     console.log(`[Symbols] Playing scatter retrigger sequence for ${scatterGrids.length} symbol(s)`);
     
     const symbolValue = 0; // Scatter symbol id
-    const winAnimationName = `animation`;
+    const winAnimationName = `Symbol${symbolValue}_FIS_Win`;
 
     // Ensure we only trigger the scatter win "nom nom" SFX once for this retrigger sequence
     let retriggerNomnomPlayed: boolean = false;
@@ -1779,13 +1856,19 @@ export class Symbols {
                           } catch {}
                           if (finished) return;
                           finished = true;
-                          // Freeze "animation" on frame 1 after win animation completes
+                          // Return to idle animation after win animation completes
                           try {
-                            const freezeEntry = state.setAnimation(0, 'animation', false);
-                            if (freezeEntry) {
-                              (freezeEntry as any).trackTime = 0;
-                              if (state.timeScale !== undefined) {
-                                state.timeScale = 0;
+                            const idleAnim = `Symbol${symbolValue}_FIS_Idle`;
+                            try {
+                              state.setAnimation(0, idleAnim, true);
+                            } catch {
+                              // Fallback to freezing on frame 1 if idle animation doesn't exist
+                              const freezeEntry = state.setAnimation(0, 'animation', false);
+                              if (freezeEntry) {
+                                (freezeEntry as any).trackTime = 0;
+                                if (state.timeScale !== undefined) {
+                                  state.timeScale = 0;
+                                }
                               }
                             }
                           } catch {}
@@ -2200,14 +2283,35 @@ export class Symbols {
         const targetX = startX + col * symbolTotalWidth + symbolTotalWidth * 0.5;
         const targetY = startY + row * symbolTotalHeight + symbolTotalHeight * 0.5;
         
-        // Freeze "animation" on frame 1 (no idle animation)
+        // Set idle animation based on symbol value
         try {
           if (symbol.animationState && symbol.animationState.setAnimation) {
-            const entry = symbol.animationState.setAnimation(0, 'animation', false);
-            if (entry) {
-              (entry as any).trackTime = 0;
-              if (symbol.animationState.timeScale !== undefined) {
-                symbol.animationState.timeScale = 0;
+            const value: number | null = typeof (symbol as any).symbolValue === 'number' ? (symbol as any).symbolValue : null;
+            if (value !== null && value >= 0 && value <= 9) {
+              const idleAnim = `Symbol${value}_FIS_Idle`;
+              try {
+                symbol.animationState.setAnimation(0, idleAnim, true);
+                if (symbol.animationState.timeScale !== undefined) {
+                  symbol.animationState.timeScale = 1;
+                }
+              } catch {
+                // Fallback to freezing on frame 1 if idle animation doesn't exist
+                const entry = symbol.animationState.setAnimation(0, 'animation', false);
+                if (entry) {
+                  (entry as any).trackTime = 0;
+                  if (symbol.animationState.timeScale !== undefined) {
+                    symbol.animationState.timeScale = 0;
+                  }
+                }
+              }
+            } else {
+              // For multipliers, freeze on frame 1
+              const entry = symbol.animationState.setAnimation(0, 'animation', false);
+              if (entry) {
+                (entry as any).trackTime = 0;
+                if (symbol.animationState.timeScale !== undefined) {
+                  symbol.animationState.timeScale = 0;
+                }
               }
             }
           }
@@ -3342,6 +3446,17 @@ function getMultiplierAnimationBase(value: number): string | null {
 }
 
 /**
+ * Get the win animation name for multiplier symbols (10-22)
+ * Symbols 10-16 use Symbol10_FIS, symbols 17-20 use Symbol11_FIS, symbols 21-22 use Symbol12_FIS
+ */
+function getMultiplierWinAnimationName(value: number): string | null {
+  if (value >= 10 && value <= 16) return 'Symbol10_FIS';
+  if (value >= 17 && value <= 20) return 'Symbol11_FIS';
+  if (value >= 21 && value <= 22) return 'Symbol12_FIS';
+  return null;
+}
+
+/**
  * Map multiplier symbol value (10–22) to its numeric multiplier for ordering
  * 10->2, 11->3, 12->4, 13->5, 14->6, 15->8, 16->10,
  * 17->12, 18->15, 19->20, 20->25, 21->50, 22->100
@@ -3443,6 +3558,93 @@ function destroySymbolOverlays(baseObj: any): void {
 }
 
 /**
+ * Disable felice gun and felice eyes attachments for Symbol0_FIS during idle animation
+ */
+function disableFeliceAttachmentsForIdle(spineObj: any): void {
+  try {
+    const skeleton: any = spineObj?.skeleton;
+    if (!skeleton || !skeleton.slots) return;
+
+    // Slot names from the JSON file - "felice gun" and "felice eyes" (with spaces)
+    const slotNamesToDisable = ['felice gun', 'felice eyes'];
+    
+    for (const slotName of slotNamesToDisable) {
+      try {
+        // Try to find slot by name - check if findSlot method exists
+        let slot: any = null;
+        if (typeof skeleton.findSlot === 'function') {
+          slot = skeleton.findSlot(slotName);
+        } else if (skeleton.slots && Array.isArray(skeleton.slots)) {
+          // Iterate through slots array to find matching slot
+          slot = skeleton.slots.find((s: any) => {
+            const name = s?.data?.name || s?.name;
+            return name === slotName;
+          });
+        }
+        
+        // Disable the attachment by setting it to null
+        if (slot && typeof slot.setAttachment === 'function') {
+          slot.setAttachment(null);
+        }
+      } catch (e) {
+        // Continue trying other slot names even if one fails
+        console.warn(`[Symbols] Failed to disable attachment "${slotName}":`, e);
+      }
+    }
+  } catch (e) {
+    // Non-fatal: silently fail if skeleton access fails
+    console.warn('[Symbols] Failed to disable felice attachments:', e);
+  }
+}
+
+/**
+ * Enable/restore felice gun and felice eyes attachments for Symbol0_FIS during win animation
+ */
+function enableFeliceAttachmentsForWin(spineObj: any): void {
+  try {
+    const skeleton: any = spineObj?.skeleton;
+    if (!skeleton || !skeleton.slots) return;
+
+    // Slot names from the JSON file - "felice gun" and "felice eyes" (with spaces)
+    // The default attachment name is the same as the slot name
+    const slotNamesToEnable = ['felice gun', 'felice eyes'];
+    
+    for (const slotName of slotNamesToEnable) {
+      try {
+        // Try to find slot by name
+        let slot: any = null;
+        if (typeof skeleton.findSlot === 'function') {
+          slot = skeleton.findSlot(slotName);
+        } else if (skeleton.slots && Array.isArray(skeleton.slots)) {
+          slot = skeleton.slots.find((s: any) => {
+            const name = s?.data?.name || s?.name;
+            return name === slotName;
+          });
+        }
+        
+        // Restore the attachment by setting it to the slot name (default attachment name)
+        if (slot && typeof slot.setAttachment === 'function') {
+          // The attachment name is the same as the slot name in the default skin
+          slot.setAttachment(slotName);
+          // Also try using skeleton's setAttachment if available (some Spine implementations prefer this)
+          if (typeof skeleton.setAttachment === 'function') {
+            try {
+              skeleton.setAttachment(slotName, slotName);
+            } catch {}
+          }
+        }
+      } catch (e) {
+        // Continue trying other slot names even if one fails
+        console.warn(`[Symbols] Failed to enable attachment "${slotName}":`, e);
+      }
+    }
+  } catch (e) {
+    // Non-fatal: silently fail if skeleton access fails
+    console.warn('[Symbols] Failed to enable felice attachments:', e);
+  }
+}
+
+/**
  * Attach a number PNG overlay in front of multiplier symbols (10–22)
  * The overlay is added to the same container and stored on the base object for lifecycle/tween syncing.
  */
@@ -3514,16 +3716,27 @@ function createSugarOrPngSymbol(self: Symbols, value: number, x: number, y: numb
           if (typeof go.setAlpha === 'function') go.setAlpha(alpha);
           // Ensure symbol is visible
           if (typeof go.setVisible === 'function') go.setVisible(true);
-          // Freeze "animation" on frame 1 (no idle animation)
+          // Set idle animation for symbols 0-9
           try {
             if (go.animationState && go.animationState.setAnimation) {
-              const entry = go.animationState.setAnimation(0, 'animation', false);
-              if (entry) {
-                // Freeze on frame 1 - set trackTime to 0
-                (entry as any).trackTime = 0;
-                // Set timeScale to 0 to freeze the animation (skeleton will still render)
-                if (go.animationState.timeScale !== undefined) {
-                  go.animationState.timeScale = 0;
+              const idleAnim = `Symbol${value}_FIS_Idle`;
+              try {
+                const entry = go.animationState.setAnimation(0, idleAnim, true);
+                if (entry && go.animationState.timeScale !== undefined) {
+                  go.animationState.timeScale = 1;
+                }
+                // Disable felice gun and felice eyes for Symbol0_FIS during idle
+                if (value === 0) {
+                  disableFeliceAttachmentsForIdle(go);
+                }
+              } catch {
+                // Fallback to freezing on frame 1 if idle animation doesn't exist
+                const entry = go.animationState.setAnimation(0, 'animation', false);
+                if (entry) {
+                  (entry as any).trackTime = 0;
+                  if (go.animationState.timeScale !== undefined) {
+                    go.animationState.timeScale = 0;
+                  }
                 }
               }
             }
@@ -3688,11 +3901,14 @@ async function playMultiplierWinThenIdle(self: Symbols, obj: any, base: string):
         return safeResolve();
       }
       
-      // All multipliers (10-22) use "animation" for win animation (no idle animation)
-      const winAnim = 'animation';
+      // Get the symbol value first
+      const value: number | null = typeof (obj as any)?.symbolValue === 'number' ? (obj as any).symbolValue : null;
+      
+      // Get the win animation name for this multiplier symbol
+      // Symbols 10-16 use Symbol10_FIS, symbols 17-20 use Symbol11_FIS, symbols 21-22 use Symbol12_FIS
+      const winAnim = value !== null ? (getMultiplierWinAnimationName(value) || 'animation') : 'animation';
       
       // Check if animation exists in skeleton
-      const value: number | null = typeof (obj as any)?.symbolValue === 'number' ? (obj as any).symbolValue : null;
       const skeleton: any = (obj as any)?.skeleton;
       if (skeleton && skeleton.data) {
         const animData = skeleton.data.findAnimation?.(winAnim);
@@ -3741,6 +3957,19 @@ async function playMultiplierWinThenIdle(self: Symbols, obj: any, base: string):
             let entry: any = null;
             try { if (animState.clearTracks) animState.clearTracks(); } catch {}
             entry = animState.setAnimation(0, winAnim, false);
+            // Slow down win animation for better visibility
+            if (entry) {
+              try {
+                const base = (typeof (entry as any).timeScale === 'number' && (entry as any).timeScale > 0)
+                  ? (entry as any).timeScale
+                  : 1;
+                (entry as any).timeScale = base * 0.7; // 30% slower for better visibility
+              } catch {}
+            } else if (animState.timeScale !== undefined) {
+              try {
+                animState.timeScale = 0.7; // 30% slower
+              } catch {}
+            }
             console.log(`[Symbols] Playing multiplier win animation "${winAnim}" for symbol ${value} (after scale-up), entry:`, entry);
             
             if (!entry) {
@@ -4041,8 +4270,9 @@ async function triggerAllMultiplierWinsAfterBonusSpin(self: Symbols): Promise<vo
         if (typeof value !== 'number') continue;
         // Only process multiplier symbols (10-22)
         if (value < 10 || value > 22) continue;
-        // All multipliers (10-22) use "animation" for win animation
-        const base = 'animation';
+        // Get the win animation name for this multiplier symbol
+        // Symbols 10-16 use Symbol10_FIS, symbols 17-20 use Symbol11_FIS, symbols 21-22 use Symbol12_FIS
+        const base = getMultiplierWinAnimationName(value) || 'animation';
         const canAnimate = !!(obj?.animationState && obj.animationState.setAnimation);
         if (!canAnimate) continue;
         const weight = getMultiplierNumeric(value);
@@ -4960,10 +5190,14 @@ async function applySingleTumble(self: Symbols, tumble: any, tumbleIndex: number
               const canPlaySugarWin = typeof value === 'number' && value >= 1 && value <= 9 && highCountSymbols.has(value) && obj.animationState && obj.animationState.setAnimation;
               // For multipliers, allow win animation only when this item actually had wins
               const canPlayMultiplierWin = !!multiBase && !!(self as any).hadWinsInCurrentItem && obj.animationState && obj.animationState.setAnimation;
-              // All symbols (0-22) use "animation" for win animation
+              // Get the win animation name: symbols 0-9 use "animation", multipliers 10-22 use Symbol{10|11|12}_FIS
               if (canPlaySugarWin || canPlayMultiplierWin) {
                 try { if (obj.animationState.clearTracks) obj.animationState.clearTracks(); } catch {}
-                const winAnim = 'animation';
+                // For multipliers, use the specific win animation name (Symbol10_FIS, Symbol11_FIS, or Symbol12_FIS)
+                // For sugar symbols (0-9), use "animation"
+                const winAnim = (typeof value === 'number' && value >= 10 && value <= 22)
+                  ? (getMultiplierWinAnimationName(value) || 'animation')
+                  : 'animation';
                 let completed = false;
                 try {
                   // Resume animation if it was frozen (for symbols 0-12)
@@ -4977,6 +5211,8 @@ async function applySingleTumble(self: Symbols, tumble: any, tumbleIndex: number
                   const targetX = baseX * 1.6;
                   const targetY = baseY * 1.6;
                   const scaleUpDuration = 200; // Duration of scale-up animation
+                  // Default safety window uses previous timing but can be extended once we know the real animation length
+                  let safetyDelayMs = scaleUpDuration + self.scene.gameData.winUpDuration + 700;
                   
                   // Scale up first
                   self.scene.tweens.add({
@@ -5006,11 +5242,45 @@ async function applySingleTumble(self: Symbols, tumble: any, tumbleIndex: number
                           } as any;
                           obj.animationState.addListener(listener);
                         }
-                        obj.animationState.setAnimation(0, winAnim, false);
+                        const winEntry = obj.animationState.setAnimation(0, winAnim, false);
+                        // Slow down win animation for better visibility
+                        if (winEntry) {
+                          try {
+                            const base = (typeof (winEntry as any).timeScale === 'number' && (winEntry as any).timeScale > 0)
+                              ? (winEntry as any).timeScale
+                              : 1;
+                            (winEntry as any).timeScale = base * 0.7; // 30% slower for better visibility
+                          } catch {}
+                          try {
+                            const rawDurationMs = Math.max(0, Number((winEntry as any)?.animation?.duration || 0) * 1000);
+                            const appliedTimeScale = (winEntry as any)?.timeScale && (winEntry as any).timeScale > 0 ? (winEntry as any).timeScale : 1;
+                            const scaledDurationMs = appliedTimeScale !== 0 ? rawDurationMs / appliedTimeScale : rawDurationMs;
+                            // Ensure the safety window is at least as long as the estimated animation runtime (+buffer)
+                            safetyDelayMs = Math.max(
+                              safetyDelayMs,
+                              scaleUpDuration + scaledDurationMs + 400
+                            );
+                          } catch {}
+                        } else if (obj.animationState.timeScale !== undefined) {
+                          try {
+                            obj.animationState.timeScale = 0.7; // 30% slower
+                          } catch {}
+                        }
                         // Log the tumble index when win animation starts
                         console.log(`[Symbols] Playing win animation "${winAnim}" for tumble index: ${tumbleIndex} (after scale-up)`);
                         // First win animation just started – notify once so header + SFX sync with visuals
                         notifyFirstWinIfNeeded();
+                        // Safety timeout in case complete isn't fired (uses the final computed duration)
+                        self.scene.time.delayedCall(safetyDelayMs, () => {
+                          if (completed) return; completed = true;
+                          try { destroySymbolOverlays(obj); } catch {}
+                          try { obj.destroy(); } catch {}
+                          self.symbols[col][row] = null as any;
+                          if (self.currentSymbolData && self.currentSymbolData[row]) {
+                            (self.currentSymbolData[row] as any)[col] = null;
+                          }
+                          resolve();
+                        });
                       } catch (e) {
                         console.warn('[Symbols] Error starting win animation after scale-up:', e);
                         // Fallback: resolve immediately if animation fails
@@ -5026,18 +5296,6 @@ async function applySingleTumble(self: Symbols, tumble: any, tumbleIndex: number
                         }
                       }
                     }
-                  });
-                  
-                  // Safety timeout in case complete isn't fired
-                  self.scene.time.delayedCall(scaleUpDuration + self.scene.gameData.winUpDuration + 700, () => {
-                    if (completed) return; completed = true;
-                    try { destroySymbolOverlays(obj); } catch {}
-                    try { obj.destroy(); } catch {}
-                    self.symbols[col][row] = null as any;
-                    if (self.currentSymbolData && self.currentSymbolData[row]) {
-                      (self.currentSymbolData[row] as any)[col] = null;
-                    }
-                    resolve();
                   });
                 } catch {
                   // Fallback to fade if animation fails

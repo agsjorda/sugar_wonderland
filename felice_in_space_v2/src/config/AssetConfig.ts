@@ -39,8 +39,8 @@ export class AssetConfig {
 			},
 			spine: {
 				'BG-Default': {
-					atlas: `assets/portrait/high/background/BG_Default_FIS/Default_FIS.atlas`,
-					json: `assets/portrait/high/background/BG_Default_FIS/Default_FIS.json`
+					atlas: `assets/portrait/high/background/BG_Default_FIS/Default_BG_FIS.atlas`,
+					json: `assets/portrait/high/background/BG_Default_FIS/Default_BG_FIS.json`
 				}
 			}
 		};
@@ -358,33 +358,29 @@ export class AssetConfig {
 		
 		return {
 			spine: {
-				// 'Congrats_Dialog': {
-				// 	atlas: `${prefix}/dialogs/Congrats_Dialog.atlas`,
-				// 	json: `${prefix}/dialogs/Congrats_Dialog.json`
-				// },
-				// 'BigWin_Dialog': {
-				// 	atlas: `${prefix}/dialogs/BigWin_Dialog.atlas`,
-				// 	json: `${prefix}/dialogs/BigWin_Dialog.json`
-				// },
-				// 'MegaWin_Dialog': {
-				// 	atlas: `${prefix}/dialogs/MegaWin_Dialog.atlas`,
-				// 	json: `${prefix}/dialogs/MegaWin_Dialog.json`
-				// },
-				// 'EpicWin_Dialog': {
-				// 	atlas: `${prefix}/dialogs/EpicWin_Dialog.atlas`,
-				// 	json: `${prefix}/dialogs/EpicWin_Dialog.json`
-				// },
-				// 'SuperWin_Dialog': {
-				// 	atlas: `${prefix}/dialogs/SuperWin_Dialog.atlas`,
-				// 	json: `${prefix}/dialogs/SuperWin_Dialog.json`
-				// },
-				// 'FreeSpin_Dialog': {
-				// 	atlas: `${prefix}/dialogs/FreeSpin_Dialog.atlas`,
-				// 	json: `${prefix}/dialogs/FreeSpin_Dialog.json`
-				// },
-				'Win': {
-					atlas: `${prefix}/win_dialog/Win.atlas`,
-					json: `${prefix}/win_dialog/Win.json`
+				'BigWin_Dialog': {
+					atlas: `${prefix}/win_dialog/BigW_FIS/BigW_FIS.atlas`,
+					json: `${prefix}/win_dialog/BigW_FIS/BigW_FIS.json`
+				},
+				'MegaWin_Dialog': {
+					atlas: `${prefix}/win_dialog/MegaW_FIS/MegaW_FIS.atlas`,
+					json: `${prefix}/win_dialog/MegaW_FIS/MegaW_FIS.json`
+				},
+				'EpicWin_Dialog': {
+					atlas: `${prefix}/win_dialog/EpicW_FIS/EpicW_FIS.atlas`,
+					json: `${prefix}/win_dialog/EpicW_FIS/EpicW_FIS.json`
+				},
+				'SuperWin_Dialog': {
+					atlas: `${prefix}/win_dialog/SuperW_FIS/SuperW_FIS.atlas`,
+					json: `${prefix}/win_dialog/SuperW_FIS/SuperW_FIS.json`
+				},
+				'Congrats_Dialog': {
+					atlas: `${prefix}/win_dialog/Congrats_FIS/Congrats_FIS.atlas`,
+					json: `${prefix}/win_dialog/Congrats_FIS/Congrats_FIS.json`
+				},
+				'FreeSpin_Dialog': {
+					atlas: `${prefix}/win_dialog/FreeSpin_FIS/FreeSpin_FIS.atlas`,
+					json: `${prefix}/win_dialog/FreeSpin_FIS/FreeSpin_FIS.json`
 				}
 			}
 		};

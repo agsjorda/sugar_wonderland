@@ -128,8 +128,8 @@ export class SlotController {
 		}
 
 		// Get the center position of the symbols grid
-		const centerX = this.scene.scale.width * 0.5 - 5;
-		const centerY = this.scene.scale.height * 0.445;
+		const centerX = this.scene.scale.width * 0.5;
+		const centerY = this.scene.scale.height * 0.25;
 
 		this.loadingSpinner = new LoadingSpinner(this.scene, centerX, centerY);
 		console.log('[SlotController] Loading spinner initialized');
@@ -355,8 +355,8 @@ export class SlotController {
 		
 		// Update loading spinner position at center of symbols grid
 		if (this.loadingSpinner && this.scene) {
-			const centerX = this.scene.scale.width * 0.5 - 5;
-			const centerY = this.scene.scale.height * 0.445; // Same as symbols center
+			const centerX = this.scene.scale.width * 0.5;
+			const centerY = this.scene.scale.height * 0.42; // Same as symbols center
 			this.loadingSpinner.updatePosition(centerX, centerY);
 			console.log('[SlotController] Loading spinner position updated to symbols center');
 		}
@@ -385,8 +385,8 @@ export class SlotController {
 		this.scene = scene;
 		
 		// Initialize loading spinner at center of symbols grid
-		const centerX = scene.scale.width * 0.5 - 5;
-		const centerY = scene.scale.height * 0.445;
+		const centerX = scene.scale.width * 0.5;
+		const centerY = scene.scale.height * 0.42;
 		this.loadingSpinner = new LoadingSpinner(scene, centerX, centerY);
 		
 		// Get GameData from the scene
@@ -397,8 +397,8 @@ export class SlotController {
 		
 		// Create main container for all controller elements
 		this.controllerContainer = scene.add.container(0, 0);
-		// Apply a small downward offset to move the whole controller slightly down
-		this.controllerVerticalOffset = scene.scale.height * 0.05;
+		// Apply a small upward offset to move the whole controller slightly up
+		this.controllerVerticalOffset = scene.scale.height * -0.02;
 		this.controllerContainer.setY(this.controllerVerticalOffset);
 		// Ensure controller UI renders above coin animations (800) but below dialogs (1000)
 		this.controllerContainer.setDepth(900);
@@ -2058,7 +2058,7 @@ export class SlotController {
 			this.controllerContainer.setSize(scene.scale.width, scene.scale.height);
 			// Reapply vertical offset on resize to maintain spacing
 			if (this.controllerVerticalOffset === 0) {
-				this.controllerVerticalOffset = scene.scale.height * 0.02;
+				this.controllerVerticalOffset = scene.scale.height * -0.02;
 			}
 			this.controllerContainer.setY(this.controllerVerticalOffset);
 		}
