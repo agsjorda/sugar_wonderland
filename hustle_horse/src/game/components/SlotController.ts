@@ -3128,12 +3128,7 @@ setBuyFeatureBetAmount(amount: number): void {
 		}
 		// Guard: do not start a new autoplay spin while reels are already spinning
 		if (gameStateManager.isReelSpinning) {
-			console.log('[SlotController] performAutoplaySpin aborted - reels already spinning, rescheduling autoplay');
-			const baseDelay = 200;
-			const gameData = this.getGameData();
-			const isTurbo = gameData?.isTurbo || false;
-			const turboDelay = isTurbo ? baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER : baseDelay;
-			this.scheduleNextAutoplaySpin(turboDelay);
+			console.log('[SlotController] performAutoplaySpin aborted - reels already spinning');
 			return;
 		}
 		// Guard: block autoplay spins when win dialog is showing
@@ -3282,10 +3277,6 @@ setBuyFeatureBetAmount(amount: number): void {
 
 	public hasPausedAutoplayToResume(): boolean {
 		return this.resumeAutoplayAfterBonusPending && this.autoplaySpinsBackupBeforeBonus > 0;
-	}
-
-	public resumeAutoplayAfterBonusIfPaused(): void {
-		this.tryResumeAutoplayAfterBonus();
 	}
 	public scheduleNextAutoplaySpin(delay: number = 500): void {
 		if (this.autoplaySpinsRemaining <= 0) {
