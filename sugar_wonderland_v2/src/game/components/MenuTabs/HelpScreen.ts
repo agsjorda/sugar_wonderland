@@ -98,14 +98,14 @@ export class HelpScreen {
     // RTP section
     // Payout section
     private readonly payoutSymbolCount: number = 9;
-    private readonly payoutSymbolKey: string = 'symbol_';
+    private readonly payoutSymbolKey: string = 'symbol';
     private readonly payoutTextRowSpacing: number = 30;
     private readonly payoutTextFontSize: number = 22;
     private readonly payoutRangeTextFontSize: number = 22;
     private readonly payoutInnerPadding: number = 20;
 
     // Scatter section
-    private readonly scatterSymbolKey: string = 'ScatterLabel';
+    private readonly scatterSymbolKey: string = 'symbol0';
     private readonly scatterHeaderLeftPadding: number = 30;
     private readonly scatterHeaderTopPadding: number = 20;
     private readonly scatterBottomPadding: number = 20;

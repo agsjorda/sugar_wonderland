@@ -121,6 +121,11 @@ export class AssetConfig {
 			const sugarJson = `assets/symbols/high/sugar_symbols/Symbol${i}.json`;
 			symbolSpine[sugarKey] = { atlas: sugarAtlas, json: sugarJson };
 			console.log(`[AssetConfig] Sugar Symbol ${i}: spine=${sugarAtlas}`);
+
+			const imageKey = `symbol${i}`;
+			const imagePath = `assets/symbols/high/sugar_symbols/statics/${imageKey}.webp`;
+			symbolImages[imageKey] = imagePath;
+			console.log(`[AssetConfig] Sugar Symbol ${i}: image=${imagePath}`);
 		}
 		
 		// Multiplier symbols (10–22) share a single Spine: SymbolBombs_SW
