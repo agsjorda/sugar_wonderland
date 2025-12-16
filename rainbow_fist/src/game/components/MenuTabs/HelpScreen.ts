@@ -646,19 +646,19 @@ export class HelpScreen {
 
         // Border will be added after all children so its height fits content dynamically
 
-        const scatterSymbolInText = scene.add.image(0, 0, 'ScatterLabel');
+        const scatterSymbolInText = scene.add.image(0, 0, 'symbol0');
         scatterSymbolInText.setScale(0.3);
         scatterSymbolInText.setOrigin(0.5, 0.5);
         scatterSymbolInText.setPosition(215, 880);
         freeSpinContainer.add(scatterSymbolInText);
 
-        const scatterSymbolInText2 = scene.add.image(0, 0, 'ScatterLabel');
+        const scatterSymbolInText2 = scene.add.image(0, 0, 'symbol0');
         scatterSymbolInText2.setScale(0.3);
         scatterSymbolInText2.setOrigin(0.5, 0.5);
         scatterSymbolInText2.setPosition(bodyText2.x + bodyText2.width * 0.5 - 15, bodyText2.y + bodyText2.height * 0.5 - 25);
         freeSpinContainer.add(scatterSymbolInText2);
 
-        const scatterSymbolTopLeft = scene.add.image(30, 20, 'ScatterLabel');
+        const scatterSymbolTopLeft = scene.add.image(30, 20, 'symbol0');
         scatterSymbolTopLeft.setScale(0.6);
         scatterSymbolTopLeft.setOrigin(0, 0);
         freeSpinContainer.add(scatterSymbolTopLeft);

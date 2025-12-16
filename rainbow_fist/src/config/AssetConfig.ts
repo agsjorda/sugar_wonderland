@@ -156,6 +156,18 @@ export class AssetConfig {
 			json: `${prefix}/symbols/Symbol10_RF/Symbol10_RF.json`
 		};
 
+		/**
+		 * Multiplier number images (e.g. 2x, 10x, 500x).
+		 * NOTE: These assets currently only exist in `assets/portrait/high/...`, so we only register them
+		 * when we're running in portrait + high quality to avoid requesting missing files.
+		 * 11 is the index of the first multiplier number
+		 */
+		const multiplierValues = [2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 50, 100, 250, 500];
+		for (let i = 0; i < multiplierValues.length; i++) {
+			const key = `multiplier_number_${i + 11}x`;
+			symbolImages[key] = `${prefix}/symbols/multiplier_numbers/${multiplierValues[i]}x.webp`;
+		}
+
 		return {
 			images: symbolImages,
 			spine: symbolSpine
@@ -272,43 +284,6 @@ export class AssetConfig {
 				'helpscreen_0': `${prefix}/help_screen/helpscreen_0.webp`,
 				'helpscreen_1': `${prefix}/help_screen/helpscreen_1.webp`,
 				'helpscreen_2': `${prefix}/help_screen/helpscreen_2.webp`,
-				// HowToPlay images
-				'howToPlay1': `${prefix}/help_screen/HowToPlay1.webp	`,
-				'howToPlay1Mobile': `${prefix}/help_screen/HowToPlay1Mobile.webp`,
-				'howToPlay2': `${prefix}/help_screen/HowToPlay2.webp`,
-				'howToPlay2Mobile': `${prefix}/help_screen/HowToPlay2Mobile.webp`,
-				'howToPlay3': `${prefix}/help_screen/HowToPlay3.webp`,
-				'howToPlay3Mobile': `${prefix}/help_screen/HowToPlay3Mobile.webp`,
-				'howToPlay4': `${prefix}/help_screen/HowToPlay4.webp`,
-				'howToPlay4Mobile': `${prefix}/help_screen/HowToPlay4Mobile.webp`,
-				'howToPlay5': `${prefix}/help_screen/HowToPlay5.webp`,
-				'howToPlay6': `${prefix}/help_screen/HowToPlay6.webp`,
-				'howToPlay7': `${prefix}/help_screen/HowToPlay7.webp`,
-				'howToPlay8': `${prefix}/help_screen/HowToPlay8.webp`,
-				'howToPlay8Mobile': `${prefix}/help_screen/HowToPlay8Mobile.webp`,
-				'howToPlay9': `${prefix}/help_screen/HowToPlay9.webp`,
-				'howToPlay9Mobile': `${prefix}/help_screen/HowToPlay9Mobile.webp`,
-				'howToPlay10': `${prefix}/help_screen/HowToPlay10.webp`,
-				'howToPlay10Mobile': `${prefix}/help_screen/HowToPlay10Mobile.webp`,
-				'howToPlay11Mobile': `${prefix}/help_screen/HowToPlay11Mobile.webp`,
-				'howToPlay12Mobile': `${prefix}/help_screen/HowToPlay12Mobile.webp`,
-				// Feature help
-				'BuyFeatHelp': `${prefix}/help_screen/BuyFeatHelp.webp`,
-				'BuyFeatMobile': `${prefix}/help_screen/BuyFeatMobile.webp`,
-				'DoubleHelp': `${prefix}/help_screen/DoubleHelp.webp`,
-				'DoubleHelpMobile': `${prefix}/help_screen/DoubleHelpMobile.webp`,
-				// Payline visuals
-				'paylineMobileWin': `${prefix}/help_screen/paylineMobileWin.webp`,
-				'paylineMobileNoWin': `${prefix}/help_screen/paylineMobileNoWin.webp`,
-				// Scatter / Tumble / Multiplier visuals
-				'scatterGame': `${prefix}/help_screen/scatterGame.webp`,
-				'scatterIcon': `${prefix}/help_screen/scatterIcon.webp`,
-				'scatterWin': `${prefix}/help_screen/scatterWin.webp`,
-				'ScatterLabel': `${prefix}/help_screen/ScatterSymbol.webp`,
-				'tumbleIcon': `${prefix}/help_screen/tumbleIcon.webp`,
-				'tumbleWin': `${prefix}/help_screen/tumbleWin.webp`,
-				'multiplierGame': `${prefix}/help_screen/multiplierGame.webp`,
-				'multiplierIcon': `${prefix}/help_screen/multiplierIcon.webp`,
 			}
 		};
 	}
@@ -321,9 +296,6 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				// 'total_win_background': `${prefix}/dialogs/total_win_background.webp`,
-				// 'total_win_foreground': `${prefix}/dialogs/total_win_foreground.webp`,
-				// 'max_win_background': `${prefix}/dialogs/max_win_background.webp`
 			},
 			spine: {
 				'big_win': {
@@ -350,10 +322,10 @@ export class AssetConfig {
 					atlas: `${prefix}/dialogs/MaxW_RF/MaxW_RF.atlas`,
 					json: `${prefix}/dialogs/MaxW_RF/MaxW_RF.json`
 				},
-				// 'total_win': {
-				// 	atlas: `${prefix}/dialogs/TotalWin_RF/TotalWin_RF.atlas`,
-				// 	json: `${prefix}/dialogs/TotalWin_RF/TotalWin_RF.json`
-				// },
+				'total_win': {
+					atlas: `${prefix}/dialogs/TotalW_RF/TotalW_RF.atlas`,
+					json: `${prefix}/dialogs/TotalW_RF/TotalW_RF.json`
+				},
 			}
 		};
 	}
@@ -391,7 +363,7 @@ export class AssetConfig {
 		// Add comma and dot
 		numberImages['number_comma'] = `${prefix}/numbers/number_comma.webp`;
 		numberImages['number_dot'] = `${prefix}/numbers/number_dot.webp`;
-		// numberImages['number_x'] = `${prefix}/numbers/number_x.webp`;
+		numberImages['number_x'] = `${prefix}/numbers/number_x.webp`;
 		
 		console.log(`[AssetConfig] Number comma: ${prefix}/numbers/number_comma.webp`);
 		console.log(`[AssetConfig] Number dot: ${prefix}/numbers/number_dot.webp`);
@@ -415,6 +387,10 @@ export class AssetConfig {
 
 		return {
 			spine: {
+				'hit_effect': {
+					atlas: `${prefix}/symbols/Poof_VFX_RF/Poof_VFX_RF.atlas`,
+					json: `${prefix}/symbols/Poof_VFX_RF/Poof_VFX_RF.json`
+				},
 			}
 		};
 	}
@@ -442,55 +418,37 @@ export class AssetConfig {
 			audio: {
 				// Updated to WF
 				// Win dialog SFX
-				'freespin_wf': 'assets/sounds/Wins/freespin_wf.ogg',
-				'congrats_wf': 'assets/sounds/Wins/congrats_wf.ogg',
-				'bigw_wf': 'assets/sounds/Wins/bigw_wf.ogg',
-				'megaw_wf': 'assets/sounds/Wins/megaw_wf.ogg',
-				'superw_wf': 'assets/sounds/Wins/superw_wf.ogg',
-				'epicw_wf': 'assets/sounds/Wins/epicw_wf.ogg',
+				'totalw': 'assets/sounds/Wins/totalw_RF.ogg',
+				'bigw': 'assets/sounds/Wins/bigw_RF.ogg',
+				'megaw': 'assets/sounds/Wins/megaw_RF.ogg',
+				'superw': 'assets/sounds/Wins/superw_RF.ogg',
+				'epicw': 'assets/sounds/Wins/epicw_RF.ogg',
+				'maxw_end': 'assets/sounds/Wins/maxw_end_RF.ogg',
+				'maxw': 'assets/sounds/Wins/maxw_RF.ogg',
+				'scatter': 'assets/sounds/SFX/scatter_RF.ogg',
 
 				// Tumble win SFX
-				'twin1_wf': 'assets/sounds/Wins/twin1_wf.ogg',
-				'twin2_wf': 'assets/sounds/Wins/twin2_wf.ogg',
-				'twin3_wf': 'assets/sounds/Wins/twin3_wf.ogg',
-				'twin4_wf': 'assets/sounds/Wins/twin4_wf.ogg',
-				'twinheaven1_wf': 'assets/sounds/Wins/twinheaven1_wf.ogg',
-				'twinheaven2_wf': 'assets/sounds/Wins/twinheaven2_wf.ogg',
-				'twinheaven3_wf': 'assets/sounds/Wins/twinheaven3_wf.ogg',
-				'twinheaven4_wf': 'assets/sounds/Wins/twinheaven4_wf.ogg',
+				'twin1': 'assets/sounds/SFX/twin_1_RF.ogg',
+				'twin2': 'assets/sounds/SFX/twin_2_RF.ogg',
+				'twin3': 'assets/sounds/SFX/twin_3_RF.ogg',
+				'twin4': 'assets/sounds/SFX/twin_4_RF.ogg',
 
 				// Background SFX
-				'mainbg_wf': 'assets/sounds/BG/mainbg_wf.ogg',
-				'bonusbg_wf': 'assets/sounds/BG/bonusbg_wf.ogg',
-				'argun_wf': 'assets/sounds/SFX/argun_wf.ogg',
+				'mainbg': 'assets/sounds/BG/mainbg_RF.ogg',
+				'freespinbg': 'assets/sounds/BG/freespinbg_RF.ogg',
+				'bonusbg': 'assets/sounds/BG/bonusbg_RF.ogg',
 
 				// Menu/UI clicks
-				'click_wf': 'assets/sounds/click_wf.ogg',
+				'click': 'assets/sounds/click.ogg',
+				'utility_button': 'assets/sounds/utility_button.ogg',
 				
-				'turbodrop_wf': 'assets/sounds/SFX/turbodrop_wf.ogg',
-				'reeldrop_wf': 'assets/sounds/SFX/reeldrop_wf.ogg',
+				'turbodrop': 'assets/sounds/SFX/turbo_RF.ogg',
+				'reeldrop': 'assets/sounds/SFX/reeldrop_RF.ogg',
+				'spin': 'assets/sounds/SFX/spin_RF.ogg',
 
-				// WIP
-				
-				'bonus_explosion_wf': 'assets/sounds/SFX/explosion_heaven_wf.ogg',
-				'multiplier_added_wf': 'assets/sounds/SFX/birdland_wf.ogg',
-				'explosion_wf': 'assets/sounds/SFX/explosion_wf.ogg',
-				'missile_wf': 'assets/sounds/SFX/missile_wf.ogg',
-				'multi_wf': 'assets/sounds/SFX/multi_wf.ogg',
-				'nuke_wf': 'assets/sounds/SFX/nuke_wf.ogg',
-
-				// Unused SFX
-				'hit_win_2_wf': 'assets/sounds/SFX/hit_win_2_wf.ogg',
-				'hit_win_wf': 'assets/sounds/SFX/hit_win_wf.ogg',
-				'reeldrop2_wf': 'assets/sounds/SFX/reeldrop2_wf.ogg',
-				'turbo2_wf': 'assets/sounds/SFX/turbo2_wf.ogg',
-				'spin_wf': 'assets/sounds/SFX/spin_wf.ogg',
-				'spin2_wf': 'assets/sounds/SFX/spin2_wf.ogg',
-				'ub_wf': 'assets/sounds/SFX/ub_wf.ogg',
-				
-				// Unused Wins
-				'maxw_end_wf': 'assets/sounds/Wins/maxw_end_wf.ogg',
-				'maxw_wf': 'assets/sounds/Wins/maxw_wf.ogg',
+				// 'multiplier_added_wf': 'assets/sounds/SFX/birdland_wf.ogg',
+				// 'hit_win_2_wf': 'assets/sounds/SFX/hit_win_2_wf.ogg',
+				// 'hit_win_wf': 'assets/sounds/SFX/hit_win_wf.ogg',
 			}
 		};
 	}

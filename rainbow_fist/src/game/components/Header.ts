@@ -13,6 +13,10 @@ import { NumberDisplay, NumberDisplayConfig } from "./NumberDisplay";
 import { TurboConfig } from "../../config/TurboConfig";
 
 export class Header {
+	// DEBUGGING
+	public showMultiplierWireframe: boolean = false;
+	private multiplierWireframe: Phaser.GameObjects.Graphics | null = null;
+
 	private headerContainer: Phaser.GameObjects.Container;
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
@@ -27,6 +31,9 @@ export class Header {
 
 	private winningsLabelTextOffset: {x: number, y: number} = {x: 0, y: -14};
 	private winningsValueTextOffset: {x: number, y: number} = {x: 0, y: 6};
+	private multiplierNumberDisplayOffset: {x: number, y: number} = {x: 12, y: 0};
+
+	private totalAmountTextColor: string = '#00ff00';
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -44,7 +51,7 @@ export class Header {
 		
 		// Create main container for all header elements
 		this.headerContainer = scene.add.container(0, 0);
-		this.headerContainer.setDepth(300); // Above idle symbols (0) but below winning symbols (600) and overlay (500)
+		this.headerContainer.setDepth(501); // Above idle symbols (0) but below winning symbols (600) and overlay (500)
 		
 		const screenConfig = this.screenModeManager.getScreenConfig();
 		const assetScale = this.networkManager.getAssetScale();
@@ -93,13 +100,20 @@ export class Header {
 	}
 
 	private createMultiplierDisplay(scene: Scene, x: number, y: number): void {
+		const displayX = x + this.multiplierNumberDisplayOffset.x;
+		const displayY = y + this.multiplierNumberDisplayOffset.y;
+
+		if(this.showMultiplierWireframe) {
+			this.multiplierWireframe = this.createMultiplierWireframe(scene, displayX, displayY);
+		}
+
 		const multiplierConfig: NumberDisplayConfig = {
-			x,
-			y,
-			scale: 0.055,
-			prefixScale: 0.04,
-			prefixYOffset: 1.5,
-			spacing: 2,
+			x: displayX,
+			y: displayY,
+			scale: 0.019,
+			prefixScale: 0.009,
+			prefixYOffset: 0.5,
+			spacing: -10,
 			alignment: 'center',
 			decimalPlaces: 0,
 			showCommas: false,
@@ -122,11 +136,25 @@ export class Header {
 		this.hideMultiplierText();
 	}
 
+	private createMultiplierWireframe(scene: Scene, x: number, y: number): Phaser.GameObjects.Graphics {
+		const wireframeSize = 10;
+		const halfSize = wireframeSize / 2;
+
+		const wireframe = scene.add.graphics({ x, y });
+		wireframe.lineStyle(1, 0xffffff, 1);
+		wireframe.strokeRect(-halfSize, -halfSize, wireframeSize, wireframeSize);
+		wireframe.setDepth(300);
+
+		this.headerContainer.add(wireframe);
+
+		return wireframe;
+	}
+
 	private createWinBar(scene: Scene, winBarX: number, winBarY: number, assetScale: number): void {
 		const winBar = scene.add.image(winBarX, winBarY, 'win-bar')
 		.setOrigin(0.5, 0.5)
 		.setScale(assetScale)
-		.setDepth(300); // Above idle symbols (0) but below winning symbols (600) and overlay (500)
+		.setDepth(501); // Above idle symbols (0) but below winning symbols (600) and overlay (500)
 
 		this.headerContainer.add(winBar);
 	}	
@@ -159,7 +187,7 @@ export class Header {
 			scene.scale.width * 0.5,
 			scene.scale.height * 0.0225,
 			'logo'
-		).setOrigin(0.5, 0).setScale(assetScale).setDepth(300); // Above idle symbols (0) but below winning symbols (600) and overlay (500)
+		).setOrigin(0.5, 0).setScale(1).setDepth(300); // Above idle symbols (0) but below winning symbols (600) and overlay (500)
 		this.headerContainer.add(logo);
 	}
 
@@ -183,7 +211,7 @@ export class Header {
 		// Separate text object for the total winnings part (shown in green)
 		this.amountTotalText = scene.add.text(x, y + 7, '', {
 			fontSize: '18px',
-			color: '#00ff00',
+			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
 		}).setOrigin(0, 0.5).setDepth(301); // Above idle symbols (0) but below winning symbols (600) and overlay (500)
 		this.amountTotalText.setVisible(false);
@@ -340,7 +368,7 @@ export class Header {
 
 		if (this.amountTotalText) {
 			// Total winnings (e.g. "$ 50.00") is rendered separately in green
-			this.amountTotalText.setColor('#00ff00');
+			this.amountTotalText.setColor(this.totalAmountTextColor);
 			this.amountTotalText.setText(totalText);
 			this.amountTotalText.setVisible(true);
 

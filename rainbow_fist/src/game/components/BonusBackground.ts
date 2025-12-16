@@ -50,30 +50,6 @@ export class BonusBackground {
 		this.createPortraitBonusBackground(scene, assetScale);
 	}
 
-	private createDoveSpineAnimation(scene: Scene, assetScale: number, position: {x: number, y: number}, scale: {x: number, y: number}): void {
-		try {
-			if (!ensureSpineFactory(scene, '[BonusBackground] createDoveSpineAnimation')) {
-				console.warn('[BonusBackground] Spine factory unavailable. Skipping dove spine.');
-				return;
-			}
-			
-			// Create the mobile disco lights Spine animation object
-			const doveSpineObject = scene.add.spine(position.x, position.y, "dove", "dove-atlas");
-			doveSpineObject.setOrigin(0.5, 0.5);
-			doveSpineObject.setScale(scale.x, scale.y);
-			doveSpineObject.setDepth(5);
-			doveSpineObject.animationState.setAnimation(0, "animation", true);
-
-			doveSpineObject.animationState.timeScale = 0.5;
-			
-			this.bonusContainer.add(doveSpineObject);
-			
-			console.log('[BonusBackground] Mobile dove Spine animation created successfully');
-		} catch (e) {
-			console.warn('[BonusBackground] createDoveSpineAnimation failed:', e);
-		}
-	}
-
 	private createPortraitBonusBackground(scene: Scene, assetScale: number): void {
 		console.log("[BonusBackground] Creating portrait bonus background layout");
 		
@@ -101,14 +77,6 @@ export class BonusBackground {
 		this.fitReelFrameToScreenWidth(scene);
 
 		this.bonusContainer.add(this.reelFrame);
-
-		// Dove spine animation
-		const doveYPosition = scene.scale.height * 0.09;
-		const doveLeftXPosition = scene.scale.width * 0.8;
-		const doveRightXPosition = scene.scale.width * 0.2;
-		const doveScale = 0.45;
-		this.createDoveSpineAnimation(scene, assetScale,  {x: doveLeftXPosition, y: doveYPosition}, {x: -doveScale, y: doveScale});
-		this.createDoveSpineAnimation(scene, assetScale, {x: doveRightXPosition, y: doveYPosition}, {x: doveScale, y: doveScale});
 	}
 
 	private fitBackgroundToScreen(scene: Scene): void {

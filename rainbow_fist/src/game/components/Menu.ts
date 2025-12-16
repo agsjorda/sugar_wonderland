@@ -1,9 +1,10 @@
 import { Scene, GameObjects } from 'phaser';
 import { Geom } from 'phaser';
 import { GameData } from '../components/GameData';
-import { AudioManager, SoundEffectType } from '../../managers/AudioManager';
+import { AudioManager } from '../../managers/AudioManager';
 import { GameAPI } from '../../backend/GameAPI';
 import { HelpScreen } from './MenuTabs/HelpScreen';
+import { playUtilityButtonSfx } from '../../utils/audioHelpers';
 
 interface ButtonBase {
     isButton: boolean;
@@ -278,7 +279,7 @@ export class Menu {
 
             // Tab click handler
             tabContainer.on('pointerup', () => {
-                scene.audioManager.playSoundEffect(SoundEffectType.MENU_CLICK);
+                playUtilityButtonSfx(scene);
                 this.switchTab(scene, tabContainers, index, tabConfigs);
             });
 
@@ -637,7 +638,7 @@ export class Menu {
                 btn.setInteractive({ useHandCursor: true });
                 btn.on('pointerup', () => {
                     if (this.historyIsLoading) { return; }
-                    scene.audioManager.playSoundEffect(SoundEffectType.MENU_CLICK);
+                    playUtilityButtonSfx(scene);
                     // Disable all pagination buttons during load
                     contentArea.iterate((child: Phaser.GameObjects.GameObject) => {
                         const img = child as Phaser.GameObjects.Image;
@@ -764,6 +765,7 @@ export class Menu {
         const musicToggleArea = scene.add.zone(toggleX, startY + 70 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
         musicToggleArea.setInteractive();
         musicToggleArea.on('pointerdown', () => {
+            playUtilityButtonSfx(scene);
             musicOn = !musicOn;
             scene.audioManager.setVolume(musicOn ? 1 : 0);
             drawToggle(musicToggleBg, musicToggleCircle, toggleX, startY + 70, musicOn);
@@ -789,6 +791,7 @@ export class Menu {
         const sfxToggleArea = scene.add.zone(toggleX, startY + 170 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
         sfxToggleArea.setInteractive();
         sfxToggleArea.on('pointerdown', () => {
+            playUtilityButtonSfx(scene);
             sfxOn = !sfxOn;
             scene.audioManager.setSfxVolume(sfxOn ? 1 : 0);
             drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 170, sfxOn);
@@ -809,6 +812,7 @@ export class Menu {
         const skipToggleArea = scene.add.zone(toggleX, skipLabelY + 2 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
         skipToggleArea.setInteractive();
         skipToggleArea.on('pointerdown', () => {
+            playUtilityButtonSfx(scene);
             skipOn = !skipOn;
             drawToggle(skipToggleBg, skipToggleCircle, toggleX, skipLabelY + 2, skipOn);
         });
@@ -980,6 +984,7 @@ export class Menu {
 
         // Music slider track click handler
         musicSliderTrack.on('pointerdown', (pointer: Phaser.Input.Pointer, localX: number) => {
+            playUtilityButtonSfx(scene);
             const sliderWidth = widthSlider * scaleFactor;
             localX = Math.max(0, Math.min(sliderWidth, localX));
             const newVolume = localX / sliderWidth;
@@ -993,11 +998,13 @@ export class Menu {
 
         // Music slider handle interaction
         musicSlider.on('pointerdown', () => {
+            playUtilityButtonSfx(scene);
             this.isDraggingMusic = true;
         });
 
         // SFX slider handle interaction
         sfxSlider.on('pointerdown', () => {
+            playUtilityButtonSfx(scene);
             this.isDraggingSFX = true;
         });
     }

@@ -331,6 +331,7 @@ export class SpinDataUtils {
   static getScatterSpinWins(spinData: any): number {
     const totalWin = spinData?.slot?.totalWin ?? 0;
     const freeSpinWin = this.getTotalWinFromFreeSpin(spinData);
+    console.log(`[SpinDataUtils] Scatter spin wins: ${totalWin} - ${freeSpinWin} = ${totalWin - freeSpinWin}`);
     return totalWin - freeSpinWin;
   }
 

@@ -15,7 +15,7 @@ export const ALL_SYMBOLS: number[] = [...SCATTER_SYMBOL, ...NORMAL_SYMBOLS, ...W
 export const SCATTER_MULTIPLIERS: number[] = [9, 11, 13, 15, 17, 19, 21, 23, 25, 27];
 
 // Timing Configuration
-export const DELAY_BETWEEN_SPINS: number = 2000;
+export const DELAY_BETWEEN_SPINS: number = 3000;
 // Ratio for time between column starts relative to DELAY_BETWEEN_SPINS
 export const DROP_REEL_START_INTERVAL_RATIO: number = 0.25;
 // Delay before starting autoplay for free spins

@@ -2,6 +2,7 @@ import { Scene } from 'phaser';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { SlotController } from './SlotController';
 import { playSpineAnimationSequence, playSpineAnimationSequenceWithConfig } from './SpineBehaviorHelper';
+import { playUtilityButtonSfx } from '../../utils/audioHelpers';
 
 export interface BuyFeatureConfig {
 	position?: { x: number; y: number };
@@ -271,7 +272,10 @@ export class BuyFeature {
 		this.container.add(this.confirmButton);
 		
 		buttonImage.setInteractive();
-		buttonImage.on('pointerdown', () => this.confirmPurchase());
+		buttonImage.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
+			this.confirmPurchase();
+		});
 	}
 
 	private createCloseButton(scene: Scene): void {
@@ -286,7 +290,10 @@ export class BuyFeature {
 		});
 		this.closeButton.setOrigin(0.5);
 		this.closeButton.setInteractive();
-		this.closeButton.on('pointerdown', () => this.close());
+		this.closeButton.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
+			this.close();
+		});
 		this.container.add(this.closeButton);
 	}
 
@@ -388,6 +395,7 @@ export class BuyFeature {
 		
 		// Handle pointer down for continuous press
 		this.minusButton.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			this.selectPreviousBet();
 			this.startContinuousDecrement(scene);
 		});
@@ -424,6 +432,7 @@ export class BuyFeature {
 		
 		// Handle pointer down for continuous press
 		this.plusButton.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			this.selectNextBet();
 			this.startContinuousIncrement(scene);
 		});

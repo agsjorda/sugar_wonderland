@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
+import { playUtilityButtonSfx } from '../../utils/audioHelpers';
 
 export interface AutoplayOptionsConfig {
 	position?: { x: number; y: number };
@@ -122,6 +123,7 @@ export class AutoplayOptions {
 		this.closeButton.setOrigin(0.5, 0.5);
 		this.closeButton.setInteractive();
 		this.closeButton.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			// Create slide-down animation
 			if (this.container.scene) {
 				this.container.scene.tweens.add({
@@ -244,6 +246,7 @@ export class AutoplayOptions {
 		// Make interactive
 		container.setInteractive(new Phaser.Geom.Rectangle(0, 0, width, height), Phaser.Geom.Rectangle.Contains);
 		container.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			this.selectButton(index, value);
 		});
 		
@@ -286,6 +289,7 @@ export class AutoplayOptions {
 		this.minusButton.setOrigin(0.5, 0.5);
 		this.minusButton.setInteractive();
 		this.minusButton.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			this.selectPreviousBet();
 		});
 		this.container.add(this.minusButton);
@@ -308,6 +312,7 @@ export class AutoplayOptions {
 		this.plusButton.setOrigin(0.5, 0.5);
 		this.plusButton.setInteractive();
 		this.plusButton.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			this.selectNextBet();
 		});
 		this.container.add(this.plusButton);
@@ -410,6 +415,7 @@ export class AutoplayOptions {
 		
 		buttonImage.setInteractive();
 		buttonImage.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			if (this.container.scene) {
 				this.container.scene.tweens.add({
 					targets: this.container,

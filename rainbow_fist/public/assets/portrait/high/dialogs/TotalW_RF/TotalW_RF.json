@@ -15003,7 +15003,7 @@
         }
     ],
     "animations": {
-        "animation": {
+        "total_win_idle": {
             "slots": {
                 "Layer 14": {
                     "attachment": [

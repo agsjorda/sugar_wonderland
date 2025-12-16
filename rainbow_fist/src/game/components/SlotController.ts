@@ -13,6 +13,7 @@ import { Symbols } from './Symbols';
 import { SoundEffectType } from '../../managers/AudioManager';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { Dialogs } from "./Dialogs";
+import { playUtilityButtonSfx } from '../../utils/audioHelpers';
 
 export class SlotController {
 	private controllerContainer: Phaser.GameObjects.Container;
@@ -107,6 +108,10 @@ export class SlotController {
 
 		// Listen for autoplay state changes
 		this.setupAutoplayEventListeners();
+	}
+
+	private playButtonSfx(): void {
+		playUtilityButtonSfx(this.scene);
 	}
 
 	/**
@@ -961,6 +966,7 @@ export class SlotController {
 		turboButton.setInteractive();
 		turboButton.on('pointerdown', () => {
 			console.log('[SlotController] Turbo button clicked');
+			this.playButtonSfx();
 			this.handleTurboButtonClick();
 		});
 		this.buttons.set('turbo', turboButton);
@@ -985,6 +991,7 @@ export class SlotController {
 		amplifyButton.setInteractive();
 		amplifyButton.on('pointerdown', () => {
 			console.log('[SlotController] Amplify button clicked');
+			this.playButtonSfx();
 			this.handleAmplifyButtonClick();
 		});
 		this.buttons.set('amplify', amplifyButton);
@@ -1012,6 +1019,7 @@ export class SlotController {
 		autoplayButton.setInteractive();
 		autoplayButton.on('pointerdown', () => {
 			console.log('[SlotController] Autoplay button clicked');
+			this.playButtonSfx();
 			this.handleAutoplayButtonClick();
 		});
 		this.buttons.set('autoplay', autoplayButton);
@@ -1036,6 +1044,7 @@ export class SlotController {
 		menuButton.setInteractive();
 		menuButton.on('pointerdown', () => {
 			console.log('[SlotController] Menu button clicked');
+			this.playButtonSfx();
 			EventBus.emit('menu');
 		});
 		this.buttons.set('menu', menuButton);
@@ -1250,6 +1259,7 @@ export class SlotController {
 			}
 			
 			console.log('[SlotController] Bet background clicked');
+			this.playButtonSfx();
 			EventBus.emit('show-bet-options');
 		});
 
@@ -1305,6 +1315,7 @@ export class SlotController {
 		decreaseBetButton.setInteractive();
 		decreaseBetButton.on('pointerdown', () => {
 			console.log('[SlotController] Decrease bet button clicked');
+			this.playButtonSfx();
 			this.adjustBetByStep(-1);
 		});
 		this.buttons.set('decrease_bet', decreaseBetButton);
@@ -1319,6 +1330,7 @@ export class SlotController {
 		increaseBetButton.setInteractive();
 		increaseBetButton.on('pointerdown', () => {
 			console.log('[SlotController] Increase bet button clicked');
+			this.playButtonSfx();
 			this.adjustBetByStep(1);
 		});
 		this.buttons.set('increase_bet', increaseBetButton);
@@ -1476,6 +1488,7 @@ export class SlotController {
 		featureButton.setInteractive();
 		featureButton.on('pointerdown', () => {
 			console.log('[SlotController] Feature button clicked');
+			this.playButtonSfx();
 			this.showBuyFeatureDrawer();
 		});
 		this.buttons.set('feature', featureButton);
@@ -1608,6 +1621,7 @@ export class SlotController {
 		turboButton.setInteractive();
 		turboButton.on('pointerdown', () => {
 			console.log('[SlotController] Turbo button clicked');
+			this.playButtonSfx();
 			this.handleTurboButtonClick();
 		});
 		this.buttons.set('turbo', turboButton);
@@ -1632,6 +1646,7 @@ export class SlotController {
 		autoplayButton.setInteractive();
 		autoplayButton.on('pointerdown', () => {
 			console.log('[SlotController] Autoplay button clicked');
+			this.playButtonSfx();
 			this.handleAutoplayButtonClick();
 		});
 		this.buttons.set('autoplay', autoplayButton);
@@ -1656,6 +1671,7 @@ export class SlotController {
 		menuButton.setInteractive();
 		menuButton.on('pointerdown', () => {
 			console.log('[SlotController] Menu button clicked');
+			this.playButtonSfx();
 			EventBus.emit('menu');
 		});
 		this.buttons.set('menu', menuButton);

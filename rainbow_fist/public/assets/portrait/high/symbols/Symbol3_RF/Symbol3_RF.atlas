@@ -1,205 +1,164 @@
 Symbol3_RF.webp
-size:2048,2048
+size:2044,2044
 filter:Linear,Linear
-pma:true
-Comp 1/Smoke_00000
-bounds:2,2,1,1
-Comp 1/Smoke_00037
-bounds:2,2,1,1
-Comp 1/Smoke_00003
-bounds:1075,21,900,821
-offsets:305,333,1500,1500
-Comp 1/Smoke_00033
-bounds:2,5,1071,837
-offsets:243,349,1500,1500
-fx
-bounds:2,844,1445,1199
-mask
-bounds:1449,1634,520,409
+pma:false
+Comp 1/Heart_00000
+bounds:2038,2038,1,1
+Comp 1/Heart_00001
+bounds:1337,895,460,460
+offsets:533,456,1500,1500
+Comp 1/Heart_00002
+bounds:2,13,571,581
+offsets:455,405,1500,1500
+Comp 1/Heart_00003
+bounds:1337,1357,699,682
+offsets:386,362,1500,1500
+Heart_1
+bounds:1337,683,215,210
+offsets:58,52,316,318
+boots 1
+bounds:2,596,1333,1443
+offsets:2,1,1337,1446
+freepik__background__11017
+bounds:575,412,430,182
+offsets:39,51,500,286
 
 Symbol3_RF_2.webp
-size:2048,2048
+size:1448,1448
 filter:Linear,Linear
-pma:true
-Comp 1/Smoke_00013
-bounds:2,993,1325,1050
-offsets:104,240,1500,1500
-Comp 1/Smoke_00021
-bounds:2,2,1269,989
-offsets:137,273,1500,1500
-fist
-bounds:1329,759,698,1284
-freepik__background__62255
-bounds:1273,187,730,570
-offsets:151,236,1024,1024
+pma:false
+boots 2
+bounds:2,2,1333,1443
+offsets:2,1,1337,1446
 
 Symbol3_RF_3.webp
-size:2044,2044
+size:2048,2048
 filter:Linear,Linear
-pma:true
-Comp 1/Smoke_00001
-bounds:1331,1396,653,643
-offsets:423,412,1500,1500
-Comp 1/Smoke_00002
-bounds:1259,247,780,743
-offsets:363,367,1500,1500
-Comp 1/Smoke_00014
-bounds:2,992,1327,1047
-offsets:104,242,1500,1500
-Comp 1/Smoke_00022
-bounds:2,11,1255,979
-offsets:145,278,1500,1500
+pma:false
+Comp 1/Heart_00005
+bounds:1112,112,932,836
+offsets:272,299,1500,1500
+Comp 1/Heart_00007
+bounds:2,8,1108,940
+offsets:185,258,1500,1500
+Comp 1/Heart_00017
+bounds:2,950,1434,1094
+offsets:26,207,1500,1500
 
 Symbol3_RF_4.webp
-size:2024,2024
-filter:Linear,Linear
-pma:true
-Comp 1/Smoke_00012
-bounds:2,971,1320,1050
-offsets:106,239,1500,1500
-Comp 1/Smoke_00023
-bounds:2,2,1240,967
-offsets:153,284,1500,1500
-
-Symbol3_RF_5.webp
-size:2048,2048
-filter:Linear,Linear
-pma:true
-Comp 1/Smoke_00007
-bounds:2,2,1197,997
-offsets:163,258,1500,1500
-Comp 1/Smoke_00015
-bounds:2,1001,1326,1042
-offsets:105,245,1500,1500
-
-Symbol3_RF_6.webp
-size:2012,2012
-filter:Linear,Linear
-pma:true
-Comp 1/Smoke_00011
-bounds:2,959,1310,1048
-offsets:110,239,1500,1500
-Comp 1/Smoke_00024
-bounds:2,2,1225,955
-offsets:161,290,1500,1500
-
-Symbol3_RF_7.webp
-size:2044,2044
-filter:Linear,Linear
-pma:true
-Comp 1/Smoke_00016
-bounds:2,1005,1321,1037
-offsets:108,248,1500,1500
-Comp 1/Smoke_00020
-bounds:2,2,1282,1001
-offsets:130,267,1500,1500
-
-Symbol3_RF_8.webp
-size:2048,2048
-filter:Linear,Linear
-pma:true
-Comp 1/Smoke_00017
-bounds:2,1015,1313,1029
-offsets:113,252,1500,1500
-Comp 1/Smoke_00019
-bounds:2,2,1294,1011
-offsets:124,262,1500,1500
-
-Symbol3_RF_9.webp
 size:1992,1992
 filter:Linear,Linear
-pma:true
-Comp 1/Smoke_00010
-bounds:2,946,1293,1042
-offsets:118,241,1500,1500
-Comp 1/Smoke_00025
-bounds:2,2,1209,942
-offsets:170,297,1500,1500
+pma:false
+Comp 1/Heart_00004
+bounds:1031,130,823,765
+offsets:325,328,1500,1500
+Comp 1/Heart_00006
+bounds:2,2,1027,893
+offsets:225,276,1500,1500
+Comp 1/Heart_00018
+bounds:2,897,1436,1092
+offsets:25,209,1500,1500
+
+Symbol3_RF_5.webp
+size:1844,1844
+filter:Linear,Linear
+pma:false
+Comp 1/Heart_00019
+bounds:2,754,1435,1088
+offsets:26,212,1500,1500
+Comp 1/Heart_00023
+bounds:2,2,1061,750
+offsets:39,227,1500,1500
+
+Symbol3_RF_6.webp
+size:1432,1432
+filter:Linear,Linear
+pma:false
+Comp 1/Heart_00016
+bounds:2,336,1427,1093
+offsets:29,206,1500,1500
+
+Symbol3_RF_7.webp
+size:1436,1436
+filter:Linear,Linear
+pma:false
+Comp 1/Heart_00020
+bounds:2,351,1432,1083
+offsets:27,215,1500,1500
+
+Symbol3_RF_8.webp
+size:1424,1424
+filter:Linear,Linear
+pma:false
+Comp 1/Heart_00015
+bounds:2,327,1417,1092
+offsets:34,205,1500,1500
+
+Symbol3_RF_9.webp
+size:1408,1408
+filter:Linear,Linear
+pma:false
+Comp 1/Heart_00014
+bounds:2,318,1403,1087
+offsets:41,206,1500,1500
 
 Symbol3_RF_10.webp
-size:2044,2044
+size:1388,1388
 filter:Linear,Linear
-pma:true
-Comp 1/Smoke_00008
-bounds:2,2,1238,1017
-offsets:143,250,1500,1500
-Comp 1/Smoke_00018
-bounds:2,1021,1304,1020
-offsets:118,257,1500,1500
+pma:false
+Comp 1/Heart_00013
+bounds:2,306,1383,1079
+offsets:50,208,1500,1500
 
 Symbol3_RF_11.webp
-size:1968,1968
+size:1364,1364
 filter:Linear,Linear
-pma:true
-Comp 1/Smoke_00009
-bounds:2,933,1270,1033
-offsets:128,244,1500,1500
-Comp 1/Smoke_00026
-bounds:2,2,1193,929
-offsets:178,303,1500,1500
+pma:false
+Comp 1/Heart_00012
+bounds:2,291,1357,1068
+offsets:63,211,1500,1500
 
 Symbol3_RF_12.webp
-size:1892,1892
-filter:Linear,Linear
-pma:true
-Comp 1/Smoke_00006
-bounds:2,921,1144,968
-offsets:188,270,1500,1500
-Comp 1/Smoke_00027
-bounds:2,2,1176,917
-offsets:187,309,1500,1500
-
-Symbol3_RF_13.webp
-size:1800,1800
-filter:Linear,Linear
-pma:true
-Comp 1/Smoke_00028
-bounds:2,895,1158,903
-offsets:197,316,1500,1500
-Comp 1/Smoke_00029
-bounds:2,2,1141,891
-offsets:206,322,1500,1500
-
-Symbol3_RF_14.webp
-size:1816,1816
-filter:Linear,Linear
-pma:true
-Comp 1/Smoke_00005
-bounds:2,881,1079,932
-offsets:219,285,1500,1500
-Comp 1/Smoke_00030
-bounds:2,2,1124,877
-offsets:215,329,1500,1500
-
-Symbol3_RF_15.webp
-size:1720,1720
-filter:Linear,Linear
-pma:true
-Comp 1/Smoke_00031
-bounds:2,855,1107,863
-offsets:224,336,1500,1500
-Comp 1/Smoke_00032
-bounds:2,2,1088,851
-offsets:234,342,1500,1500
-
-Symbol3_RF_16.webp
 size:2040,2040
 filter:Linear,Linear
-pma:true
-Comp 1/Smoke_00004
-bounds:2,1153,998,883
-offsets:258,306,1500,1500
-Comp 1/Smoke_00034
-bounds:2,328,1052,823
-offsets:253,356,1500,1500
-Comp 1/Smoke_00035
-bounds:1002,1226,1034,810
-offsets:263,362,1500,1500
+pma:false
+Comp 1/Heart_00008
+bounds:2,2,1177,978
+offsets:151,243,1500,1500
+Comp 1/Heart_00011
+bounds:2,982,1325,1053
+offsets:79,216,1500,1500
 
-Symbol3_RF_17.webp
-size:1020,1020
+Symbol3_RF_13.webp
+size:2044,2044
 filter:Linear,Linear
-pma:true
-Comp 1/Smoke_00036
-bounds:2,221,1016,797
-offsets:272,369,1500,1500
+pma:false
+Comp 1/Heart_00010
+bounds:2,1004,1284,1035
+offsets:99,222,1500,1500
+Star
+bounds:2,2,1000,1000
+
+Symbol3_RF_14.webp
+size:1240,1240
+filter:Linear,Linear
+pma:false
+Comp 1/Heart_00009
+bounds:2,227,1235,1010
+offsets:123,231,1500,1500
+
+Symbol3_RF_15.webp
+size:1152,1152
+filter:Linear,Linear
+pma:false
+Comp 1/Heart_00021
+bounds:2,106,1148,1044
+offsets:30,219,1500,1500
+
+Symbol3_RF_16.webp
+size:1076,1076
+filter:Linear,Linear
+pma:false
+Comp 1/Heart_00022
+bounds:2,37,1072,1037
+offsets:34,223,1500,1500

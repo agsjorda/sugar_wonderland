@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
+import { playUtilityButtonSfx } from '../../utils/audioHelpers';
 
 export interface BetOptionsConfig {
 	position?: { x: number; y: number };
@@ -102,6 +103,7 @@ export class BetOptions {
 		this.closeButton.setOrigin(0.5, 0.5);
 		this.closeButton.setInteractive();
 		this.closeButton.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			// Create slide-down animation
 			if (this.container.scene) {
 				this.container.scene.tweens.add({
@@ -179,6 +181,7 @@ export class BetOptions {
 		// Make interactive
 		container.setInteractive(new Phaser.Geom.Rectangle(0, 0, width, height), Phaser.Geom.Rectangle.Contains);
 		container.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			this.selectButton(index, value);
 		});
 		
@@ -216,6 +219,7 @@ export class BetOptions {
 		this.minusButton.setOrigin(0.5, 0.5);
 		this.minusButton.setInteractive();
 		this.minusButton.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			this.selectPreviousBet();
 		});
 		this.container.add(this.minusButton);
@@ -238,6 +242,7 @@ export class BetOptions {
 		this.plusButton.setOrigin(0.5, 0.5);
 		this.plusButton.setInteractive();
 		this.plusButton.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			this.selectNextBet();
 		});
 		this.container.add(this.plusButton);
@@ -264,6 +269,7 @@ export class BetOptions {
 		
 		buttonImage.setInteractive();
 		buttonImage.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			// Create slide-down animation
 			if (this.container.scene) {
 				this.container.scene.tweens.add({

@@ -31,6 +31,26 @@ export function hideSpineAttachmentsByKeywords(spine: SpineGameObject, keywords:
     } catch {}
 }
 
+/**
+ * Returns the duration (ms) of a spine animation by name, factoring timeScale.
+ * If the animation is missing or invalid, returns fallbackMs (default 0).
+ */
+export function getSpineAnimationDurationMs(
+    spine: SpineGameObject | undefined,
+    animationName: string,
+    fallbackMs: number = 0
+): number {
+    try {
+        if (!spine || !animationName) return fallbackMs;
+        const timeScale = Math.max(0, (spine as any)?.animationState?.timeScale ?? 1) || 1;
+        const durationSec = (spine as any)?.skeleton?.data?.findAnimation?.(animationName)?.duration;
+        if (typeof durationSec === 'number' && durationSec > 0) {
+            return durationSec * 1000 * timeScale;
+        }
+    } catch {}
+    return fallbackMs;
+}
+
 export function playSpineAnimationSequence(spine: SpineGameObject, animationSequence: number[], loopLastAnimation: boolean = true, onComplete?: () => void) {
     
     // Compute total duration (ms) of the animations to be played (one iteration each), factoring in timeScale

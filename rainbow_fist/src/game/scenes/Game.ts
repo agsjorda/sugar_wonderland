@@ -153,12 +153,55 @@ export class Game extends Scene
 
 	create ()
 	{
+		console.log(`[Game] Creating game scene`);
+
+		// Create fade overlay FIRST (and above everything) so all first-frame init is hidden.
+		// Note: Many UI elements use depths in the 100-3000 range, and some transitions use 10000,
+		// so we pick a very high value to guarantee coverage.
+		const fadeOverlay = this.add.rectangle(
+			this.scale.width * 0.5,
+			this.scale.height * 0.5,
+			this.scale.width,
+			this.scale.height,
+			0x000000
+		)
+			.setOrigin(0.5, 0.5)
+			.setScrollFactor(0)
+			.setAlpha(1)
+			.setDepth(30000);
+
+		// Keep overlay sized correctly if the game resizes before the fade completes.
+		const onResize = (gameSize: Phaser.Structs.Size) => {
+			if (!fadeOverlay || !fadeOverlay.active) return;
+			fadeOverlay.setPosition(gameSize.width * 0.5, gameSize.height * 0.5);
+			fadeOverlay.setSize(gameSize.width, gameSize.height);
+		};
+		this.scale.on('resize', onResize);
+
+		const startStartupFadeIn = () => {
+			// Small buffer so any first-tick UI toggles (mode/visibility/state) happen while still fully black.
+			const holdMs = 120;
+			const fadeMs = 650;
+
+			this.time.delayedCall(holdMs, () => {
+				this.tweens.add({
+					targets: fadeOverlay,
+					alpha: 0,
+					duration: fadeMs,
+					ease: 'Power2',
+					onComplete: () => {
+						console.log('[Game] Fade in from black complete');
+						this.scale.off('resize', onResize);
+						fadeOverlay.destroy();
+					}
+				});
+			});
+		};
+
 		this.clockDisplay = new ClockDisplay(this, {
 			gameTitle: 'Rainbow Fist',
 		});
 		this.clockDisplay.create();
-
-		console.log(`[Game] Creating game scene`);
 		
 		// Set physics world bounds (physics is already enabled globally)
 		if (this.physics && this.physics.world) {
@@ -167,16 +210,7 @@ export class Game extends Scene
 		} else {
 			console.warn('[Game] Physics system not available');
 		}
-		
-		// Create fade overlay for transition from black
-		const fadeOverlay = this.add.rectangle(
-			this.scale.width * 0.5,
-			this.scale.height * 0.5,
-			this.scale.width,
-			this.scale.height,
-			0x000000
-		).setOrigin(0.5, 0.5).setScrollFactor(0).setAlpha(1);
-		
+
 		// Backend initialization removed - using SlotController autoplay system
 		
 		// Create background using the managers
@@ -241,6 +275,113 @@ export class Game extends Scene
 		// Create dialogs using the managers
 		this.dialogs = new Dialogs(this.networkManager, this.screenModeManager);
 		this.dialogs.create(this);
+
+		// Debug helper: expose console-callable functions to simulate win dialogs / free spin dialogs.
+		// Usage (DevTools console):
+		//   showTotalWinDialog(12345)
+		//   showTotalWinDialog(12345, { addSprites: true })
+		//   showBigWinDialog(5000)
+		//   showMegaWinDialog(15000)
+		//   showEpicWinDialog(45000)
+		//   showSuperWinDialog(90000)
+		//   showMaxWinDialog(250000)
+		//   showFreeSpinDialog(10)
+		//   showRetriggerDialog(5) // bonus free spin dialog
+		try {
+			const w = window as any;
+			// Global gate for ALL console dialog calls:
+			// - Set to false to block:   window.__ALLOW_CONSOLE_DIALOG_CALLS__ = false
+			// - Re-enable:               window.__ALLOW_CONSOLE_DIALOG_CALLS__ = true
+			if (typeof w.__ALLOW_CONSOLE_DIALOG_CALLS__ !== 'boolean') {
+				w.__ALLOW_CONSOLE_DIALOG_CALLS__ = true;
+			}
+
+			const isConsoleDialogCallsAllowed = () => {
+				if (w.__ALLOW_CONSOLE_DIALOG_CALLS__ === false) {
+					console.warn('[Debug] Console dialog calls are blocked (window.__ALLOW_CONSOLE_DIALOG_CALLS__ = false).');
+					return false;
+				}
+				return true;
+			};
+
+			const getGameScene = () => {
+				const phaserGame = w.phaserGame;
+				return (
+					phaserGame?.scene?.getScene?.('Game') ??
+					phaserGame?.scene?.scenes?.find((s: any) => s?.scene?.key === 'Game')
+				);
+			};
+
+			const getDialogs = () => {
+				const gameScene = getGameScene();
+				if (!gameScene) return { gameScene: null, dialogs: null };
+				return { gameScene, dialogs: (gameScene as any).dialogs };
+			};
+
+			const closeIfOpen = (dialogs: any) => {
+				try {
+					if (typeof dialogs?.isDialogShowing === 'function' && dialogs.isDialogShowing()) {
+						dialogs.hideDialog?.();
+					}
+				} catch {}
+			};
+
+			// Generic helper (optional, but handy)
+			w.showDialog = (type: string, params?: any) => {
+				if (!isConsoleDialogCallsAllowed()) return false;
+				const { gameScene, dialogs } = getDialogs();
+				if (!gameScene) {
+					console.warn('[Debug] Game scene not found. Is the game running?');
+					return false;
+				}
+				if (!dialogs || typeof dialogs.showDialog !== 'function') {
+					console.warn('[Debug] dialogs.showDialog not available on Game scene.');
+					return false;
+				}
+				closeIfOpen(dialogs);
+				dialogs.showDialog(gameScene, { type, ...(params || {}) });
+				return true;
+			};
+
+			w.showTotalWinDialog = (winAmount: number = 1000, opts?: { addSprites?: boolean; closeExisting?: boolean }) => {
+				if (!isConsoleDialogCallsAllowed()) return false;
+				const addSprites = opts?.addSprites ?? false;
+				const closeExisting = opts?.closeExisting ?? true;
+
+				const { gameScene, dialogs } = getDialogs();
+				if (!gameScene) {
+					console.warn('[Debug] Game scene not found. Is the game running?');
+					return false;
+				}
+				if (!dialogs || typeof dialogs.showCongratulations !== 'function') {
+					console.warn('[Debug] dialogs.showCongratulations not available on Game scene.');
+					return false;
+				}
+
+				if (closeExisting) closeIfOpen(dialogs);
+				dialogs.showCongratulations(gameScene, { winAmount: Number(winAmount) || 0 });
+				try {
+					if (addSprites && typeof dialogs.addTotalWinSprites === 'function') {
+						dialogs.addTotalWinSprites(gameScene);
+					}
+				} catch {}
+				return true;
+			};
+
+			// Win dialogs
+			w.showBigWinDialog = (winAmount: number = 5000) => (isConsoleDialogCallsAllowed() ? w.showDialog('BigWin', { winAmount: Number(winAmount) || 0 }) : false);
+			w.showMegaWinDialog = (winAmount: number = 15000) => (isConsoleDialogCallsAllowed() ? w.showDialog('MegaWin', { winAmount: Number(winAmount) || 0 }) : false);
+			w.showEpicWinDialog = (winAmount: number = 45000) => (isConsoleDialogCallsAllowed() ? w.showDialog('EpicWin', { winAmount: Number(winAmount) || 0 }) : false);
+			w.showSuperWinDialog = (winAmount: number = 90000) => (isConsoleDialogCallsAllowed() ? w.showDialog('SuperWin', { winAmount: Number(winAmount) || 0 }) : false);
+			w.showMaxWinDialog = (winAmount: number = 250000) => (isConsoleDialogCallsAllowed() ? w.showDialog('MaxWin', { winAmount: Number(winAmount) || 0 }) : false);
+
+			// Free spin dialogs
+			w.showFreeSpinDialog = (freeSpins: number = 10) => (isConsoleDialogCallsAllowed() ? w.showDialog('FreeSpinDialog', { freeSpins: Number(freeSpins) || 0 }) : false);
+			w.showRetriggerDialog = (freeSpins: number = 5) => (isConsoleDialogCallsAllowed() ? w.showDialog('BonusFreeSpinDialog', { freeSpins: Number(freeSpins) || 0 }) : false);
+
+			// Back-compat alias (some folks type this instinctively)
+			w.totalWinDialog = w.showTotalWinDialog;
+		} catch {}
 		
 		// Initialize scatter animation manager with both containers, spinner and dialogs components
 		const scatterAnimationManager = this.symbols.scatterAnimationManager;
@@ -290,19 +431,9 @@ export class Game extends Scene
 		
 		EventBus.emit('current-scene-ready', this);
 
-		// Fade in from black after all components are created
-		this.tweens.add({
-			targets: fadeOverlay,
-			// Start at alpha 1 (fully black) and tween down to 0 (fully transparent)
-			alpha: 0,
-			duration: 5000,
-			ease: 'Power2',
-			onComplete: () => {
-				console.log('[Game] Fade in from black complete');
-				// Remove the fade overlay to clean up
-				fadeOverlay.destroy();
-			}
-		});
+		// Fade in from black only after we've completed all first-frame setup.
+		// Starting on next tick helps avoid showing intermediate state changes (HUD toggles, mode switches).
+		this.time.delayedCall(0, startStartupFadeIn);
 
 		// Trigger layered effects when game starts
 		console.log(`[Game] Triggering layered effects...`);
@@ -1073,6 +1204,10 @@ export class Game extends Scene
 				}
 				// Notify other systems autoplay is fully stopped
 				gameEventManager.emit(GameEventType.AUTO_STOP);
+				// Refresh balance now that bonus spins are complete (updates were skipped during bonus)
+				this.updateBalanceAfterWinStop().catch((err) => {
+					console.warn('[Game] Failed to refresh balance after bonus end:', err);
+				});
 				// Switch back to main background music
 				if (this.audioManager) {
 					this.audioManager.playBackgroundMusic(MusicType.MAIN);

@@ -1143,6 +1143,10 @@ export class Game extends Scene
 				}
 				// Notify other systems autoplay is fully stopped
 				gameEventManager.emit(GameEventType.AUTO_STOP);
+				// Refresh balance now that bonus spins are complete (updates were skipped during bonus)
+				this.updateBalanceAfterWinStop().catch((err) => {
+					console.warn('[Game] Failed to refresh balance after bonus end:', err);
+				});
 				// Switch back to main background music
 				if (this.audioManager) {
 					this.audioManager.playBackgroundMusic(MusicType.MAIN);

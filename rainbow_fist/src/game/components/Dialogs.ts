@@ -9,10 +9,11 @@ import { getFullScreenSpineScale, playSpineAnimationSequenceWithConfig } from '.
 import { FlashTransition } from './FlashTransition';
 import { WinTracker } from './WinTracker';
 import { AUTO_SPIN_WIN_DIALOG_TIMEOUT } from '../../config/GameConfig';
+import { playUtilityButtonSfx } from '../../utils/audioHelpers';
 
 export interface DialogConfig {
 	//type: 'confetti_KA' | 'congrats_wf' | 'Explosion_AK' | 'FreeSpinDialog_KA' | 'largeW_KA' | 'LargeW_KA' | 'MediumW_KA' | 'SmallW_KA' | 'superw_wf';
-	type: 'Congratulations' | 'FreeSpinDialog' | 'BonusFreeSpinDialog' | 'BigWin' | 'MegaWin' | 'EpicWin' | 'SuperWin';
+	type: 'Congratulations' | 'FreeSpinDialog' | 'BonusFreeSpinDialog' | 'BigWin' | 'MegaWin' | 'EpicWin' | 'SuperWin' | 'MaxWin';
 	position?: { x: number; y: number };
 	scale?: number;
 	duration?: number;
@@ -58,24 +59,26 @@ export class Dialogs {
 	
 	// Dialog configuration
 	private dialogScales: Record<string, number> = {
-		'Congratulations': 1,
+		'Congratulations': 0.7,
 		'FreeSpinDialog': 0.28,
 		'BonusFreeSpinDialog': 0.28,
-		'EpicWin': 1.01,
-		'MegaWin': 1.01,
-		'BigWin': 1.01,
-		'SuperWin': 1.01,
+		'EpicWin': 1.025,
+		'MegaWin': 1.025,
+		'BigWin': 1.025,
+		'SuperWin': 1.025,
+		'MaxWin': 1.025,
 	};
 
 	// Dialog positions (relative: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom)
 	private dialogPositions: Record<string, { x: number; y: number }> = {
-		'Congratulations': { x: 0.535, y: 0.625 },
-		'FreeSpinDialog': { x: 0.5, y: 0.3 },
-		'BonusFreeSpinDialog': { x: 0.5, y: 0.3 },
+		'Congratulations': { x: 0.5, y: 0.63 },
+		'FreeSpinDialog': { x: 0.5, y: 0.35 },
+		'BonusFreeSpinDialog': { x: 0.5, y: 0.35 },
 		'BigWin': { x: 0.54, y: 0.53 },
 		'MegaWin': { x: 0.51, y: 0.555 },
 		'EpicWin': { x: 0.5, y: 0.5175 },
 		'SuperWin': { x: 0.5, y: 0.5075 },
+		'MaxWin': { x: 0.5, y: 0.5175 },
 	};
 
 	// Number display positions (relative). Defaults to center + offset when not specified.
@@ -85,9 +88,9 @@ export class Dialogs {
 		'EpicWin': { x: 0.5, y: 0.525 },
 		'SuperWin': { x: 0.5, y: 0.525 },
 		'FreeSpinDialog': { x: 0.5, y: 0.625 },
-		'BonusFreeSpinDialog': { x: 0.5, y: 0.5 },
-		'MaxWin': { x: 0.5, y: 0.625 },
-		'Congratulations': { x: 0.5, y: 0.625 },
+		'BonusFreeSpinDialog': { x: 0.5, y: 0.625 },
+		'MaxWin': { x: 0.5, y: 0.575 },
+		'Congratulations': { x: 0.5, y: 0.575 },
 	};
 
 	private dialogLoops: Record<string, boolean> = {
@@ -98,7 +101,8 @@ export class Dialogs {
 		'EpicWin': true,
 		'MegaWin': true,
 		'BigWin': true,
-		'SuperWin': true
+		'SuperWin': true,
+		'MaxWin': true
 	};
 
 	private winDialogAnimationNames: Record<string, string> = {
@@ -109,6 +113,7 @@ export class Dialogs {
 		'MegaWin': 'animation',
 		'EpicWin': 'animation',
 		'SuperWin': 'animation',
+		'MaxWin': 'animation',
 		'default': 'animation'
 	}
 
@@ -119,9 +124,12 @@ export class Dialogs {
 		'BigWin': 'big_win',
 		'MegaWin': 'mega_win',
 		'EpicWin': 'epic_win',
-		'SuperWin': 'super_win'
+		'SuperWin': 'super_win',
+		'MaxWin': 'max_win'
 	}
 	private flashTransition: FlashTransition | null = null;
+	private dialogSpinePool: Record<string, SpineGameObject[]> = {};
+	private dialogSpinesPrewarmed: boolean = false;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -157,6 +165,7 @@ export class Dialogs {
 		// Prepare white flash transition overlay for special dialog exits (e.g., congrats)
 		this.flashTransition = new FlashTransition(scene);
 		this.flashTransition.hide();
+		this.prewarmDialogSpines(scene);
 		
 		console.log('[Dialogs] Dialog system created');
 	}
@@ -233,15 +242,14 @@ export class Dialogs {
 		try {
 			const audioManager = (window as any).audioManager;
 			if (audioManager && typeof audioManager.playSoundEffect === 'function') {
-				const type = (this.currentDialogType || '').toLowerCase();
-                if (type === 'freespindialog') {
-                    // Use congrats_wf for the FreeSpin dialog per request
+				const type = this.currentDialogType;
+                if (type === 'FreeSpinDialog' || type === 'BonusFreeSpinDialog') {
                     audioManager.playSoundEffect('dialog_congrats');
                     // Duck background music similar to win dialogs
                     if (typeof audioManager.duckBackground === 'function') {
                         audioManager.duckBackground(0.3);
                     }
-                } else if (type === 'congrats_wf') {
+                } else if (type === 'Congratulations') {
 					audioManager.playSoundEffect('dialog_congrats');
                     if (typeof audioManager.duckBackground === 'function') {
                         audioManager.duckBackground(0.3);
@@ -324,13 +332,81 @@ export class Dialogs {
 		return this.dialogSpineNames[config.type] || config.type;
 	}
 
+	private prewarmDialogSpines(scene: Scene): void {
+		if (this.dialogSpinesPrewarmed) {
+			return;
+		}
+
+		this.dialogSpinesPrewarmed = true;
+		const uniqueSpineNames = Array.from(new Set(Object.values(this.dialogSpineNames)));
+
+		for (const spineName of uniqueSpineNames) {
+			const spine = this.instantiateDialogSpine(scene, spineName);
+			if (spine) {
+				this.releaseDialogSpine(spine);
+			}
+		}
+	}
+
+	private instantiateDialogSpine(scene: Scene, spineName: string): SpineGameObject | null {
+		try {
+			const spine = scene.add.spine(0, 0, spineName, `${spineName}-atlas`);
+			(spine as any).__dialogSpineKey = spineName;
+			spine.setVisible(false);
+			spine.setActive(false);
+			return spine;
+		} catch (error) {
+			console.error(`[Dialogs] Error instantiating dialog spine: ${spineName}`, error);
+			return null;
+		}
+	}
+
+	private acquireDialogSpine(scene: Scene, spineName: string): SpineGameObject | null {
+		const pool = this.dialogSpinePool[spineName];
+		let spine: SpineGameObject | undefined = pool && pool.length > 0 ? pool.pop() : undefined;
+
+		if (!spine) {
+			spine = this.instantiateDialogSpine(scene, spineName) || undefined;
+		}
+
+		if (!spine) {
+			return null;
+		}
+
+		try { spine.setVisible(true); } catch {}
+		try { spine.setActive(true); } catch {}
+		try { spine.setAlpha(1); } catch {}
+		return spine;
+	}
+
+	private releaseDialogSpine(spine: SpineGameObject | null): void {
+		if (!spine) return;
+
+		const spineKey: string | undefined = (spine as any).__dialogSpineKey || (spine as any).key || spine.name;
+
+		try { spine.animationState?.clearTracks?.(); } catch {}
+		try { (spine as any).parentContainer?.remove?.(spine); } catch {}
+		try { spine.setVisible(false); } catch {}
+		try { spine.setActive(false); } catch {}
+		try { spine.setAlpha(0); } catch {}
+
+		if (spineKey) {
+			if (!this.dialogSpinePool[spineKey]) {
+				this.dialogSpinePool[spineKey] = [];
+			}
+			this.dialogSpinePool[spineKey].push(spine);
+		} else {
+			spine.destroy();
+		}
+	}
+
 	/**
 	 * Create the main dialog content (FreeSpinDialog_KA, LargeW_KA, etc.)
 	 */
 	private createDialogContent(scene: Scene, config: DialogConfig): void {
 		// Clean up existing dialog
 		if (this.currentDialog) {
-			this.currentDialog.destroy();
+			this.releaseDialogSpine(this.currentDialog);
 			this.currentDialog = null;
 		}
 
@@ -341,12 +417,12 @@ export class Dialogs {
 		try {
 			console.log(`[Dialogs] Creating Spine animation for dialog: ${config.type}`);
 			console.log(`[Dialogs] Using atlas: ${config.type}-atlas`);
-			this.currentDialog = scene.add.spine(
-				position.x,
-				position.y,
-				config.type,
-				`${config.type}-atlas`
-			);
+			this.currentDialog = this.acquireDialogSpine(scene, config.type);
+			if (!this.currentDialog) {
+				console.warn('[Dialogs] Failed to acquire dialog spine, aborting createDialogContent');
+				return;
+			}
+			this.currentDialog.setPosition(position.x, position.y);
 			this.currentDialog.setOrigin(0.5, 0.5);
 			
 			// Play intro animation first, then loop idle based on configuration (fallback to idle if intro missing)
@@ -378,7 +454,7 @@ export class Dialogs {
 	private createDialogContentWithCustomSpineName(scene: Scene, spineName: string, config: DialogConfig): void {
 		// Clean up existing dialog
 		if (this.currentDialog) {
-			this.currentDialog.destroy();
+			this.releaseDialogSpine(this.currentDialog);
 			this.currentDialog = null;
 		}
 
@@ -389,12 +465,12 @@ export class Dialogs {
 		try {
 			console.log(`[Dialogs] Creating Spine animation for dialog: ${config.type}`);
 			console.log(`[Dialogs] Using atlas: ${spineName}-atlas`);
-			this.currentDialog = scene.add.spine(
-				position.x,
-				position.y,
-				spineName,
-				`${spineName}-atlas`
-			);
+			this.currentDialog = this.acquireDialogSpine(scene, spineName);
+			if (!this.currentDialog) {
+				console.warn('[Dialogs] Failed to acquire dialog spine, aborting createDialogContentWithCustomSpineName');
+				return;
+			}
+			this.currentDialog.setPosition(position.x, position.y);
 			this.currentDialog.setOrigin(0.5, 0.5);
 			
 			// Play intro animation first, then loop idle based on configuration (fallback to idle if intro missing)
@@ -678,8 +754,8 @@ export class Dialogs {
 		const numberConfig: NumberDisplayConfig = {
 			x: position.x,
 			y: position.y,
-			scale: 0.04,
-			spacing: -12,
+			scale: 0.035,
+			spacing: -15,
 			alignment: 'center',
 			decimalPlaces: freeSpins !== undefined ? 0 : 2, // No decimals for free spins
 			showCommas: freeSpins !== undefined ? false : true, // No commas for free spins
@@ -898,6 +974,7 @@ export class Dialogs {
 			scene.time.delayedCall(1000, () => {
 				if (this.clickArea) {
 					this.clickArea.on('pointerdown', () => {
+						playUtilityButtonSfx(scene);
 						this.handleDialogClick(scene);
 						this.clickArea?.disableInteractive();
 					});
@@ -911,6 +988,7 @@ export class Dialogs {
 				if (this.clickArea) {
 					this.clickArea.on('pointerdown', () => {
 						console.log('[Dialogs] Free spin dialog clicked!');
+						playUtilityButtonSfx(scene);
 						this.handleDialogClick(scene);
 						this.clickArea?.disableInteractive();
 					});
@@ -1000,7 +1078,8 @@ export class Dialogs {
 		return this.currentDialogType === 'BigWin' || 
 			   this.currentDialogType === 'MegaWin' || 
 			   this.currentDialogType === 'EpicWin' || 
-			   this.currentDialogType === 'SuperWin';
+			   this.currentDialogType === 'SuperWin' ||
+			   this.currentDialogType === 'MaxWin';
 	}
 	
 	/**
@@ -1475,8 +1554,8 @@ export class Dialogs {
 		
 		// Clean up current dialog
 		if (this.currentDialog) {
-			console.log('[Dialogs] Destroying current dialog');
-			this.currentDialog.destroy();
+			console.log('[Dialogs] Releasing current dialog to pool');
+			this.releaseDialogSpine(this.currentDialog);
 			this.currentDialog = null;
 		}
 		
@@ -1672,7 +1751,7 @@ export class Dialogs {
 	// Convenience methods for specific dialog types
 	showCongratulations(scene: Scene, config?: Partial<DialogConfig>): void {
 		this.showDialog(scene, { type: 'Congratulations', ...config });
-		this.addTotalWinSprites(scene);
+		// this.addTotalWinSprites(scene);
 	}
 
 	addTotalWinSprites(scene: Scene) : void
@@ -1750,5 +1829,10 @@ export class Dialogs {
 	// 60x
 	showSuperWin(scene: Scene, config?: Partial<DialogConfig>): void {
 		this.showDialog(scene, { type: 'SuperWin', ...config });
+	}
+
+	// Max win
+	showMaxWin(scene: Scene, config?: Partial<DialogConfig>): void {
+		this.showDialog(scene, { type: 'MaxWin', ...config });
 	}
 }

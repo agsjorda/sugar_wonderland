@@ -377,7 +377,6 @@ export class ScatterAnimationManager {
           const isTurbo = gameStateManager.isTurbo;
           this.scene?.time.delayedCall(900, () => {
             audioMgr.fadeOutSfx(SoundEffectType.MISSILE, 300);
-            audioMgr.playSoundEffect(SoundEffectType.EXPLOSION);
             this.scene?.time.delayedCall(300, () => {
               audioMgr.playSoundEffect(SoundEffectType.NUKE);
               console.log('[ScatterAnimationManager] Nuke SFX played at nuclear animation end');

@@ -511,6 +511,7 @@ export class NumberDisplay {
 				const texture = this.scene!.textures.get(key);
 				totalWidth += texture.source[0].width * charScale + this.config.spacing!;
 			}
+
 		}
 		
 		// Remove last spacing

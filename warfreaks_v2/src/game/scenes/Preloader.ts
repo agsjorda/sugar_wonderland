@@ -73,6 +73,17 @@ export class Preloader extends Scene
 		// Black background for studio loading
 		this.cameras.main.setBackgroundColor(0x000000);
 
+		// Hide the HTML boot loader right as the Phaser preloader scene begins,
+		// so the studio loading screen underneath becomes visible.
+		try {
+			const hideBootLoader = (window as any).hideBootLoader;
+			if (typeof hideBootLoader === 'function') {
+				hideBootLoader();
+			}
+		} catch (_e) {
+			/* no-op */
+		}
+
 		// Always show background since we're forcing portrait mode
 		const background = this.add.image(
 			this.scale.width * 0.5, 
@@ -183,6 +194,16 @@ export class Preloader extends Scene
 				this.progressText.setText(`${Math.round(progress * 100)}%`);
 			}
 
+			// Mirror progress to the HTML boot loader (if present)
+			try {
+				const setBootLoaderProgress = (window as any).setBootLoaderProgress;
+				if (typeof setBootLoaderProgress === 'function') {
+					setBootLoaderProgress(progress);
+				}
+			} catch (_e) {
+				/* no-op */
+			}			
+
 			// Keep emitting for React overlay listeners if any
 			EventBus.emit('progress', progress);
 		});
@@ -247,6 +268,16 @@ export class Preloader extends Scene
         } catch (error) {
             console.error('[Preloader] Failed to initialize GameAPI or slot session:', error);
         }
+
+		// Finalize the HTML boot loader progress (it was hidden in init)
+		try {
+			const setBootLoaderProgress = (window as any).setBootLoaderProgress;
+			if (typeof setBootLoaderProgress === 'function') {
+				setBootLoaderProgress(1);
+			}
+		} catch (_e) {
+			/* no-op */
+		}
 
         // Mark backend as initialized
         this.backendInitialized = true;

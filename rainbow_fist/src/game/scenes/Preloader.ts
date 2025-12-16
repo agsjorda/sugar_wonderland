@@ -12,6 +12,7 @@ import { StudioLoadingScreen } from '../components/StudioLoadingScreen';
 import { ClockDisplay } from '../components/ClockDisplay';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { hideSpineAttachmentsByKeywords, playSpineAnimationSequenceWithConfig } from '../components/SpineBehaviorHelper';
+import { playUtilityButtonSfx } from '../../utils/audioHelpers';
 
 export class Preloader extends Scene
 {
@@ -40,6 +41,10 @@ export class Preloader extends Scene
 
 	private studioLoadingScreen?: StudioLoadingScreen;
 	private preloaderLogoSpine?: SpineGameObject;
+	private loadingHeaderTween?: Phaser.Tweens.Tween;
+	private loadingHeaderBobTween?: Phaser.Tweens.Tween;
+	private assetsLoaded: boolean = false;
+	private backendInitialized: boolean = false;
 
 	constructor ()
 	{
@@ -71,10 +76,29 @@ export class Preloader extends Scene
 		// Black background for studio loading
 		this.cameras.main.setBackgroundColor(0x000000);
 
+		// Hide the HTML boot loader right as the Phaser preloader scene begins,
+		// so the studio loading screen underneath becomes visible.
+		try {
+			const hideBootLoader = (window as any).hideBootLoader;
+			if (typeof hideBootLoader === 'function') {
+				hideBootLoader();
+			}
+		} catch (_e) {
+			/* no-op */
+		}
+
 		this.createBackground();
 		this.createCharacter();
 		this.createHeader();
 		this.createFooter();
+
+		// Cleanup any looping tweens when this scene transitions away.
+		this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+			try { this.loadingHeaderTween?.stop(); } catch {}
+			this.loadingHeaderTween = undefined;
+			try { this.loadingHeaderBobTween?.stop(); } catch {}
+			this.loadingHeaderBobTween = undefined;
+		});
 		
 		// this.createSpineLogo();
 
@@ -96,8 +120,7 @@ export class Preloader extends Scene
 				text2Color: '#FFFFFF'
 		});
 		this.studioLoadingScreen.show();
-		// Schedule fade-out after minimum 3s, then reveal preloader UI if needed
-		this.studioLoadingScreen.bedazzle(5, 5);
+		// Note: we fade the studio screen only once assets + backend are ready (see checkReadyToTransition)
 
 		// Delay revealing Preloader's own progress UI until studio fade completes
 		this.events.once('studio-fade-complete', () => {
@@ -138,6 +161,11 @@ export class Preloader extends Scene
 
 		// Set up progress event listener
 		this.load.on('progress', (progress: number) => {
+			// Update studio loading screen progress bar
+			if (this.studioLoadingScreen) {
+				this.studioLoadingScreen.updateProgress(progress);
+			}
+
 			// Update in-scene progress bar
 			if (this.progressBarFill && this.progressBarX !== undefined && this.progressBarY !== undefined && this.progressBarWidth !== undefined && this.progressBarHeight !== undefined) {
 				const innerX = this.progressBarX - this.progressBarWidth * 0.5 + this.progressBarPadding;
@@ -158,8 +186,25 @@ export class Preloader extends Scene
 				this.progressText.setText(`${Math.round(progress * 100)}%`);
 			}
 
+			// Mirror progress to the HTML boot loader (if present)
+			try {
+				const setBootLoaderProgress = (window as any).setBootLoaderProgress;
+				if (typeof setBootLoaderProgress === 'function') {
+					setBootLoaderProgress(progress);
+				}
+			} catch (_e) {
+				/* no-op */
+			}
+
 			// Keep emitting for React overlay listeners if any
 			EventBus.emit('progress', progress);
+		});
+
+		// Set up complete event listener to mark assets as loaded
+		this.load.on('complete', () => {
+			console.log('[Preloader] All assets loaded');
+			this.assetsLoaded = true;
+			this.checkReadyToTransition();
 		});
 		
 		EventBus.emit('current-scene-ready', this);	
@@ -207,6 +252,20 @@ export class Preloader extends Scene
             console.error('[Preloader] Failed to initialize GameAPI:', error);
         }
 
+        // Finalize the HTML boot loader progress (it was hidden in init)
+        try {
+            const setBootLoaderProgress = (window as any).setBootLoaderProgress;
+            if (typeof setBootLoaderProgress === 'function') {
+                setBootLoaderProgress(1);
+            }
+        } catch (_e) {
+            /* no-op */
+        }
+
+		// Mark backend as initialized (even if it failed, we don't want to deadlock the loader)
+		this.backendInitialized = true;
+		this.checkReadyToTransition();
+
         // Create fullscreen toggle now that assets are loaded (using shared manager)
         const assetScale = this.networkManager.getAssetScale();
         this.fullscreenBtn = FullScreenManager.addToggle(this, {
@@ -247,10 +306,16 @@ export class Preloader extends Scene
             this.scale.width,
             this.scale.height,
             0x000000
-        ).setOrigin(0.5, 0.5).setScrollFactor(0).setAlpha(0);
+        )
+            .setOrigin(0.5, 0.5)
+            .setScrollFactor(0)
+            .setAlpha(0)
+            // Must render above the StudioLoadingScreen container (depth 999) and fullscreen toggle (depth 10000)
+            .setDepth(20000);
 
         // Start game on click
         this.buttonSpin?.once('pointerdown', () => {
+            playUtilityButtonSfx(this);
             this.tweens.add({
                 targets: fadeOverlay,
                 alpha: 1,
@@ -264,6 +329,9 @@ export class Preloader extends Scene
                     });
                 }
             });
+
+			// Cleanly fade out any remaining studio loading UI so it never overlaps gameplay.
+			this.studioLoadingScreen?.fadeOutRemainingElements(500);
         });
 
 		// Ensure web fonts are applied after they are ready
@@ -405,7 +473,39 @@ export class Preloader extends Scene
 		const scale = Math.max(scaleX, scaleY);
 		
 		background.setScale(scale);
-		
+
+		// Subtle scale up/down ("breathing") animation for the header
+		try {
+			const baseScaleX = background.scaleX;
+			const baseScaleY = background.scaleY;
+			const amp = 1.02; // 2% pulse
+
+			this.loadingHeaderTween?.stop();
+			this.loadingHeaderTween = this.tweens.add({
+				targets: background,
+				scaleX: baseScaleX * amp,
+				scaleY: baseScaleY * amp,
+				duration: 900,
+				ease: 'Sine.easeInOut',
+				yoyo: true,
+				repeat: -1,
+			});
+
+			// Small vertical bob to add a bit more life
+			const baseY = background.y;
+			const bobPx = 4;
+			this.loadingHeaderBobTween?.stop();
+			this.loadingHeaderBobTween = this.tweens.add({
+				targets: background,
+				y: baseY - bobPx,
+				duration: 900,
+				ease: 'Sine.easeInOut',
+				yoyo: true,
+				repeat: -1,
+			});
+		} catch (e) {
+			console.warn('[Preloader] Could not start loading_header pulse tween:', e);
+		}
 	}
 
 	private createFooter()
@@ -477,6 +577,22 @@ export class Preloader extends Scene
 			this.preloaderLogoSpine = spine;
 		} catch (e) {
 			console.warn('[Preloader] Failed to create preloader logo spine:', e);
+		}
+	}
+
+	private checkReadyToTransition()
+	{
+		// Only proceed if both assets and backend are ready
+		if (!this.assetsLoaded || !this.backendInitialized) {
+			console.log(`[Preloader] Waiting for completion... Assets: ${this.assetsLoaded}, Backend: ${this.backendInitialized}`);
+			return;
+		}
+
+		console.log('[Preloader] All assets and backend ready! Transitioning studio loading screen...');
+
+		// Trigger studio loading screen fade-out with minimum 3s visible time
+		if (this.studioLoadingScreen) {
+			this.studioLoadingScreen.bedazzle(3000, 500);
 		}
 	}
 }

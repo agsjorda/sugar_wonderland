@@ -57,8 +57,8 @@ export enum SoundEffectType {
 export class AudioManager {
 	private scene: Phaser.Scene;
 	private currentMusic: MusicType | null = null;
-	private musicVolume: number = 0.2;
-	private sfxVolume: number = 0.2;
+	private musicVolume: number = 1;
+	private sfxVolume: number = 1;
 	private ambientVolume: number = 0.3; // Volume for ambient audio layer
 	private cachedMusicVolume: number = 0.2;
 	private cachedSfxVolume: number = 0.2;
@@ -161,7 +161,7 @@ export class AudioManager {
 		this.tryCreateSfxInstance(SoundEffectType.DIALOG_CONGRATS, 'congrats_wf');
 
 		// Try to create optional SFX instances
-		this.tryCreateSfxInstance(SoundEffectType.ARGUN, 'argun_wf', true, 0.01);
+		this.tryCreateSfxInstance(SoundEffectType.ARGUN, 'argun_wf', true);
 		this.tryCreateSfxInstance(SoundEffectType.EXPLOSION, 'explosion_wf');
 		this.tryCreateSfxInstance(SoundEffectType.BONUS_EXPLOSION, 'bonus_explosion_wf');
 		this.tryCreateSfxInstance(SoundEffectType.MULTIPLIER_ADDED, 'multiplier_added_wf');
