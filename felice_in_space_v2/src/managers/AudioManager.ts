@@ -39,7 +39,8 @@ export enum SoundEffectType {
 	// WIN_EPIC_TURBO = 'win_epic_turbo'
 	// ,
 	DIALOG_FREESPIN = 'dialog_freespin',
-	DIALOG_CONGRATS = 'dialog_congrats'
+	DIALOG_CONGRATS = 'dialog_congrats',
+	CHARACTER_SHOOT = 'character_shoot'
 }
 
 export class AudioManager {
@@ -276,6 +277,19 @@ export class AudioManager {
 				console.log('[AudioManager] Congrats dialog SFX instance created');
 			} catch (e) {
 				console.warn('[AudioManager] Failed to create congrats_ka SFX instance:', e);
+			}
+			// Create character shoot SFX instance (plays during character win animation)
+			try {
+				// Check if the audio asset is loaded
+				if (this.scene.cache.audio.has('felice_shoot_fis')) {
+					const characterShoot = this.scene.sound.add('felice_shoot_fis', { volume: this.sfxVolume, loop: false });
+					this.sfxInstances.set(SoundEffectType.CHARACTER_SHOOT, characterShoot);
+					console.log('[AudioManager] Character shoot SFX instance created');
+				} else {
+					console.warn('[AudioManager] felice_shoot_fis audio asset not found in cache');
+				}
+			} catch (e) {
+				console.warn('[AudioManager] Failed to create felice_shoot_fis SFX instance:', e);
 			}
 			console.log('[AudioManager] Total SFX instances:', this.sfxInstances.size);
 

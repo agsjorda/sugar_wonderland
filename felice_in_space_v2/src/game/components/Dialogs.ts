@@ -88,10 +88,10 @@ export class Dialogs {
 
 	// Dialog positions (relative: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom)
 	private dialogPositions: Record<string, { x: number; y: number }> = {
-		'Congrats_Dialog': { x:0.5, y: 0.4 },
+		'Congrats_Dialog': { x: 0.48, y: 0.4 },
 		'FreeSpin_Dialog': { x: 0.5, y: 0.4 },
-		'EpicWin_Dialog': { x: 0.5, y:0.4 },
-		'MegaWin_Dialog': { x:0.5, y: 0.4 },
+		'EpicWin_Dialog': { x: 0.5, y: 0.43 },
+		'MegaWin_Dialog': { x: 0.52, y: 0.4 },
 		'BigWin_Dialog': { x: 0.5, y: 0.4 },
 		'SuperWin_Dialog': { x: 0.5, y: 0.4 }
 	};
@@ -328,12 +328,9 @@ export class Dialogs {
 		// Create number display(s) if win amount or free spins are provided
 		if (config.winAmount !== undefined || config.freeSpins !== undefined) {
 			if (config.type === 'Congrats_Dialog') {
-				// Congrats dialog: primary total win + secondary free spins used (if provided)
+				// Congrats dialog: primary total win only (spin count removed)
 				if (config.winAmount !== undefined) {
 					this.createNumberDisplay(scene, config.winAmount || 0, undefined);
-				}
-				if (config.freeSpins !== undefined) {
-					this.createCongratsFreeSpinsDisplay(scene, config.freeSpins);
 				}
 			} else {
 				// Other dialogs: existing single number behavior
@@ -590,9 +587,9 @@ export class Dialogs {
 			// between the last stage starting and the dialog auto-closing is also
 			// ~perStageDwellMs, matching the earlier tiers.
 			if (this.isStagedWinNumberAnimation && this.stagedWinStages.length > 1) {
-				const perStageDwellMs = 2000; // Keep in sync with startStagedWinNumberSequence
-				// Give the final staged win tier an extra 1s of dwell time before auto-close.
-				baseDelayMs = perStageDwellMs * this.stagedWinStages.length + 1500;
+				const perStageDwellMs = 2950; // Keep in sync with runStagedWinStage
+				// Give the final staged win tier extra dwell time before auto-close.
+				baseDelayMs = perStageDwellMs * this.stagedWinStages.length + 3000;
 			}
 
 			const extraAutoplayDelayMs = 0;
@@ -688,7 +685,7 @@ export class Dialogs {
 		// Create number display configuration
 		const numberConfig: NumberDisplayConfig = {
 			x: scene.scale.width / 2,
-			y: this.getNumberDisplayY(scene, this.currentDialogType),
+			y: this.getNumberDisplayY(scene, this.currentDialogType) - 18,
 			scale: 0.65,
 			spacing: 0,
 			alignment: 'center',
@@ -781,11 +778,14 @@ export class Dialogs {
 		if (!dialogType) return defaultY;
 		
 		if (dialogType === 'FreeSpin_Dialog') {
-			return this.numberYFreeSpin ?? defaultY;
+			// Add offset to move free spin number display down a bit
+			const freeSpinY = this.numberYFreeSpin ?? (defaultY + 30);
+			return freeSpinY;
 		}
 		
 		if (dialogType === 'Congrats_Dialog') {
-			return this.numberYCongrats ?? defaultY;
+			// Move number display downward for congrats dialog
+			return this.numberYCongrats ?? (defaultY + 40);
 		}
 		
 		if (this.isWinDialogType(dialogType)) {
@@ -2001,10 +2001,10 @@ export class Dialogs {
 			this.currentDialogType = firstStage.type;
 
 			if (this.currentDialog && this.currentScene) {
-				// Get position and scale from the existing dialog before destroying it
-				const currentX = this.currentDialog.x;
-				const currentY = this.currentDialog.y;
+				// Get scale from the existing dialog before destroying it
 				const currentScale = this.currentDialog.scaleX;
+				// Get the correct position for this dialog type (don't preserve old position)
+				const position = this.getDialogPosition(firstStage.type, this.currentScene);
 				
 				// Destroy the old spine object (which was created with the final dialog type)
 				this.currentDialog.destroy();
@@ -2018,8 +2018,8 @@ export class Dialogs {
 				console.log(`[Dialogs] Using asset: ${assetKey}, atlas: ${atlasKey}`);
 				
 				this.currentDialog = this.currentScene.add.spine(
-					currentX,
-					currentY,
+					position.x,
+					position.y,
 					assetKey,
 					atlasKey
 				);
@@ -2162,10 +2162,11 @@ export class Dialogs {
 		// so avoid resetting it here to prevent the "first tier plays twice" effect.
 		if (index > 0 || fastFromSkip) {
 			try {
-				// Get position and scale from the existing dialog before destroying it
-				const currentX = this.currentDialog.x;
-				const currentY = this.currentDialog.y;
+				// Get scale from the existing dialog before destroying it
 				const currentScale = this.currentDialog.scaleX;
+				// Get the correct position for this dialog type (don't preserve old position)
+				const sceneRef = this.currentScene || scene;
+				const position = this.getDialogPosition(stage.type, sceneRef);
 				
 				// Destroy the old spine object
 				if (this.currentDialog) {
@@ -2176,14 +2177,13 @@ export class Dialogs {
 				// Create new spine object with the correct asset for this stage
 				const assetKey = stage.type;
 				const atlasKey = `${stage.type}-atlas`;
-				const sceneRef = this.currentScene || scene;
 				
 				console.log(`[Dialogs] Staged win: recreating spine for stage ${index} (${stage.type})`);
 				console.log(`[Dialogs] Using asset: ${assetKey}, atlas: ${atlasKey}`);
 				
 				this.currentDialog = sceneRef.add.spine(
-					currentX,
-					currentY,
+					position.x,
+					position.y,
 					assetKey,
 					atlasKey
 				);
@@ -2244,7 +2244,7 @@ export class Dialogs {
 		const defaultDurationMs = 2500; // time for the counter animation
 		const fastDurationMs = 2500; // shorter animation when skipping
 		const numberAnimDurationMs = fastFromSkip ? fastDurationMs : defaultDurationMs;
-		const perStageDwellMs = 2000; // approximate dwell time per tier (matches original auto-close)
+		const perStageDwellMs = 2950; // approximate dwell time per tier (matches original auto-close)
 
 		this.numberDisplay!.animateToValue(stage.target, {
 			duration: numberAnimDurationMs,
@@ -2278,10 +2278,18 @@ export class Dialogs {
 		} else {
 			console.log('[Dialogs] Staged win: last stage scheduled, will end at full win amount');
 
-			// If we're in autoplay and the original auto-close timer was cleared due to a manual
-			// skip, ensure the final staged tier still auto-closes after a sensible dwell.
+			// When we reach the final stage, clear any existing auto-close timer and create
+			// a new one with the correct timing to ensure the final stage has enough time to display.
 			try {
-				if (!this.autoCloseTimer && this.isWinDialog()) {
+				if (this.isWinDialog()) {
+					// Clear any existing auto-close timer (from setupAutoCloseTimer) to prevent
+					// it from firing too early and cutting off the final stage.
+					if (this.autoCloseTimer) {
+						this.autoCloseTimer.destroy();
+						this.autoCloseTimer = null;
+						console.log('[Dialogs] Cleared initial auto-close timer for final staged tier');
+					}
+
 					// Detect free spin autoplay (bonus autoplay) via Symbols component on the scene
 					let isFreeSpinAutoplay = false;
 					try {
@@ -2294,8 +2302,8 @@ export class Dialogs {
 
 					const isAutoplaying = gameStateManager.isAutoPlaying || isFreeSpinAutoplay;
 					if (isAutoplaying) {
-						const perStageDwellFinalMs = 2000; // Keep in sync with setupAutoCloseTimer
-						const finalStageDwellMs = perStageDwellFinalMs + 1500;
+						const perStageDwellMs = 2950; // Keep in sync with runStagedWinStage
+						const finalStageDwellMs = perStageDwellMs + 3500;
 
 						console.log('[Dialogs] Creating auto-close timer for final staged tier during autoplay', {
 							delayMs: finalStageDwellMs,

@@ -28,11 +28,13 @@ import { SoundEffectType } from '../../managers/AudioManager';
 		private defaultDuration: number = 1500; // total ms for out+hold+in
 	private defaultParticleCount: number = 80;
 
-		constructor(scene: Scene) {
-			this.scene = scene;
-			this.container = scene.add.container(0, 0);
-			this.container.setDepth(this.depth);
-			this.container.setVisible(false);
+	constructor(scene: Scene) {
+		this.scene = scene;
+		this.container = scene.add.container(0, 0);
+		this.container.setDepth(this.depth);
+		this.container.setVisible(false);
+		// Ensure container stays in the scene and isn't removed during scene initialization
+		this.container.setActive(true);
 
 			// Create an invisible, full-screen interaction blocker that sits above
 			// everything else while the explosion transition is playing. This
@@ -66,28 +68,43 @@ import { SoundEffectType } from '../../managers/AudioManager';
 			}
 		}
 
-		public show(): void {
-			this.container.setVisible(true);
-
-			// Enable the interaction blocker while the transition is visible
-			if (this.inputBlocker) {
-				this.inputBlocker.setVisible(true);
-				this.inputBlocker.setActive(true);
-				this.inputBlocker.setInteractive({ useHandCursor: false });
-			}
+	public show(): void {
+		// Ensure container is in the scene and active before making it visible
+		if (!this.scene.children.exists(this.container)) {
+			this.scene.children.add(this.container);
 		}
+		this.container.setActive(true);
+		this.container.setVisible(true);
 
-		public hide(): void {
-			this.container.setVisible(false);
-			this.destroyParticles();
-
-			// Disable the interaction blocker once the transition is finished
-			if (this.inputBlocker) {
-				this.inputBlocker.setVisible(false);
-				this.inputBlocker.setActive(false);
-				this.inputBlocker.disableInteractive();
+		// Enable the interaction blocker while the transition is visible
+		if (this.inputBlocker) {
+			if (!this.scene.children.exists(this.inputBlocker)) {
+				this.scene.children.add(this.inputBlocker);
 			}
+			this.inputBlocker.setVisible(true);
+			this.inputBlocker.setActive(true);
+			this.inputBlocker.setInteractive({ useHandCursor: false });
 		}
+	}
+
+	public hide(): void {
+		// Only hide if we're not currently playing an animation
+		// This prevents premature destruction of particles during scene initialization
+		if (this.isPlaying) {
+			console.warn('[SymbolExplosionTransition] hide() called while animation is still playing - ignoring');
+			return;
+		}
+		
+		this.container.setVisible(false);
+		this.destroyParticles();
+
+		// Disable the interaction blocker once the transition is finished
+		if (this.inputBlocker) {
+			this.inputBlocker.setVisible(false);
+			this.inputBlocker.setActive(false);
+			this.inputBlocker.disableInteractive();
+		}
+	}
 
 	/**
 	 * Play the explosion transition.
@@ -117,7 +134,7 @@ import { SoundEffectType } from '../../managers/AudioManager';
 				// First immediate play
 				audioManager.playSoundEffect(SoundEffectType.CANDY_TRANSITION);
 				// Second play after 500ms
-				this.scene.time.delayedCall(2300, () => {
+				this.scene.time.delayedCall(2100, () => {
 					try {
 						audioManager.playSoundEffect(SoundEffectType.CANDY_TRANSITION);
 					} catch (inner) {
@@ -195,6 +212,10 @@ import { SoundEffectType } from '../../managers/AudioManager';
 				continue;
 			}
 
+			// Ensure particle is active and won't be destroyed prematurely
+			particle.setActive(true);
+			particle.setVisible(true);
+			
 			this.particles.push(particle);
 			this.container.add(particle);
 
@@ -256,8 +277,10 @@ import { SoundEffectType } from '../../managers/AudioManager';
 			particle.setAlpha(0);
 
 			// Phase 1: explode out from center to target position
-			this.scene.tweens.add({
-				targets: particle,
+			// Store reference to particle to prevent garbage collection issues
+			const particleRef = particle;
+			const tween = this.scene.tweens.add({
+				targets: particleRef,
 				x: targetX,
 				y: targetY,
 				// Rotate from the random starting angle back to 0 (upright)
@@ -269,11 +292,24 @@ import { SoundEffectType } from '../../managers/AudioManager';
 				duration: explodeDuration,
 				ease: 'Cubic.easeOut',
 				onStart: () => {
-					particle.setAlpha(1);
+					// Ensure particle is still active and visible when tween starts
+					if (particleRef && particleRef.active) {
+						particleRef.setAlpha(1);
+						particleRef.setVisible(true);
+					}
 				},
 				onComplete: () => {
+					// Check if particle still exists before continuing
+					if (!particleRef || !particleRef.active || !this.isPlaying) {
+						return;
+					}
 					// Phase 2: hold in place (no tween needed for hold, just delayed call)
 					this.scene.time.delayedCall(holdDuration, () => {
+						// Check if particle still exists and animation is still playing
+						if (!particleRef || !particleRef.active || !this.isPlaying) {
+							return;
+						}
+						
 						// Phase 3a: small "cockback" opposite the disperse direction
 						const cockbackDistance = Math.min(200, Math.min(cellWidth, cellHeight) * 1.3);
 						const cockbackX = targetX - ux * cockbackDistance;
@@ -282,34 +318,137 @@ import { SoundEffectType } from '../../managers/AudioManager';
 						const cockbackDuration = collapseDuration * 1.5;
 						const disperseDuration = collapseDuration * 0.7;
 
+						// Ensure container and particle are still active and visible before cockback
+						if (!this.container.active || !this.container.visible) {
+							console.warn('[SymbolExplosionTransition] Container inactive/invisible during cockback, restoring...');
+							this.container.setActive(true);
+							this.container.setVisible(true);
+						}
+						
+						// Ensure particle is still in container and active
+						if (particleRef && particleRef.active) {
+							// Re-add to container if it was removed
+							if (!this.container.list.includes(particleRef)) {
+								console.warn('[SymbolExplosionTransition] Particle removed from container, re-adding...');
+								this.container.add(particleRef);
+							}
+							particleRef.setActive(true);
+							particleRef.setVisible(true);
+						}
+						
 						this.scene.tweens.add({
-							targets: particle,
+							targets: particleRef,
 							x: cockbackX,
 							y: cockbackY,
 							duration: cockbackDuration,
 							ease: 'Cubic.easeOut',
+							onStart: () => {
+								// Ensure particle is visible and active when cockback starts
+								if (particleRef && particleRef.active) {
+									particleRef.setVisible(true);
+									particleRef.setAlpha(1);
+								}
+							},
 							onComplete: () => {
+								// Check if particle still exists before continuing
+								if (!particleRef) {
+									console.error('[SymbolExplosionTransition] Particle is null after cockback');
+									return;
+								}
+								if (!particleRef.active) {
+									console.error('[SymbolExplosionTransition] Particle is inactive after cockback');
+									return;
+								}
+								if (!this.isPlaying) {
+									console.error('[SymbolExplosionTransition] Animation stopped after cockback');
+									return;
+								}
+								
+								console.log('[SymbolExplosionTransition] Cockback complete, starting disperse phase', {
+									particleActive: particleRef.active,
+									particleVisible: particleRef.visible,
+									particleAlpha: particleRef.alpha,
+									containerVisible: this.container.visible,
+									containerActive: this.container.active,
+									inContainer: this.container.list.includes(particleRef),
+									isPlaying: this.isPlaying
+								});
+								
+								// Ensure container is still visible
+								if (!this.container.visible) {
+									console.warn('[SymbolExplosionTransition] Container hidden after cockback, restoring...');
+									this.container.setVisible(true);
+								}
+								
+								// Ensure particle is still in container
+								if (!this.container.list.includes(particleRef)) {
+									console.warn('[SymbolExplosionTransition] Particle missing from container after cockback, re-adding...');
+									this.container.add(particleRef);
+								}
+								
 								// Phase 3b: disperse further outwards (stay mostly opaque during movement)
+								// CRITICAL: Explicitly ensure particle is visible and in container before disperse
+								if (particleRef && particleRef.active) {
+									// Force visibility
+									particleRef.setVisible(true);
+									particleRef.setAlpha(1);
+									
+									// Ensure particle is in container
+									if (!this.container.list.includes(particleRef)) {
+										console.warn('[SymbolExplosionTransition] Particle not in container before disperse, re-adding...');
+										this.container.add(particleRef);
+									}
+									
+									// Ensure container is visible
+									if (!this.container.visible) {
+										console.warn('[SymbolExplosionTransition] Container hidden before disperse, restoring...');
+										this.container.setVisible(true);
+									}
+								}
+								
 								this.scene.tweens.add({
-									targets: particle,
+									targets: particleRef,
 									x: disperseX,
 									y: disperseY,
 									angle: 0, // settle to upright as it disperses away
 									// Slight additional scale change as it flies out
 									scaleX: finalScale * 1.05,
 									scaleY: finalScale * 1.05,
+									alpha: 1, // Keep fully visible during disperse - DO NOT fade during movement
 									duration: disperseDuration,
 									ease: 'Cubic.easeIn',
+									onStart: () => {
+										// Ensure particle is visible when disperse starts
+										if (particleRef && particleRef.active) {
+											particleRef.setVisible(true);
+											particleRef.setAlpha(1);
+											// Double-check it's in container
+											if (!this.container.list.includes(particleRef)) {
+												this.container.add(particleRef);
+											}
+										}
+									},
+									onUpdate: () => {
+										// Continuously ensure particle stays visible during disperse
+										if (particleRef && particleRef.active && particleRef.alpha < 0.9) {
+											particleRef.setAlpha(1);
+										}
+									},
 									onComplete: () => {
+										// Check if particle still exists before continuing
+										if (!particleRef || !particleRef.active || !this.isPlaying) {
+											return;
+										}
+										
 										// Phase 3c: gentle fade-out after symbols have dispersed off-frame
 										this.scene.tweens.add({
-											targets: particle,
+											targets: particleRef,
 											alpha: 0,
 											duration: collapseDuration * 0.8,
 											ease: 'Linear',
 											onComplete: () => {
 												completedCount++;
-												if (completedCount >= totalParticles) {
+												if (completedCount >= totalParticles && this.isPlaying) {
 													this.finish(onComplete);
 												}
 											}
@@ -343,9 +482,25 @@ import { SoundEffectType } from '../../managers/AudioManager';
 	}
 
 	private destroyParticles(): void {
+		// Only destroy particles if they still exist and the animation is complete
+		// This should only be called when isPlaying is false
+		if (this.isPlaying) {
+			console.warn('[SymbolExplosionTransition] destroyParticles() called while animation is playing - ignoring');
+			return;
+		}
+		
 		this.particles.forEach((p) => {
 			try {
-				p.destroy();
+				// Check if particle still exists before destroying
+				if (p && p.scene && p.active) {
+					// Remove from container first
+					try {
+						if (this.container && this.container.list.includes(p)) {
+							this.container.remove(p);
+						}
+					} catch {}
+					p.destroy();
+				}
 			} catch {
 				// ignore
 			}
@@ -430,40 +585,40 @@ import { SoundEffectType } from '../../managers/AudioManager';
 			// ignore scaling failure, keep default
 		}
 
-		// Try to play a nice looped animation if available, otherwise leave default pose.
+		// Freeze the animation on the first frame (no idle animations available for felice_in_space)
 		try {
 			const state: any = particle.animationState;
 			if (state && typeof state.setAnimation === 'function') {
-				// For sugar symbols, prefer the SW Idle/Win loops if they exist.
+				// Try to set a win animation to get to the first frame, then freeze it
 				if (desc.isSugar && typeof desc.symbolValue === 'number') {
 					const symbolValue = desc.symbolValue;
-					const baseName = `Symbol${symbolValue}_SW`;
-					const idleName = `${baseName}_Idle`;
-					const winName = `${baseName}_Win`;
+					const winName = `Symbol${symbolValue}_FIS_Win`;
 
 					try {
-						const entry: any = state.setAnimation(0, idleName, true);
-						// Randomize animation phase so candies don't loop in sync
+						const entry: any = state.setAnimation(0, winName, false);
 						if (entry) {
-							entry.trackTime = Phaser.Math.FloatBetween(0, 1.0);
+							// Set to first frame (trackTime = 0)
+							entry.trackTime = 0;
+							// Freeze the animation by setting timeScale to 0
+							if (state.timeScale !== undefined) {
+								state.timeScale = 0;
+							}
 						}
 					} catch {
+						// If win animation doesn't exist, try to freeze on default pose
 						try {
-							const entry: any = state.setAnimation(0, winName, true);
-							if (entry) {
-								entry.trackTime = Phaser.Math.FloatBetween(0, 1.0);
+							if (state.timeScale !== undefined) {
+								state.timeScale = 0;
 							}
 						} catch {
-							// Fall back silently – default animation will be used
+							// Fall back silently – default pose will be used
 						}
 					}
 				} else {
-					// Generic fallback: follow the project's "{spine-keyname}_idle" convention when possible.
-					const idleName = `${desc.spineKey}_idle`;
+					// For non-sugar symbols, just freeze on default pose
 					try {
-						const entry: any = state.setAnimation(0, idleName, true);
-						if (entry) {
-							entry.trackTime = Phaser.Math.FloatBetween(0, 1.0);
+						if (state.timeScale !== undefined) {
+							state.timeScale = 0;
 						}
 					} catch {
 						// If that fails, leave the Spine at its default pose/animation.

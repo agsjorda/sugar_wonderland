@@ -212,6 +212,19 @@ export class BonusHeader {
 	}
 
 	/**
+	 * Add to the cumulative bonus total (e.g., for scatter retriggers)
+	 * This preserves the existing cumulative total and adds the new amount
+	 */
+	public addToCumulativeWin(amount: number): void {
+		const amountToAdd = Math.max(0, Number(amount) || 0);
+		if (amountToAdd > 0) {
+			this.cumulativeBonusWin += amountToAdd;
+			this.hasStartedBonusTracking = true;
+			console.log(`[BonusHeader] Added to cumulative bonus win: +$${amountToAdd}, new total: $${this.cumulativeBonusWin}`);
+		}
+	}
+
+	/**
 	 * Hide the winnings display (both "YOU WON" text and amount) with shrink animation
 	 */
 	public hideWinningsDisplay(): void {

@@ -1252,6 +1252,9 @@ export class SlotController {
 			this.disableSpinButton();
 			this.disableBetButtons();
 			this.disableFeatureButton();
+			// Disable and grey out autoplay and turbo buttons while symbols are dropping
+			this.disableAutoplayButton();
+			this.disableTurboButton();
 			this.playSpinButtonAnimation();
 			this.rotateSpinButton();
 			
@@ -1936,6 +1939,9 @@ export class SlotController {
 			this.disableSpinButton();
 			this.disableBetButtons();
 			this.disableFeatureButton();
+			// Disable and grey out autoplay and turbo buttons while symbols are dropping
+			this.disableAutoplayButton();
+			this.disableTurboButton();
 			this.playSpinButtonAnimation();
 			this.rotateSpinButton();
 			
@@ -2449,6 +2455,7 @@ export class SlotController {
 			if (this.autoplaySpinsRemaining === 0) {
 				this.enableSpinButton();
 				this.enableAutoplayButton();
+				this.enableTurboButton();
 				this.enableBetButtons();
 				// Keep feature disabled during bonus or until explicitly allowed
 				if (!gameStateManager.isBonus && this.canEnableFeatureButton) {
@@ -2458,6 +2465,7 @@ export class SlotController {
 				this.enableBetBackgroundInteraction('after manual spin REELS_STOP');
 				this.hideAutoplaySpinsRemainingText();
 				this.updateAutoplayButtonState();
+				this.updateTurboButtonState();
 				console.log('[SlotController] Manual spin - all buttons re-enabled after REELS_STOP');
 				return;
 			}
@@ -2467,6 +2475,7 @@ export class SlotController {
 			if(!this.gameData?.isAutoPlaying && !gameStateManager.isReelSpinning) {
 				this.enableSpinButton();
 				this.enableAutoplayButton();
+				this.enableTurboButton();
 				this.enableBetButtons();
 				// Keep feature disabled during bonus or until explicitly allowed
 				if (!gameStateManager.isBonus && this.canEnableFeatureButton) {
@@ -2474,6 +2483,7 @@ export class SlotController {
 				}
 				this.enableAmplifyButton();
 				this.enableBetBackgroundInteraction('after manual spin complete');
+				this.updateTurboButtonState();
 				console.log('[SlotController] All buttons enabled - manual spin completed and reels stopped');
 				return;
 			}

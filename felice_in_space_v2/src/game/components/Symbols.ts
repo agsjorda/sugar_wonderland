@@ -47,19 +47,19 @@ export class Symbols {
 
   // Configuration for Spine symbol scales - adjust these values manually
   private spineSymbolScales: { [key: number]: number } = {
-    0:  0.120,   // Symbol0_KA (scatter) scale
-    1:  0.031,  // Symbol1_KA scale
-    2:  0.031,  // Symbol2_KA scale
-    3:  0.031,  // Symbol3_KA scale
-    4:  0.120,  // Symbol4_KA scale
-    5:  0.120,  // Symbol5_KA scale
-    6:  0.120,  // Symbol6_KA scale
-    7:  0.120,  // Symbol7_KA scale
-    8:  0.120,  // Symbol8_KA scale
-    9:  0.120,  // Symbol9_KA scale
-    10: 0.120,  // Symbol10_KA scale
-    11: 0.120,  // Symbol11_KA scale
-    12: 0.122,  // Symbol12_KA (wildcard x2) scale
+    0:  1.2,   // Symbol0_KA (scatter) scale
+    1:  0.30,  // Symbol1_KA scale
+    2:  0.33,  // Symbol2_KA scale (increased by 10% from 0.041)
+    3:  0.33,  // Symbol3_KA scale (increased by 10% from 0.041)
+    4:  0.31,  // Symbol4_KA scale
+    5:  0.30,  // Symbol5_KA scale
+    6:  0.30,  // Symbol6_KA scale
+    7:  0.30,  // Symbol7_KA scale
+    8:  0.30,  // Symbol8_KA scale
+    9:  0.30,  // Symbol9_KA scale
+    10: 0.5,  // Symbol10_KA scale (increased by 30%)
+    11: 0.5,  // Symbol11_KA scale (increased by 30%)
+    12: 0.5,  // Symbol12_KA (wildcard x2) scale (increased by 30%)
     13: 0.122,  // Symbol13_KA (wildcard x3) scale
     14: 0.122  // Symbol14_KA (wildcard x4) scale
   };
@@ -1707,6 +1707,8 @@ export class Symbols {
               // Store back into grid
               this.symbols[col][row] = spineSymbol;
               symbol = spineSymbol;
+              // Enable felice gun and felice eyes for retrigger scatter animation
+              enableFeliceAttachmentsForWin(spineSymbol);
             }
           } catch {}
           
@@ -1792,6 +1794,8 @@ export class Symbols {
                       state.addListener(listenerRef);
                     }
                   } catch {}
+                  // Enable felice gun and felice eyes for Symbol0_FIS win animation (BEFORE animation is set)
+                  enableFeliceAttachmentsForWin(symbol);
                   // Start the win animation
                   try {
                     state.setAnimation(0, winAnimationName, false);
@@ -3002,7 +3006,7 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
     const betAmount = parseFloat(String(spinData.bet));
     const multiplier = betAmount > 0 ? (totalWinFromTumbles / betAmount) : 0;
 
-    if (multiplier >= 20) {
+    if (multiplier >= 0.5) {
       console.log(`[Symbols] Tumble win meets dialog threshold (${multiplier.toFixed(2)}x) - pausing autoplay immediately`);
       gameStateManager.isShowingWinDialog = true;
     } else {
@@ -3051,15 +3055,26 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
         console.warn('[Symbols] Failed to update Header winnings for scatter', e);
       }
       
-      // Seed bonus header cumulative total with scatter base amount
+      // Update bonus header cumulative total with scatter base amount
       try {
         const bonusHeader = (self.scene as any)?.bonusHeader;
-        if (bonusHeader && typeof bonusHeader.seedCumulativeWin === 'function' && totalForHeader > 0) {
-          bonusHeader.seedCumulativeWin(totalForHeader);
-          console.log(`[Symbols] BonusHeader seeded with total win at scatter: $${totalForHeader} (scatter base only)`);
+        if (bonusHeader && totalForHeader > 0) {
+          if (isRetrigger) {
+            // For retriggers, add to existing cumulative total instead of resetting
+            if (typeof bonusHeader.addToCumulativeWin === 'function') {
+              bonusHeader.addToCumulativeWin(totalForHeader);
+              console.log(`[Symbols] BonusHeader added scatter retrigger win: $${totalForHeader} (added to cumulative)`);
+            }
+          } else {
+            // Initial scatter trigger: seed the cumulative total
+            if (typeof bonusHeader.seedCumulativeWin === 'function') {
+              bonusHeader.seedCumulativeWin(totalForHeader);
+              console.log(`[Symbols] BonusHeader seeded with total win at scatter: $${totalForHeader} (scatter base only)`);
+            }
+          }
         }
       } catch (e) {
-        console.warn('[Symbols] Failed to seed BonusHeader with scatter base win', e);
+        console.warn('[Symbols] Failed to update BonusHeader with scatter base win', e);
       }
     } catch (e) {
       console.warn('[Symbols] Error computing/updating scatter base payout', e);
@@ -3246,6 +3261,21 @@ function fitSpineToSymbolBox(self: Symbols, spineObj: any): void {
         if (typeof spineObj.setScale === 'function') {
           spineObj.setScale(sx * 1.2, sy * 1.2); // +20% for scatter
         }
+      } else if (val >= 1 && val <= 9) {
+        // Apply configured scale multiplier for symbols 1-9
+        const baseScale = (spineObj as any)?.scaleX ?? 1;
+        const configuredScale = self.getSpineSymbolScale(val);
+        // Use configured scale as absolute value (it's already calculated relative to symbol box)
+        if (typeof spineObj.setScale === 'function') {
+          spineObj.setScale(configuredScale);
+        }
+      } else if (val >= 10 && val <= 22) {
+        // Apply 30% increase for symbol_10_spine (values 10-16), symbol_11_spine (values 17-20), symbol_12_spine (values 21-22)
+        const sx = (spineObj as any)?.scaleX ?? 1;
+        const sy = (spineObj as any)?.scaleY ?? 1;
+        if (typeof spineObj.setScale === 'function') {
+          spineObj.setScale(sx * 1.8, sy * 1.8); // +30% for symbols 10-22
+        }
       }
     } catch {}
   } catch {}
@@ -3319,6 +3349,101 @@ function getMultiplierWinAnimationName(value: number): string | null {
 }
 
 /**
+ * Play VFX animation behind symbols 1-9, 0.5s before their win animation ends
+ * @param self Symbols instance
+ * @param symbolObj The symbol object to play VFX behind
+ * @param winAnimationDurationMs The duration of the win animation in milliseconds
+ */
+function playSymbolVFX(self: Symbols, symbolObj: any, winAnimationDurationMs: number): void {
+  try {
+    // Only play VFX for symbols 1-9
+    const symbolValue = (symbolObj as any)?.symbolValue;
+    if (typeof symbolValue !== 'number' || symbolValue < 1 || symbolValue > 9) {
+      return;
+    }
+
+    // Check if VFX assets are loaded
+    const vfxKey = 'vfx_fis';
+    const vfxAtlasKey = 'vfx_fis-atlas';
+    const cacheJson: any = self.scene.cache.json;
+    if (!cacheJson || !cacheJson.has(vfxKey)) {
+      console.warn(`[Symbols] VFX spine '${vfxKey}' not loaded yet`);
+      return;
+    }
+
+    // Get symbol position
+    const x = symbolObj.x || 0;
+    const y = symbolObj.y || 0;
+
+    // Calculate when to start VFX (0.5s before win animation ends)
+    const vfxStartDelay = Math.max(0, winAnimationDurationMs - 100);
+
+    // Schedule VFX creation
+    self.scene.time.delayedCall(vfxStartDelay, () => {
+      try {
+        // Create VFX spine animation
+        const vfxSpine = self.scene.add.spine(x, y, vfxKey, vfxAtlasKey);
+        if (!vfxSpine) {
+          console.warn(`[Symbols] Failed to create VFX spine at (${x}, ${y})`);
+          return;
+        }
+
+        vfxSpine.setOrigin(0.5, 0.5);
+        
+        // Scale VFX to 50% of original size
+        vfxSpine.setScale(0.5);
+        
+        // Position VFX behind the symbol (lower depth)
+        const symbolDepth = symbolObj.depth || 0;
+        vfxSpine.setDepth(symbolDepth - 1);
+
+        // Add to container to maintain proper layering
+        if (self.container) {
+          self.container.add(vfxSpine);
+        }
+
+        // Play VFX animation (assuming it has an "animation" track or similar)
+        // Try common animation names, or use the first available animation
+        try {
+          const animState = vfxSpine.animationState;
+          if (animState && animState.setAnimation) {
+            // Try to find an animation - use 'animation' as default, or first available
+            const skeleton: any = (vfxSpine as any)?.skeleton;
+            let animName = 'animation';
+            if (skeleton && skeleton.data && skeleton.data.animations && skeleton.data.animations.length > 0) {
+              animName = skeleton.data.animations[0].name;
+            }
+            animState.setAnimation(0, animName, false);
+            console.log(`[Symbols] Playing VFX animation "${animName}" behind symbol ${symbolValue} at (${x}, ${y})`);
+          }
+        } catch (e) {
+          console.warn(`[Symbols] Failed to play VFX animation:`, e);
+        }
+
+        // Clean up VFX after animation completes (with safety timeout)
+        const cleanupDelay = 3000; // Safety timeout
+        self.scene.time.delayedCall(cleanupDelay, () => {
+          try {
+            if (vfxSpine) {
+              if (self.container) {
+                self.container.remove(vfxSpine, false);
+              }
+              vfxSpine.destroy();
+            }
+          } catch (e) {
+            console.warn(`[Symbols] Error cleaning up VFX:`, e);
+          }
+        });
+      } catch (e) {
+        console.warn(`[Symbols] Error creating VFX spine:`, e);
+      }
+    });
+  } catch (e) {
+    console.warn(`[Symbols] Error in playSymbolVFX:`, e);
+  }
+}
+
+/**
  * Map multiplier symbol value (10–22) to its numeric multiplier for ordering
  * 10->2, 11->3, 12->4, 13->5, 14->6, 15->8, 16->10,
  * 17->12, 18->15, 19->20, 20->25, 21->50, 22->100
@@ -3370,7 +3495,7 @@ function getMultiplierOverlayKey(value: number): string | null {
  * Returns the Phaser.Text object (already origin-centered).
  */
 function createWinText(self: Symbols, amount: number, x: number, y: number): Phaser.GameObjects.Text {
-  const px = Math.max(18, Math.round(self.displayHeight * 0.5));
+  const px = Math.max(40, Math.round(self.displayHeight * 0.5));
   let textValue = '';
   try {
     if (Number.isInteger(amount)) textValue = `$${amount}`;
@@ -3386,7 +3511,7 @@ function createWinText(self: Symbols, amount: number, x: number, y: number): Pha
   } as any);
   txt.setOrigin(0.5, 0.5);
   try {
-    (txt as any).setStroke?.('#FA2A55', Math.max(2, Math.round(px * 0.12)));
+    (txt as any).setStroke?.('#02c2d4', Math.max(2, Math.round(px * 0.12)));
     (txt as any).setShadow?.(0, 2, '#000000', Math.max(2, Math.round(px * 0.15)), true, true);
   } catch {}
   return txt;
@@ -3795,22 +3920,243 @@ async function playMultiplierWinThenIdle(self: Symbols, obj: any, base: string):
         onComplete: () => {
           // After scale-up completes, start the win animation
           try {
+            // Declare entry variable that will be set by setAnimation
+            let entry: any = null;
+            let overlayMovementTriggered = false;
+            
+            // Function to handle overlay movement after animation completes
+            const handleOverlayMovement = () => {
+              // Guard to prevent double execution
+              if (overlayMovementTriggered) {
+                console.log(`[Symbols] Overlay movement already triggered for multiplier symbol ${value}, skipping`);
+                return;
+              }
+              overlayMovementTriggered = true;
+              try {
+                // Pause the animation on the current frame to freeze it
+                const e = entry || (animState?.getCurrent && animState.getCurrent(0));
+                if (e) {
+                  try { (e as any).timeScale = 0; } catch {}
+                } else {
+                  try { (animState as any).timeScale = 0; } catch {}
+                }
+                // After pausing, disable the symbol so it won't interact/animate further
+                try { disableSymbolObject(self, obj); } catch {}
+              } catch {}
+              
+              // Move multiplier PNG overlay toward the center of the winnings display
+              try {
+                const overlayObj: any = (obj as any)?.__overlayImage;
+                // Create overlay if missing (derive from symbolValue)
+                if (!overlayObj) {
+                  try {
+                    const value = (obj as any)?.symbolValue;
+                    if (typeof value === 'number') {
+                      attachMultiplierOverlay(self, obj, value, obj.x, obj.y);
+                    }
+                  } catch {}
+                }
+                const ov: any = (obj as any)?.__overlayImage;
+                // Stop bounce and any ongoing tweens on original overlay
+                try { (ov as any)?.__bounceTween?.stop?.(); } catch {}
+                try { if (ov) self.scene.tweens.killTweensOf(ov); } catch {}
+                // Compute world coordinates for starting point
+                let worldX = obj.x, worldY = obj.y;
+                try {
+                  const source = (ov && ov.getWorldTransformMatrix) ? ov : (obj && obj.getWorldTransformMatrix ? obj : null);
+                  const m: any = source ? source.getWorldTransformMatrix() : null;
+                  if (m && typeof m.tx === 'number' && typeof m.ty === 'number') {
+                    worldX = m.tx; worldY = m.ty;
+                  } else {
+                    worldX = (ov ? ov.x : obj.x) + (self.container?.x || 0);
+                    worldY = (ov ? ov.y : obj.y) + (self.container?.y || 0);
+                  }
+                } catch {}
+                // Determine texture key and scale for the flying overlay
+                let textureKey: string | null = null;
+                let scaleX = 1, scaleY = 1;
+                try { textureKey = ov?.texture?.key || null; } catch {}
+                if (!textureKey) {
+                  try {
+                    const value = (obj as any)?.symbolValue;
+                    textureKey = getMultiplierOverlayKey(value);
+                  } catch {}
+                }
+                try {
+                  scaleX = (ov && typeof ov.scaleX === 'number') ? ov.scaleX : scaleX;
+                  scaleY = (ov && typeof ov.scaleY === 'number') ? ov.scaleY : scaleY;
+                } catch {}
+                // The overlay has been enlarged by 30% during win animation, so current scale is enlarged
+                // Calculate original scale by dividing by 1.3, and use current scale as enlarged scale
+                const enlargedScaleX = scaleX;
+                const enlargedScaleY = scaleY;
+                const originalScaleX = scaleX / 1.8;
+                const originalScaleY = scaleY / 1.8;
+                // Hide/detach original overlay to avoid double-visibility and mask effects
+                try {
+                  if (ov) {
+                    ov.setVisible(false);
+                    // Keep reference for cleanup but ensure it doesn't render
+                  }
+                } catch {}
+                // Create an unmasked overlay at world coordinates in the root display list
+                if (textureKey) {
+                  try {
+                    const fly = self.scene.add.image(worldX, worldY, textureKey);
+                    fly.setOrigin(0.5, 0.5);
+                    // Start at enlarged scale (30% larger)
+                    try { fly.setScale(enlargedScaleX, enlargedScaleY); } catch {}
+                    try { fly.setDepth(920); } catch {}
+                    // Compute target center (win bar text middle) - use actual amountText position from BonusHeader
+                    let cx = self.scene.scale.width * 0.5;
+                    let cy = self.scene.scale.height * 0.215 + 18; // Fallback position
+                    try {
+                      const gameScene = self.scene as any;
+                      const bonusHeader = gameScene?.bonusHeader;
+                      if (bonusHeader) {
+                        const amountText = (bonusHeader as any)?.amountText;
+                        if (amountText && typeof amountText.x === 'number' && typeof amountText.y === 'number') {
+                          // Get world position of amountText
+                          const matrix = amountText.getWorldTransformMatrix();
+                          if (matrix && typeof matrix.tx === 'number' && typeof matrix.ty === 'number') {
+                            cx = matrix.tx;
+                            cy = matrix.ty;
+                          } else {
+                            // Fallback to local position if world transform not available
+                            cx = amountText.x;
+                            cy = amountText.y;
+                          }
+                        }
+                      }
+                    } catch (e) {
+                      console.warn('[Symbols] Failed to get amountText position from BonusHeader, using fallback:', e);
+                    }
+                    // Travel tween - tween both position and scale back to original size
+                    self.scene.tweens.add({
+                      targets: fly,
+                      x: cx,
+                      y: cy,
+                      scaleX: originalScaleX,
+                      scaleY: originalScaleY,
+                      duration: Math.max(200, self.scene.gameData.dropDuration),
+                      ease: Phaser.Math.Easing.Cubic.InOut,
+                      onComplete: () => {
+                        // Notify bonus header that one multiplier reached center (accumulate display)
+                        try {
+                          // Determine multiplier weight from symbol value
+                          let weight = 0;
+                          try {
+                            const value = (obj as any)?.symbolValue;
+                            if (typeof value === 'number') weight = getMultiplierNumeric(value);
+                          } catch {}
+                          // Compute spin total for this spin BEFORE multipliers are applied:
+                          // prefer subTotalWin from the current freespin item, then fall back
+                          // to a manual sum of paylines + tumbles.
+                          let spinTotal = 0;
+                          try {
+                            const spinData: any = (self as any)?.currentSpinData;
+                            const fs = spinData?.slot?.freespin || spinData?.slot?.freeSpin;
+                            if (fs?.items && Array.isArray(fs.items)) {
+                              const currentFreeSpinItem = fs.items.find((item: any) => item.spinsLeft > 0);
+                              if (currentFreeSpinItem && typeof currentFreeSpinItem.subTotalWin === 'number') {
+                                const base = Number(currentFreeSpinItem.subTotalWin);
+                                if (!isNaN(base) && base > 0) {
+                                  spinTotal = base;
+                                }
+                              }
+                            }
+                            // Fallback: if subTotalWin not available, manually sum paylines + tumbles
+                            if (spinTotal === 0) {
+                              if (spinData?.slot?.paylines && Array.isArray(spinData.slot.paylines)) {
+                                for (const pl of spinData.slot.paylines) {
+                                  const w = Number(pl?.win || 0);
+                                  if (!isNaN(w)) spinTotal += w;
+                                }
+                              }
+                              if (Array.isArray(spinData?.slot?.tumbles)) {
+                                for (const t of spinData.slot.tumbles) {
+                                  const w = Number(t?.win || 0);
+                                  if (!isNaN(w)) spinTotal += w;
+                                }
+                              }
+                            }
+                          } catch {}
+                          gameEventManager.emit(GameEventType.MULTIPLIER_ARRIVED, { spinTotal, weight } as any);
+                        } catch {}
+                        // Soft pop + fade out then destroy
+                        try {
+                          const sx = (fly as any)?.scaleX ?? 1;
+                          const sy = (fly as any)?.scaleY ?? 1;
+                          self.scene.tweens.chain({
+                            targets: fly,
+                            tweens: [
+                              { scaleX: sx * 1.1, scaleY: sy * 1.1, duration: 120, ease: Phaser.Math.Easing.Cubic.Out },
+                              { alpha: 0, duration: 260, ease: Phaser.Math.Easing.Cubic.In, onComplete: () => {
+                                try { fly.destroy(); } catch {}
+                                // Resolve after the fly completes its arrival + fade sequence
+                                safeResolve();
+                              }}
+                            ]
+                          });
+                        } catch {
+                          try { fly.destroy(); } catch {}
+                          // Ensure resolution even if fade chain fails
+                          safeResolve();
+                        }
+                      }
+                    });
+                  } catch {}
+                }
+              } catch {}
+              // Do not resolve here; wait for the fly tween to complete so arrival is processed before continuing
+            };
+            
             // Listen for completion of the Win animation
+            let listenerRef: any = null;
             if (animState.addListener) {
-              const listener = {
+              listenerRef = {
                 complete: (entry: any) => {
                   try {
                     if (!entry || entry.animation?.name !== winAnim) return;
                   } catch {}
-                  safeResolve();
+                  
+                  // Remove listener to prevent memory leaks
+                  try {
+                    if (animState && typeof animState.removeListener === 'function' && listenerRef) {
+                      animState.removeListener(listenerRef);
+                    }
+                  } catch {}
+                  
+                  // Animation completed - now proceed with overlay movement
+                  handleOverlayMovement();
                 }
               } as any;
-              try { animState.addListener(listener); } catch {}
+              try { animState.addListener(listenerRef); } catch {}
             }
+            
             // Start the Win animation
-            let entry: any = null;
             try { if (animState.clearTracks) animState.clearTracks(); } catch {}
             entry = animState.setAnimation(0, winAnim, false);
+            // Smoothly enlarge the overlay by 30% when win animation starts
+            try {
+              const overlayObj: any = (obj as any)?.__overlayImage;
+              if (overlayObj) {
+                const currentScaleX = (overlayObj.scaleX ?? 1);
+                const currentScaleY = (overlayObj.scaleY ?? 1);
+                const targetScaleX = currentScaleX * 1.8;
+                const targetScaleY = currentScaleY * 1.8;
+                // Stop any existing bounce tween before enlarging
+                try { (overlayObj as any)?.__bounceTween?.stop?.(); } catch {}
+                // Smoothly tween to enlarged size
+                self.scene.tweens.add({
+                  targets: overlayObj,
+                  scaleX: targetScaleX,
+                  scaleY: targetScaleY,
+                  duration: 250,
+                  ease: Phaser.Math.Easing.Cubic.Out,
+                });
+              }
+            } catch {}
             // Slow down win animation for better visibility
             if (entry) {
               try {
@@ -3826,11 +4172,11 @@ async function playMultiplierWinThenIdle(self: Symbols, obj: any, base: string):
             }
             console.log(`[Symbols] Playing multiplier win animation "${winAnim}" for symbol ${value} (after scale-up), entry:`, entry);
             
-            // Fire dedicated multiplier trigger SFX 1 second after the win animation starts
+            // Fire dedicated multiplier trigger SFX 0.4 seconds after the win animation starts
             try {
               const audio = (window as any)?.audioManager;
               if (audio && typeof audio.playSoundEffect === 'function' && gameStateManager.isBonus) {
-                self.scene.time.delayedCall(1000, () => {
+                self.scene.time.delayedCall(800, () => {
                   try {
                     audio.playSoundEffect(SoundEffectType.MULTIPLIER_TRIGGER);
                   } catch {}
@@ -3847,224 +4193,87 @@ async function playMultiplierWinThenIdle(self: Symbols, obj: any, base: string):
               return;
             }
             
-            // Pause a few frames before the end of the Win animation (non-turbo only), then resolve so flow can continue
-            try {
-              // Compute pause time near the end of the animation (0.5s before end)
-              const animData = (obj as any)?.skeleton?.data?.findAnimation?.(winAnim);
-              const durationSec = typeof animData?.duration === 'number' ? animData.duration : 0;
-              // In turbo mode, pause a bit closer to the end so things still feel fast
-              const pauseDeltaSec = isTurbo ? 0.25 : 0.5;
-              const pauseAtSec = Math.max(0, durationSec > 0 ? Math.max(0, durationSec - pauseDeltaSec) : 0);
-              const delayMs = Math.max(0, pauseAtSec * 1000);
-              // Safety timeout in case animation never completes
-              const maxDuration = durationSec > 0 ? durationSec * 1000 + 500 : 3000; // Add 500ms buffer
-              self.scene.time.delayedCall(maxDuration, () => {
-                if (!finished) {
-                  console.warn(`[Symbols] Multiplier animation timeout for symbol ${value} after ${maxDuration}ms`);
-                  safeResolve();
-                }
-              });
+            // Safety timeout in case animation never completes
+            const animData = (obj as any)?.skeleton?.data?.findAnimation?.(winAnim);
+            const durationSec = typeof animData?.duration === 'number' ? animData.duration : 0;
+            
+            // Pause animation 0.5 seconds before it ends
+            if (durationSec > 0 && entry) {
+              // Account for the timeScale (0.7) that was applied to the animation
+              const effectiveTimeScale = (entry as any)?.timeScale ?? (animState.timeScale ?? 1);
+              const effectiveDurationMs = (durationSec * 1000) / effectiveTimeScale;
+              const pauseTimeMs = Math.max(0, effectiveDurationMs - 400); // 0.5 seconds before end
               
-              // Schedule the pause shortly before the end
-              self.scene.time.delayedCall(delayMs, () => {
-                try {
-                  // Always pause the Win animation briefly near the end so the multiplier
-                  // appears to "freeze" before the overlay flies toward the winnings display.
-                  const e = entry || (animState?.getCurrent && animState.getCurrent(0));
-                  if (e) {
-                    try { (e as any).timeScale = 0; } catch {}
-                  } else {
-                    try { (animState as any).timeScale = 0; } catch {}
-                  }
-                  // After pausing near the end, disable the symbol so it won't interact/animate further
-                  try { disableSymbolObject(self, obj); } catch {}
-                } catch {}
-                // Move multiplier PNG overlay toward the center of the winnings display
-                try {
-                  const overlayObj: any = (obj as any)?.__overlayImage;
-            // Create overlay if missing (derive from symbolValue)
-            if (!overlayObj) {
-              try {
-                const value = (obj as any)?.symbolValue;
-                if (typeof value === 'number') {
-                  attachMultiplierOverlay(self, obj, value, obj.x, obj.y);
-                }
-              } catch {}
-            }
-            const ov: any = (obj as any)?.__overlayImage;
-            // Stop bounce and any ongoing tweens on original overlay
-            try { (ov as any)?.__bounceTween?.stop?.(); } catch {}
-            try { if (ov) self.scene.tweens.killTweensOf(ov); } catch {}
-            // Compute world coordinates for starting point
-            let worldX = obj.x, worldY = obj.y;
-            try {
-              const source = (ov && ov.getWorldTransformMatrix) ? ov : (obj && obj.getWorldTransformMatrix ? obj : null);
-              const m: any = source ? source.getWorldTransformMatrix() : null;
-              if (m && typeof m.tx === 'number' && typeof m.ty === 'number') {
-                worldX = m.tx; worldY = m.ty;
-              } else {
-                worldX = (ov ? ov.x : obj.x) + (self.container?.x || 0);
-                worldY = (ov ? ov.y : obj.y) + (self.container?.y || 0);
-              }
-            } catch {}
-            // Determine texture key and scale for the flying overlay
-            let textureKey: string | null = null;
-            let scaleX = 1, scaleY = 1;
-            try { textureKey = ov?.texture?.key || null; } catch {}
-            if (!textureKey) {
-              try {
-                const value = (obj as any)?.symbolValue;
-                textureKey = getMultiplierOverlayKey(value);
-              } catch {}
-            }
-            try {
-              scaleX = (ov && typeof ov.scaleX === 'number') ? ov.scaleX : scaleX;
-              scaleY = (ov && typeof ov.scaleY === 'number') ? ov.scaleY : scaleY;
-            } catch {}
-            // Hide/detach original overlay to avoid double-visibility and mask effects
-            try {
-              if (ov) {
-                ov.setVisible(false);
-                // Keep reference for cleanup but ensure it doesn't render
-              }
-            } catch {}
-            // Create an unmasked overlay at world coordinates in the root display list
-            if (textureKey) {
-              try {
-                const fly = self.scene.add.image(worldX, worldY, textureKey);
-                fly.setOrigin(0.5, 0.5);
-                try { fly.setScale(scaleX, scaleY); } catch {}
-                try { fly.setDepth(920); } catch {}
-                // Compute target center (win bar text middle) - use actual amountText position from BonusHeader
-                let cx = self.scene.scale.width * 0.5;
-                let cy = self.scene.scale.height * 0.215 + 18; // Fallback position
-                try {
-                  const gameScene = self.scene as any;
-                  const bonusHeader = gameScene?.bonusHeader;
-                  if (bonusHeader) {
-                    const amountText = (bonusHeader as any)?.amountText;
-                    if (amountText && typeof amountText.x === 'number' && typeof amountText.y === 'number') {
-                      // Get world position of amountText
-                      const matrix = amountText.getWorldTransformMatrix();
-                      if (matrix && typeof matrix.tx === 'number' && typeof matrix.ty === 'number') {
-                        cx = matrix.tx;
-                        cy = matrix.ty;
-                      } else {
-                        // Fallback to local position if world transform not available
-                        cx = amountText.x;
-                        cy = amountText.y;
-                      }
+              if (pauseTimeMs > 0) {
+                // Pause the animation 0.5s before it would naturally end
+                self.scene.time.delayedCall(pauseTimeMs, () => {
+                  try {
+                    // Pause the animation by setting timeScale to 0
+                    if (entry) {
+                      try { (entry as any).timeScale = 0; } catch {}
+                    } else {
+                      try { (animState as any).timeScale = 0; } catch {}
                     }
-                  }
-                } catch (e) {
-                  console.warn('[Symbols] Failed to get amountText position from BonusHeader, using fallback:', e);
-                }
-                // Travel tween
-                self.scene.tweens.add({
-                  targets: fly,
-                  x: cx,
-                  y: cy,
-                  duration: Math.max(200, self.scene.gameData.dropDuration),
-                  ease: Phaser.Math.Easing.Cubic.InOut,
-                  onComplete: () => {
-                    // Notify bonus header that one multiplier reached center (accumulate display)
-                    try {
-                      // Determine multiplier weight from symbol value
-                      let weight = 0;
-                      try {
-                        const value = (obj as any)?.symbolValue;
-                        if (typeof value === 'number') weight = getMultiplierNumeric(value);
-                      } catch {}
-                      // Compute spin total for this spin BEFORE multipliers are applied:
-                      // prefer subTotalWin from the current freespin item, then fall back
-                      // to a manual sum of paylines + tumbles.
-                      let spinTotal = 0;
-                      try {
-                        const spinData: any = (self as any)?.currentSpinData;
-                        const fs = spinData?.slot?.freespin || spinData?.slot?.freeSpin;
-                        if (fs?.items && Array.isArray(fs.items)) {
-                          const currentFreeSpinItem = fs.items.find((item: any) => item.spinsLeft > 0);
-                          if (currentFreeSpinItem && typeof currentFreeSpinItem.subTotalWin === 'number') {
-                            const base = Number(currentFreeSpinItem.subTotalWin);
-                            if (!isNaN(base) && base > 0) {
-                              spinTotal = base;
-                            }
-                          }
-                        }
-                        // Fallback: if subTotalWin not available, manually sum paylines + tumbles
-                        if (spinTotal === 0) {
-                          if (spinData?.slot?.paylines && Array.isArray(spinData.slot.paylines)) {
-                            for (const pl of spinData.slot.paylines) {
-                              const w = Number(pl?.win || 0);
-                              if (!isNaN(w)) spinTotal += w;
-                            }
-                          }
-                          if (Array.isArray(spinData?.slot?.tumbles)) {
-                            for (const t of spinData.slot.tumbles) {
-                              const w = Number(t?.win || 0);
-                              if (!isNaN(w)) spinTotal += w;
-                            }
-                          }
-                        }
-                      } catch {}
-                      gameEventManager.emit(GameEventType.MULTIPLIER_ARRIVED, { spinTotal, weight } as any);
-                    } catch {}
-                    // Soft pop + fade out then destroy
-                    try {
-                      const sx = (fly as any)?.scaleX ?? 1;
-                      const sy = (fly as any)?.scaleY ?? 1;
-                      self.scene.tweens.chain({
-                        targets: fly,
-                        tweens: [
-                          { scaleX: sx * 1.1, scaleY: sy * 1.1, duration: 120, ease: Phaser.Math.Easing.Cubic.Out },
-                          { alpha: 0, duration: 260, ease: Phaser.Math.Easing.Cubic.In, onComplete: () => {
-                            try { fly.destroy(); } catch {}
-                            // Resolve after the fly completes its arrival + fade sequence
-                            safeResolve();
-                          }}
-                        ]
-                      });
-                    } catch {
-                      try { fly.destroy(); } catch {}
-                      // Ensure resolution even if fade chain fails
-                      safeResolve();
-                    }
+                    console.log(`[Symbols] Paused multiplier animation for symbol ${value} 0.5s before end`);
+                  } catch (e) {
+                    console.warn(`[Symbols] Failed to pause multiplier animation for symbol ${value}:`, e);
                   }
                 });
-              } catch {}
+                
+                // Manually trigger completion handler at the original end time since animation is paused
+                self.scene.time.delayedCall(effectiveDurationMs, () => {
+                  if (!finished && !overlayMovementTriggered) {
+                    // Remove listener if still attached
+                    try {
+                      if (animState && typeof animState.removeListener === 'function' && listenerRef) {
+                        animState.removeListener(listenerRef);
+                      }
+                    } catch {}
+                    // Trigger overlay movement since animation won't complete naturally
+                    handleOverlayMovement();
+                  }
+                });
+              }
             }
-          } catch {}
-          // Do not resolve here; wait for the fly tween to complete so arrival is processed before continuing
-        });
-      } catch {
-        // If anything fails, just resolve after a short safety delay
-        self.scene.time.delayedCall(300, () => safeResolve());
-      }
-      // After 0.5s, move multiplier behind other symbols (lower depth)
-      try {
-        self.scene.time.delayedCall(500, () => {
-          try {
-            // Reorder within container so multiplier renders behind other symbols
-            const overlayObj: any = (obj as any)?.__overlayImage;
-            // Temporarily remove overlay if present so we can place it right after the base
-            if (overlayObj && self.container?.remove) {
-              self.container.remove(overlayObj, false);
-            }
-            if (self.container?.sendToBack) {
-              self.container.sendToBack(obj);
-            }
-            // Place overlay right above its base symbol, but still behind all other symbols
-            if (overlayObj && self.container?.addAt && self.container?.getIndex) {
-              const baseIndex = self.container.getIndex(obj);
-              self.container.addAt(overlayObj, baseIndex + 1);
-            }
-          } catch {}
-        });
-      } catch {}
-        } catch (e) {
-          console.warn('[Symbols] Error in multiplier win animation after scale-up:', e);
-          safeResolve();
-        }
+            
+            const maxDuration = durationSec > 0 ? durationSec * 1000 * 1.5 + 1000 : 5000; // Add 50% buffer + 1s safety
+            self.scene.time.delayedCall(maxDuration, () => {
+              if (!finished && !overlayMovementTriggered) {
+                console.warn(`[Symbols] Multiplier animation timeout for symbol ${value} after ${maxDuration}ms - proceeding anyway`);
+                // Remove listener if still attached
+                try {
+                  if (animState && typeof animState.removeListener === 'function' && listenerRef) {
+                    animState.removeListener(listenerRef);
+                  }
+                } catch {}
+                handleOverlayMovement();
+              }
+            });
+            // After 0.5s, move multiplier behind other symbols (lower depth)
+            try {
+              self.scene.time.delayedCall(500, () => {
+                try {
+                  // Reorder within container so multiplier renders behind other symbols
+                  const overlayObj: any = (obj as any)?.__overlayImage;
+                  // Temporarily remove overlay if present so we can place it right after the base
+                  if (overlayObj && self.container?.remove) {
+                    self.container.remove(overlayObj, false);
+                  }
+                  if (self.container?.sendToBack) {
+                    self.container.sendToBack(obj);
+                  }
+                  // Place overlay right above its base symbol, but still behind all other symbols
+                  if (overlayObj && self.container?.addAt && self.container?.getIndex) {
+                    const baseIndex = self.container.getIndex(obj);
+                    self.container.addAt(overlayObj, baseIndex + 1);
+                  }
+                } catch {}
+              });
+            } catch {}
+          } catch {
+            // If anything fails, just resolve after a short safety delay
+            self.scene.time.delayedCall(300, () => safeResolve());
+          }
       }
     });
     } catch {
@@ -4616,7 +4825,7 @@ function disposeSymbols(symbols: any[][]) {
           try {
             const overlayObj: any = (symbol as any)?.__overlayImage;
             if (overlayObj) {
-              try { overlayObj.scene?.tweens?.killTweensOf?.(overlayObj); } catch {}
+              //try { overlayObj.scene?.tweens?.killTweensOf?.(overlayObj); } catch {}
               if (!overlayObj.destroyed && overlayObj.destroy) {
                 overlayObj.destroy();
               }
@@ -5112,6 +5321,7 @@ async function applySingleTumble(self: Symbols, tumble: any, tumbleIndex: number
                         }
                         const winEntry = obj.animationState.setAnimation(0, winAnim, false);
                         // Slow down win animation for better visibility
+                        let winAnimationDurationMs = 0;
                         if (winEntry) {
                           try {
                             const base = (typeof (winEntry as any).timeScale === 'number' && (winEntry as any).timeScale > 0)
@@ -5123,6 +5333,7 @@ async function applySingleTumble(self: Symbols, tumble: any, tumbleIndex: number
                             const rawDurationMs = Math.max(0, Number((winEntry as any)?.animation?.duration || 0) * 1000);
                             const appliedTimeScale = (winEntry as any)?.timeScale && (winEntry as any).timeScale > 0 ? (winEntry as any).timeScale : 1;
                             const scaledDurationMs = appliedTimeScale !== 0 ? rawDurationMs / appliedTimeScale : rawDurationMs;
+                            winAnimationDurationMs = scaledDurationMs;
                             // Ensure the safety window is at least as long as the estimated animation runtime (+buffer)
                             safetyDelayMs = Math.max(
                               safetyDelayMs,
@@ -5136,6 +5347,12 @@ async function applySingleTumble(self: Symbols, tumble: any, tumbleIndex: number
                         }
                         // Log the tumble index when win animation starts
                         console.log(`[Symbols] Playing win animation "${winAnim}" for tumble index: ${tumbleIndex} (after scale-up)`);
+                        
+                        // Play VFX animation behind symbols 1-9, 0.5s before win animation ends
+                        if (canPlaySugarWin && winAnimationDurationMs > 0) {
+                          playSymbolVFX(self, obj, winAnimationDurationMs);
+                        }
+                        
                         // First win animation just started – notify once so header + SFX sync with visuals
                         notifyFirstWinIfNeeded();
                         // Safety timeout in case complete isn't fired (uses the final computed duration)

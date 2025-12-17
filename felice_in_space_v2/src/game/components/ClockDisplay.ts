@@ -34,7 +34,7 @@ export class ClockDisplay {
             offsetX: 0,
             offsetY: 0,
             fontSize: 14,
-            color: '#000000',
+            color: '#FFFFFF',
             alpha: 0.50,
             depth: 30000
         };
@@ -45,7 +45,7 @@ export class ClockDisplay {
         const timeY = (this.options.offsetY || 0);
         const fontSize = this.options.fontSize || 14;
         const fontFamily = this.options.fontFamily || 'Arial';
-        const textColor = this.options.color || '#000000';
+        const textColor = this.options.color || '#FFFFFF';
         const alpha = this.options.alpha !== undefined ? this.options.alpha : 0.50;
         const depth = this.options.depth || 30000;
         const scale = this.options.scale !== undefined ? this.options.scale : 1.0;

@@ -3,6 +3,8 @@ import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
+import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
+import { SoundEffectType } from '../../managers/AudioManager';
 
 export class BonusHeader {
 	private bonusHeaderContainer: Phaser.GameObjects.Container;
@@ -11,6 +13,8 @@ export class BonusHeader {
 	private amountText: Phaser.GameObjects.Text;
 	private youWonText: Phaser.GameObjects.Text;
 	private currentWinnings: number = 0;
+	private characterSpine: SpineGameObject | null = null;
+	private isPlayingWinAnimation: boolean = false;
 	// Tracks cumulative total during bonus mode by incrementing each spin's subtotal
 	private cumulativeBonusWin: number = 0;
 	private hasStartedBonusTracking: boolean = false;
@@ -56,6 +60,12 @@ export class BonusHeader {
 		// Set up event listeners for winnings updates (like regular header)
 		this.setupWinningsEventListener();
 		
+		// Set up bonus mode listener to enable/disable character spine
+		this.setupBonusModeListener(scene);
+		
+		// Set up win animation listeners
+		this.setupWinAnimationListeners();
+		
 		// Initialize winnings display - start hidden
 		this.initializeWinnings();
 	}
@@ -81,6 +91,9 @@ export class BonusHeader {
 		).setOrigin(0.5, 0.5).setScale(1).setDepth(1);
 		this.bonusHeaderContainer.add(logo);
 
+		// Add character spine animation in top right
+		this.createCharacterSpineAnimation(scene, assetScale);
+
 		// Create winnings text at a stable position (was inside win bar)
 		this.createWinBarText(scene, scene.scale.width * 0.5, scene.scale.height * 0.20);
 	}
@@ -96,8 +109,53 @@ export class BonusHeader {
 		).setOrigin(0.5, 0.5).setScale(1).setDepth(1);
 		this.bonusHeaderContainer.add(logo);
 
+		// Add character spine animation in top right
+		this.createCharacterSpineAnimation(scene, assetScale);
+
 		// Create winnings text at a stable position
 		this.createWinBarText(scene, scene.scale.width * 0.5, scene.scale.height * 0.20);
+	}
+
+	private createCharacterSpineAnimation(scene: Scene, assetScale: number): void {
+		try {
+			// Check if the spine assets are loaded
+			if (!scene.cache.json.has('Character_FIS')) {
+				console.warn('[BonusHeader] Character_FIS spine assets not loaded yet, will retry later');
+				// Set up a retry mechanism
+				scene.time.delayedCall(1000, () => {
+					this.createCharacterSpineAnimation(scene, assetScale);
+				});
+				return;
+			}
+
+			// Position in top right area of the screen
+			const x = scene.scale.width * 0.60;
+			const y = scene.scale.height * 0.18;
+
+			const characterSpine = (scene.add as any).spine(
+				x,
+				y,
+				'Character_FIS',
+				'Character_FIS-atlas'
+			) as SpineGameObject;
+			
+			characterSpine.setOrigin(0.5, 0.5);
+			characterSpine.setScale(assetScale * 0.1);
+			characterSpine.setDepth(0); // Behind reel-container (depth 1)
+			
+			// Play idle animation (loop it)
+			characterSpine.animationState.setAnimation(0, 'Character_FIS_idle', true);
+			
+			// Start hidden by default - will be enabled when bonus mode is active
+			characterSpine.setVisible(false);
+			
+			// Add directly to scene (not container) to ensure proper depth layering behind reel-container
+			// Don't add to container - add directly to scene so depth works correctly
+			this.characterSpine = characterSpine;
+			console.log('[BonusHeader] Created Character_FIS spine animation in top right (hidden by default)');
+		} catch (error) {
+			console.error('[BonusHeader] Failed to create Character_FIS spine animation:', error);
+		}
 	}
 
 	private createWinBarText(scene: Scene, x: number, y: number): void {
@@ -209,6 +267,19 @@ export class BonusHeader {
 		// For bonus mode, we only show per-tumble "YOU WON" values.
 		// Seed the cumulative tracker silently; UI will be driven by tumble events.
 		console.log(`[BonusHeader] Seeded cumulative bonus win with scatter base (tracking only): $${this.scatterBaseWin}`);
+	}
+
+	/**
+	 * Add to the cumulative bonus total (e.g., for scatter retriggers)
+	 * This preserves the existing cumulative total and adds the new amount
+	 */
+	public addToCumulativeWin(amount: number): void {
+		const amountToAdd = Math.max(0, Number(amount) || 0);
+		if (amountToAdd > 0) {
+			this.cumulativeBonusWin += amountToAdd;
+			this.hasStartedBonusTracking = true;
+			console.log(`[BonusHeader] Added to cumulative bonus win: +$${amountToAdd}, new total: $${this.cumulativeBonusWin}`);
+		}
 	}
 
 	/**
@@ -421,6 +492,8 @@ export class BonusHeader {
 						this.justSeededWin = false;
 					}
 					this.showWinningsDisplay(amount);
+					// Play win animation for character spine
+					this.playWinAnimation();
 				}
 			} catch {}
 		});
@@ -648,6 +721,8 @@ export class BonusHeader {
 					
 					if (totalWin > 0) {
 						this.showWinningsDisplay(totalWin);
+						// Play win animation for character spine
+						this.playWinAnimation();
 					} else {
 						this.hideWinningsDisplay();
 					}
@@ -697,6 +772,8 @@ export class BonusHeader {
 			
 			if (spinWin > 0) {
 				this.showWinningsDisplay(spinWin);
+				// Play win animation for character spine
+				this.playWinAnimation();
 			} else {
 				// Don't hide if we're showing cumulative total - only hide if truly no wins
 				// The TUMBLE_WIN_PROGRESS will handle showing wins during tumbles
@@ -850,7 +927,198 @@ export class BonusHeader {
 		return this.bonusHeaderContainer;
 	}
 
+	/**
+	 * Setup listener for bonus mode changes to enable/disable character spine
+	 */
+	private setupBonusModeListener(scene: Scene): void {
+		// Listen for bonus mode events
+		scene.events.on('setBonusMode', (isBonus: boolean) => {
+			if (isBonus) {
+				// Enable character spine animation during bonus mode
+				this.enableCharacterSpine();
+				console.log('[BonusHeader] Character spine enabled - bonus mode started');
+			} else {
+				// Disable character spine animation when bonus mode ends
+				this.disableCharacterSpine();
+				console.log('[BonusHeader] Character spine disabled - bonus mode ended');
+			}
+		});
+
+		// Listen for showBonusHeader event to enable character spine
+		scene.events.on('showBonusHeader', () => {
+			this.enableCharacterSpine();
+			console.log('[BonusHeader] Character spine enabled - bonus header shown');
+		});
+
+		// Listen for hideBonusHeader event to disable character spine
+		scene.events.on('hideBonusHeader', () => {
+			this.disableCharacterSpine();
+			console.log('[BonusHeader] Character spine disabled - bonus header hidden');
+		});
+	}
+
+	/**
+	 * Enable the character spine animation
+	 */
+	private enableCharacterSpine(): void {
+		if (this.characterSpine) {
+			this.characterSpine.setVisible(true);
+			// Ensure idle animation is playing
+			if (this.characterSpine.animationState) {
+				this.characterSpine.animationState.setAnimation(0, 'Character_FIS_idle', true);
+			}
+			console.log('[BonusHeader] Character spine animation enabled');
+		}
+	}
+
+	/**
+	 * Disable the character spine animation
+	 */
+	private disableCharacterSpine(): void {
+		if (this.characterSpine) {
+			this.characterSpine.setVisible(false);
+			console.log('[BonusHeader] Character spine animation disabled');
+		}
+	}
+
+	/**
+	 * Set up listeners for win events to trigger character spine win animation
+	 */
+	private setupWinAnimationListeners(): void {
+		// Listen for WIN_START event
+		gameEventManager.on(GameEventType.WIN_START, () => {
+			try {
+				// Only play win animation in bonus mode
+				if (!gameStateManager.isBonus) {
+					return;
+				}
+				this.playWinAnimation();
+			} catch {}
+		});
+	}
+
+	/**
+	 * Play the win animation for the character spine
+	 * After the animation completes, return to idle
+	 */
+	private playWinAnimation(): void {
+		if (!this.characterSpine || !this.characterSpine.visible || this.isPlayingWinAnimation) {
+			return;
+		}
+
+		try {
+			this.isPlayingWinAnimation = true;
+			const animationState = this.characterSpine.animationState;
+			
+			if (!animationState) {
+				this.isPlayingWinAnimation = false;
+				return;
+			}
+
+			// Play win animation once (not looped)
+			animationState.setAnimation(0, 'Character_FIS_win', false);
+			
+			// Play character shoot SFX with delays: first at 1s, second at 1.5s (0.5s after first)
+			if (this.scene) {
+				try {
+					const sceneAny: any = this.scene as any;
+					const audioManager =
+						(sceneAny && sceneAny.audioManager) ||
+						((window as any)?.audioManager ?? null);
+
+					if (audioManager && typeof audioManager.playSoundEffect === 'function') {
+						// Store scene reference for delayed callbacks
+						const sceneRef = this.scene;
+						
+						// First play after 1 second
+						sceneRef.time.delayedCall(2000, () => {
+							try {
+								// Re-check audioManager in case it changed
+								const sceneAnyDelayed: any = sceneRef as any;
+								const audioManagerDelayed =
+									(sceneAnyDelayed && sceneAnyDelayed.audioManager) ||
+									((window as any)?.audioManager ?? null);
+								
+								if (audioManagerDelayed && typeof audioManagerDelayed.playSoundEffect === 'function') {
+									console.log('[BonusHeader] Playing first character shoot SFX at 1s delay');
+									audioManagerDelayed.playSoundEffect(SoundEffectType.CHARACTER_SHOOT);
+								} else {
+									console.warn('[BonusHeader] AudioManager not available when first SFX should play');
+								}
+							} catch (e) {
+								console.warn('[BonusHeader] Failed to play first character shoot SFX:', e);
+							}
+						});
+						// Second play after 1.5 seconds (0.5s after first)
+						sceneRef.time.delayedCall(2500, () => {
+							try {
+								// Re-check audioManager in case it changed
+								const sceneAnyDelayed: any = sceneRef as any;
+								const audioManagerDelayed =
+									(sceneAnyDelayed && sceneAnyDelayed.audioManager) ||
+									((window as any)?.audioManager ?? null);
+								
+								if (audioManagerDelayed && typeof audioManagerDelayed.playSoundEffect === 'function') {
+									console.log('[BonusHeader] Playing second character shoot SFX at 1.5s delay');
+									audioManagerDelayed.playSoundEffect(SoundEffectType.CHARACTER_SHOOT);
+								} else {
+									console.warn('[BonusHeader] AudioManager not available when second SFX should play');
+								}
+							} catch (e) {
+								console.warn('[BonusHeader] Failed to play second character shoot SFX:', e);
+							}
+						});
+						console.log('[BonusHeader] Scheduled character shoot SFX plays at 1s and 1.5s');
+					} else {
+						console.warn('[BonusHeader] AudioManager not available for character shoot SFX');
+					}
+				} catch (e) {
+					console.warn('[BonusHeader] Failed to schedule character shoot SFX:', e);
+				}
+			}
+			
+			// Listen for animation complete event to return to idle
+			const listenerRef = {
+				complete: (entry: any) => {
+					try {
+						// Check if this is the win animation completing
+						if (!entry || entry.animation?.name !== 'Character_FIS_win') {
+							return;
+						}
+					} catch {}
+					
+					// Return to idle animation after win animation completes
+					if (this.characterSpine && this.characterSpine.visible && animationState) {
+						animationState.setAnimation(0, 'Character_FIS_idle', true);
+					}
+					
+					// Remove listener to prevent memory leaks
+					try {
+						if (animationState && typeof animationState.removeListener === 'function') {
+							animationState.removeListener(listenerRef);
+						}
+					} catch {}
+					
+					this.isPlayingWinAnimation = false;
+					console.log('[BonusHeader] Character spine win animation completed, returned to idle');
+				}
+			};
+			
+			animationState.addListener(listenerRef);
+
+			console.log('[BonusHeader] Playing character spine win animation');
+		} catch (error) {
+			console.error('[BonusHeader] Failed to play character spine win animation:', error);
+			this.isPlayingWinAnimation = false;
+		}
+	}
+
 	destroy(): void {
+		// Destroy character spine (added directly to scene, not container)
+		if (this.characterSpine) {
+			this.characterSpine.destroy();
+			this.characterSpine = null;
+		}
 		if (this.bonusHeaderContainer) {
 			this.bonusHeaderContainer.destroy();
 		}

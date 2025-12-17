@@ -67,9 +67,12 @@ export class AssetConfig {
 				'header-logo': `${prefix}/header/header_logo.png`,
 
 			},
-			spine: {
-
+		spine: {
+			'Character_FIS': {
+				atlas: `${prefix}/header/Character_FIS/Character_FIS.atlas`,
+				json: `${prefix}/header/Character_FIS/Character_FIS.json`
 			}
+		}
 		};
 	}
 
@@ -78,7 +81,12 @@ export class AssetConfig {
 		
 		return {
 			images: {},
-			spine: {}
+		spine: {
+			'Character_FIS': {
+				atlas: `${prefix}/header/Character_FIS/Character_FIS.atlas`,
+				json: `${prefix}/header/Character_FIS/Character_FIS.json`
+			}
+		}
 		};
 	}
 
@@ -159,7 +167,14 @@ export class AssetConfig {
 			json: `assets/symbols/high/Symbol12_FIS.json`
 		};
 		
+		// Load VFX spine for symbols 1-9 win animations
+		symbolSpine['vfx_fis'] = {
+			atlas: `assets/symbols/high/vfx/VFX_FIS.atlas`,
+			json: `assets/symbols/high/vfx/VFX_FIS.json`
+		};
+		
 		console.log(`[AssetConfig] Multiplier spines: Symbol10_FIS (10-16), Symbol11_FIS (17-20), Symbol12_FIS (21-22)`);
+		console.log(`[AssetConfig] VFX spine: VFX_FIS (for symbols 1-9 win animations)`);
 		
 		// Multiplier overlays (PNG numbers shown in front of the multiplier symbol)
 		// Mapping: 10->2, 11->3, 12->4, 13->5, 14->6, 15->8, 16->10,
@@ -464,7 +479,7 @@ export class AssetConfig {
 				'reeldrop_sfx': 'assets/sounds/SFX/reeldrop_fis.ogg',
 				'turboDrop_sfx': 'assets/sounds/SFX/turbodrop_fis.ogg',
 				// Candy explosion transition SFX (used by SymbolExplosionTransition)
-				'candy_transition_sw': 'assets/sounds/SFX/candy_transition.ogg',
+				'candy_transition_sw': 'assets/sounds/SFX/planets_fis.ogg',
 				'coin_throw_ka': 'assets/sounds/SFX/coin_throw_ka.ogg',
 				'coin_drop_ka': 'assets/sounds/SFX/coin_drop_ka.ogg',
 				// Multiplier trigger / bomb SFX (bonus-mode multipliers)
@@ -484,7 +499,9 @@ export class AssetConfig {
 				'congratsDialog_sfx': 'assets/sounds/Wins/congrats_fis.ogg',
 				'megawskip_ka': 'assets/sounds/Wins/megawskip_ka.ogg',
 				'superwskip_ka': 'assets/sounds/Wins/superwskip_ka.ogg',
-				'epicwskip_ka': 'assets/sounds/Wins/epicwskip_ka.ogg'
+				'epicwskip_ka': 'assets/sounds/Wins/epicwskip_ka.ogg',
+				// Character shoot SFX (plays during character win animation)
+				'felice_shoot_fis': 'assets/sounds/SFX/felice_shoot_fis.ogg'
 			}
 		};
 	}

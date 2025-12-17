@@ -93,7 +93,7 @@ export class Preloader extends Scene
 			offsetY: clockY,
 			fontSize: 16,
 			fontFamily: 'poppins-regular',
-			color: '#000000',
+			color: '#FFFFFF',
 			alpha: 0.5,
 			depth: 30000,
 			scale: 0.7,
@@ -102,7 +102,7 @@ export class Preloader extends Scene
 			additionalTextOffsetX: 185,
 			additionalTextOffsetY: 0,
 			additionalTextScale: 0.7,
-			additionalTextColor: '#000000',
+			additionalTextColor: '#FFFFFF',
 			additionalTextFontSize: 16,
 			additionalTextFontFamily: 'poppins-regular'
 		});

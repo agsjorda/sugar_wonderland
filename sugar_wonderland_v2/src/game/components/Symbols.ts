@@ -3049,15 +3049,26 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
         console.warn('[Symbols] Failed to update Header winnings for scatter', e);
       }
       
-      // Seed bonus header cumulative total with scatter base amount
+      // Update bonus header cumulative total with scatter base amount
       try {
         const bonusHeader = (self.scene as any)?.bonusHeader;
-        if (bonusHeader && typeof bonusHeader.seedCumulativeWin === 'function' && totalForHeader > 0) {
-          bonusHeader.seedCumulativeWin(totalForHeader);
-          console.log(`[Symbols] BonusHeader seeded with total win at scatter: $${totalForHeader} (scatter base only)`);
+        if (bonusHeader && totalForHeader > 0) {
+          if (isRetrigger) {
+            // For retriggers, add to existing cumulative total instead of resetting
+            if (typeof bonusHeader.addToCumulativeWin === 'function') {
+              bonusHeader.addToCumulativeWin(totalForHeader);
+              console.log(`[Symbols] BonusHeader added scatter retrigger win: $${totalForHeader} (added to cumulative)`);
+            }
+          } else {
+            // Initial scatter trigger: seed the cumulative total
+            if (typeof bonusHeader.seedCumulativeWin === 'function') {
+              bonusHeader.seedCumulativeWin(totalForHeader);
+              console.log(`[Symbols] BonusHeader seeded with total win at scatter: $${totalForHeader} (scatter base only)`);
+            }
+          }
         }
       } catch (e) {
-        console.warn('[Symbols] Failed to seed BonusHeader with scatter base win', e);
+        console.warn('[Symbols] Failed to update BonusHeader with scatter base win', e);
       }
     } catch (e) {
       console.warn('[Symbols] Error computing/updating scatter base payout', e);
@@ -3356,7 +3367,7 @@ function getMultiplierOverlayKey(value: number): string | null {
  * Returns the Phaser.Text object (already origin-centered).
  */
 function createWinText(self: Symbols, amount: number, x: number, y: number): Phaser.GameObjects.Text {
-  const px = Math.max(18, Math.round(self.displayHeight * 0.5));
+  const px = Math.max(40, Math.round(self.displayHeight * 0.5));
   let textValue = '';
   try {
     if (Number.isInteger(amount)) textValue = `$${amount}`;
@@ -3623,6 +3634,26 @@ async function playMultiplierWinThenIdle(self: Symbols, obj: any, base: string):
       let entry: any = null;
       try { if (animState.clearTracks) animState.clearTracks(); } catch {}
       entry = animState.setAnimation(0, winAnim, false);
+      // Smoothly enlarge the overlay by 30% when win animation starts
+      try {
+        const overlayObj: any = (obj as any)?.__overlayImage;
+        if (overlayObj) {
+          const currentScaleX = (overlayObj.scaleX ?? 1);
+          const currentScaleY = (overlayObj.scaleY ?? 1);
+          const targetScaleX = currentScaleX * 1.8;
+          const targetScaleY = currentScaleY * 1.8;
+          // Stop any existing bounce tween before enlarging
+          try { (overlayObj as any)?.__bounceTween?.stop?.(); } catch {}
+          // Smoothly tween to enlarged size
+          self.scene.tweens.add({
+            targets: overlayObj,
+            scaleX: targetScaleX,
+            scaleY: targetScaleY,
+            duration: 250,
+            ease: Phaser.Math.Easing.Cubic.Out,
+          });
+        }
+      } catch {}
       // Apply the same visual scale-up used for normal symbol win animations
       try { scheduleScaleUp(self, obj, 500); } catch {}
       // Pause a few frames before the end of the Win animation (non-turbo only), then resolve so flow can continue
@@ -3690,6 +3721,12 @@ async function playMultiplierWinThenIdle(self: Symbols, obj: any, base: string):
               scaleX = (ov && typeof ov.scaleX === 'number') ? ov.scaleX : scaleX;
               scaleY = (ov && typeof ov.scaleY === 'number') ? ov.scaleY : scaleY;
             } catch {}
+            // The overlay has been enlarged by 30% during win animation, so current scale is enlarged
+            // Calculate original scale by dividing by 1.3, and use current scale as enlarged scale
+            const enlargedScaleX = scaleX;
+            const enlargedScaleY = scaleY;
+            const originalScaleX = scaleX / 1.8;
+            const originalScaleY = scaleY / 1.8;
             // Hide/detach original overlay to avoid double-visibility and mask effects
             try {
               if (ov) {
@@ -3702,17 +3739,20 @@ async function playMultiplierWinThenIdle(self: Symbols, obj: any, base: string):
               try {
                 const fly = self.scene.add.image(worldX, worldY, textureKey);
                 fly.setOrigin(0.5, 0.5);
-                try { fly.setScale(scaleX, scaleY); } catch {}
+                // Start at enlarged scale (30% larger)
+                try { fly.setScale(enlargedScaleX, enlargedScaleY); } catch {}
                 try { fly.setDepth(920); } catch {}
                 // Compute target center (win bar text middle)
                 const cx = self.scene.scale.width * 0.5;
                 const baseY = self.scene.scale.height * 0.215;
                 const cy = baseY + 18;
-                // Travel tween
+                // Travel tween - tween both position and scale back to original size
                 self.scene.tweens.add({
                   targets: fly,
                   x: cx,
                   y: cy,
+                  scaleX: originalScaleX,
+                  scaleY: originalScaleY,
                   duration: Math.max(200, self.scene.gameData.dropDuration),
                   ease: Phaser.Math.Easing.Cubic.InOut,
                   onComplete: () => {
@@ -4333,7 +4373,7 @@ function disposeSymbols(symbols: any[][]) {
           try {
             const overlayObj: any = (symbol as any)?.__overlayImage;
             if (overlayObj) {
-              try { overlayObj.scene?.tweens?.killTweensOf?.(overlayObj); } catch {}
+              //try { overlayObj.scene?.tweens?.killTweensOf?.(overlayObj); } catch {}
               if (!overlayObj.destroyed && overlayObj.destroy) {
                 overlayObj.destroy();
               }

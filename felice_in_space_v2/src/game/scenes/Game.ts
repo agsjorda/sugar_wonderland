@@ -179,11 +179,11 @@ export class Game extends Scene
 		// Match positioning + formatting with Preloader scene for consistency
 		const clockY = this.scale.height * 0.015;
 		this.clockDisplay = new ClockDisplay(this, {
-			offsetX: -130,
+			offsetX: -140,
 			offsetY: clockY,
 			fontSize: 16,
 			fontFamily: 'poppins-regular',
-			color: '#000000',
+			color: '#FFFFFF',
 			alpha: 0.5,
 			depth: 30000,
 			scale: 0.7,
@@ -192,7 +192,7 @@ export class Game extends Scene
 			additionalTextOffsetX: 185,
 			additionalTextOffsetY: 0,
 			additionalTextScale: 0.7,
-			additionalTextColor: '#000000',
+			additionalTextColor: '#FFFFFF',
 			additionalTextFontSize: 16,
 			additionalTextFontFamily: 'poppins-regular'
 		});
