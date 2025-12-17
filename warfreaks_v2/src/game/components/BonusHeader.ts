@@ -17,6 +17,7 @@ export class BonusHeader {
 	private screenModeManager: ScreenModeManager;
 	private spotlight: Phaser.GameObjects.Image;
     private logoImage: Phaser.GameObjects.Image;
+	private winBarCenterX: number = 0;
 	private spotlightBounds: {
 		minX: number;
 		maxX: number;
@@ -30,7 +31,32 @@ export class BonusHeader {
 	private multiplierDisplay: NumberDisplay | null = null;
 	private currentMultiplier: number = 0;
 	private currentBaseWinnings: number = 0;
-	private xTextOffset: number = 5;
+
+	/**
+	 * Keep the main winnings amount color in sync with the current label.
+	 * - TOTAL WIN -> green
+	 * - everything else -> white
+	 * Note: when we are showing an equation, `amountTotalText` is visible and handles the green total.
+	 */
+	private syncAmountColorToLabel(): void {
+		if (!this.amountText || !this.youWonText) {
+			return;
+		}
+
+		// When using the split equation display, keep the prefix white and let `amountTotalText` be green.
+		if (this.amountTotalText?.visible) {
+			this.amountText.setColor('#ffffff');
+			return;
+		}
+
+		const isTotalWin = this.youWonText.text === 'TOTAL WIN';
+		this.amountText.setColor(isTotalWin ? '#00ff00' : '#ffffff');
+	}
+	/**
+	 * Tracks whether the CURRENT tumble has received any multiplier update event.
+	 * If not, we should not display an equation and should not multiply base winnings.
+	 */
+	private didMultiplierUpdateForCurrentTumble: boolean = false;
 	private readonly handleBonusModeToggle = (isBonus: boolean) => {
 		if (typeof isBonus !== 'boolean') {
 			return;
@@ -94,6 +120,7 @@ export class BonusHeader {
 		const winBarBonusHeightMultiplier = 0.205;
 		const winBarX = scene.scale.width * winBarBonusWidthMultiplier;
 		const winBarY = scene.scale.height * winBarBonusHeightMultiplier;
+		this.winBarCenterX = winBarX;
 		this.createWinBar(scene, winBarX, winBarY, assetScale);
 		this.createWinBarText(scene, winBarX, winBarY);
 
@@ -213,7 +240,7 @@ export class BonusHeader {
 			const formattedWinnings = this.formatCurrency(winnings);
 			this.amountText.setColor('#ffffff');
 			this.amountText.setText(formattedWinnings);
-			this.amountText.setPosition(this.scene.scale.width * 0.5 + this.xTextOffset, this.amountText.y);
+			this.amountText.setPosition(this.winBarCenterX || this.scene.scale.width * 0.5, this.amountText.y);
 			
 			// Show both texts when updating winnings
 			this.youWonText.setVisible(true);
@@ -224,6 +251,9 @@ export class BonusHeader {
 				this.amountTotalText.setVisible(false);
 				this.amountTotalText.setText('');
 			}
+
+			// Ensure TOTAL WIN uses green, and everything else uses white
+			this.syncAmountColorToLabel();
 
 			if (animate) {
 				this.animateWinningsDisplay(this.amountText);
@@ -272,7 +302,7 @@ export class BonusHeader {
 			
 			// Update amount text with winnings
 			this.amountText.setText(formattedWinnings);
-			this.amountText.setPosition(this.scene.scale.width * 0.5 + this.xTextOffset, this.amountText.y);
+			this.amountText.setPosition(this.winBarCenterX || this.scene.scale.width * 0.5, this.amountText.y);
 			
 			console.log(`[BonusHeader] Winnings display shown: ${formattedWinnings} (raw: ${winnings})`);
 
@@ -281,6 +311,9 @@ export class BonusHeader {
 				this.amountTotalText.setVisible(false);
 				this.amountTotalText.setText('');
 			}
+
+			// Ensure TOTAL WIN uses green, and everything else uses white
+			this.syncAmountColorToLabel();
 		} else {
 			console.warn('[BonusHeader] Cannot show winnings display - text objects not available', {
 				amountText: !!this.amountText,
@@ -303,7 +336,7 @@ export class BonusHeader {
 			this.amountTotalText.setText(totalText);
 			this.amountTotalText.setVisible(true);
 
-			const baseX = this.scene.scale.width * 0.5 + this.xTextOffset;
+			const baseX = this.winBarCenterX || this.scene.scale.width * 0.5;
 			const baseY = this.amountText.y;
 
 			// Keep the base centered and let the total extend to the right
@@ -401,12 +434,14 @@ export class BonusHeader {
 
 			if (!gameStateManager.isBonus) {
 				this.currentMultiplier = 0;
+				this.didMultiplierUpdateForCurrentTumble = false;
 				this.updateMultiplierValue(this.currentMultiplier);
 
 				return;
 			}
 
 			const multiplier = (data as UpdateMultiplierValueEventData).multiplier;
+			this.didMultiplierUpdateForCurrentTumble = true;
 
 			// Accumulate the multiplier value within the bonus
 			this.currentMultiplier = this.currentMultiplier > 0 ? this.currentMultiplier + multiplier : multiplier;
@@ -455,14 +490,18 @@ export class BonusHeader {
 				console.log(`[BonusHeader] REELS_START: free spin multiplier: ${freeSpin?.multiplierValue}, tumble wins: ${tumbleWins}, total winnings: ${this.currentWinnings}`);
 			}
 
-			// On reels start, if baseWinnings != 0, add baseWinnings * multiplier to currentWinnings
+			// On reels start, roll the last tumble's winnings into the running total.
+			// If there was no multiplier update for that tumble, do NOT multiply the base winnings.
 			if (this.currentBaseWinnings !== 0) {
-				const addedWinnings = this.currentBaseWinnings * Math.max(1, this.currentMultiplier);
+				const addedWinnings = this.didMultiplierUpdateForCurrentTumble
+					? this.currentBaseWinnings * Math.max(1, this.currentMultiplier)
+					: this.currentBaseWinnings;
 				this.currentWinnings += addedWinnings;
-				console.log(`[BonusHeader] REELS_START: applying base=${this.currentBaseWinnings} * multiplier=${this.currentMultiplier} => +${addedWinnings}, new total=${this.currentWinnings}`);
+				console.log(`[BonusHeader] REELS_START: applying base=${this.currentBaseWinnings}${this.didMultiplierUpdateForCurrentTumble ? ` * multiplier=${this.currentMultiplier}` : ''} => +${addedWinnings}, new total=${this.currentWinnings}`);
 
 				// Clear base winnings after they have been applied
 				this.currentBaseWinnings = 0;
+				this.didMultiplierUpdateForCurrentTumble = false;
 			}
 
 			// Then update the display to show the total win
@@ -504,6 +543,9 @@ export class BonusHeader {
 				return;
 			}
 
+			// New tumble starts accumulating base winnings; reset per-tumble multiplier-update tracking.
+			this.didMultiplierUpdateForCurrentTumble = false;
+
 			const fsIndex = this.scene.gameAPI.getCurrentFreeSpinIndex() - 1;
 			const freespinItem = spinData?.slot?.freespin?.items?.[fsIndex];
 
@@ -541,34 +583,27 @@ export class BonusHeader {
 				currentTumbleMultiplier = freespinItem?.tumble?.multiplier ?? 0;
 			}
 
-			// If there is no multiplier for the current tumble, skip showing the
-			// multiplier equation here to avoid using a stale/incorrect value.
+			// If the current tumble *does* have a multiplier, UPDATE_MULTIPLIER_VALUE should be emitted
+			// and will handle the equation display. This REELS_STOP path is only for tumbles where the
+			// multiplier doesn't change.
 			if (currentTumbleMultiplier > 0) {
-				console.log('[BonusHeader] REELS_STOP: no current free-spin tumble multiplier, skipping equation display');
+				console.log('[BonusHeader] REELS_STOP: tumble has multiplier update, skipping no-change handling');
 				return;
 			}
 
 			if(this.currentMultiplier <= 0) {
-				console.log('[BonusHeader] REELS_STOP: no current multiplier, skipping equation display');
+				console.log('[BonusHeader] REELS_STOP: no current multiplier, skipping no-change handling');
 				return;
 			}
 
 			if (this.currentBaseWinnings <= 0) {
-				console.log('[BonusHeader] REELS_STOP: no current base winnings, skipping equation display');
+				console.log('[BonusHeader] REELS_STOP: no current base winnings, skipping no-change handling');
 				return;
 			}
 
-			const baseWinnings = this.currentBaseWinnings;
-			const multipliedWinnings = baseWinnings * Math.max(1, this.currentMultiplier);
-			const formattedBaseWinnings = this.formatCurrency(baseWinnings);
-			const formattedMultipliedWinnings = this.formatCurrency(multipliedWinnings);
-
-			// Immediately show the same style equation used in UPDATE_MULTIPLIER_VALUE,
-			// but without the delayedCall.
-			this.updateWinningsDisplayEquation(
-				`${formattedBaseWinnings}  x  ${this.currentMultiplier}  =  `,
-				formattedMultipliedWinnings
-			);
+			// New behavior: when the multiplier doesn't change, do NOT show an equation and do NOT
+			// multiply the base winnings. Display the base winnings as-is.
+			this.updateWinningsDisplay(this.currentBaseWinnings);
 
 			if(gameStateManager.isBonusFinished)
 			{
@@ -584,8 +619,11 @@ export class BonusHeader {
 	private updateCurrentWinnings(): void {
 		if(this.currentBaseWinnings > 0)
 		{
-			this.currentWinnings += this.currentBaseWinnings * Math.max(1, this.currentMultiplier);
+			this.currentWinnings += this.didMultiplierUpdateForCurrentTumble
+				? this.currentBaseWinnings * Math.max(1, this.currentMultiplier)
+				: this.currentBaseWinnings;
 			this.currentBaseWinnings = 0;
+			this.didMultiplierUpdateForCurrentTumble = false;
 		}
 	}
 
@@ -593,6 +631,7 @@ export class BonusHeader {
 		this.currentWinnings = isBonus ? this.getCachedPreBonusWins() : 0;
 		this.currentBaseWinnings = 0;
 		this.currentMultiplier = 0;
+		this.didMultiplierUpdateForCurrentTumble = false;
 		this.hideWinningsDisplay();
 		this.resetMultiplierValue();
 	}

@@ -24,7 +24,32 @@ export class Header {
 	private multiplierDisplay: NumberDisplay | null = null;
 	private scene: Game;
 	private currentMultiplier: number = 0;
-	private xTextOffset: number = 5;
+	private winBarCenterX: number = 0;
+
+	private getWinningsCenterX(): number {
+		return this.winBarCenterX || this.scene?.scale?.width * 0.5 || 0;
+	}
+
+	/**
+	 * Keep the main winnings amount color in sync with the current label.
+	 * - TOTAL WIN -> green
+	 * - everything else -> white
+	 * Note: when we are showing an equation, `amountTotalText` is visible and handles the green total.
+	 */
+	private syncAmountColorToLabel(): void {
+		if (!this.amountText || !this.youWonText) {
+			return;
+		}
+
+		// When using the split equation display, keep the prefix white and let `amountTotalText` be green.
+		if (this.amountTotalText?.visible) {
+			this.amountText.setColor('#ffffff');
+			return;
+		}
+
+		const isTotalWin = this.youWonText.text === 'TOTAL WIN';
+		this.amountText.setColor(isTotalWin ? '#00ff00' : '#ffffff');
+	}
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -65,6 +90,7 @@ export class Header {
 		const winBarBonusHeightMultiplier = 0.205;
 		const winBarX = scene.scale.width * winBarBonusWidthMultiplier;
 		const winBarY = scene.scale.height * winBarBonusHeightMultiplier;
+		this.winBarCenterX = winBarX;
 		this.createWinBar(scene, winBarX, winBarY, assetScale);
 		this.createWinBarText(scene, winBarX, winBarY);
 
@@ -303,7 +329,7 @@ export class Header {
 			// Reset color to default white for regular winnings display
 			this.amountText.setColor('#ffffff');
 			this.amountText.setText(formattedWinnings);
-			this.amountText.setPosition(this.scene.scale.width * 0.5 + this.xTextOffset, this.amountText.y);
+			this.amountText.setPosition(this.getWinningsCenterX(), this.amountText.y);
 			console.log(`[Header] Winnings updated to: ${formattedWinnings} (raw: ${winnings})`);
 
 			// Hide and clear the separate total text when not showing the expression
@@ -311,6 +337,9 @@ export class Header {
 				this.amountTotalText.setVisible(false);
 				this.amountTotalText.setText('');
 			}
+
+			// Ensure TOTAL WIN uses green, and everything else uses white
+			this.syncAmountColorToLabel();
 
 			this.animateWinningsDisplay(this.amountText);
 		}
@@ -330,7 +359,7 @@ export class Header {
 			this.amountTotalText.setText(totalText);
 			this.amountTotalText.setVisible(true);
 
-			const baseX = this.scene.scale.width * 0.5 + this.xTextOffset;
+			const baseX = this.getWinningsCenterX();
 			const baseY = this.amountText.y;
 
 			// Keep the base centered and let the total extend to the right
@@ -381,7 +410,7 @@ export class Header {
 			// Show both texts
 			this.youWonText.setVisible(true);
 			this.amountText.setVisible(true);
-			this.amountText.setPosition(this.scene.scale.width * 0.5 + this.xTextOffset, this.amountText.y);
+			this.amountText.setPosition(this.getWinningsCenterX(), this.amountText.y);
 			
 			// Update amount text with winnings
 			this.amountText.setText(formattedWinnings);
@@ -392,12 +421,30 @@ export class Header {
 				this.amountTotalText.setVisible(false);
 				this.amountTotalText.setText('');
 			}
+
+			// Ensure TOTAL WIN uses green, and everything else uses white
+			this.syncAmountColorToLabel();
 		} else {
 			console.warn('[Header] Cannot show winnings display - text objects not available', {
 				amountText: !!this.amountText,
 				youWonText: !!this.youWonText
 			});
 		}
+	}
+
+	/**
+	 * Display a TOTAL WIN amount in the header (amount in green).
+	 * This is safe to call even if the header normally shows standard winnings.
+	 */
+	public updateDisplayTextToTotalWin(totalWin: number): void {
+		if (!this.youWonText || !this.amountText) {
+			return;
+		}
+
+		this.youWonText.setText('TOTAL WIN');
+		this.showWinningsDisplay(totalWin);
+		// `showWinningsDisplay` defaults to white; re-sync so TOTAL WIN becomes green.
+		this.syncAmountColorToLabel();
 	}
 
 	public animateWinningsDisplay(target: any): void {

@@ -2,6 +2,7 @@ import { SpinData } from "./SpinData";
 import { GameData } from "../game/components/GameData";
 import { gameStateManager } from "../managers/GameStateManager";
 import { SoundEffectType } from "../managers/AudioManager";
+import { DEMO_ALLOW_NO_TOKEN, ENABLE_API_POPUPS } from "../config/GameConfig";
 
 /**
  * Function to parse URL query parameters
@@ -104,6 +105,30 @@ export class GameAPI {
     constructor(gameData: GameData) {
         this.gameData = gameData;
     }   
+
+    private getDemoBalance(): number {
+        return 200000.0;
+    }
+
+    private createDemoSpinData(bet: number): SpinData {
+        const randomSymbol = (): number => 1 + Math.floor(Math.random() * 9); // 1..9 (avoid scatter/multipliers)
+        const area: number[][] = Array.from({ length: 6 }, () =>
+            Array.from({ length: 5 }, () => randomSymbol())
+        );
+
+        const freespin = { count: 0, totalWin: 0, items: [] as any[] };
+
+        return {
+            playerId: 'demo-player',
+            bet: String(bet),
+            slot: {
+                area,
+                paylines: [],
+                freespin,
+                freeSpin: freespin as any
+            } as any
+        };
+    }
 
     /**
      * 1. Generate game URL token upon game initialization
@@ -387,6 +412,9 @@ export class GameAPI {
         try {
             const token = localStorage.getItem('token');
             if (!token) {
+                if (DEMO_ALLOW_NO_TOKEN) {
+                    return { balance: this.getDemoBalance() };
+                }
                 this.showTokenExpiredPopup();
                 throw new Error('No authentication token available');
             }
@@ -430,6 +458,7 @@ export class GameAPI {
      * Show token expired popup to the user
      */
     private showTokenExpiredPopup(): void {
+        if (!ENABLE_API_POPUPS) return;
         try {
             // Find the game scene using phaserGame (as set in main.ts line 146)
             const gameScene = (window as any).phaserGame?.scene?.getScene('Game');
@@ -471,6 +500,11 @@ export class GameAPI {
     public async doSpin(bet: number, isBuyFs: boolean, isEnhancedBet: boolean, isFs: boolean = false): Promise<SpinData> {
         const token = localStorage.getItem('token');
         if (!token) {
+            if (DEMO_ALLOW_NO_TOKEN) {
+                const demo = this.createDemoSpinData(bet);
+                this.currentSpinData = demo;
+                return demo;
+            }
             this.showTokenExpiredPopup();
             throw new Error('No game token available. Please initialize the game first.');
         }
@@ -781,7 +815,7 @@ export class GameAPI {
         } catch (error) {
             console.error('[GameAPI] Error initializing balance:', error);
             // Return a default balance if API call fails
-            const defaultBalance = 0;
+            const defaultBalance = DEMO_ALLOW_NO_TOKEN ? this.getDemoBalance() : 0;
             console.log(`[GameAPI] Using default balance: $${defaultBalance}`);
             return defaultBalance;
         }

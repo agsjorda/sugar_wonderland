@@ -157,6 +157,7 @@ export class Symbols {
     createContainer(this);
     prewarmSymbolSpinePools(this);
     prewarmSparkSpinePool(this);
+    prewarmMultiplierSpinePools(this);
     onStart(this);
     onSpinDataReceived(this);
     this.onSpinDone(this.scene);
@@ -1889,8 +1890,8 @@ export class Symbols {
 
     // In bonus mode, if there was any win on this free spin, add extra delay
     // so the player has more time to see the result before the next spin.
-    if (hadWinThisBonusSpin && gameStateManager.isBonus) {
-      baseDelay += 1000; // +1s on top of the standard delay
+    if (hadWinThisBonusSpin && gameStateManager.isBonus && !gameStateManager.isShowingWinDialog) {
+      baseDelay += 500; // +1s on top of the standard delay
       console.log(
         `[Symbols] Applying extra bonus delay after winning free spin. New baseDelay=${baseDelay}ms`
       );
@@ -2285,6 +2286,25 @@ function prewarmSparkSpinePool(self: Symbols, count: number = 6) {
     } catch (e) {
       console.warn('[Symbols] Failed to prewarm spark Spine pool', e);
       break;
+    }
+  }
+}
+
+function prewarmMultiplierSpinePools(self: Symbols, countEach: number = 3) {
+  // Pre-warm pooled Spine instances used by playMultiplierSymbolAnimations to avoid first-use hitches.
+  const keys = ['shatter_frame', 'multiplier_frame', 'multiplier_dove'];
+  for (const spineKey of keys) {
+    const atlasKey = `${spineKey}-atlas`;
+    for (let i = 0; i < countEach; i++) {
+      try {
+        const spine = acquireSpineFromPool(self, spineKey, atlasKey);
+        if (spine) {
+          releaseSpineToPool(self, spine);
+        }
+      } catch (e) {
+        console.warn('[Symbols] Failed to prewarm multiplier Spine pool for', spineKey, e);
+        break;
+      }
     }
   }
 }
@@ -3856,6 +3876,11 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
     const scale = self.getSpineSymbolScale(10);
     if (cols > 0 && rows > 0) {
       const isTurbo = (self.scene as any)?.gameData?.isTurbo || gameStateManager.isTurbo;
+      const speedMultiplier = isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1;
+      // Stagger each dove’s departure so multiple multipliers don’t all launch at once.
+      // Keep this turbo-scaled so turbo still feels fast.
+      const birdDepartureStaggerMs = 800;
+      let birdDepartureIndex = 0;
       const baseTimeScale = self.getSymbolWinTimeScale(10);
       const timeScale = isTurbo
         ? baseTimeScale * TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER
@@ -3948,13 +3973,13 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
                   shatterSpine.setActive(true);
                   multContainer.add(shatterSpine);
 
-                  const shatterDelay = 500 / (isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
+                  const shatterDelay = 500 / speedMultiplier;
                   self.scene.time.delayedCall(shatterDelay, () => {
                     shatterSpine.setVisible(true);
                     // get first animation in skeleton
                     const animationName = shatterSpine.skeleton?.data?.animations[0]?.name ?? 'animation';
                     shatterSpine.animationState.setAnimation(0, animationName, false);
-                    shatterSpine.animationState.timeScale = 1;
+                    shatterSpine.animationState.timeScale = timeScale;
                   });
                 } catch { }
               }
@@ -4024,8 +4049,10 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
                       ? self.scene.scale.width * 1.2
                       : -self.scene.scale.width * 1.2;
                     leaveTargetY = -self.scene.scale.height * (Math.random() * 0.2 + 0.3);
-                    const speedMultiplier = isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1;
-                    leaveDelay = (Math.random() * 300 + 120) / speedMultiplier;
+                    const baseRandomLeaveDelayMs = (Math.random() * 300 + 120);
+                    const staggerLeaveDelayMs = birdDepartureIndex * birdDepartureStaggerMs;
+                    birdDepartureIndex += 1;
+                    leaveDelay = (baseRandomLeaveDelayMs + staggerLeaveDelayMs) / speedMultiplier;
                     leaveDuration = 1250 / speedMultiplier;
                     const leaveFacingDirection = isOnLeftSide ? 1 : -1;
                     doveSpine.setScale(leaveFacingDirection * scale, scale);
@@ -4052,15 +4079,16 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
                     //
                     // We only care about when everything is visually finished, so use the
                     // actual tween timings (already turbo-adjusted above).
-                    const tweenTailMs = 400;
-                    const extraDelayMs = 150;
+                    const tweenTailMs = 400 / speedMultiplier;
+                    const extraDelayMs = 150 / speedMultiplier;
                     const totalTweenDurationMs = returnDelay + returnDuration + tweenTailMs + extraDelayMs;
                     if (totalTweenDurationMs > localMaxDurationMs) {
                       localMaxDurationMs = totalTweenDurationMs;
                     }
 
                     console.log('[Symbols] returnStartingX ', returnStartingX);
-                    self.scene.time.delayedCall(returnDelay - 50, () => {
+                    const preReturnRepositionMs = 50 / speedMultiplier;
+                    self.scene.time.delayedCall(Math.max(0, returnDelay - preReturnRepositionMs), () => {
                       multContainer.remove(doveSpine);
                       doveSpine.animationState.setAnimation(0, `symbol10_WF`, true);
                       doveSpine.setPosition(returnStartingX, returnStartingY);
@@ -4088,7 +4116,7 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
                           scheduleTranslate(
                             self,
                             valueImage,
-                            50,
+                            50 / speedMultiplier,
                             returnDuration,
                             returnTargetX,
                             returnTargetY + returnValueOffsetY,
@@ -4108,7 +4136,7 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
                           self.scene.tweens.add({
                             targets: valueImage,
                             y: valueImage.y + 20,
-                            duration: 250,
+                            duration: 250 / speedMultiplier,
                             ease: Phaser.Math.Easing.Cubic.In,
                           });
 
@@ -4116,8 +4144,8 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
                           self.scene.tweens.add({
                             targets: valueImage,
                             alpha: 0,
-                            duration: 150,
-                            delay: 250,
+                            duration: 150 / speedMultiplier,
+                            delay: 250 / speedMultiplier,
                             ease: Phaser.Math.Easing.Quadratic.Out,
                             onComplete: () => {
 
@@ -4133,7 +4161,7 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
                         } catch { }
                       }
 
-                      self.scene.time.delayedCall(300, () => {
+                      self.scene.time.delayedCall(300 / speedMultiplier, () => {
                         try { releaseSpineToPool(self, doveSpine); } catch { }
                       });
                     };
@@ -4175,8 +4203,8 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
             }
 
             // Apply subtle scale and translate tweens to the whole multiplier container
-            try { scheduleScaleUp(self, multContainer, 20, 200, 1.05); } catch { }
-            try { scheduleTranslate(self, multContainer, 20, 200, 0, -3); } catch { }
+            try { scheduleScaleUp(self, multContainer, 20 / speedMultiplier, 200 / speedMultiplier, 1.05); } catch { }
+            try { scheduleTranslate(self, multContainer, 20 / speedMultiplier, 200 / speedMultiplier, 0, -3); } catch { }
 
             // Update global maximum duration
             if (localMaxDurationMs > maxDurationMs) {
@@ -4322,13 +4350,19 @@ function createDropPromise(
 ): Promise<void> {
   return new Promise<void>((resolve) => {
     try {
+      // Tumble-only slowdown (requested): affect ONLY tumble "in" symbol drops.
+      // 1.0 = unchanged, 1.5 = ~50% slower (longer), 2.0 = ~2x slower.
+      const TUMBLE_DROP_TIME_MULTIPLIER = 1.5;
       const DROP_STAGGER_MS = (gameData?.tumbleDropStaggerMs ?? (MANUAL_STAGGER_MS * 0.25));
       const computedStartDelay = (gameData?.tumbleDropStartDelayMs ?? 0) + (DROP_STAGGER_MS * sequenceIndex);
       const skipPreHop = !!(gameData?.tumbleSkipPreHop);
       const symbolHop = (gameData?.winUpHeight ?? 0) * 0.5;
-      const dropDuration = isOverlap 
+
+      const preHopDuration = (gameData?.winUpDuration ?? 1000) * TUMBLE_DROP_TIME_MULTIPLIER;
+      const dropDurationBase = isOverlap
         ? ((gameData?.dropDuration ?? 1000) * 1.2)
         : ((gameData?.dropDuration ?? 1000) * 0.9);
+      const dropDuration = dropDurationBase * TUMBLE_DROP_TIME_MULTIPLIER;
       const tweensArr: any[] = [];
       const handleLanding = () => {
         try {
@@ -4351,7 +4385,7 @@ function createDropPromise(
         tweensArr.push({
           delay: computedStartDelay,
           y: `-= ${symbolHop}`,
-          duration: gameData?.winUpDuration ?? 1000,
+          duration: preHopDuration,
           ease: Phaser.Math.Easing.Circular.Out,
         });
         tweensArr.push({

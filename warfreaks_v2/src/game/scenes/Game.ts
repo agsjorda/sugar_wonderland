@@ -393,10 +393,16 @@ export class Game extends Scene
 
 		EventBus.on('show-bet-options', () => {
 			console.log('[Game] Showing bet options with fade-in effect');
-			
-			// Get the current bet from the slot controller display
-			const currentBetText = this.slotController.getBetAmountText();
-			const currentBet = currentBetText ? parseFloat(currentBetText) : 0.20;
+
+			// Bet selection uses the base bet ladder. If Enhanced Bet is ON, the HUD
+			// text may show base*1.25, which must NOT be used as the "current bet"
+			// for the bet options menu.
+			const currentBet = (typeof (this.slotController as any).getBaseBetAmount === 'function')
+				? (this.slotController as any).getBaseBetAmount()
+				: (() => {
+					const currentBetText = this.slotController.getBetAmountText();
+					return currentBetText ? parseFloat(currentBetText) : 0.20;
+				})();
 			
 			this.betOptions.show({
 				currentBet: currentBet,
@@ -416,9 +422,17 @@ export class Game extends Scene
 		// Listen for autoplay button click
 		EventBus.on('autoplay', () => {
 			console.log('[Game] Autoplay button clicked - showing options');
-			
-			const currentBetText = this.slotController.getBetAmountText();
-			const currentBet = currentBetText ? parseFloat(currentBetText) : 0.20;
+
+			// IMPORTANT: Autoplay bet selection is based on the *base bet ladder*.
+			// If Enhanced Bet is ON, the HUD bet text may be base*1.25, which would
+			// cause the autoplay panel to "change" the bet back to base on confirm
+			// and visually break enhanced bet. Always use base bet here.
+			const currentBet = (typeof (this.slotController as any).getBaseBetAmount === 'function')
+				? (this.slotController as any).getBaseBetAmount()
+				: (() => {
+					const currentBetText = this.slotController.getBetAmountText();
+					return currentBetText ? parseFloat(currentBetText) : 0.20;
+				})();
 			
 			// Get the most current balance as a numeric value from the SlotController
 			const currentBalance = this.slotController.getBalanceAmount();
@@ -431,6 +445,12 @@ export class Game extends Scene
 			this.autoplayOptions.show({
 				currentAutoplayCount: 10,
 				currentBet: currentBet,
+				// Use the HUD bet text as the display bet (includes enhanced bet if active)
+				currentBetDisplay: (() => {
+					const betText = this.slotController.getBetAmountText();
+					const parsed = betText ? parseFloat(betText) : Number.NaN;
+					return Number.isFinite(parsed) && parsed > 0 ? parsed : currentBet;
+				})(),
 				currentBalance: currentBalance,
 				onClose: () => {
 					console.log('[Game] Autoplay options closed');

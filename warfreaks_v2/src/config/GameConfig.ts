@@ -24,6 +24,20 @@ export const AUTO_SPIN_WIN_DIALOG_TIMEOUT: number = 2500;
 // Delay before showing tiered win dialogs while in bonus mode (ms)
 export const BONUS_WIN_DIALOG_DELAY_MS: number = 1500;
 
+/**
+ * Internal "demo mode" toggle.
+ * When enabled, the game can run even if there is no API token (no token popups, no hard failures).
+ *
+ * Flip this to `false` to restore normal token-required API behavior.
+ */
+export const DEMO_ALLOW_NO_TOKEN: boolean = false;
+
+/**
+ * API-driven popups (token expired, out-of-balance, etc).
+ * Kept as a derived flag so existing call sites can stay simple.
+ */
+export const ENABLE_API_POPUPS: boolean = !DEMO_ALLOW_NO_TOKEN;
+
 export const MULTIPLIER_VALUE_REFERENCE: { [key: number]: number } = {
   10: 2,
   11: 3,

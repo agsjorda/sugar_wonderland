@@ -13,6 +13,7 @@ import { Symbols } from './Symbols';
 import { SoundEffectType } from '../../managers/AudioManager';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { Dialogs } from "./Dialogs";
+import { ENABLE_API_POPUPS } from '../../config/GameConfig';
 
 export class SlotController {
 	private controllerContainer: Phaser.GameObjects.Container;
@@ -113,6 +114,7 @@ export class SlotController {
 	}
 
 	private showOutOfBalancePopup(message?: string): void {
+		if (!ENABLE_API_POPUPS) return;
 		const scene = this.scene as Scene | null;
 		if (!scene) return;
 		import('./OutOfBalancePopup').then(module => {
@@ -213,7 +215,7 @@ export class SlotController {
 		// Amplify bet button
 		const amplifyButton = this.buttons.get('amplify');
 		if (amplifyButton) {
-			amplifyButton.setAlpha(0.5);
+			amplifyButton.setAlpha(0.3);
 			amplifyButton.disableInteractive();
 			console.log('[SlotController] Amplify bet button disabled for free rounds');
 		}
@@ -1130,6 +1132,10 @@ export class SlotController {
 			this.disableSpinButton();
 			this.disableBetButtons();
 			this.disableFeatureButton();
+			// While processing a spin, disable controls that should not be toggled/opened
+			// (autoplay options menu button + turbo toggle)
+			this.disableAutoplayButton();
+			this.disableTurboButton();
 			this.playSpinButtonAnimation();
 			this.rotateSpinButton();
 
@@ -1160,6 +1166,10 @@ export class SlotController {
 		turboButton.setInteractive();
 		turboButton.on('pointerdown', () => {
 			console.log('[SlotController] Turbo button clicked');
+			if (gameStateManager.isProcessingSpin) {
+				console.log('[SlotController] Turbo toggle blocked - isProcessingSpin=true');
+				return;
+			}
 			this.handleTurboButtonClick();
 		});
 		this.buttons.set('turbo', turboButton);
@@ -1211,6 +1221,12 @@ export class SlotController {
 		autoplayButton.setInteractive();
 		autoplayButton.on('pointerdown', () => {
 			console.log('[SlotController] Autoplay button clicked');
+			// Allow stopping autoplay even while a spin is being processed.
+			// Only block opening the autoplay menu while a spin is processing.
+			if (gameStateManager.isProcessingSpin && !this.isAutoplayActive()) {
+				console.log('[SlotController] Autoplay button blocked - isProcessingSpin=true (autoplay not active)');
+				return;
+			}
 			this.handleAutoplayButtonClick();
 		});
 		this.buttons.set('autoplay', autoplayButton);
@@ -1931,35 +1947,28 @@ export class SlotController {
 	}
 
 	updateBetAmount(betAmount: number): void {
-		// Track the previous base bet so we can detect real bet changes
-		const previousBaseBet = this.baseBetAmount;
+		// NOTE: `betAmount` is always treated as the BASE bet (non-enhanced).
+		// Enhanced/Amplify bet should remain sticky across base bet changes; only the
+		// amplify toggle button should change `isEnhancedBet`.
 
-		
-		if (this.betAmountText) {
+		if (!this.isInternalBetChange) {
+			this.baseBetAmount = betAmount;
+		}
+
+		// Keep the HUD bet text in sync with the current amplify/enhanced bet state.
+		// If Enhanced Bet is ON, display base*1.25; otherwise display base.
+		const gameData = this.getGameData();
+		if (gameData && this.betAmountText) {
+			this.syncDisplayedBetWithAmplifyStateFromBase();
+		} else if (this.betAmountText) {
+			// Fallback if GameData isn't available yet
 			this.betAmountText.setText(betAmount.toFixed(2));
-
-			// Update dollar sign position based on new bet amount width
 			if (this.betDollarText) {
 				const betX = this.betAmountText.x;
 				const betY = this.betAmountText.y;
 				this.betDollarText.setPosition(betX - (this.betAmountText.width / 2) - 5, betY);
 			}
-		}
-
-		// Keep the Buy Feature amount synced with current base bet
-		this.updateFeatureAmountFromCurrentBet();
-
-		// Update base bet amount when changed externally (not by amplify bet)
-		if (!this.isInternalBetChange) {
-			this.baseBetAmount = betAmount;
-			
-			// If the new base bet is the same as before, this is likely a server echo
-			// or harmless re-sync – do NOT treat it as a bet change that should
-			// cancel Enhanced/Amplify Bet.
-			if (previousBaseBet !== betAmount) {
-				// Reset amplify bet state only when the base bet actually changes
-				this.resetAmplifyBetOnBetChange();
-			}
+			this.updateFeatureAmountFromCurrentBet();
 		}
 	}
 
@@ -2113,6 +2122,8 @@ export class SlotController {
 			// Disable bet controls and autoplay button for the duration of the spin
 			this.disableBetButtons();
 			this.disableAutoplayButton();
+			// Requirement: turbo toggle should not be usable while a spin is being processed
+			this.disableTurboButton();
 
 			// Play the spin button spine animation for all spins (manual and autoplay)
 			this.playSpinButtonAnimation();
@@ -2277,6 +2288,7 @@ export class SlotController {
 						}
 						this.enableSpinButton();
 						this.enableAutoplayButton();
+						this.enableTurboButton();
 						this.enableBetButtons();
 						// Keep feature disabled during bonus or until explicitly allowed
 						if (!gameStateManager.isBonus && this.canEnableFeatureButton) {
@@ -2300,6 +2312,7 @@ export class SlotController {
 
 					this.enableSpinButton();
 					this.enableAutoplayButton();
+					this.enableTurboButton();
 					this.enableBetButtons();
 					if (!gameStateManager.isBonus && this.canEnableFeatureButton) {
 						this.enableFeatureButton();
@@ -2392,6 +2405,7 @@ export class SlotController {
 			// Normal case: re-enable all controls
 			this.enableSpinButton();
 			this.enableAutoplayButton();
+			this.enableTurboButton();
 			this.enableBetButtons();
 			this.enableFeatureButton();
 			this.enableAmplifyButton();
@@ -2520,6 +2534,10 @@ export class SlotController {
 	 * Handle turbo button click - toggle between on and off states
 	 */
 	private handleTurboButtonClick(): void {
+		if (gameStateManager.isProcessingSpin) {
+			console.log('[SlotController] Turbo button clicked - blocked while isProcessingSpin=true');
+			return;
+		}
 		const gameData = this.getGameData();
 		if (!gameData) {
 			console.error('[SlotController] GameData not available for turbo button click');
@@ -2638,8 +2656,13 @@ export class SlotController {
 	 * Handle autoplay button click - either start autoplay or stop if already running
 	 */
 	private handleAutoplayButtonClick(): void {
-		// Check if autoplay is currently active
-		if (this.autoplaySpinsRemaining > 0) {
+		const autoplayActive = this.isAutoplayActive();
+		if (gameStateManager.isProcessingSpin && !autoplayActive) {
+			console.log('[SlotController] Autoplay button clicked - blocked while isProcessingSpin=true (autoplay not active)');
+			return;
+		}
+		// If autoplay is active, this button acts as "STOP" (even during spin processing).
+		if (autoplayActive) {
 			// Autoplay is active, stop it
 			console.log('[SlotController] Stopping autoplay via button click');
 			this.stopAutoplay();
@@ -2648,6 +2671,17 @@ export class SlotController {
 			console.log('[SlotController] Showing autoplay options');
 			EventBus.emit('autoplay');
 		}
+	}
+
+	/**
+	 * Returns true when normal autoplay is active (used to decide if the autoplay button should remain usable).
+	 */
+	private isAutoplayActive(): boolean {
+		return !!(
+			this.autoplaySpinsRemaining > 0 ||
+			this.gameData?.isAutoPlaying ||
+			gameStateManager.isAutoPlaying
+		);
 	}
 
 	/**
@@ -2852,9 +2886,14 @@ export class SlotController {
 	public disableTurboButton(): void {
 		const turboButton = this.buttons.get('turbo');
 		if (turboButton) {
-			turboButton.setTint(0x666666); // Grey out the button
+			// Use alpha instead of tint so the button doesn't become too dark/hard to see
+			turboButton.setAlpha(0.3);
 			turboButton.disableInteractive();
 			console.log('[SlotController] Turbo button disabled and greyed out');
+		}
+		// If turbo spine animation is visible, also dim it so the whole control reads "disabled"
+		if (this.turboButtonAnimation && typeof this.turboButtonAnimation.setAlpha === 'function') {
+			this.turboButtonAnimation.setAlpha(0.3);
 		}
 	}
 
@@ -2864,29 +2903,39 @@ export class SlotController {
 	public enableTurboButton(): void {
 		const turboButton = this.buttons.get('turbo');
 		if (turboButton) {
-			turboButton.clearTint(); // Remove grey tint
+			// Restore visibility + interaction
+			turboButton.setAlpha(1.0);
+			// Backwards-compat: clear any older tint-based disable state
+			turboButton.clearTint();
 			turboButton.setInteractive();
 			console.log('[SlotController] Turbo button enabled');
+		}
+		if (this.turboButtonAnimation && typeof this.turboButtonAnimation.setAlpha === 'function') {
+			this.turboButtonAnimation.setAlpha(1.0);
 		}
 	}
 
 	/**
-	 * Disable the amplify button (disable interaction only, no visual changes)
+	 * Disable the amplify button.
+	 * When non-interactable, it should appear visually disabled (30% opacity).
 	 */
 	public disableAmplifyButton(): void {
 		const amplifyButton = this.buttons.get('amplify');
 		if (amplifyButton) {
+			// Visual disabled state
+			amplifyButton.setAlpha(0.3);
 			amplifyButton.removeInteractive();
 			console.log('[SlotController] Amplify button disabled');
 		}
 	}
 
 	/**
-	 * Enable the amplify button (enable interaction)
+	 * Enable the amplify button (restore interaction + full opacity)
 	 */
 	public enableAmplifyButton(): void {
 		const amplifyButton = this.buttons.get('amplify');
 		if (amplifyButton) {
+			amplifyButton.setAlpha(1.0);
 			amplifyButton.setInteractive();
 			console.log('[SlotController] Amplify button enabled');
 		}
@@ -2904,9 +2953,9 @@ export class SlotController {
 		const turboButton = this.buttons.get('turbo');
 		if (!turboButton) return;
 
-		// Disable turbo button if spinning, enable otherwise
-		if (gameStateManager.isReelSpinning) {
-			console.log(`[SlotController] Disabling turbo button - isReelSpinning: ${gameStateManager.isReelSpinning}`);
+		// Disable turbo button if a spin is active/being processed, enable otherwise
+		if (gameStateManager.isReelSpinning || gameStateManager.isProcessingSpin) {
+			console.log(`[SlotController] Disabling turbo button - isReelSpinning: ${gameStateManager.isReelSpinning}, isProcessingSpin: ${gameStateManager.isProcessingSpin}`);
 			this.disableTurboButton();
 		} else {
 			console.log(`[SlotController] Enabling turbo button - not spinning`);
@@ -3567,12 +3616,21 @@ export class SlotController {
 	/**
  * Disable the autoplay button (grey out and disable interaction)
  */
-	public disableAutoplayButton(): void {
+	public disableAutoplayButton(force: boolean = false): void {
+		// While autoplay is active, keep the button interactive so the player can stop autoplay
+		// even if a spin is being processed. Use force=true for flows that must lock the button.
+		if (!force && this.isAutoplayActive()) {
+			return;
+		}
 		const autoplayButton = this.buttons.get('autoplay');
 		if (autoplayButton) {
-			autoplayButton.setTint(0x666666); // Grey out the button
+			// Use alpha instead of tint so the button doesn't become too dark/hard to see
+			autoplayButton.setAlpha(0.3);
 			autoplayButton.disableInteractive();
 			console.log('[SlotController] Autoplay button disabled and greyed out');
+		}
+		if (this.autoplayButtonAnimation && typeof this.autoplayButtonAnimation.setAlpha === 'function') {
+			this.autoplayButtonAnimation.setAlpha(0.3);
 		}
 	}
 
@@ -3588,11 +3646,22 @@ export class SlotController {
 		this.scene?.time.delayedCall(this.buttonReenableDelay, () => {
 			this.inProcessOfReenablingAutoplayButton = false;
 
+			// If a new spin started while we were waiting to re-enable, keep autoplay disabled,
+			// unless autoplay is active (button should remain usable as "STOP").
+			if (gameStateManager.isProcessingSpin && !this.isAutoplayActive()) {
+				return;
+			}
+
 			const autoplayButton = this.buttons.get('autoplay');
 			if (autoplayButton) {
-				autoplayButton.clearTint(); // Remove grey tint
+				autoplayButton.setAlpha(1.0);
+				// Backwards-compat: clear any older tint-based disable state
+				autoplayButton.clearTint();
 				autoplayButton.setInteractive();
 				console.log('[SlotController] Autoplay button enabled');
+			}
+			if (this.autoplayButtonAnimation && typeof this.autoplayButtonAnimation.setAlpha === 'function') {
+				this.autoplayButtonAnimation.setAlpha(1.0);
 			}
 		});
 	}
@@ -3609,12 +3678,13 @@ export class SlotController {
 		const autoplayButton = this.buttons.get('autoplay');
 		if (!autoplayButton) return;
 
-		// Disable autoplay button if spinning, enable otherwise
-		if (gameStateManager.isReelSpinning) {
-			console.log(`[SlotController] Disabling autoplay button - isReelSpinning: ${gameStateManager.isReelSpinning}`);
+		// Disable autoplay button if a spin is active/being processed, unless autoplay is active
+		// (in that case, keep it enabled so the player can stop autoplay).
+		if ((gameStateManager.isReelSpinning || gameStateManager.isProcessingSpin) && !this.isAutoplayActive()) {
+			console.log(`[SlotController] Disabling autoplay button - isReelSpinning: ${gameStateManager.isReelSpinning}, isProcessingSpin: ${gameStateManager.isProcessingSpin}`);
 			this.disableAutoplayButton();
 		} else {
-			console.log(`[SlotController] Enabling autoplay button - not spinning`);
+			console.log(`[SlotController] Enabling autoplay button - ${this.isAutoplayActive() ? 'autoplay active' : 'not spinning'}`);
 			this.enableAutoplayButton();
 		}
 	}
@@ -3655,6 +3725,10 @@ export class SlotController {
 	private async handleSpin(): Promise<void> {
 		// Ensure processing flag is set when any spin path begins (covers autoplay and other callers)
 		gameStateManager.isProcessingSpin = true;
+		// While processing a spin, do not allow opening autoplay options or toggling turbo
+		// Keep autoplay button enabled during autoplay (allow STOP while spin is processing).
+		this.disableAutoplayButton();
+		this.disableTurboButton();
 
 		// Apply any pending turbo toggle so it takes effect for this spin
 		this.applyPendingTurboState('spin-start');
@@ -3681,6 +3755,7 @@ export class SlotController {
 				this.showOutOfBalancePopup();
 				this.enableSpinButton();
 				this.enableAutoplayButton();
+				this.enableTurboButton();
 				this.enableBetButtons();
 				this.enableFeatureButton();
 				this.enableAmplifyButton();
@@ -3774,6 +3849,9 @@ export class SlotController {
 					gameStateManager.isReelSpinning = false;
 					gameStateManager.isProcessingSpin = false;
 					this.enableSpinButton();
+					this.enableAutoplayButton();
+					this.enableTurboButton();
+					this.enableBetButtons();
 					return;
 				}
 			}
@@ -3835,6 +3913,7 @@ export class SlotController {
 			// Allow UI controls to recover in case of error and avoid emitting spin events
 			this.enableSpinButton();
 			this.enableAutoplayButton();
+			this.enableTurboButton();
 			this.enableBetButtons();
 			this.enableFeatureButton();
 			this.enableAmplifyButton();
@@ -3863,7 +3942,7 @@ export class SlotController {
 				console.log('[SlotController] Buy feature confirmed');
 				// Immediately disable interactions to prevent other actions
 				this.disableSpinButton();
-				this.disableAutoplayButton();
+				this.disableAutoplayButton(true);
 				this.disableFeatureButton();
 				this.disableBetButtons();
 				this.disableAmplifyButton();
@@ -3901,6 +3980,7 @@ export class SlotController {
 			// Re-enable controls since purchase cannot proceed
 			this.enableSpinButton();
 			this.enableAutoplayButton();
+			this.enableTurboButton();
 			this.enableFeatureButton();
 			this.enableBetButtons();
 			this.enableAmplifyButton();
@@ -3967,6 +4047,7 @@ export class SlotController {
 			// Re-enable controls on error to avoid locking the UI
 			this.enableSpinButton();
 			this.enableAutoplayButton();
+			this.enableTurboButton();
 			this.enableFeatureButton();
 			this.enableBetButtons();
 			this.enableAmplifyButton();
@@ -4068,7 +4149,7 @@ export class SlotController {
 
 			// Keep controls disabled/greyed out while scatter/bonus sequence proceeds
 			this.disableSpinButton();
-			this.disableAutoplayButton();
+			this.disableAutoplayButton(true);
 			this.disableAmplifyButton();
 
 			console.log(`[SlotController] Scatter bonus activated with index ${data.scatterIndex} and ${data.actualFreeSpins} free spins - hiding primary controller, free spin display will appear after dialog closes`);
