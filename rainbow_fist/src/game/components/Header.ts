@@ -29,11 +29,15 @@ export class Header {
 	private scene: Game;
 	private currentMultiplier: number = 0;
 
-	private winningsLabelTextOffset: {x: number, y: number} = {x: 0, y: -14};
-	private winningsValueTextOffset: {x: number, y: number} = {x: 0, y: 6};
+	// Slightly adjusted for larger font sizes (amount +2px, label +2px)
+	private winningsLabelTextOffset: {x: number, y: number} = {x: 0, y: -16};
+	private winningsValueTextOffset: {x: number, y: number} = {x: 0, y: 7};
 	private multiplierNumberDisplayOffset: {x: number, y: number} = {x: 12, y: 0};
 
 	private totalAmountTextColor: string = '#00ff00';
+	// Theme-contrasting outline used across the UI (see SlotController/Preloader)
+	private textStrokeColor: string = '#004400'; // dark green
+	private textStrokeThickness: number = 2;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -194,25 +198,29 @@ export class Header {
 	private createWinBarText(scene: Scene, x: number, y: number): void {
 		// Line 1: "YOU WON"
 		this.youWonText = scene.add.text(x + this.winningsLabelTextOffset.x, y + this.winningsLabelTextOffset.y, 'YOU WON', {
-			fontSize: '12px',
+			fontSize: '14px',
 			color: '#ffffff',
-			fontFamily: 'Poppins-Regular'
+			fontFamily: 'Poppins-Regular',
 		}).setOrigin(0.5, 0.5).setDepth(301); // Higher depth than win bar, above idle symbols (0) but below winning symbols (600) and overlay (500)
 		this.headerContainer.add(this.youWonText);
 
 		// Line 2: "$ 0.00" with bold formatting (base winnings / expression prefix)
 		this.amountText = scene.add.text(x + this.winningsValueTextOffset.x, y + this.winningsValueTextOffset.y, '$ 0.00', {
-			fontSize: '20px',
+			fontSize: '22px',
 			color: '#ffffff',
-			fontFamily: 'Poppins-Bold'
+			fontFamily: 'Poppins-Bold',
+			stroke: this.textStrokeColor,
+			strokeThickness: this.textStrokeThickness,
 		}).setOrigin(0.5, 0.5).setDepth(301); // Higher depth than win bar, above idle symbols (0) but below winning symbols (600) and overlay (500)
 		this.headerContainer.add(this.amountText);
 
 		// Separate text object for the total winnings part (shown in green)
-		this.amountTotalText = scene.add.text(x, y + 7, '', {
-			fontSize: '18px',
+		this.amountTotalText = scene.add.text(x + this.winningsValueTextOffset.x, y + this.winningsValueTextOffset.y, '', {
+			fontSize: '22px',
 			color: '#ffffff',
-			fontFamily: 'Poppins-Bold'
+			fontFamily: 'Poppins-Bold',
+			stroke: this.textStrokeColor,
+			strokeThickness: this.textStrokeThickness,
 		}).setOrigin(0, 0.5).setDepth(301); // Above idle symbols (0) but below winning symbols (600) and overlay (500)
 		this.amountTotalText.setVisible(false);
 		this.headerContainer.add(this.amountTotalText);
@@ -262,6 +270,21 @@ export class Header {
 					formattedTotalWinnings
 				);
 			});
+		});
+
+		// When the win sequence completes, the displayed winnings represent the total win for the spin.
+		// Color that total in green; other update paths (e.g. WIN_START/REELS_START) reset back to white.
+		gameEventManager.on(GameEventType.WIN_STOP, () => {
+			// If we're currently showing an equation (prefix + separate total), the total is already green.
+			if (this.amountTotalText?.visible) {
+				return;
+			}
+
+			if (this.amountText && this.currentWinnings > 0) {
+				this.amountText.setColor(this.totalAmountTextColor);
+				// For green total win, use the same theme stroke
+				this.amountText.setStroke(this.textStrokeColor, this.textStrokeThickness);
+			}
 		});
 
 		// Note: SPIN_RESPONSE event listener removed - now using SPIN_DATA_RESPONSE
@@ -344,6 +367,7 @@ export class Header {
 
 			// Reset color to default white for regular winnings display
 			this.amountText.setColor('#ffffff');
+			this.amountText.setStroke(this.textStrokeColor, this.textStrokeThickness);
 			this.amountText.setText(formattedWinnings);
 			this.amountText.setPosition(this.scene.scale.width * 0.5, this.amountText.y);
 			console.log(`[Header] Winnings updated to: ${formattedWinnings} (raw: ${winnings})`);
@@ -362,6 +386,7 @@ export class Header {
 		if (this.amountText) {
 			// Base expression (e.g. "$ 10.00  x  5  =  ") stays white
 			this.amountText.setColor('#ffffff');
+			this.amountText.setStroke(this.textStrokeColor, this.textStrokeThickness);
 			this.amountText.setText(prefixText);
 			this.amountText.setVisible(true);
 		}
@@ -369,6 +394,8 @@ export class Header {
 		if (this.amountTotalText) {
 			// Total winnings (e.g. "$ 50.00") is rendered separately in green
 			this.amountTotalText.setColor(this.totalAmountTextColor);
+			// When the value is green, use the same theme stroke
+			this.amountTotalText.setStroke(this.textStrokeColor, this.textStrokeThickness);
 			this.amountTotalText.setText(totalText);
 			this.amountTotalText.setVisible(true);
 
@@ -419,6 +446,7 @@ export class Header {
 			
 			// Reset color to default white when showing standard winnings
 			this.amountText.setColor('#ffffff');
+			this.amountText.setStroke(this.textStrokeColor, this.textStrokeThickness);
 
 			// Show both texts
 			this.youWonText.setVisible(true);

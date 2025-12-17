@@ -180,8 +180,9 @@ export class Game extends Scene
 
 		const startStartupFadeIn = () => {
 			// Small buffer so any first-tick UI toggles (mode/visibility/state) happen while still fully black.
-			const holdMs = 120;
-			const fadeMs = 650;
+			// Keep this short so the player gets control quickly.
+			const holdMs = 60;
+			const fadeMs = 350;
 
 			this.time.delayedCall(holdMs, () => {
 				this.tweens.add({

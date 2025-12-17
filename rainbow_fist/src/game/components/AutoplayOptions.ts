@@ -416,6 +416,7 @@ export class AutoplayOptions {
 		buttonImage.setInteractive();
 		buttonImage.on('pointerdown', () => {
 			playUtilityButtonSfx(scene);
+			if (this.onConfirmCallback) this.onConfirmCallback(this.currentAutoplayCount);
 			if (this.container.scene) {
 				this.container.scene.tweens.add({
 					targets: this.container,
@@ -423,7 +424,6 @@ export class AutoplayOptions {
 					duration: 400,
 					ease: 'Power2.in',
 					onComplete: () => {
-						if (this.onConfirmCallback) this.onConfirmCallback(this.currentAutoplayCount);
 						this.hide();
 					}
 				});

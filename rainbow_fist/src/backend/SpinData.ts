@@ -107,6 +107,130 @@ export interface FreespinItem {
  */
 export class SpinDataUtils {
   /**
+   * Multiplier symbol indices used by this game.
+   * (Matches the multiplier index mapping used in `Symbols.ts`: 11..25)
+   */
+  static isMultiplierSymbolIndex(symbol: unknown): boolean {
+    return typeof symbol === 'number' && Number.isFinite(symbol) && symbol >= 11 && symbol <= 25;
+  }
+
+  /**
+   * Get tumble items from a spin payload.
+   * Supports both base-game tumbles (`slot.tumbles`) and bonus/free-spin tumbles (`freespin.items[i].tumble`).
+   *
+   * The backend shape is handled defensively:
+   * - container could be `{ items: [...] }`
+   * - or directly an array `[...]`
+   */
+  static getTumbleItems(spinData: any, freeSpinIndex?: number): any[] {
+    if (!spinData || !spinData.slot) return [];
+    const slotAny = spinData.slot as any;
+
+    const getContainerItems = (container: any): any[] => {
+      if (!container) return [];
+      if (Array.isArray(container?.items)) return container.items;
+      if (Array.isArray(container)) return container;
+      return [];
+    };
+
+    // Prefer explicit free-spin tumble when a freeSpinIndex is provided
+    if (typeof freeSpinIndex === 'number' && freeSpinIndex >= 0) {
+      const fs = slotAny.freespin || slotAny.freeSpin;
+      const fsItem = fs?.items?.[freeSpinIndex];
+      const fsTumble = fsItem?.tumble;
+      const fsItems = getContainerItems(fsTumble);
+      if (fsItems.length > 0) return fsItems;
+    }
+
+    // Base-game tumbles
+    return getContainerItems(slotAny.tumbles);
+  }
+
+  /**
+   * True if the spin has any symbol matches (either paylines, or tumble outs).
+   */
+  static hasAnyMatch(spinData: SpinData | any, freeSpinIndex?: number): boolean {
+    if (!spinData) return false;
+
+    // Base wins from paylines
+    const hasPaylines = this.hasWins(spinData as SpinData);
+    if (hasPaylines) return true;
+
+    // Tumble wins: any out entry with a positive count indicates a match occurred
+    const tumbleItems = this.getTumbleItems(spinData, freeSpinIndex);
+    for (const t of tumbleItems) {
+      const outs = t?.symbols?.out;
+      if (!Array.isArray(outs)) continue;
+      for (const outEntry of outs) {
+        const c = Number(outEntry?.count ?? 0);
+        if (Number.isFinite(c) && c > 0) return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * True if the spin/tumble chain contains any multiplier symbols (either via payline multipliers,
+   * or present in the visible grid / tumble ins/outs).
+   */
+  static hasAnyMultiplierSymbol(spinData: SpinData | any, freeSpinIndex?: number): boolean {
+    if (!spinData) return false;
+
+    // 1) Payline multiplier metadata (if present)
+    const paylines = (spinData && spinData.slot && Array.isArray((spinData.slot as any).paylines))
+      ? ((spinData.slot as any).paylines as any[])
+      : [];
+    for (const payline of paylines) {
+      const multipliers = Array.isArray(payline?.multipliers) ? payline.multipliers : [];
+      for (const m of multipliers) {
+        const cnt = Number(m?.count ?? 0);
+        if (Number.isFinite(cnt) && cnt > 0 && this.isMultiplierSymbolIndex(m?.symbol)) {
+          return true;
+        }
+      }
+    }
+
+    // Helper to scan a column-major numeric grid (area[col][row])
+    const scanArea = (area: any): boolean => {
+      if (!Array.isArray(area)) return false;
+      for (const col of area) {
+        if (!Array.isArray(col)) continue;
+        for (const v of col) {
+          if (this.isMultiplierSymbolIndex(v)) return true;
+        }
+      }
+      return false;
+    };
+
+    // 2) Visible grid
+    if (scanArea((spinData as any)?.slot?.area)) return true;
+
+    // 3) Tumble ins/outs can introduce/remove multipliers
+    const tumbleItems = this.getTumbleItems(spinData, freeSpinIndex);
+    for (const t of tumbleItems) {
+      // symbols.in is per-column arrays of new symbol indices
+      const ins = t?.symbols?.in;
+      if (Array.isArray(ins)) {
+        for (const colArr of ins) {
+          if (!Array.isArray(colArr)) continue;
+          for (const v of colArr) {
+            if (this.isMultiplierSymbolIndex(v)) return true;
+          }
+        }
+      }
+      const outs = t?.symbols?.out;
+      if (Array.isArray(outs)) {
+        for (const outEntry of outs) {
+          if (this.isMultiplierSymbolIndex(outEntry?.symbol)) return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Calculate total win amount from all paylines
    */
   static getTotalWin(spinData: SpinData): number {

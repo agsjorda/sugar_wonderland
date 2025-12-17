@@ -23,6 +23,21 @@ export class TestBed extends Scene {
 	}
 
 	init() {
+		// If the HTML bootloader overlay is present, hide it when entering TestBed directly.
+		// (When TestBed is first in the Phaser scene list, Boot/Preloader never run.)
+		try {
+			const hideBootLoader = (window as any).hideBootLoader;
+			if (typeof hideBootLoader === 'function') {
+				hideBootLoader();
+			}
+			const setBootLoaderProgress = (window as any).setBootLoaderProgress;
+			if (typeof setBootLoaderProgress === 'function') {
+				setBootLoaderProgress(1);
+			}
+		} catch (_e) {
+			/* no-op */
+		}
+
 		console.log('[TestBed] init');
 		EventBus.emit('current-scene-ready', this);
 	}
@@ -56,10 +71,10 @@ export class TestBed extends Scene {
 		// this.displaySuperWinSpine({ x: 0.5, y: 0.5 });
 
 		this.displaySymbolSpine(0, scale, { x: 0.2, y: 0.75 }, 0, false);
-		this.displaySymbolSpine(1, scale, { x: 0.5, y: 0.75 }, 1);
-		this.displaySymbolSpine(2, scale, { x: 0.8, y: 0.75 }, 1);
-		this.displaySymbolSpine(3, scale, { x: 0.2, y: 0.85 }, 1);
-		this.displaySymbolSpine(4, scale, { x: 0.5, y: 0.85 }, 1);
+		this.displaySymbolSpine(1, 0.5, { x: 0.5, y: 0.5 }, 0);
+		this.displaySymbolSpine(2, scale, { x: 0.5, y: 0.5 }, 0);
+		this.displaySymbolSpine(3, scale, { x: 0.5, y: 0.5 }, 0);
+		this.displaySymbolSpine(4, scale, { x: 0.5, y: 0.5 }, 0);
 		this.displaySymbolSpine(5, scale, { x: 0.8, y: 0.85 }, 0, false);
 		this.displaySymbolSpine(5, scale, { x: 0.2, y: 0.95 }, 1);
 		this.displaySymbolSpine(5, scale, { x: 0.5, y: 0.95 }, 2);

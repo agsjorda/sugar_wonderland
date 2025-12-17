@@ -24,9 +24,6 @@ Symbol4_RF_2.webp
 size:2024,2024
 filter:Linear,Linear
 pma:true
-Light Rays
-bounds:901,145,147,797
-offsets:45,3,228,979
 Particles/VFX_00002
 bounds:1192,573,713,669
 offsets:392,414,1500,1500
@@ -40,9 +37,9 @@ Particles/VFX_00013
 bounds:2,944,1188,1075
 offsets:145,179,1500,1500
 R ribbon
-bounds:1050,2,670,569
+bounds:901,2,670,569
 center
-bounds:1722,204,179,367
+bounds:1573,204,179,367
 
 Symbol4_RF_3.webp
 size:1816,1816

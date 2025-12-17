@@ -25,6 +25,7 @@ const config: Phaser.Types.Core.GameConfig = {
 		}
 	},
 	scene: [
+		// TestBed,
 		Boot,
 		Preloader,
 		MainGame,

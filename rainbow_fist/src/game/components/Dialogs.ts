@@ -338,7 +338,9 @@ export class Dialogs {
 		}
 
 		this.dialogSpinesPrewarmed = true;
-		const uniqueSpineNames = Array.from(new Set(Object.values(this.dialogSpineNames)));
+		// Prewarm dialog spines to avoid first-use hitches, but skip MaxWin for now (heavy + rarely hit).
+		const uniqueSpineNames = Array.from(new Set(Object.values(this.dialogSpineNames)))
+			.filter((spineName) => spineName !== 'max_win');
 
 		for (const spineName of uniqueSpineNames) {
 			const spine = this.instantiateDialogSpine(scene, spineName);

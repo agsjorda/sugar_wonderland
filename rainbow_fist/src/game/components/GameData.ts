@@ -19,14 +19,14 @@ export class GameData {
 	// Drop overshoot/settle tuning (used by Symbols.ts drop tweens)
 	// If null/undefined, Symbols.ts will use its built-in defaults.
 	public dropOvershootPx: number | null = 25;
-	public dropOvershootFallFraction: number | null = 0.7; // 0..1 (portion of time spent falling into the overshoot)
+	public dropOvershootFallFraction: number | null = 0.6; // 0..1 (portion of time spent falling into the overshoot)
 	public tumbleDropOvershootPx: number | null = 25;
-	public tumbleDropOvershootFallFraction: number | null = 0.7; // 0..1
+	public tumbleDropOvershootFallFraction: number | null = 0.6; // 0..1
 	// Compression overshoot/settle tuning (used by Symbols.ts compression tweens)
-	public compressionOvershootPx: number | null = 5; // overshoot distance in pixels
+	public compressionOvershootPx: number | null = 10; // overshoot distance in pixels
 	public compressionOvershootFallFraction: number | null = 0.4; // 0..1 (portion of time spent falling into the overshoot)
 	// Tumble-only timing controls (do not affect global spin timings)
-	public tumbleStaggerMs: number = 250; // base stagger used by tumble sequences
+	public tumbleStaggerMs: number = 200; // base stagger used by tumble sequences
 	public tumbleDropStaggerMs: number | null = null; // if null, defaults to tumbleStaggerMs * 0.25
 	public tumbleDropStartDelayMs: number = 50; // additional start delay before dropping ins (post-compression)
 	public tumbleSkipPreHop: boolean = false; // if true, skip pre-hop and start falling immediately
@@ -49,7 +49,7 @@ import { DROP_REEL_START_INTERVAL_RATIO } from '../../config/GameConfig';
 
 // Global time multiplier for symbol drop and reset animations
 // Lower than 1.0 = faster; higher than 1.0 = slower
-export const DROP_RESET_TIME_MULTIPLIER: number = 1.2;
+export const DROP_RESET_TIME_MULTIPLIER: number = 1.1;
 
 export function setSpeed(data: GameData, DELAY_BETWEEN_SPINS: number) {
 	// Apply global multiplier to win-up (reset) and drop durations

@@ -1,7 +1,7 @@
 Symbol3_RF.webp
 size:2044,2044
 filter:Linear,Linear
-pma:false
+pma:true
 Comp 1/Heart_00000
 bounds:2038,2038,1,1
 Comp 1/Heart_00001
@@ -26,7 +26,7 @@ offsets:39,51,500,286
 Symbol3_RF_2.webp
 size:1448,1448
 filter:Linear,Linear
-pma:false
+pma:true
 boots 2
 bounds:2,2,1333,1443
 offsets:2,1,1337,1446
@@ -34,7 +34,7 @@ offsets:2,1,1337,1446
 Symbol3_RF_3.webp
 size:2048,2048
 filter:Linear,Linear
-pma:false
+pma:true
 Comp 1/Heart_00005
 bounds:1112,112,932,836
 offsets:272,299,1500,1500
@@ -48,7 +48,7 @@ offsets:26,207,1500,1500
 Symbol3_RF_4.webp
 size:1992,1992
 filter:Linear,Linear
-pma:false
+pma:true
 Comp 1/Heart_00004
 bounds:1031,130,823,765
 offsets:325,328,1500,1500
@@ -62,7 +62,7 @@ offsets:25,209,1500,1500
 Symbol3_RF_5.webp
 size:1844,1844
 filter:Linear,Linear
-pma:false
+pma:true
 Comp 1/Heart_00019
 bounds:2,754,1435,1088
 offsets:26,212,1500,1500
@@ -73,7 +73,7 @@ offsets:39,227,1500,1500
 Symbol3_RF_6.webp
 size:1432,1432
 filter:Linear,Linear
-pma:false
+pma:true
 Comp 1/Heart_00016
 bounds:2,336,1427,1093
 offsets:29,206,1500,1500
@@ -81,7 +81,7 @@ offsets:29,206,1500,1500
 Symbol3_RF_7.webp
 size:1436,1436
 filter:Linear,Linear
-pma:false
+pma:true
 Comp 1/Heart_00020
 bounds:2,351,1432,1083
 offsets:27,215,1500,1500
@@ -89,7 +89,7 @@ offsets:27,215,1500,1500
 Symbol3_RF_8.webp
 size:1424,1424
 filter:Linear,Linear
-pma:false
+pma:true
 Comp 1/Heart_00015
 bounds:2,327,1417,1092
 offsets:34,205,1500,1500
@@ -97,7 +97,7 @@ offsets:34,205,1500,1500
 Symbol3_RF_9.webp
 size:1408,1408
 filter:Linear,Linear
-pma:false
+pma:true
 Comp 1/Heart_00014
 bounds:2,318,1403,1087
 offsets:41,206,1500,1500
@@ -105,7 +105,7 @@ offsets:41,206,1500,1500
 Symbol3_RF_10.webp
 size:1388,1388
 filter:Linear,Linear
-pma:false
+pma:true
 Comp 1/Heart_00013
 bounds:2,306,1383,1079
 offsets:50,208,1500,1500
@@ -113,7 +113,7 @@ offsets:50,208,1500,1500
 Symbol3_RF_11.webp
 size:1364,1364
 filter:Linear,Linear
-pma:false
+pma:true
 Comp 1/Heart_00012
 bounds:2,291,1357,1068
 offsets:63,211,1500,1500
@@ -121,7 +121,7 @@ offsets:63,211,1500,1500
 Symbol3_RF_12.webp
 size:2040,2040
 filter:Linear,Linear
-pma:false
+pma:true
 Comp 1/Heart_00008
 bounds:2,2,1177,978
 offsets:151,243,1500,1500
@@ -130,19 +130,17 @@ bounds:2,982,1325,1053
 offsets:79,216,1500,1500
 
 Symbol3_RF_13.webp
-size:2044,2044
+size:1288,1288
 filter:Linear,Linear
-pma:false
+pma:true
 Comp 1/Heart_00010
-bounds:2,1004,1284,1035
+bounds:2,251,1284,1035
 offsets:99,222,1500,1500
-Star
-bounds:2,2,1000,1000
 
 Symbol3_RF_14.webp
 size:1240,1240
 filter:Linear,Linear
-pma:false
+pma:true
 Comp 1/Heart_00009
 bounds:2,227,1235,1010
 offsets:123,231,1500,1500
@@ -150,7 +148,7 @@ offsets:123,231,1500,1500
 Symbol3_RF_15.webp
 size:1152,1152
 filter:Linear,Linear
-pma:false
+pma:true
 Comp 1/Heart_00021
 bounds:2,106,1148,1044
 offsets:30,219,1500,1500
@@ -158,7 +156,7 @@ offsets:30,219,1500,1500
 Symbol3_RF_16.webp
 size:1076,1076
 filter:Linear,Linear
-pma:false
+pma:true
 Comp 1/Heart_00022
 bounds:2,37,1072,1037
 offsets:34,223,1500,1500

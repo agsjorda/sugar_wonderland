@@ -26,6 +26,12 @@ export class Symbols {
   public showWireframes: boolean = false; // Toggle to show/hide wireframe boxes
   public showMaskWireframe: boolean = false; // Toggle to show/hide mask wireframe
 
+  /**
+   * True while a reel drop/tumble sequence is actively animating.
+   * Used to prevent "cleanup" routines (often triggered by dialogs/transitions) from killing in-flight drop tweens.
+   */
+  public isReelDropping: boolean = false;
+
   public wireframeBoxes: Phaser.GameObjects.Graphics[] = [];
   public maskWireframe?: Phaser.GameObjects.Graphics;
 
@@ -137,22 +143,22 @@ export class Symbols {
       1: { x: 0.46, y: 0.6 },
       2: { x: 0.5, y: 0.5 },
       3: { x: 0.5, y: 0.5 },
-      4: { x: 0.5, y: 0.625 },
+      4: { x: 0.5, y: 0.55 },
       5: { x: 0.5, y: 0.5 },
       6: { x: 0.5, y: 0.5 },
       7: { x: 0.5, y: 0.5 },
       8: { x: 0.5, y: 0.5 },
       9: { x: 0.5, y: 0.5 },
-      10: { x: 0.55, y: 0.6 },
+      10: { x: 0.5, y: 0.6 },
     }
 
   // Configuration for Spine symbol scales - adjust these values manually
   public static readonly SPINE_SYMBOL_SCALES: { [key: number]: number } = {
     0: 0.045,   // Symbol0_RF scale (scatter)
-    1: 0.046,  // Symbol1_RF scale (HP)
-    2: 0.053,  // Symbol2_RF scale (HP)
-    3: 0.039,  // Symbol3_RF scale (HP)
-    4: 0.039,  // Symbol4_RF scale (HP)
+    1: 0.51,  // Symbol1_RF scale (HP)
+    2: 0.054,  // Symbol2_RF scale (HP)
+    3: 0.045,  // Symbol3_RF scale (HP)
+    4: 0.041,  // Symbol4_RF scale (HP)
     5: 0.1,  // Symbol5_RF scale (LP)
     6: 0.1,  // Symbol6_RF scale (LP)
     7: 0.1,  // Symbol7_RF scale (LP)
@@ -160,6 +166,20 @@ export class Symbols {
     9: 0.1,  // Symbol9_RF scale (LP)
     10: 0.055,  // Symbol10_RF scale (multiplier)
   };
+
+  /**
+   * Scatter (value 0) is rendered as a PNG on the reels (Spine is only used for the big center hit).
+   * Use a multiplier here to make the Scatter PNG visually larger than the standard symbol box.
+   */
+  public static readonly SCATTER_PNG_SCALE_MULTIPLIER: number = 1.2;
+
+  /**
+   * When scaling Scatter up, optionally offset it to keep it visually aligned inside the symbol box.
+   * Default behavior: keep the *bottom* of the sprite aligned (shift up as it scales up).
+   * - 0.0 = no auto-offset
+   * - 1.0 = full bottom alignment correction
+   */
+  public static readonly SCATTER_PNG_BOTTOM_ALIGN_FACTOR: number = 1.0;
 
   // Store current symbol data for reset purposes
   public currentSymbolData: number[][] | null = null;
@@ -325,6 +345,9 @@ export class Symbols {
       }
 
       // Reset any symbol tints/effects that might be active
+      // IMPORTANT: Do not kill active tweens here. Dialogs can close while reel drop tweens
+      // are still running (especially around bonus transitions / large win dialogs). Killing
+      // tweens mid-chain leaves symbols stuck partway through their drop.
       this.resetSymbolsState();
     });
 
@@ -342,7 +365,11 @@ export class Symbols {
       this.stopAllSpineAnimations();
 
       // Then stop all other animations and convert Spine symbols back to PNG
-      this.stopAllSymbolAnimations();
+      if (this.isReelDropping) {
+        console.log('[Symbols] Skipping stopAllSymbolAnimations because reel drop is in progress');
+      } else {
+        this.stopAllSymbolAnimations();
+      }
 
       // Restore all symbols to visible state
       this.restoreSymbolVisibility();
@@ -568,6 +595,13 @@ export class Symbols {
   public stopAllSymbolAnimations(): void {
     console.log('[Symbols] Stopping all active symbol animations (no PNG reversion)...');
 
+    // Important: during reel drops we must not kill symbol tweens, or the drop sequence will appear "interrupted".
+    // This can happen if dialog/bonus cleanup fires while a new spin is already dropping.
+    if (this.isReelDropping) {
+      console.log('[Symbols] stopAllSymbolAnimations skipped (reel drop in progress)');
+      return;
+    }
+
     if (this.symbols && this.symbols.length > 0) {
       let animationsStopped = 0;
       let spineTracksCleared = 0;
@@ -788,9 +822,6 @@ export class Symbols {
             if (typeof symbol.setAlpha === 'function') {
               symbol.setAlpha(1);
             }
-
-            // Stop any active tweens on this symbol
-            this.scene.tweens.killTweensOf(symbol);
           }
         }
       }
@@ -1017,15 +1048,9 @@ export class Symbols {
     // before starting a new sequence.
     this.cleanupActiveBigScatterSpine();
 
-    // When scatter bonus dialogs/transitions finish, restore gathered scatter PNGs back to their
-    // original reel positions WITH a tween (instead of snapping), and cleanup the big scatter Spine.
-    // This event is emitted by ScatterAnimationManager as part of its bonus transition flow.
-    try {
-      this.scene?.events?.once('dialogAnimationsComplete', () => {
-        try { this.cleanupActiveBigScatterSpine(); } catch { }
-        try { this.tweenGatheredScatterSymbolsBackToStart(); } catch { }
-      });
-    } catch { }
+    // Note: returning gathered scatter PNGs + big scatter cleanup is now handled immediately
+    // after the big scatter Spine finishes its 2-play hit animation (with fallback), so we no
+    // longer tie the reset to dialogAnimationsComplete here.
 
     // Reset winning symbols spine animations back to PNG after scatter symbol animations
     this.stopAllSymbolAnimations();
@@ -1074,6 +1099,44 @@ export class Symbols {
         this.tweenOneGatheredScatterSymbolBackToStart(symbol, duration);
       }
     }
+  }
+
+  /**
+   * Awaitable variant for returning gathered scatter PNGs back to their stored start positions.
+   * Scoped to the provided scatter grids so we don't scan the entire grid.
+   *
+   * Note: `tweenOneGatheredScatterSymbolBackToStart` clears the stored start data and does not
+   * expose a completion callback, so we resolve based on duration with a small buffer.
+   */
+  private async tweenGatheredScatterSymbolsBackToStartAsync(scatterGrids: any[], duration: number = 550): Promise<void> {
+    try {
+      if (!this.scene || !Array.isArray(scatterGrids) || scatterGrids.length === 0) return;
+
+      const waits = scatterGrids.map((grid) => {
+        return new Promise<void>((resolve) => {
+          try {
+            const col = grid?.x;
+            const row = grid?.y;
+            const symbol: any =
+              (typeof col === 'number' && typeof row === 'number') ? this.symbols?.[col]?.[row] : null;
+
+            const startX = symbol?.getData?.('startX');
+            const startY = symbol?.getData?.('startY');
+            if (typeof startX !== 'number' || typeof startY !== 'number') {
+              resolve();
+              return;
+            }
+
+            try { this.tweenOneGatheredScatterSymbolBackToStart(symbol, duration); } catch { }
+            this.scene.time.delayedCall(duration + 50, () => resolve());
+          } catch {
+            resolve();
+          }
+        });
+      });
+
+      await Promise.all(waits);
+    } catch { }
   }
 
   private tweenOneGatheredScatterSymbolBackToStart(symbol: any, duration: number = 550): void {
@@ -1223,7 +1286,8 @@ export class Symbols {
           return;
         }
 
-        // Store original position/scale once so we can reset after the dialog finishes
+        // Store original position/scale once so we can reset after the big scatter hit completes.
+        // (We no longer tie this to dialogAnimationsComplete; we return immediately after the 2-hit sequence.)
         try {
           const hasStartPosition = typeof symbol.getData === 'function' ? symbol.getData('startX') !== undefined : false;
           if (!hasStartPosition && typeof symbol.setData === 'function') {
@@ -1231,14 +1295,6 @@ export class Symbols {
             symbol.setData('startY', symbol.y);
             symbol.setData('startScaleX', (symbol as any)?.scaleX ?? 1);
             symbol.setData('startScaleY', (symbol as any)?.scaleY ?? 1);
-
-            const resetScatterPosition = () => {
-              // Tween back to the stored start position instead of snapping.
-              // Note: this will also clear the stored start data to avoid double-resets.
-              try { this.tweenOneGatheredScatterSymbolBackToStart(symbol); } catch { }
-            };
-
-            this.scene.events.once('dialogAnimationsComplete', resetScatterPosition);
           }
         } catch { }
 
@@ -1319,7 +1375,12 @@ export class Symbols {
         bigScatter.setScale(startScatterScale);
 
         // Kick the Scatter win animation by name; fallback to first animation if missing.
-        // Play it TWICE back-to-back (requested for scatter hit).
+        // IMPORTANT: We must not start the freespins scatter sequence until this big-center scatter
+        // finishes its 2-play hit animation. Use Spine completion events, with a hard 5s fallback.
+        //
+        // Note: The scale "pop-in" tween should start immediately (visual feedback), while the
+        // await below only gates progression to the freespins dialog/sequence.
+        let waitForTwoPlays: Promise<void> = Promise.resolve();
         try {
           const desired = Symbols.SCATTER_HIT_ANIMATION_NAME; // 'Symbol0_RF_win'
           const animations = (bigScatter as any)?.skeleton?.data?.animations as Array<{ name: string }> | undefined;
@@ -1327,35 +1388,57 @@ export class Symbols {
           const fallback = Array.isArray(animations) && animations.length > 0 ? animations[0]?.name : undefined;
           const nameToPlay = hasDesired ? desired : fallback;
           const state = (bigScatter as any)?.animationState;
+
           if (nameToPlay && state?.setAnimation) {
             try { state.clearTracks?.(); } catch { }
 
-            let completedCount = 0;
-            const listener = {
-              complete: (entry: any) => {
-                try {
-                  const isTrack0 = entry?.trackIndex === 0;
-                  const animName = entry?.animation?.name ?? "";
-                  if (!isTrack0) return;
-                  if (animName !== nameToPlay) return;
+            waitForTwoPlays = new Promise<void>((resolve) => {
+              let completedCount = 0;
+              let resolved = false;
+              let listener: any = null;
 
-                  completedCount++;
-                  if (completedCount === 1) {
-                    // Immediately replay the same animation once more
-                    try { state.setAnimation(0, nameToPlay, false); } catch { }
-                    return;
+              const safeResolve = () => {
+                if (resolved) return;
+                resolved = true;
+                try { if (listener) state.removeListener?.(listener as any); } catch { }
+                resolve();
+              };
+
+              listener = {
+                complete: (entry: any) => {
+                  try {
+                    const isTrack0 = entry?.trackIndex === 0;
+                    const animName = entry?.animation?.name ?? "";
+                    if (!isTrack0) return;
+                    if (animName !== nameToPlay) return;
+
+                    completedCount++;
+                    if (completedCount === 1) {
+                      // Immediately replay the same animation once more
+                      try { state.setAnimation(0, nameToPlay, false); } catch { }
+                      return;
+                    }
+
+                    if (completedCount >= 2) {
+                      safeResolve();
+                    }
+                  } catch {
+                    // If anything unexpected happens inside the listener, let the 5s fallback release us.
                   }
+                }
+              };
 
-                  // After the second completion, remove listener and keep the final pose.
-                  if (completedCount >= 2) {
-                    try { state.removeListener?.(listener as any); } catch { }
-                  }
-                } catch { }
-              }
-            };
+              // Hard fallback: never block the game flow on missing/interrupting Spine events.
+              try {
+                this.scene?.time?.delayedCall?.(5000, () => {
+                  console.warn('[Symbols] Big scatter Spine did not complete twice within 5s; continuing scatter flow (fallback)');
+                  safeResolve();
+                });
+              } catch { }
 
-            try { state.addListener?.(listener as any); } catch { }
-            try { state.setAnimation(0, nameToPlay, false); } catch { }
+              try { state.addListener?.(listener as any); } catch { }
+              try { state.setAnimation(0, nameToPlay, false); } catch { safeResolve(); }
+            });
           }
         } catch (e) {
           console.warn('[Symbols] Failed to play big scatter Spine animation:', e);
@@ -1372,7 +1455,38 @@ export class Symbols {
           });
         } catch { }
 
-        // NOTE: intentionally NOT cleaning up the big scatter spine yet (per request).
+        // Gate progression to the freespins dialog/sequence on 2 animation plays (with fallback).
+        try { await waitForTwoPlays; } catch { }
+
+        // Cleanup/outro: scale the big scatter back down, then return the gathered scatter PNGs.
+        try {
+          // Scale back down to the starting scale (with a small safety timeout).
+          await new Promise<void>((resolve) => {
+            let done = false;
+            const finish = () => {
+              if (done) return;
+              done = true;
+              resolve();
+            };
+            try { this.scene?.time?.delayedCall?.(1000, () => finish()); } catch { }
+            try {
+              this.scene?.tweens?.add?.({
+                targets: bigScatter,
+                scaleX: startScatterScale,
+                scaleY: startScatterScale,
+                duration: 250,
+                ease: 'Sine.easeInOut',
+                onComplete: () => finish()
+              });
+            } catch {
+              finish();
+            }
+          });
+        } catch { }
+
+        // Now remove the big scatter spine (cleanup) and tween the scatter PNGs back.
+        try { this.cleanupActiveBigScatterSpine(); } catch { }
+        try { await this.tweenGatheredScatterSymbolsBackToStartAsync(scatterGrids, 550); } catch { }
       } catch (e) {
         console.warn('[Symbols] Failed to configure big scatter Spine:', e);
         // If configuration failed, do return it to pool to avoid a broken persistent spine.
@@ -1381,13 +1495,7 @@ export class Symbols {
       }
     }
 
-    // Allow the win animation to play before continuing
-    const baseDelay = 1200;
-    const turboMultiplier = gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1.0;
-    const adjustedDelay = baseDelay * turboMultiplier;
-    await this.delay(adjustedDelay);
-
-    console.log('[Symbols] Scatter symbol Spine animation completed');
+    console.log('[Symbols] Scatter symbol Spine animation completed (or fallback reached)');
   }
 
   /**
@@ -1736,9 +1844,30 @@ export class Symbols {
     const baseDelay = 500;
     const turboDelay = gameStateManager.isTurbo ?
       baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER : baseDelay;
-    console.log(`[Symbols] Scheduling next free spin in ${turboDelay}ms (base: ${baseDelay}ms, turbo: ${gameStateManager.isTurbo})`);
 
-    this.freeSpinAutoplayTimer = this.scene.time.delayedCall(turboDelay, () => {
+    // Extra delay when: multiplier symbol exists AND any match occurred (spin or tumble)
+    let extraDelay = 0;
+    try {
+      const spinData = this.scene?.gameAPI?.getCurrentSpinData?.();
+      // For free spins, GameAPI's index is already incremented for the *next* spin,
+      // so use the just-finished index (current - 1).
+      const finishedFreeSpinIndex = Math.max(0, (this.scene?.gameAPI?.getCurrentFreeSpinIndex?.() ?? 1) - 1);
+      if (spinData) {
+        const hasMatch = SpinDataUtils.hasAnyMatch(spinData, finishedFreeSpinIndex);
+        const hasMultiplier = SpinDataUtils.hasAnyMultiplierSymbol(spinData, finishedFreeSpinIndex);
+        if (hasMatch && hasMultiplier) {
+          extraDelay = 1000;
+        }
+        console.log('[Symbols] Free spin extra-delay check:', { hasMatch, hasMultiplier, extraDelay });
+      }
+    } catch (e) {
+      console.warn('[Symbols] Failed extra-delay check for free spin autoplay:', e);
+    }
+
+    const totalDelay = turboDelay + extraDelay;
+    console.log(`[Symbols] Scheduling next free spin in ${totalDelay}ms (base: ${baseDelay}ms, turbo: ${gameStateManager.isTurbo}, extra: ${extraDelay}ms)`);
+
+    this.freeSpinAutoplayTimer = this.scene.time.delayedCall(totalDelay, () => {
       this.performFreeSpinAutoplay();
     });
   }
@@ -2463,6 +2592,29 @@ function createPngSymbol(self: Symbols, value: number, x: number, y: number, alp
   try { (sprite as any).symbolValue = value; } catch { }
   sprite.displayWidth = self.displayWidth;
   sprite.displayHeight = self.displayHeight;
+
+  // Special-case: Scatter should render larger than other PNG symbols.
+  // Important: apply after displayWidth/Height so we multiply the fit-to-box scale.
+  if (value === 0) {
+    const mult = (Symbols.SCATTER_PNG_SCALE_MULTIPLIER || 1);
+    try {
+      const sx = (sprite.scaleX || 1) * mult;
+      const sy = (sprite.scaleY || 1) * mult;
+      sprite.setScale(sx, sy);
+    } catch { }
+
+    // Offset based on scale so enlarged Scatter stays aligned in the symbol box.
+    // With origin at 0.5,0.5, scaling increases height around center; to keep the bottom edge
+    // in the same place (Phaser +Y is down), shift DOWN by (H * (mult - 1)) / 2.
+    const alignFactor = Symbols.SCATTER_PNG_BOTTOM_ALIGN_FACTOR ?? 0;
+    if (alignFactor) {
+      try {
+        const dy = self.displayHeight * (mult - 1) * 0.5 * alignFactor;
+        sprite.setPosition(x, y + dy);
+      } catch { }
+    }
+  }
+
   if (typeof sprite.setAlpha === 'function') sprite.setAlpha(alpha);
   try { sprite.setVisible(true); sprite.setActive(true); } catch { }
   if (self.container && sprite.parentContainer !== self.container) {
@@ -3238,6 +3390,7 @@ async function dropReels(self: Symbols, data: Data): Promise<void> {
   console.log('[Symbols] dropReels called with data:', data);
   console.log('[Symbols] SLOT_ROWS:', SLOT_ROWS);
 
+  self.isReelDropping = true;
   self.dropSparkPlayedColumns.clear();
   // Play turbo drop sound effect at the start of reel drop sequence when in turbo mode
   if (self.scene.gameData.isTurbo && (window as any).audioManager) {
@@ -3245,35 +3398,39 @@ async function dropReels(self: Symbols, data: Data): Promise<void> {
     console.log('[Symbols] Playing turbo drop sound effect at start of reel drop sequence');
   }
 
-  // Stagger reel starts at a fixed interval and let them overlap
+  try {
+    // Stagger reel starts at a fixed interval and let them overlap
 
-  // Anticipation disabled: do not check columns for scatter, no reel extension
-  const extendLastReelDrop = false;
-  try { (self.scene as any).__isScatterAnticipationActive = false; } catch { }
+    // Anticipation disabled: do not check columns for scatter, no reel extension
+    const extendLastReelDrop = false;
+    try { (self.scene as any).__isScatterAnticipationActive = false; } catch { }
 
-  const reelPromises: Promise<void>[] = [];
-  // Adjustable gap between clearing previous symbols and spawning new ones per row
-  const PREV_TO_NEW_DELAY_MS = (self.scene.gameData as any)?.prevToNewDelayMs ?? 750;
-  // Reverse the sequence: start from bottom row to top row
-  for (let step = 0; step < SLOT_COLUMNS; step++) {
-    const actualRow = (SLOT_COLUMNS - 1) - step;
-    const isLastReel = actualRow === 0;
-    const startDelay = self.scene.gameData.dropReelsDelay * step;
-    const p = (async () => {
-      await delay(startDelay);
-      console.log(`[Symbols] Processing row ${actualRow}`);
-      dropPrevSymbols(self, actualRow, isLastReel && extendLastReelDrop)
-      // rowDropPrevSymbols(self, actualRow, isLastReel && extendLastReelDrop)
+    const reelPromises: Promise<void>[] = [];
+    // Adjustable gap between clearing previous symbols and spawning new ones per row
+    const PREV_TO_NEW_DELAY_MS = (self.scene.gameData as any)?.prevToNewDelayMs ?? 750;
+    // Reverse the sequence: start from bottom row to top row
+    for (let step = 0; step < SLOT_COLUMNS; step++) {
+      const actualRow = (SLOT_COLUMNS - 1) - step;
+      const isLastReel = actualRow === 0;
+      const startDelay = self.scene.gameData.dropReelsDelay * step;
+      const p = (async () => {
+        // Use Phaser time so dialog/scene pauses don't desync reel scheduling
+        await phaserDelay(self.scene, startDelay);
+        console.log(`[Symbols] Processing row ${actualRow}`);
+        dropPrevSymbols(self, actualRow, isLastReel && extendLastReelDrop);
 
-      // Wait before spawning new symbols so previous ones are cleared first
-      await delay(PREV_TO_NEW_DELAY_MS);
-      await dropNewSymbols(self, actualRow, isLastReel && extendLastReelDrop);
-    })();
-    reelPromises.push(p);
+        // Wait before spawning new symbols so previous ones are cleared first
+        await phaserDelay(self.scene, PREV_TO_NEW_DELAY_MS);
+        await dropNewSymbols(self, actualRow, isLastReel && extendLastReelDrop);
+      })();
+      reelPromises.push(p);
+    }
+    console.log('[Symbols] Waiting for all reels to complete animation...');
+    await Promise.all(reelPromises);
+    console.log('[Symbols] All reels have completed animation');
+  } finally {
+    self.isReelDropping = false;
   }
-  console.log('[Symbols] Waiting for all reels to complete animation...');
-  await Promise.all(reelPromises);
-  console.log('[Symbols] All reels have completed animation');
 }
 
 function dropPrevSymbols(self: Symbols, index: number, extendDuration: boolean = false) {
@@ -3294,7 +3451,7 @@ function dropPrevSymbols(self: Symbols, index: number, extendDuration: boolean =
   const distanceToScreenBottom = Math.max(0, self.scene.scale.height - gridBottomY);
   const DROP_DISTANCE = distanceToScreenBottom + self.totalGridHeight + (height * 2) + self.scene.gameData.winUpHeight;
   const STAGGER_MS = gameStateManager.isTurbo ? 0 : 150; // mirror dropNewSymbols stagger
-  const symbolHop = self.scene.gameData.winUpHeight * 0.2;
+  const symbolHop = self.scene.gameData.winUpHeight * 0.1;
 
   for (let i = 0; i < self.symbols.length; i++) {
     // Check if the current row exists and has the required index
@@ -3310,7 +3467,14 @@ function dropPrevSymbols(self: Symbols, index: number, extendDuration: boolean =
     const targetY = symbol.y + DROP_DISTANCE;
 
     // Copy dropNewSymbols animation sequencing (hop + optional overshoot/settle)
-    const dropTotalMs = (self.scene.gameData.dropDuration * 0.9) + extraMs;
+    // Make previous-symbols clear-out a bit snappier than the main drop by default.
+    // You can tune this at runtime via `gameData.dropPrevDurationMultiplier` (e.g. 0.75..0.9).
+    const prevDropMultRaw = (self.scene.gameData as any)?.dropPrevDurationMultiplier;
+    const prevDropMult =
+      (typeof prevDropMultRaw === 'number' && prevDropMultRaw > 0)
+        ? prevDropMultRaw
+        : 0.8;
+    const dropTotalMs = (self.scene.gameData.dropDuration * prevDropMult) + extraMs;
     const overshootPxRaw = (self.scene.gameData as any)?.dropOvershootPx;
     const overshootPx = Math.max(
       0,
@@ -3329,7 +3493,7 @@ function dropPrevSymbols(self: Symbols, index: number, extendDuration: boolean =
       {
         delay: STAGGER_MS * i,
         y: `-= ${symbolHop}`,
-        duration: self.scene.gameData.winUpDuration,
+        duration: self.scene.gameData.winUpDuration * prevDropMult,
         ease: Phaser.Math.Easing.Circular.Out,
       },
     ];
@@ -3513,7 +3677,7 @@ function disposeSymbols(self: Symbols, symbols: any[][]) {
       const symbol = symbols[col][row];
       if (!symbol) continue;
 
-      try { self.scene.tweens.killTweensOf(symbol); } catch { }
+      // try { self.scene.tweens.killTweensOf(symbol); } catch { }
 
       try {
         if ((symbol as any).__spinePoolKey) {
@@ -3743,10 +3907,19 @@ async function animateMultiplierValueToPosition(self: Symbols, value: number, x:
 
       // Hardcoded win bar position (matches HUD ratios)
       const targetX = scene.scale.width * 0.5;
-      const targetY = scene.scale.height * 0.2125;
+      // Positive Y goes downward in Phaser, so a positive offset lands slightly LOWER than the win bar.
+      // Scaled to screen height so it remains subtle but consistent across resolutions.
+      const WIN_BAR_TARGET_Y_OFFSET_PX = 18;
+      const winBarTargetYOffset = WIN_BAR_TARGET_Y_OFFSET_PX * (scene.scale.height / 720);
+      const targetY = scene.scale.height * 0.2125 + winBarTargetYOffset;
 
       // Reuse the multiplier bar texture so we know the asset is available
       const baseScale = self.getSpineSymbolScale(value);
+      // Pre-flight scale punch: scale up to 3.0, then settle at 2.0 before traveling.
+      // Applied relative to the symbol's baseScale so it stays consistent across resolutions.
+      const MULTIPLIER_PREFLIGHT_SCALE_UP = 3.0;
+      const MULTIPLIER_TRAVEL_SCALE = 2.0;
+      const travelScale = baseScale * MULTIPLIER_TRAVEL_SCALE;
       const multiplierNumber = `multiplier_number_${value}x`;
       const floatImage = scene.add.image(x, y, multiplierNumber)
         .setOrigin(0.5, 0.5)
@@ -3787,7 +3960,10 @@ async function animateMultiplierValueToPosition(self: Symbols, value: number, x:
           Math.floor(Math.random() * MULTIPLIER_TWEEN_VARIANTS.length)
         ] || tweenMultiplierLine;
 
-        variant(scene, floatImage, { startX: x, startY: y, targetX, targetY, baseScale })
+        // Ensure the scale punch completes BEFORE any movement begins.
+        tweenMultiplierPreFlightScale(scene, floatImage, { baseScale, scaleUpTo: baseScale * MULTIPLIER_PREFLIGHT_SCALE_UP, settleTo: travelScale })
+          .catch(() => { /* if scale tween fails, still attempt the flight */ })
+          .then(() => variant(scene, floatImage, { startX: x, startY: y, targetX, targetY, baseScale, travelScale }))
           .then(() => {
             emitMultiplierLanded();
             resolve();
@@ -3818,11 +3994,50 @@ type MultiplierTweenParams = {
   targetX: number;
   targetY: number;
   baseScale: number;
+  travelScale: number;
 };
+
+function tweenMultiplierPreFlightScale(
+  scene: any,
+  floatImage: any,
+  params: { baseScale: number; scaleUpTo: number; settleTo: number }
+): Promise<void> {
+  const { baseScale, scaleUpTo, settleTo } = params;
+  return new Promise<void>((resolve) => {
+    try {
+      // If the object is already gone or the tween manager isn't available, just continue.
+      if (!scene?.tweens?.addTimeline || !floatImage || floatImage?.destroyed) {
+        try { floatImage?.setScale?.(settleTo ?? baseScale); } catch { }
+        resolve();
+        return;
+      }
+
+      scene.tweens.addTimeline({
+        targets: floatImage,
+        tweens: [
+          {
+            duration: 170,
+            scale: scaleUpTo,
+            ease: Phaser.Math.Easing.Cubic.Out,
+          },
+          {
+            duration: 140,
+            scale: settleTo,
+            ease: Phaser.Math.Easing.Cubic.Out,
+          },
+        ],
+        onComplete: () => resolve(),
+      });
+    } catch {
+      try { floatImage?.setScale?.(settleTo ?? baseScale); } catch { }
+      resolve();
+    }
+  });
+}
 
 // Variant 0: straight-line flight to the target (win bar) using an ease-in-out.
 function tweenMultiplierLine(scene: any, floatImage: any, params: MultiplierTweenParams): Promise<void> {
-  const { startX: x, startY: y, targetX, targetY, baseScale } = params;
+  const { startX: x, startY: y, targetX, targetY, travelScale } = params;
 
   return new Promise<void>((resolve) => {
     try {
@@ -3830,21 +4045,20 @@ function tweenMultiplierLine(scene: any, floatImage: any, params: MultiplierTwee
       const dy = targetY - y;
       const distance = Math.sqrt(dx * dx + dy * dy);
       // Slower, smoother travel than the arc variant
-      const duration = Phaser.Math.Clamp(distance * 1.55, 520, 1400);
+      const duration = Phaser.Math.Clamp(distance * 2.80, 900, 2600);
 
       scene.tweens.add({
         targets: floatImage,
         duration,
         x: targetX,
         y: targetY,
-        angle: (floatImage.angle ?? 0) + (dx >= 0 ? 180 : -180),
         ease: Phaser.Math.Easing.Sine.InOut,
         onComplete: () => {
           // Small "pop" and fade-out on arrival
           scene.tweens.add({
             targets: floatImage,
             duration: 180,
-            scale: baseScale * 1.15,
+            scale: travelScale * 1.15,
             alpha: 0,
             ease: Phaser.Math.Easing.Cubic.Out,
             onComplete: () => {
@@ -3863,7 +4077,7 @@ function tweenMultiplierLine(scene: any, floatImage: any, params: MultiplierTwee
 
 // Variant 1: basketball-style arc shot toward the multiplier bar (ring)
 function tweenMultiplierArc(scene: any, floatImage: any, params: MultiplierTweenParams): Promise<void> {
-  const { startX: x, startY: y, targetX, targetY, baseScale } = params;
+  const { startX: x, startY: y, targetX, targetY, travelScale } = params;
 
   return new Promise<void>((resolve) => {
     const dx = targetX - x;
@@ -3872,43 +4086,39 @@ function tweenMultiplierArc(scene: any, floatImage: any, params: MultiplierTween
     const arcLift = Math.max(80, Math.min(200, distance * 0.25));
     const apexX = x + dx * 0.5 + dx * 0.08; // slight additional X drift near apex
     const apexY = Math.min(y, targetY) - arcLift;
-    const spin = dx >= 0 ? 540 : -540;
     const driftAtApex = dx * 0.12;
     const tinyFall = Math.min(8, arcLift * 0.03);
 
     // Phase 1: quick shoot upward
     scene.tweens.add({
       targets: floatImage,
-      duration: 240,
+      duration: 320,
       x: x + dx * 0.45,
       y: apexY,
-      angle: spin * 0.4,
       ease: Phaser.Math.Easing.Sine.Out,
       onComplete: () => {
         // Phase 2: brief rest at apex (minimal vertical movement, slight X drift)
         scene.tweens.add({
           targets: floatImage,
-          duration: 180,
+          duration: 240,
           x: apexX + driftAtApex,
           y: apexY + tinyFall,
-          angle: spin * 0.55,
           ease: Phaser.Math.Easing.Sine.InOut,
           onComplete: () => {
             // Phase 3: controlled drop toward the ring
             scene.tweens.add({
               targets: floatImage,
-              duration: 580,
+              duration: 780,
               x: targetX,
               y: targetY,
-              angle: spin,
-              scale: baseScale,
+              scale: travelScale,
               alpha: 1,
               ease: Phaser.Math.Easing.Cubic.Out,
               onComplete: () => {
                 scene.tweens.add({
                   targets: floatImage,
                   duration: 180,
-                  scale: baseScale * 1.15,
+                  scale: travelScale * 1.15,
                   alpha: 0,
                   ease: Phaser.Math.Easing.Cubic.Out,
                   onComplete: () => {
@@ -3927,7 +4137,7 @@ function tweenMultiplierArc(scene: any, floatImage: any, params: MultiplierTween
 
 // Variant 2: ricochet bounce off screen edges, then a top bounce, then into the ring
 function tweenMultiplierRicochet(scene: any, floatImage: any, params: MultiplierTweenParams): Promise<void> {
-  const { startX: x, startY: y, targetX, targetY, baseScale } = params;
+  const { startX: x, startY: y, targetX, targetY, travelScale } = params;
 
   return new Promise<void>((resolve) => {
     try {
@@ -3982,7 +4192,7 @@ function tweenMultiplierRicochet(scene: any, floatImage: any, params: Multiplier
         const dy = (floatImage.y ?? 0) - toY;
         const dist = Math.sqrt(dx * dx + dy * dy);
         const speedFactor = isFinalLeg ? 1.0 : 0.8; // faster on side hops, normal on final leg
-        const duration = Phaser.Math.Clamp(dist * speedFactor, 160, isFinalLeg ? 520 : 420);
+        const duration = Phaser.Math.Clamp(dist * speedFactor * 1.35, 220, isFinalLeg ? 720 : 560);
         return new Promise<void>((res) => {
           scene.tweens.add({
             targets: floatImage,
@@ -3990,7 +4200,6 @@ function tweenMultiplierRicochet(scene: any, floatImage: any, params: Multiplier
             y: toY,
             duration,
             ease,
-            angle: (floatImage.angle ?? 0) + (Math.random() < 0.5 ? -180 : 180),
             onComplete: () => res(),
           });
         });
@@ -4007,7 +4216,7 @@ function tweenMultiplierRicochet(scene: any, floatImage: any, params: Multiplier
         scene.tweens.add({
           targets: floatImage,
           duration: 160,
-          scale: baseScale * 1.1,
+          scale: travelScale * 1.1,
           alpha: 0,
           ease: Phaser.Math.Easing.Cubic.Out,
           onComplete: () => {
@@ -5075,6 +5284,25 @@ async function delay(duration: number) {
     setTimeout(() => {
       resolve(true);
     }, duration);
+  });
+}
+
+/**
+ * Promise-based delay that uses Phaser's clock (scene time), so it respects scene pauses / time scaling.
+ * This is important for reel/drop sequencing: we don't want real-time JS timers to elapse while the
+ * scene/tweens are paused due to dialogs/transitions.
+ */
+function phaserDelay(scene: Phaser.Scene, durationMs: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    try {
+      if (!scene || !scene.time || durationMs <= 0) {
+        resolve();
+        return;
+      }
+      scene.time.delayedCall(durationMs, () => resolve());
+    } catch {
+      resolve();
+    }
   });
 }
 
