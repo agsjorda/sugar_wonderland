@@ -7,6 +7,7 @@ import { AssetLoader } from '../../utils/AssetLoader';
 import { GameAPI } from '../../backend/GameAPI';
 import { GameData } from '../components/GameData';
 import { FullScreenManager } from '../../managers/FullScreenManager';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { StudioLoadingScreen, queueGameAssetLoading } from '../components/StudioLoadingScreen';
 import { ClockDisplay } from '../components/ClockDisplay';
 import { SoundEffectType } from '../../managers/AudioManager';
@@ -45,6 +46,16 @@ export class Preloader extends Scene
 
 	init (data: any)
 	{
+		// Check if add.spine is available - if not, reload the game
+		const hasSpineFactory = ensureSpineFactory(this, '[Preloader] init');
+		if (!hasSpineFactory) {
+			console.error('[Preloader] add.spine is not recognized. Reloading the game...');
+			setTimeout(() => {
+				window.location.reload();
+			}, 250);
+			return;
+		}
+
 		// Receive managers from Boot scene
 		this.networkManager = data.networkManager;
 		this.screenModeManager = data.screenModeManager;
