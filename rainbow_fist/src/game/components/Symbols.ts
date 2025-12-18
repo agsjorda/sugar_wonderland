@@ -3837,6 +3837,13 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
 
       let animDurationMs: number | null = null;
       if (animationName) {
+        // Play multiplier-hit SFX right when the multiplier spine animation starts.
+        try {
+          const audio = (window as any)?.audioManager;
+          if (audio && typeof audio.playSoundEffect === 'function') {
+            audio.playSoundEffect(SoundEffectType.MULTIPLIER_HIT);
+          }
+        } catch { }
         try { state.setAnimation(0, animationName, false); } catch { }
         // Estimate duration so we can await the longest-running animation.
         const animDurationSec =
@@ -4505,6 +4512,11 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
                     try { scheduleScaleUp(self, png, 20, durationMs, 1.1); } catch { }
                     try { scheduleTranslate(self, png, 20, durationMs, 0, -3); } catch { }
                     self.scene.time.delayedCall(durationMs, () => {
+                      // play hit_win 
+                      const audio = (window as any)?.audioManager;
+                      if (audio && typeof audio.playSingleInstanceSoundEffect === 'function') {
+                        audio.playSingleInstanceSoundEffect(SoundEffectType.HIT_WIN);
+                      }
                       try { png.destroy(); } catch { }
                       // Spawn a brief hit effect when the PNG is removed
                       const playHitEffect = () => {
@@ -4584,6 +4596,12 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
                       // Unified completion handler
                       const onDone = () => {
                         console.log('[Symbols] Animation complete (track/state listener)');
+                        try {
+                          const audio = (window as any)?.audioManager;
+                          if (audio && typeof audio.playSoundEffect === 'function') {
+                            audio.playSoundEffect(SoundEffectType.HIT_WIN);
+                          }
+                        } catch { }
                         try { fx.destroy(); } catch { }
                         finish();
                       };

@@ -2,7 +2,7 @@ import { Scene, GameObjects } from 'phaser';
 
 type TextStyle = Phaser.Types.GameObjects.Text.TextStyle;
 
-const PAYOUT_RANGES = ['5', '4', '8 - 9'] as const;
+const PAYOUT_RANGES = ['5', '4', '3'] as const;
 
 const SYMBOL_PAYOUTS: Record<number, [number, number, number]> = {
     1: [37.50, 7.50, 2.50],
@@ -23,6 +23,7 @@ const SCATTER_COUNTS = ['6', '5', '4'] as const;
 const SCATTER_DESCRIPTIONS = [
     'Appears only on reels 1, 3, and 5.',
     'Landing 3 BONUS symbols triggers the Free Spins Round.',
+    '3x BONUS symbols award 5x your total bet.',
     'BONUS symbols pay in any position.',
 ] as const;
 

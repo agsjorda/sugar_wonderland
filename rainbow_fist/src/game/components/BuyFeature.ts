@@ -43,6 +43,7 @@ export class BuyFeature {
 	private readonly CONTINUOUS_INTERVAL: number = 200; // 150ms interval for continuous press
 	private priceDisplay: Phaser.GameObjects.Text;
 	private featureLogo: SpineGameObject;
+	private featureLogoBg?: Phaser.GameObjects.Image;
 	private backgroundImage: Phaser.GameObjects.Image;
 	private onCloseCallback?: () => void;
 	private onConfirmCallback?: () => void;
@@ -183,12 +184,24 @@ export class BuyFeature {
 		const screenWidth = scene.cameras.main.width;
 		const screenHeight = scene.cameras.main.height;
 
-		const y = screenHeight - this.globalBottomAnchorOffset - 365;
+		const y = screenHeight - this.globalBottomAnchorOffset - 382.5;
 		const spineKey = 'symbol0_spine';
 		const spineAtlasKey = `${spineKey}-atlas`;
+		
+		// Background behind the animated logo
+		if (scene.textures.exists('buy_feature_logo_bg')) {
+			const bgSize = Math.min(screenWidth * 0.52, 260);
+			this.featureLogoBg = scene.add.image(screenWidth / 2, y, 'buy_feature_logo_bg');
+			this.featureLogoBg.setOrigin(0.5, 0.5);
+			this.featureLogoBg.setDisplaySize(bgSize, bgSize);
+			this.container.add(this.featureLogoBg);
+		} else {
+			console.warn('[BuyFeature] buy_feature_logo_bg texture not found');
+		}
 
+		const xOffset = 10;
 		// Scatter symbol idle loop reused as the buy feature logo to keep the area animated
-		this.featureLogo = scene.add.spine(screenWidth / 2, y, spineKey, spineAtlasKey) as SpineGameObject;
+		this.featureLogo = scene.add.spine(screenWidth / 2 + xOffset, y, spineKey, spineAtlasKey) as SpineGameObject;
 		this.featureLogo.setOrigin(0.5, 0.5);
 		this.featureLogo.setScale(0.1);
 
@@ -221,8 +234,8 @@ export class BuyFeature {
 		const screenHeight = scene.cameras.main.height;
 		const x = screenHeight - this.globalBottomAnchorOffset - 510;
 		
-		const featureName = scene.add.text(screenWidth / 2, x, "Heaven's Welcome Bonus", {
-			fontSize: '24px',
+		const featureName = scene.add.text(screenWidth / 2, x, "Liberation Bonus", {
+			fontSize: '26px',
 			fontFamily: 'Poppins-Regular',
 			color: '#ffffff',
 			fontStyle: 'bold'

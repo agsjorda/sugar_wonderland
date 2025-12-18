@@ -403,9 +403,8 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				'buy_feature_logo': `${prefix}/symbols/symbol0.webp`,
-				'buy_feature_logo_bg': `${prefix}/buy_feature/buy_feature_logo_bg.png`,
-				'buy_feature_bg': `${prefix}/buy_feature/buy_feature_bg.png`
+				'buy_feature_logo_bg': `${prefix}/buy_feature/buy_feature_logo_bg.webp`,
+				'buy_feature_bg': `${prefix}/buy_feature/buy_feature_bg.webp`
 			}
 		};
 	}
@@ -446,9 +445,10 @@ export class AssetConfig {
 				'reeldrop': 'assets/sounds/SFX/reeldrop_RF.ogg',
 				'spin': 'assets/sounds/SFX/spin_RF.ogg',
 
-				// 'multiplier_added_wf': 'assets/sounds/SFX/birdland_wf.ogg',
+				// 'multiplier_added': 'assets/sounds/SFX/ringbell_RF.ogg',
+				'multiplier_hit': 'assets/sounds/SFX/ringbell_RF.ogg',
 				// 'hit_win_2_wf': 'assets/sounds/SFX/hit_win_2_wf.ogg',
-				// 'hit_win_wf': 'assets/sounds/SFX/hit_win_wf.ogg',
+				'hit_win': 'assets/sounds/SFX/texplosion_RF.ogg',
 			}
 		};
 	}

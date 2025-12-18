@@ -51,6 +51,7 @@ export enum SoundEffectType {
 	TWIN2 = 'twin2',
 	TWIN3 = 'twin3',
 	TWIN4 = 'twin4',
+	MULTIPLIER_HIT = "MULTIPLIER_HIT",
 }
 
 export class AudioManager {
@@ -158,8 +159,9 @@ export class AudioManager {
 		addSfxInstance(SoundEffectType.MENU_CLICK, 'click');
 		addSfxInstance(SoundEffectType.REEL_DROP, 'reeldrop');
 		addSfxInstance(SoundEffectType.TURBO_DROP, 'turbodrop');
-		addSfxInstance(SoundEffectType.HIT_WIN, 'hitwin');
+		addSfxInstance(SoundEffectType.HIT_WIN, 'hit_win');
 		addSfxInstance(SoundEffectType.SCATTER, 'scatter');
+		addSfxInstance(SoundEffectType.MULTIPLIER_HIT, 'multiplier_hit');
 
 		// Win dialog SFX instances
 		addSfxInstance(SoundEffectType.WIN_BIG, 'bigw');
@@ -175,7 +177,7 @@ export class AudioManager {
 		// ARGUN SFX is intentionally quieter (50% of base SFX volume)
 		addSfxInstance(SoundEffectType.MULTIPLIER_ADDED, 'multiplier_added');
 		addSfxInstance(SoundEffectType.HIT_WIN_2, 'hit_win_2');
-		addSfxInstance(SoundEffectType.HIT_WIN_ALT, 'hit_win');
+		addSfxInstance(SoundEffectType.HIT_WIN_ALT, 'hit_win_alt');
 		addSfxInstance(SoundEffectType.MULTI, 'multi_wf');
 		addSfxInstance(SoundEffectType.BONUS_SPIN, 'spin');
 		addSfxInstance(SoundEffectType.UTILITY_BUTTON, 'utility_button');

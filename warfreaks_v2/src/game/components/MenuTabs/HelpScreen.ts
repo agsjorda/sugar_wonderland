@@ -95,7 +95,7 @@ export class HelpScreen {
     private isTabInteractionBlocked: boolean = false;
     
     // Game Rules section
-    private readonly GameRulesText: string = "All symbols pay left to right on adjacent reels, starting from the leftmost reel.";
+    private readonly GameRulesText: string = "Win by landing 8 or more matching symbols anywhere on the screen. The more matching symbols you get, the higher your payout.";
     // RTP section
     private readonly RTPValue: string = '97%';
     // Max Win section
