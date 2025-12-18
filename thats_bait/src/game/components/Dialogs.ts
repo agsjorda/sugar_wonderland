@@ -2,8 +2,6 @@ import { Scene } from 'phaser';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { NumberDisplay, NumberDisplayConfig } from './NumberDisplay';
-import { IrisTransition } from './IrisTransition';
-import { SymbolExplosionTransition } from './SymbolExplosionTransition';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
@@ -69,11 +67,6 @@ export class Dialogs {
 	private stagedWinStages: Array<{ type: 'SmallW_KA' | 'MediumW_KA' | 'LargeW_KA' | 'SuperW_KA'; target: number }> = [];
 	private stagedWinCurrentStageIndex: number = 0;
 	private stagedWinStageTimer: Phaser.Time.TimerEvent | null = null;
-	
-	// Iris transition for scatter animation
-	private irisTransition: IrisTransition | null = null;
-	// Symbol explosion transition for free spin dialog dismissal
-	private candyTransition: SymbolExplosionTransition | null = null;
 
 	// Dialog configuration
 	private dialogScales: Record<string, number> = {
@@ -128,9 +121,9 @@ export class Dialogs {
 		this.currentScene = scene;
 		
 		// Initialize iris transition for scatter animation
-		this.irisTransition = new IrisTransition(scene);
+		(this as any).irisTransition = new IrisTransition(scene);
 		// Initialize symbol explosion transition for free spin dialog dismissal
-		this.candyTransition = new SymbolExplosionTransition(scene);
+		(this as any).candyTransition = new SymbolExplosionTransition(scene);
 		
 		// Create main dialog overlay container
 		this.dialogOverlay = scene.add.container(0, 0);
@@ -1162,7 +1155,7 @@ export class Dialogs {
 	 * Start candy transition for free spin dialog
 	 */
 	private startCandyTransition(scene: Scene): void {
-		if (!this.candyTransition) {
+		if (!(this as any).candyTransition) {
 			console.warn('[Dialogs] Candy transition not available, falling back to normal transition');
 			this.startNormalTransition(scene);
 			return;
@@ -1174,7 +1167,7 @@ export class Dialogs {
 		scene.events.emit('disableSpinner');
 
 		// Start transition animation
-		this.candyTransition.show();
+		(this as any).candyTransition.show();
 
 		// Hide dialog content and switch to bonus visuals after a short delay,
 		// giving the symbol explosion time to cover the screen first.
@@ -1183,6 +1176,11 @@ export class Dialogs {
 				const audioManager = (window as any).audioManager;
 				if (audioManager && typeof audioManager.fadeOutSfx === 'function') {
 					audioManager.fadeOutSfx('dialog_congrats', 400);
+				}
+				// Stop free spin music when dialog closes - bonus music will start when background changes
+				if (audioManager && typeof audioManager.stopCurrentMusic === 'function') {
+					audioManager.stopCurrentMusic();
+					console.log('[Dialogs] Stopped free spin music as dialog closes');
 				}
 			} catch {}
 			this.disableAllWinDialogElements();
@@ -1218,7 +1216,7 @@ export class Dialogs {
 			// If anything goes wrong, simply fall back to all available symbols.
 		}
 
-		this.candyTransition.play(() => {
+		(this as any).candyTransition.play(() => {
 			// Emit dialog animations complete event after transition
 			scene.events.emit('dialogAnimationsComplete');
 
@@ -1236,7 +1234,7 @@ export class Dialogs {
 	 * Start iris transition for free spin dialog
 	 */
 	private startIrisTransition(scene: Scene): void {
-		if (!this.irisTransition) {
+		if (!(this as any).irisTransition) {
 			console.warn('[Dialogs] Iris transition not available, falling back to normal transition');
 			this.startNormalTransition(scene);
 			return;
@@ -1252,10 +1250,10 @@ export class Dialogs {
 		console.log('[Dialogs] Spinner disabled during iris transition');
 		
 		// Show iris transition overlay
-		this.irisTransition.show();
+		(this as any).irisTransition.show();
 		
 		// Start iris transition - zoom in to small radius (closing iris effect)
-		this.irisTransition.zoomInToRadius(28, 1500); // Fast transition to 28px radius
+		(this as any).irisTransition.zoomInToRadius(28, 1500); // Fast transition to 28px radius
 		
 		// Hide dialog content quickly after iris starts closing (200ms delay)
 		scene.time.delayedCall(200, () => {
@@ -1276,6 +1274,15 @@ export class Dialogs {
 		scene.time.delayedCall(1500, () => {
 			console.log('[Dialogs] Iris closed - triggering bonus mode');
 			
+			// Stop free spin music when dialog closes - bonus music will start when background changes
+			try {
+				const audioManager = (window as any).audioManager;
+				if (audioManager && typeof audioManager.stopCurrentMusic === 'function') {
+					audioManager.stopCurrentMusic();
+					console.log('[Dialogs] Stopped free spin music as dialog closes (iris transition)');
+				}
+			} catch {}
+			
 			// Trigger bonus mode during closed iris
 			console.log('[Dialogs] Triggering bonus mode during closed iris');
 			this.triggerBonusMode(scene);
@@ -1283,13 +1290,13 @@ export class Dialogs {
 			// Wait 0.5 seconds, then open iris (zoom out) - faster for better flow
 			scene.time.delayedCall(500, () => {
 				console.log('[Dialogs] Opening iris transition');
-				this.irisTransition!.zoomInToRadius(1000, 1500); // Open iris to full size
+				(this as any).irisTransition!.zoomInToRadius(1000, 1500); // Open iris to full size
 				
 				// Clean up after iris opens
 				scene.time.delayedCall(1500, () => {
 					console.log('[Dialogs] Iris transition complete');
 					// Hide the iris transition overlay
-					this.irisTransition!.hide();
+					(this as any).irisTransition!.hide();
 					
 					// Emit dialog animations complete event AFTER the full iris transition completes
 					scene.events.emit('dialogAnimationsComplete');
@@ -1361,24 +1368,38 @@ export class Dialogs {
 				} else {
 					// If congrats closed while in bonus mode, revert to base visuals and reset symbols
 					if (dialogTypeBeforeCleanup === 'Congrats_KA') {
-						console.log('[Dialogs] Congrats dialog closed - reverting from bonus visuals to base');
-						// Switch off bonus mode visuals and music
-						scene.events.emit('setBonusMode', false);
-						scene.events.emit('hideBonusBackground');
-						scene.events.emit('hideBonusHeader');
-						// Reset symbols/winlines state for base game
-						scene.events.emit('resetSymbolsForBase');
-
-						// Ensure win sequence finalization when starting normal transition
-					try {
-						gameEventManager.emit(GameEventType.WIN_STOP);
-						console.log('[Dialogs] Emitted WIN_STOP at start of normal transition');
-					} catch {}
-
+						let shouldShowTotal = false;
+						try {
+							const sceneAny: any = scene as any;
+							const symbolsAny: any = sceneAny?.symbols;
+							const remaining = Number(symbolsAny?.freeSpinAutoplaySpinsRemaining);
+							const pending = symbolsAny?.pendingBackendRetriggerTotal;
+							shouldShowTotal = (isFinite(remaining) ? remaining : 0) <= 0 && (pending === null || pending === undefined);
+						} catch {
+							shouldShowTotal = false;
+						}
+						if (shouldShowTotal) {
+							console.log('[Dialogs] Congrats dialog closed - showing TotalWinOverlay before exiting bonus');
+							try { scene.events.emit('showTotalWinOverlay'); } catch {}
+						} else {
+							console.log('[Dialogs] Congrats dialog closed - reverting from bonus visuals to base');
+							scene.events.emit('setBonusMode', false);
+							scene.events.emit('hideBonusBackground');
+							scene.events.emit('hideBonusHeader');
+							scene.events.emit('resetSymbolsForBase');
+							try {
+								gameEventManager.emit(GameEventType.WIN_STOP);
+								console.log('[Dialogs] Emitted WIN_STOP at start of normal transition');
+							} catch {}
+						}
 					}
-					// Re-enable symbols after transition completes (normal flow)
-					scene.events.emit('enableSymbols');
-					console.log('[Dialogs] Symbols re-enabled after transition');
+					// If we're showing TotalWinOverlay, do not re-enable symbols/controls here.
+					// Finalization happens after the overlay is dismissed.
+					if (dialogTypeBeforeCleanup !== 'Congrats_KA') {
+						// Re-enable symbols after transition completes (normal flow)
+						scene.events.emit('enableSymbols');
+						console.log('[Dialogs] Symbols re-enabled after transition');
+					}
 				}
 				
 					// Emit dialog animations complete event for scatter bonus reset

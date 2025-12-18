@@ -160,6 +160,8 @@ export class MoneyValueOverlayManager {
 
 	private handleSceneUpdate(): void {
 		try {
+			const sceneAny: any = this.host.scene as any;
+			const tweensAny: any = sceneAny?.tweens;
 			for (let c = 0; c < this.overlays.length; c++) {
 				const col = this.overlays[c];
 				if (!Array.isArray(col)) continue;
@@ -186,8 +188,17 @@ export class MoneyValueOverlayManager {
 						const ownerScaleY = typeof owner.scaleY === 'number' ? owner.scaleY : 1;
 						const ratioX = baseOwnerScaleX !== 0 ? ownerScaleX / baseOwnerScaleX : 1;
 						const ratioY = baseOwnerScaleY !== 0 ? ownerScaleY / baseOwnerScaleY : 1;
-						cont.scaleX = baseOverlayScaleX * ratioX;
-						cont.scaleY = baseOverlayScaleY * ratioY;
+						let boost = 1;
+						try {
+							const tweeningA = !!tweensAny?.isTweening?.(owner);
+							const tweenList = tweensAny?.getTweensOf?.(owner, true) || tweensAny?.getTweensOf?.(owner) || [];
+							const tweeningB = Array.isArray(tweenList) && tweenList.length > 0;
+							if (tweeningA || tweeningB) {
+								boost = 1.25;
+							}
+						} catch {}
+						cont.scaleX = baseOverlayScaleX * ratioX * boost;
+						cont.scaleY = baseOverlayScaleY * ratioY * boost;
 						const symbolHeight = (owner.displayHeight || this.host.displayHeight) as number;
 						cont.x = owner.x;
 						cont.y = owner.y + symbolHeight * 0.28 + this.host.moneyValueOffsetY;

@@ -4,6 +4,8 @@ import { AUTO, Game } from 'phaser';
 import { Preloader } from './scenes/Preloader';
 import { BubbleTransitionScene } from './scenes/BubbleTransitionScene';
 import { BubbleOverlayTransitionScene } from './scenes/BubbleOverlayTransitionScene';
+import { TotalWinOverlayScene } from './scenes/TotalWinOverlayScene';
+import { FreeSpinRetriggerOverlayScene } from './scenes/FreeSpinRetriggerOverlayScene';
 // Import Spine runtime and plugin
 import * as Spine from '@esotericsoftware/spine-phaser-v3';
 
@@ -34,6 +36,8 @@ const config: Phaser.Types.Core.GameConfig = {
         Preloader,
         BubbleTransitionScene,
         BubbleOverlayTransitionScene,
+        FreeSpinRetriggerOverlayScene,
+        TotalWinOverlayScene,
         MainGame,
     ],
     plugins: {
@@ -181,6 +185,28 @@ const StartGame = (parent: string) => {
     const onWebGLContextRestored = () => {
         restartGame();
     };
+
+    const onGlobalError = (e: any) => {
+        try {
+            (window as any).__lastGameError = e;
+        } catch {}
+        try {
+            const err = (e && (e.error || e.reason)) ? (e.error || e.reason) : e;
+            console.error('[Game] Global error', err);
+        } catch {}
+        try { restartGame(); } catch {}
+    };
+    const onUnhandledRejection = (e: any) => {
+        try {
+            (window as any).__lastGameRejection = e;
+        } catch {}
+        try {
+            console.error('[Game] Unhandled rejection', e?.reason ?? e);
+        } catch {}
+        try { restartGame(); } catch {}
+    };
+    try { window.addEventListener('error', onGlobalError as any); } catch {}
+    try { window.addEventListener('unhandledrejection', onUnhandledRejection as any); } catch {}
 
     boundToCanvas = game.canvas as HTMLCanvasElement | null;
     if (boundToCanvas) {

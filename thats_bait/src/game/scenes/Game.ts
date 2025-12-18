@@ -20,6 +20,7 @@ import { FreeSpinOverlay } from '../components/FreeSpinOverlay';
 import { ScatterAnimationManager } from '../../managers/ScatterAnimationManager';
 import { BonusHeader } from '../components/BonusHeader';
 import { GaugeMeter } from '../components/GaugeMeter';
+import { Dialogs } from '../components/Dialogs';
 
 export class Game extends Phaser.Scene {
 	private networkManager!: NetworkManager;
@@ -79,6 +80,10 @@ export class Game extends Phaser.Scene {
 	private reelsStopListener?: (data?: any) => void;
 	private winStopListener?: (data?: any) => void;
 	private winTrackerHideListener?: () => void;
+	private bonusOverlayQueue: Array<() => Promise<void>> = [];
+	private bonusOverlayQueueRunning: boolean = false;
+	private freeSpinRetriggerOverlaySeq: number = 0;
+	private shownBonusRetriggerStages: Set<number> = new Set<number>();
 
 	public readonly gameData: GameData;
 	public readonly gameAPI: GameAPI;
@@ -91,7 +96,13 @@ export class Game extends Phaser.Scene {
 	private bonusHeader!: BonusHeader;
 	private gaugeMeter!: GaugeMeter;
 	private winTracker!: WinTracker;
+	private dialogs!: Dialogs;
 	private freeSpinOverlay?: FreeSpinOverlay;
+	private readonly freeSpinRetriggerMultiplierDisplayOptions: Record<string, { offsetX?: number; offsetY?: number; scale?: number }> = {
+		'2x_multiplier': { offsetX: 0, offsetY: 0, scale: 1 },
+		'3x_Multiplier_TB': { offsetX: 0, offsetY: 0, scale: 1 },
+		'10x_Multiplier_TB': { offsetX: 0, offsetY: 0, scale: 1 }
+	};
 	private readonly slotBackgroundModifiers = {
 		offsetX: 0,
 		offsetY: 40,
@@ -157,9 +168,80 @@ export class Game extends Phaser.Scene {
 		this.winTracker = new WinTracker();
 		(this as any).winTracker = this.winTracker;
 		this.winTracker.create(this);
+		try {
+			this.dialogs = new Dialogs(this.networkManager, this.screenModeManager);
+			(this as any).dialogs = this.dialogs;
+			this.dialogs.create(this);
+		} catch (e) {
+			try { console.warn('[Game] Failed to initialize Dialogs component:', e); } catch {}
+			try { (this as any).dialogs = undefined; } catch {}
+		}
 		// Initialize free spin overlay for scatter bonus entry
 		this.freeSpinOverlay = new FreeSpinOverlay(this, this.networkManager, this.screenModeManager);
 		(this as any).freeSpinOverlay = this.freeSpinOverlay;
+		// End-of-bonus total win overlay (TotalW_TB) shown after Congrats closes
+		this.events.on('showTotalWinOverlay', () => {
+			try {
+				try {
+					if ((this as any).__shownBonusTotalWinOverlay) {
+						return;
+					}
+					(this as any).__shownBonusTotalWinOverlay = true;
+				} catch {}
+
+				// Serialize end-of-bonus overlay with retrigger overlays.
+				this.enqueueBonusOverlay(async () => {
+					await this.showTotalWinOverlayFlow();
+				});
+			} catch {}
+		});
+
+		// Called when TotalWinOverlay is dismissed (triggered by BubbleOverlayTransition from TotalWinOverlay)
+		this.events.on('finalizeBonusExit', () => {
+			try {
+				// Ensure we return to base visuals/state
+				try { this.events.emit('deactivateBonusMode'); } catch {}
+				try { this.events.emit('resetSymbolsForBase'); } catch {}
+				try { gameEventManager.emit(GameEventType.WIN_STOP); } catch {}
+				try { this.events.emit('enableSymbols'); } catch {}
+				try { gameStateManager.isBonus = false; } catch {}
+				try { gameStateManager.isBonusFinished = false; } catch {}
+				try { gameStateManager.isShowingWinDialog = false; } catch {}
+				try { this.slotController?.setExternalControlLock(false); } catch {}
+			} catch {}
+		});
+		this.events.on('bonusRetrigger', (data: any) => {
+			try {
+				const addedSpins = Number(data?.addedSpins) || 0;
+				const totalSpins = Number(data?.totalSpins) || 0;
+				const rawStage = Number(data?.stage) || 0;
+				if (rawStage <= 0 || rawStage > 3) {
+					return;
+				}
+				const stage = Math.max(1, Math.min(3, rawStage));
+				try {
+					if (this.shownBonusRetriggerStages.has(stage)) {
+						return;
+					}
+				} catch {}
+				let multKey: string | null = null;
+				try {
+					if (stage >= 3) multKey = '10x_Multiplier_TB';
+					else if (stage >= 2) multKey = '3x_Multiplier_TB';
+					else if (stage >= 1) multKey = '2x_multiplier';
+				} catch {
+					multKey = null;
+				}
+				if (totalSpins > 0) {
+					try { this.slotController?.updateFreeSpinNumber?.(totalSpins); } catch {}
+				}
+				if (addedSpins > 0) {
+					this.enqueueBonusOverlay(async () => {
+						await this.showRetriggerOverlayFlow({ addedSpins, totalSpins, stage, multKey });
+					});
+				}
+			} catch {}
+		});
 		// Initialize ScatterAnimationManager with scene and symbol container so it can drive the overlay
 		try {
 			const scatterManager = ScatterAnimationManager.getInstance();
@@ -169,7 +251,7 @@ export class Game extends Phaser.Scene {
 			dummySpinner.setVisible(false);
 			scatterManager.initialize(this, symbolsContainer, dummySpinner, undefined, undefined, undefined, this.freeSpinOverlay);
 		} catch {}
-	
+
 		// Create rope and draggable handles after the main UI so they sit on top visually.
 		if (this.enableRope) {
 			this.setupRopeCable();
@@ -181,7 +263,7 @@ export class Game extends Phaser.Scene {
 		this.events.on('hook-scatter', this.handleHookScatter, this);
 		this.events.on('hook-collector', this.handleHookCollector, this);
 		this.registerBonusUiEventListeners();
-		
+
 		// Let any downstream listeners know the simple scene is ready.
 		gameEventManager.emit(GameEventType.START);
 	}
@@ -210,12 +292,150 @@ export class Game extends Phaser.Scene {
 			try { this.events.emit('showBonusBackground'); } catch {}
 			try { this.events.emit('showBonusHeader'); } catch {}
 			try { this.events.emit('enableSymbols'); } catch {}
+			try { (this as any).__shownBonusTotalWinOverlay = false; } catch {}
+			try { this.freeSpinRetriggerOverlaySeq = 0; } catch {}
+			try { this.shownBonusRetriggerStages.clear(); } catch {}
 		});
 		this.events.on('deactivateBonusMode', () => {
 			try { this.events.emit('setBonusMode', false); } catch {}
 			try { this.events.emit('hideBonusBackground'); } catch {}
 			try { this.events.emit('hideBonusHeader'); } catch {}
 		});
+	}
+
+	private enqueueBonusOverlay(fn: () => Promise<void>): void {
+		try {
+			this.bonusOverlayQueue.push(fn);
+		} catch {
+			return;
+		}
+		if (this.bonusOverlayQueueRunning) return;
+		this.bonusOverlayQueueRunning = true;
+		void this.runBonusOverlayQueue();
+	}
+
+	private runWithTimeout(p: Promise<void>, timeoutMs: number): Promise<void> {
+		return new Promise<void>((resolve) => {
+			let finished = false;
+			const finish = () => {
+				if (finished) return;
+				finished = true;
+				resolve();
+			};
+			let t: any = null;
+			try { t = setTimeout(() => finish(), Math.max(0, (Number(timeoutMs) || 0) | 0)); } catch {}
+			Promise.resolve(p).then(() => {
+				try { if (t) clearTimeout(t); } catch {}
+				finish();
+			}).catch(() => {
+				try { if (t) clearTimeout(t); } catch {}
+				finish();
+			});
+		});
+	}
+
+	private async runBonusOverlayQueue(): Promise<void> {
+		try {
+			while (this.bonusOverlayQueue.length > 0) {
+				const fn = this.bonusOverlayQueue.shift();
+				if (!fn) continue;
+				try {
+					await this.runWithTimeout(Promise.resolve(fn()), 15000);
+				} catch {}
+				await new Promise<void>((resolve) => {
+					try { this.time.delayedCall(0, () => resolve()); } catch { resolve(); }
+				});
+			}
+		} finally {
+			this.bonusOverlayQueueRunning = false;
+		}
+	}
+
+	private async showRetriggerOverlayFlow(data: { addedSpins: number; totalSpins: number; stage: number; multKey: string | null }): Promise<void> {
+		const stage = Math.max(1, Math.min(3, Number((data as any)?.stage) || 0));
+		try {
+			if (this.shownBonusRetriggerStages.has(stage)) {
+				return;
+			}
+			this.shownBonusRetriggerStages.add(stage);
+		} catch {}
+
+		const overlayId = (Number(this.freeSpinRetriggerOverlaySeq) || 0) + 1;
+		this.freeSpinRetriggerOverlaySeq = overlayId;
+		try { gameStateManager.isShowingWinDialog = true; } catch {}
+		await new Promise<void>((resolve) => {
+			let finished = false;
+			const finish = () => {
+				if (finished) return;
+				finished = true;
+				resolve();
+			};
+			const onClosed = (id?: any) => {
+				try { if (Number(id) !== overlayId) return; } catch {}
+				// Clear immediately to avoid a race where Symbols tries to resume autoplay while
+				// isShowingWinDialog is still true.
+				try { gameStateManager.isShowingWinDialog = false; } catch {}
+				finish();
+			};
+			try { this.events.once('freeSpinRetriggerOverlayClosed', onClosed); } catch {}
+			try { this.time.delayedCall(6000, () => finish()); } catch { try { setTimeout(() => finish(), 6000); } catch { finish(); } }
+			try {
+				if (this.scene.isActive('FreeSpinRetriggerOverlay') || this.scene.isSleeping('FreeSpinRetriggerOverlay')) {
+					try { this.scene.stop('FreeSpinRetriggerOverlay'); } catch {}
+				}
+			} catch {}
+			let launched = false;
+			try {
+				this.scene.launch('FreeSpinRetriggerOverlay', {
+					fromSceneKey: 'Game',
+					overlayId,
+					spinsLeft: Number(data?.totalSpins) || 0,
+					multiplierKey: data?.multKey ?? null,
+					multiplierOptionsByKey: this.freeSpinRetriggerMultiplierDisplayOptions
+				});
+				launched = true;
+				try { this.scene.bringToTop('FreeSpinRetriggerOverlay'); } catch {}
+			} catch {
+				try {
+					if (!launched) {
+						this.shownBonusRetriggerStages.delete(stage);
+					}
+				} catch {}
+				finish();
+			}
+		});
+		try { gameStateManager.isShowingWinDialog = false; } catch {}
+		try {
+			if (this.scene.isActive('FreeSpinRetriggerOverlay') || this.scene.isSleeping('FreeSpinRetriggerOverlay')) {
+				try { this.scene.stop('FreeSpinRetriggerOverlay'); } catch {}
+			}
+		} catch {}
+	}
+
+	private async showTotalWinOverlayFlow(): Promise<void> {
+		try { gameStateManager.isShowingWinDialog = true; } catch {}
+		await new Promise<void>((resolve) => {
+			let finished = false;
+			const finish = () => {
+				if (finished) return;
+				finished = true;
+				resolve();
+			};
+			try { this.events.once('finalizeBonusExit', () => finish()); } catch {}
+			try { this.time.delayedCall(20000, () => finish()); } catch { try { setTimeout(() => finish(), 20000); } catch { finish(); } }
+			try {
+				if (this.scene.isActive('TotalWinOverlay') || this.scene.isSleeping('TotalWinOverlay')) {
+					try { this.scene.stop('TotalWinOverlay'); } catch {}
+				}
+			} catch {}
+			try {
+				this.scene.launch('TotalWinOverlay');
+				try { this.scene.bringToTop('TotalWinOverlay'); } catch {}
+			} catch {
+				finish();
+			}
+		});
+		try { gameStateManager.isShowingWinDialog = false; } catch {}
 	}
 
 	public updateGaugeMeterModifiers(mods: { offsetX?: number; offsetY?: number; spacingX?: number; barThickness?: number; indicatorOffsetX?: number; indicatorOffsetY?: number; indicatorScale?: number; indicatorIntroDuration?: number; stage1OffsetX?: number; stage1OffsetY?: number; stage1Scale?: number; stage1Gap?: number; stage1ShadowOffsetX?: number; stage1ShadowOffsetY?: number; stage1ShadowAlpha?: number; stage1ShadowScale?: number; stage1GlowTint?: number; stage1GlowAlpha?: number; stage1GlowScale?: number; stage1GlowDuration?: number; stage1UnlockDuration?: number; stage1UnlockYOffset?: number; stage1FloatAmplitude?: number; stage1FloatDuration?: number; scale?: number; depth?: number }): void {
@@ -563,7 +783,12 @@ export class Game extends Phaser.Scene {
 			const originalParent: any = this.hookCollectorCollectorOriginalParent;
 			const overlay: any = this.hookCollectorOverlayContainer;
 			const idx = this.hookCollectorCollectorOriginalParentIndex;
-			if (collectorObj && originalParent && overlay && collectorObj.parentContainer === overlay) {
+			const wasCollected = !!(collectorObj as any)?.__collectedByHook;
+			if (wasCollected) {
+				try { overlay?.remove?.(collectorObj); } catch {}
+				try { collectorObj?.destroy?.(); } catch {}
+				try { if (this.hookScatterSymbol === collectorObj) this.hookScatterSymbol = undefined; } catch {}
+			} else if (collectorObj && originalParent && overlay && collectorObj.parentContainer === overlay) {
 				let wx = (collectorObj?.x ?? 0) as number;
 				let wy = (collectorObj?.y ?? 0) as number;
 				try {
@@ -621,6 +846,30 @@ export class Game extends Phaser.Scene {
 		this.hookCollectorRaisedParentContainer = undefined;
 	}
 
+	private getHookCollectorSpeedMultiplier(): number {
+		let m = 1;
+		try {
+			if (gameStateManager.isBonus) {
+				m *= 0.85;
+			}
+		} catch {}
+		try {
+			if (gameStateManager.isTurbo) {
+				m *= 0.75;
+			}
+		} catch {}
+		return Math.max(0.25, m);
+	}
+
+	private scaleHookCollectorMs(baseMs: number, minMs: number): number {
+		try {
+			const m = this.getHookCollectorSpeedMultiplier();
+			return Math.max(minMs, Math.round((Number(baseMs) || 0) * m));
+		} catch {
+			return Math.max(minMs, Number(baseMs) || minMs);
+		}
+	}
+
 	private startHookCollectorWithCharacter(pointerX: number, pointerY: number, homeX: number, homeY: number): void {
 		const hookToCollector = () => {
 			if (!this.isHookScatterEventActive || !this.rope) {
@@ -648,7 +897,7 @@ export class Game extends Phaser.Scene {
 				targets: this.hookScatterTarget,
 				x: pointerX,
 				y: pointerY,
-				duration: 1000,
+				duration: this.scaleHookCollectorMs(1000, 260),
 				ease: 'Sine.easeIn',
 				onComplete: () => {
 					try {
@@ -657,7 +906,7 @@ export class Game extends Phaser.Scene {
 						}
 					} catch {}
 					try {
-						this.time.delayedCall(120, () => {
+						this.time.delayedCall(this.scaleHookCollectorMs(120, 50), () => {
 							if (!this.isHookScatterEventActive) {
 								try { this.completeHookCollectorEvent(); } catch {}
 								return;
@@ -694,7 +943,7 @@ export class Game extends Phaser.Scene {
 		this.tweens.add({
 			targets: curveProxy,
 			value: 0,
-			duration: 1000,
+			duration: this.scaleHookCollectorMs(420, 160),
 			ease: 'Sine.easeInOut',
 			onUpdate: () => {
 				if (this.rope) {
@@ -759,7 +1008,7 @@ export class Game extends Phaser.Scene {
 			targets: this.hookScatterTarget,
 			x: homeX,
 			y: homeY,
-			duration: 1000,
+			duration: this.scaleHookCollectorMs(1000, 260),
 			ease: 'Sine.easeOut',
 			onUpdate: () => {
 				try {
@@ -801,7 +1050,9 @@ export class Game extends Phaser.Scene {
 				resolve();
 				return;
 			}
-			const target = gm && typeof gm.getLevel1WorldPosition === 'function' ? gm.getLevel1WorldPosition() : undefined;
+			const target = gm && typeof gm.getActiveLevelWorldPosition === 'function'
+				? gm.getActiveLevelWorldPosition()
+				: (gm && typeof gm.getLevel1WorldPosition === 'function' ? gm.getLevel1WorldPosition() : undefined);
 			if (!target || typeof target.x !== 'number' || typeof target.y !== 'number') {
 				resolve();
 				return;
@@ -817,7 +1068,9 @@ export class Game extends Phaser.Scene {
 					incremented = true;
 					let p: any = undefined;
 					try {
-						if (gm && typeof gm.incrementStage1Progress === 'function') {
+						if (gm && typeof gm.incrementActiveStageProgress === 'function') {
+							p = gm.incrementActiveStageProgress();
+						} else if (gm && typeof gm.incrementStage1Progress === 'function') {
 							p = gm.incrementStage1Progress();
 						}
 					} catch {}
@@ -841,6 +1094,50 @@ export class Game extends Phaser.Scene {
 			};
 
 			const collectorObj: any = this.hookScatterSymbol;
+			try {
+				const col = this.hookScatterCol;
+				const row = this.hookScatterRow;
+				const grid: any[][] = (this.symbols as any)?.symbols;
+				const symbolsContainer: any = (this.symbols as any)?.container;
+				if (grid && grid[col] && grid[col][row] === collectorObj) {
+					let w = (collectorObj?.displayWidth ?? (this.symbols as any)?.displayWidth ?? 1) as number;
+					let h = (collectorObj?.displayHeight ?? (this.symbols as any)?.displayHeight ?? 1) as number;
+					if (!isFinite(w) || w <= 0) w = 1;
+					if (!isFinite(h) || h <= 0) h = 1;
+					let lx = (collectorObj?.x ?? 0) as number;
+					let ly = (collectorObj?.y ?? 0) as number;
+					try {
+						if (typeof collectorObj.getBounds === 'function') {
+							const b = collectorObj.getBounds();
+							lx = b.centerX;
+							ly = b.centerY;
+						}
+					} catch {}
+					let px = lx;
+					let py = ly;
+					try {
+						if (symbolsContainer && typeof symbolsContainer.getWorldTransformMatrix === 'function') {
+							const m: any = symbolsContainer.getWorldTransformMatrix();
+							if (m && typeof m.applyInverse === 'function') {
+								const pt: any = m.applyInverse(lx, ly);
+								px = pt.x;
+								py = pt.y;
+							} else {
+								px = lx - (symbolsContainer.x ?? 0);
+								py = ly - (symbolsContainer.y ?? 0);
+							}
+						}
+					} catch {}
+					const placeholder: any = this.add.zone(px, py, w, h);
+					try { placeholder.setVisible(false); } catch {}
+					try { placeholder.setAlpha(0); } catch {}
+					try { placeholder.setDepth((collectorObj?.depth ?? 0) as number); } catch {}
+					try { (placeholder as any).__isCollectorPlaceholder = true; } catch {}
+					try { symbolsContainer?.add?.(placeholder); } catch {}
+					grid[col][row] = placeholder;
+					try { (collectorObj as any).__collectedByHook = true; } catch {}
+				}
+			} catch {}
 			let sx = 0;
 			let sy = 0;
 			try {
@@ -861,13 +1158,8 @@ export class Game extends Phaser.Scene {
 			try {
 				if (collectorObj) {
 					this.tweens.killTweensOf(collectorObj);
-					this.tweens.add({ targets: collectorObj, alpha: 0.2, duration: 70, yoyo: true, repeat: 2, ease: 'Sine.easeInOut' });
-					try {
-						this.time.delayedCall(260, () => {
-							try { collectorObj.setVisible(false); } catch {}
-							try { collectorObj.alpha = 0; } catch {}
-						});
-					} catch {}
+					try { collectorObj.setVisible(false); } catch { try { collectorObj.visible = false; } catch {} }
+					try { collectorObj.setAlpha(0); } catch { try { collectorObj.alpha = 0; } catch {} }
 				}
 			} catch {}
 
@@ -959,7 +1251,7 @@ export class Game extends Phaser.Scene {
 				targets: this.hookScatterTarget,
 				x: offscreenX,
 				y: offscreenY,
-				duration: 1000,
+				duration: 420,
 				ease: 'Sine.easeIn',
 				onComplete: () => {
 					this.handleHookReturnWithCharacter(pointerX, pointerY);
@@ -1256,7 +1548,7 @@ export class Game extends Phaser.Scene {
 			targets,
 			x: cellX,
 			y: cellY,
-			duration: 1000,
+			duration: 420,
 			ease: 'Sine.easeOut',
 			onComplete: () => {
 				this.finishHookScatterWithSymbol(cellX, cellY);

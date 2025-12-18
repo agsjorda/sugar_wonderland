@@ -569,7 +569,11 @@ export class GameAPI {
             
             // Use fake API if available
             if (fakeBonusAPI.hasMoreFreeSpins()) {
-                return await fakeBonusAPI.simulateFreeSpin();
+                const data = await fakeBonusAPI.simulateFreeSpin();
+                try {
+                    this.currentSpinData = data;
+                } catch {}
+                return data;
             }
         }
 

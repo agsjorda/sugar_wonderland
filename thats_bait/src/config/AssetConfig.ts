@@ -74,15 +74,36 @@ export class AssetConfig {
 				'stage1_2': `${forcedPortraitHighPrefix}/gauge-meter/stage1_2.webp`,
 				'stage1_3': `${forcedPortraitHighPrefix}/gauge-meter/stage1_3.webp`,
 				'stage1_4': `${forcedPortraitHighPrefix}/gauge-meter/stage1_4.webp`,
-				'stage1_5': `${forcedPortraitHighPrefix}/gauge-meter/stage1_5.webp`,
+				'stage2_1': `${forcedPortraitHighPrefix}/gauge-meter/stage2_1.webp`,
+				'stage2_2': `${forcedPortraitHighPrefix}/gauge-meter/stage2_2.webp`,
+				'stage2_3': `${forcedPortraitHighPrefix}/gauge-meter/stage2_3.webp`,
+				'stage2_4': `${forcedPortraitHighPrefix}/gauge-meter/stage2_4.webp`,
+				'stage3_1': `${forcedPortraitHighPrefix}/gauge-meter/stage3_1.webp`,
+				'stage3_2': `${forcedPortraitHighPrefix}/gauge-meter/stage3_2.webp`,
+				'stage3_3': `${forcedPortraitHighPrefix}/gauge-meter/stage3_3.webp`,
+				'stage3_4': `${forcedPortraitHighPrefix}/gauge-meter/stage3_4.webp`,
 				'win-10-free-spins': `${forcedPortraitHighPrefix}/gauge-meter/win-10-free-spins.webp`,
-				'2x_multiplier': `${forcedPortraitHighPrefix}/gauge-meter/2x_multiplier.webp`
+				'2x_multiplier': `${forcedPortraitHighPrefix}/gauge-meter/2x_multiplier.webp`,
+				'3x_Multiplier_TB': `${forcedPortraitHighPrefix}/gauge-meter/3x_Multiplier_TB.webp`,
+				'10x_Multiplier_TB': `${forcedPortraitHighPrefix}/gauge-meter/10x_Multiplier_TB.webp`
 			},
 			// Bonus dragon & fireworks spine assets were removed for this game
 			spine: {
 				'ReelBottom_Bonus_TB': {
 					atlas: `${forcedPortraitHighPrefix}/bonus_background/ReelBottom_Bonus_TB.atlas`,
 					json: `${forcedPortraitHighPrefix}/bonus_background/ReelBottom_Bonus_TB.json`
+				},
+				'stage1_5': {
+					atlas: `${forcedPortraitHighPrefix}/gauge-meter/stage1_5.atlas`,
+					json: `${forcedPortraitHighPrefix}/gauge-meter/stage1_5.json`
+				},
+				'stage2_5': {
+					atlas: `${forcedPortraitHighPrefix}/gauge-meter/stage2_5.atlas`,
+					json: `${forcedPortraitHighPrefix}/gauge-meter/stage2_5.json`
+				},
+				'stage3_5': {
+					atlas: `${forcedPortraitHighPrefix}/gauge-meter/stage3_5.atlas`,
+					json: `${forcedPortraitHighPrefix}/gauge-meter/stage3_5.json`
 				}
 			}
 		};
@@ -450,6 +471,14 @@ export class AssetConfig {
 				'FreeSpin_TB': {
 					atlas: `${forcedPortraitHighPrefix}/overlays/FreeSpin_TB.atlas`,
 					json: `${forcedPortraitHighPrefix}/overlays/FreeSpin_TB.json`
+				},
+				'FreeSpinRetri_TB': {
+					atlas: `${forcedPortraitHighPrefix}/overlays/FreeSpinRetri_TB.atlas`,
+					json: `${forcedPortraitHighPrefix}/overlays/FreeSpinRetri_TB.json`
+				},
+				'TotalW_TB': {
+					atlas: `${forcedPortraitHighPrefix}/overlays/TotalW_TB.atlas`,
+					json: `${forcedPortraitHighPrefix}/overlays/TotalW_TB.json`
 				}
 			}
 		};

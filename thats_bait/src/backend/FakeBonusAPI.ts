@@ -3,7 +3,16 @@ import { normalizeArea, normalizeMoney, normalizeSpinResponse } from "../backend
 
 // FAKE API CONFIGURATION - EASILY TOGGLEABLE
 const USE_FAKE_API_FOR_BONUS = true; // Set to false to disable fake API
-const FAKE_RESPONSE_PATH = '/fake-response.json';
+const FAKE_RESPONSE_PATH = (() => {
+    try {
+        const baseUrl = (import.meta as any)?.env?.BASE_URL;
+        if (typeof baseUrl === 'string' && baseUrl.length > 0) {
+            const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+            return `${normalizedBase}fake-response.json`;
+        }
+    } catch {}
+    return '/fake-response.json';
+})();
 
 // Cache for fake response data
 let fakeResponseCache: any = null;
@@ -16,6 +25,8 @@ export class FakeBonusAPI {
     private static instance: FakeBonusAPI;
     private fakeSpinData: SpinData | null = null;
     private currentFreeSpinIndex: number = 0;
+    private forcedDisabled: boolean = false;
+    private lastLoadError: any = null;
 
     private constructor() {}
 
@@ -30,28 +41,42 @@ export class FakeBonusAPI {
      * Check if fake API is enabled
      */
     public isEnabled(): boolean {
-        return USE_FAKE_API_FOR_BONUS;
+        return USE_FAKE_API_FOR_BONUS && !this.forcedDisabled;
+    }
+
+    private disableDueToLoadError(error: any): void {
+        try {
+            this.forcedDisabled = true;
+            this.lastLoadError = error;
+            console.warn('[FakeBonusAPI] Disabling fake bonus API due to load error. Falling back to backend responses.', error);
+        } catch {}
     }
 
     /**
      * Load fake response data from JSON file
      */
-    private async loadFakeResponse(): Promise<any> {
+    private async loadFakeResponse(): Promise<any | null> {
         if (fakeResponseCache) {
             return fakeResponseCache;
+        }
+
+        if (!this.isEnabled()) {
+            return null;
         }
 
         try {
             const response = await fetch(FAKE_RESPONSE_PATH);
             if (!response.ok) {
-                throw new Error(`Failed to load fake response: ${response.status}`);
+                const err = new Error(`Failed to load fake response: ${response.status}`);
+                this.disableDueToLoadError(err);
+                return null;
             }
             fakeResponseCache = await response.json();
             console.log('Fake response data loaded successfully');
             return fakeResponseCache;
         } catch (error) {
-            console.error('Error loading fake response:', error);
-            throw error;
+            this.disableDueToLoadError(error);
+            return null;
         }
     }
 
@@ -66,21 +91,23 @@ export class FakeBonusAPI {
 
         try {
             const fakeData = await this.loadFakeResponse();
-            
+            if (!fakeData) {
+                return;
+            }
+
             // Convert fake response to SpinData format
-            const bet = Number(fakeData.bet) || 1;
+            const bet = Number((fakeData as any).bet) || 1;
             this.fakeSpinData = normalizeSpinResponse(fakeData, bet);
-            
+
             this.currentFreeSpinIndex = 0;
-            
+
             console.log('Fake bonus API initialized with free spins:', {
                 totalSpins: this.fakeSpinData?.slot?.freespin?.count,
                 totalWin: this.fakeSpinData?.slot?.freespin?.totalWin,
                 itemsCount: this.fakeSpinData?.slot?.freespin?.items?.length
             });
         } catch (error) {
-            console.error('Failed to initialize fake bonus API:', error);
-            throw error;
+            this.disableDueToLoadError(error);
         }
     }
 
@@ -191,6 +218,8 @@ export class FakeBonusAPI {
         fakeResponseCache = null;
         this.fakeSpinData = null;
         this.currentFreeSpinIndex = 0;
+        this.forcedDisabled = false;
+        this.lastLoadError = null;
         console.log('Fake API cache cleared');
     }
 }

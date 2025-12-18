@@ -9,12 +9,20 @@ export class FreeSpinOverlay {
 	private container: Phaser.GameObjects.Container | null = null;
 	private background: Phaser.GameObjects.Rectangle | null = null;
 	private spine: any | null = null;
+	private spineKey: string = 'FreeSpin_TB';
+	private multiplierKey: string | null = null;
+	private multiplierImage: Phaser.GameObjects.Image | null = null;
+	private pressToContinueText: Phaser.GameObjects.Text | null = null;
 	private numberDisplay: NumberDisplay | null = null;
 	private valueOffsetX: number = -10;
 	private valueOffsetY: number = -95;
 	private valueOffsetModifierX: number = 1;
 	private valueOffsetModifierY: number = 1;
 	private valueScaleModifier: number = 2.5;
+	private multiplierOffsetX: number = 0;
+	private multiplierOffsetY: number = 0;
+	private multiplierScaleModifier: number = 1;
+	private multiplierOptionsByKey: Record<string, { offsetX?: number; offsetY?: number; scale?: number }> = {};
 	private valueBobAmplitude: number = 2;
 	private valueBobDurationMs: number = 1200;
 	private valueBobTween: Phaser.Tweens.Tween | null = null;
@@ -49,6 +57,21 @@ export class FreeSpinOverlay {
 		this.valueBobDurationMs = isFinite(durationMs) ? Math.max(200, durationMs) : this.valueBobDurationMs;
 	}
 
+	public setMultiplierDisplayOptions(options: { offsetX?: number; offsetY?: number; scale?: number }): void {
+		if (options.offsetX !== undefined) this.multiplierOffsetX = options.offsetX;
+		if (options.offsetY !== undefined) this.multiplierOffsetY = options.offsetY;
+		if (options.scale !== undefined) this.multiplierScaleModifier = (isFinite(options.scale) && options.scale > 0) ? options.scale : this.multiplierScaleModifier;
+	}
+
+	public setMultiplierDisplayOptionsForKey(multiplierKey: string, options: { offsetX?: number; offsetY?: number; scale?: number }): void {
+		if (!multiplierKey) return;
+		this.multiplierOptionsByKey[multiplierKey] = {
+			offsetX: options.offsetX,
+			offsetY: options.offsetY,
+			scale: options.scale
+		};
+	}
+
 	public initialize(scene: Scene, networkManager?: NetworkManager | null, screenModeManager?: ScreenModeManager | null): void {
 		if (this.isInitialized) return;
 		this.scene = scene;
@@ -80,11 +103,19 @@ export class FreeSpinOverlay {
 		this.isInitialized = true;
 	}
 
-	public show(spinsLeft: number, onComplete?: () => void): void {
+	public show(spinsLeft: number, onComplete?: () => void, spineKey?: string, multiplierKey?: string | null): void {
 		if (!this.scene || !this.container || !this.background) return;
 		if (this.isShowing) {
 			if (onComplete) onComplete();
 			return;
+		}
+		try {
+			this.spineKey = (typeof spineKey === 'string' && spineKey.length > 0) ? spineKey : 'FreeSpin_TB';
+		} catch {}
+		try {
+			this.multiplierKey = (typeof multiplierKey === 'string' && multiplierKey.length > 0) ? multiplierKey : null;
+		} catch {
+			this.multiplierKey = null;
 		}
 		this.isShowing = true;
 		this.container.setVisible(true);
@@ -99,6 +130,14 @@ export class FreeSpinOverlay {
 				this.spine.destroy();
 			} catch {}
 			this.spine = null;
+		}
+		if (this.multiplierImage) {
+			try { this.multiplierImage.destroy(); } catch {}
+			this.multiplierImage = null;
+		}
+		if (this.pressToContinueText) {
+			try { this.pressToContinueText.destroy(); } catch {}
+			this.pressToContinueText = null;
 		}
 		if (this.numberDisplay) {
 			try {
@@ -120,9 +159,88 @@ export class FreeSpinOverlay {
 			onComplete: () => {
 				this.createSpine();
 				this.createNumberDisplay(spinsLeft);
+				this.createPressToContinueLabel();
 				if (onComplete) onComplete();
 			}
 		});
+	}
+
+	private createPressToContinueLabel(): void {
+		try {
+			if (!this.scene || !this.container) return;
+			const key = (this as any).spineKey || '';
+			if (key !== 'FreeSpinRetri_TB') return;
+			const cam = this.scene.cameras.main;
+			const assetScale = this.networkManager?.getAssetScale?.() ?? 1;
+			const fontSize = Math.max(12, Math.round(18 * assetScale));
+			const txt = this.scene.add.text(
+				cam.centerX,
+				cam.centerY + cam.height * 0.34,
+				'Press anywhere to continue',
+				{
+					fontFamily: 'Poppins-Bold',
+					fontSize: `${fontSize}px`,
+					color: '#ffffff'
+				}
+			);
+			try { txt.setOrigin(0.5, 0.5); } catch {}
+			try { (txt as any).setScrollFactor?.(0); } catch {}
+			try { txt.setAlpha(0); } catch {}
+			this.container.add(txt);
+			this.pressToContinueText = txt;
+			try {
+				this.scene.tweens.add({
+					targets: txt,
+					alpha: 1,
+					duration: 260,
+					ease: 'Sine.easeOut',
+					delay: 300
+				});
+			} catch {}
+		} catch {}
+	}
+
+	private createMultiplierImage(numberContainer: Phaser.GameObjects.Container): void {
+		try {
+			if (!this.scene || !this.container) return;
+			if (!this.multiplierKey) return;
+			if (!this.scene.textures?.exists?.(this.multiplierKey)) return;
+			if (!numberContainer) return;
+			try { this.multiplierImage?.destroy?.(); } catch {}
+			this.multiplierImage = null;
+
+			const b = numberContainer.getBounds?.();
+			if (!b || !isFinite(b.right) || !isFinite(b.centerY) || !isFinite(b.height)) return;
+			const opts = (this.multiplierKey && this.multiplierOptionsByKey[this.multiplierKey]) ? this.multiplierOptionsByKey[this.multiplierKey] : null;
+			const ox = (opts?.offsetX ?? this.multiplierOffsetX) || 0;
+			const oy = (opts?.offsetY ?? this.multiplierOffsetY) || 0;
+			const sm = (opts?.scale ?? this.multiplierScaleModifier) || 1;
+			const img: any = this.scene.add.image(b.right + 12 + ox, b.centerY + oy, this.multiplierKey).setOrigin(0, 0.5);
+			try { img.setScrollFactor?.(0); } catch {}
+			try { img.setAlpha(0); } catch {}
+
+			try {
+				const ih = (img.height ?? img.displayHeight ?? 0) as number;
+				if (ih > 0) {
+					const targetH = Math.max(8, b.height * 0.9);
+					const s = targetH / ih;
+					img.setScale(s * (isFinite(sm) && sm > 0 ? sm : 1));
+				}
+			} catch {}
+
+			this.container.add(img);
+			this.multiplierImage = img;
+
+			try {
+				this.scene.tweens.add({
+					targets: img,
+					alpha: 1,
+					duration: 220,
+					ease: 'Sine.easeOut',
+					delay: 220
+				});
+			} catch {}
+		} catch {}
 	}
 
 	private createSpine(): void {
@@ -132,7 +250,8 @@ export class FreeSpinOverlay {
 		const x = cam.width * 0.5;
 		const y = cam.height * 0.45;
 		try {
-			const spineObj = (this.scene.add as any).spine(x, y, 'FreeSpin_TB', 'FreeSpin_TB-atlas');
+			const key = (this as any).spineKey || 'FreeSpin_TB';
+			const spineObj = (this.scene.add as any).spine(x, y, key, `${key}-atlas`);
 			try {
 				spineObj.setOrigin(0.5, 0.5);
 			} catch {}
@@ -192,8 +311,8 @@ export class FreeSpinOverlay {
 	private createNumberDisplay(spinsLeft: number): void {
 		if (!this.scene) return;
 		const sceneAny: any = this.scene as any;
-		const networkManager = sceneAny?.networkManager as NetworkManager | undefined;
-		const screenModeManager = sceneAny?.screenModeManager as ScreenModeManager | undefined;
+		const networkManager = (this.networkManager || (sceneAny?.networkManager as NetworkManager | undefined)) as NetworkManager | undefined;
+		const screenModeManager = (this.screenModeManager || (sceneAny?.screenModeManager as ScreenModeManager | undefined)) as ScreenModeManager | undefined;
 		if (!networkManager || !screenModeManager) return;
 		const cam = this.scene.cameras.main;
 		const baseX = cam.centerX;
@@ -227,6 +346,9 @@ export class FreeSpinOverlay {
 			cont.setScale(0.7 * this.valueScaleModifier);
 		} catch {}
 		this.container?.add(cont);
+		try {
+			this.createMultiplierImage(cont);
+		} catch {}
 		this.scene.tweens.add({
 			targets: cont,
 			alpha: 1,
@@ -284,6 +406,14 @@ export class FreeSpinOverlay {
 						this.spine.destroy();
 					} catch {}
 					this.spine = null;
+				}
+				if (this.multiplierImage) {
+					try { this.multiplierImage.destroy(); } catch {}
+					this.multiplierImage = null;
+				}
+				if (this.pressToContinueText) {
+					try { this.pressToContinueText.destroy(); } catch {}
+					this.pressToContinueText = null;
 				}
 				if (this.numberDisplay) {
 					try {

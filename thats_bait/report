@@ -1,0 +1,2647 @@
+ [Symbols] Waiting for reels to stop before continuing free spin autoplay
+ [Symbols] ===== FREE SPIN AUTOPLAY COMPLETED =====
+ [SlotController] Free spin number updated to 3 (actual: 3)
+ [SlotController] Updated free spin display to 3 remaining
+ [SlotController] Processing free spin data directly via symbols component
+ [Symbols] Processing spin data directly: Object
+ [Symbols] Stored current spin data for access by other components
+ [Symbols] Using symbols from SpinData slot.area: Array(5)
+ [Symbols] Processing SpinData symbols: Array(5)
+ [ScatterAnimationManager] Cleared all scatter symbol references
+ [Symbols] Resetting symbols and clearing previous state for new spin
+ [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+ [Symbols] Cleaned state for 14 symbols before spin (converted 0 Spine symbols to WEBP/PNG)
+ [Symbols] Clearing win lines and overlay for new spin
+ [Symbols] Converted SpinData paylines to win format: Map(0)
+ [Symbols] Setting animation timing: Object
+ [SlotController] Reels started - disabling amplify and bet UI
+ [SlotController] Amplify button disabled
+ [SlotController] Decrease bet button disabled
+ [SlotController] Increase bet button disabled
+ [Header] Reels started - hiding winnings display
+ [Header] Winnings display hidden
+ [BonusHeader] Reels started
+ [BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $35.5
+ [BonusHeader] Winnings display shown: $35.50 (raw: 35.5)
+ [Symbols] Disposing old symbols...
+ [Symbols] Disposed 0 symbols
+ [Symbols] New symbols from spin response: Array(5)
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 20
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 10
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 5
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 10
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 10
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [ReelDropScript] Anticipation check (reel 1 AND reel 3 scatter): r1=false, r3=false → extend=false
+ [ReelDropScript] Processing reel 0
+ [ReelDropScript] Processing reel 1
+ [ReelDropScript] Processing reel 2
+ [ReelDropScript] Processing reel 3
+ [ReelDropScript] Processing reel 4
+ [ReelDropScript] Waiting for all reels to complete animation...
+ [Symbols] Triggering _idle animations for NEW reel 0
+ [Symbols] Set new symbol at (0, 0) to idle animation: Symbol5-3_TB_idle
+ [Symbols] Set new symbol at (0, 1) to idle animation: Symbol5-2_TB_idle
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 10 at (0, 2) - no Spine data
+ [Symbols] Triggering _idle animations for NEW reel 1
+ [Symbols] Converted PNG/WEBP symbol 1 at (1, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (1, 0) to idle animation: symbol1_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 6 at (1, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (1, 1) to idle animation: Symbol6_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 4 at (1, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (1, 2) to idle animation: Symbol4_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 2
+ [Symbols] Set new symbol at (2, 0) to idle animation: Symbol5-1_TB_idle
+ [Symbols] Set new symbol at (2, 1) to idle animation: Symbol5-2_TB_idle
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 10 at (2, 2) - no Spine data
+ [Symbols] Triggering _idle animations for NEW reel 3
+ [Symbols] Converted PNG/WEBP symbol 3 at (3, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (3, 0) to idle animation: Symbol3_TB_idle
+ [Symbols] Set new symbol at (3, 1) to idle animation: Symbol5-2_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 4 at (3, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (3, 2) to idle animation: Symbol4_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 4
+ [Symbols] Converted PNG/WEBP symbol 6 at (4, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (4, 0) to idle animation: Symbol6_TB_idle
+ [Symbols] Set new symbol at (4, 2) to idle animation: Symbol5-1_TB_idle
+ [ReelDropScript] All reels have completed animation
+ [Symbols] Disposing old symbols...
+ [Symbols] Disposed 15 symbols
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 20
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 10
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 5
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 10
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 10
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 20
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 10
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 5
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 10
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 10
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 0
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 20
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 10
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 5
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 10
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 10
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Displaying: 20
+ [NumberDisplay] Displaying: 30
+ [NumberDisplay] Displaying: 35
+ [NumberDisplay] Displaying: 45
+ [NumberDisplay] Displaying: 55
+ [NumberDisplay] Displaying: 57
+ [NumberDisplay] Displaying: 114
+ [SlotController] Autoplay button disabled and greyed out
+ [SlotController] Decrease bet button disabled
+ [SlotController] Increase bet button disabled
+ [SlotController] Feature button disabled
+ [SlotController] Amplify button disabled
+ [SlotController] Turbo button disabled and greyed out
+ [SlotController] enableSpinButton skipped - isSpinLocked or reels still spinning
+ [SlotController] Autoplay button enabled
+ [SlotController] Decrease bet button enabled
+ [SlotController] Increase bet button enabled
+ [SlotController] Skipping feature enable (reels spinning or spin locked)
+ [SlotController] Amplify button enabled
+ [SlotController] Turbo button enabled
+ [SlotController] Disabling autoplay button - isReelSpinning: true
+ [SlotController] Autoplay button disabled and greyed out
+ [Symbols] Checking for scatter symbols...
+ [Symbols] Symbols grid: Array(5)
+ [Symbols] SCATTER_SYMBOL from GameConfig: Array(1)
+ [Symbols] ScatterGrids found: Array(0)
+ [Symbols] ScatterGrids length: 0
+ [Symbols] No paylines in SpinData, calling WinLineDrawer for no-wins scenario
+ [WinLineDrawer] No paylines to draw lines for (once)
+ [Symbols] No scatter detected (found 0 scatter symbols, need 3+)
+ [SlotController] Reels stopped event received - updating spin button state
+ [SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)
+ [SlotController] No pending balance update to apply
+ [SlotController] Bonus active - keeping buttons disabled on REELS_STOP
+ [Symbols] REELS_STOP event received
+ [Symbols] REELS_STOP received - autoplay continuation handled separately in onSpinDataReceived
+ [Symbols] Ensuring symbols remain visible after autoplay stop
+ [Symbols] Container visibility ensured after autoplay stop
+ [Symbols] Ensured 15 symbols are visible after autoplay stop
+ [Symbols] Cleared winlines after autoplay stop
+ [Symbols] Hidden winning overlay after autoplay stop
+ [Symbols] REELS_STOP received - continuing free spin autoplay
+ [Symbols] ===== CONTINUING FREE SPIN AUTOPLAY =====
+ [Symbols] Free spin autoplay: 3 spins remaining
+ [Symbols] Waiting for WIN_STOP event before continuing free spin autoplay
+ [Symbols] Setting freeSpinAutoplayWaitingForWinlines to true
+ [Symbols] freeSpinAutoplayWaitingForWinlines is now: true
+ [Symbols] ===== FREE SPIN AUTOPLAY CONTINUED =====
+ [Header] REELS_STOP received - checking for wins
+ [Header] Ignoring REELS_STOP before first spin event
+ [Header] Winnings display hidden
+ [BonusHeader] REELS_STOP received - checking for wins
+ [BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)
+ [Symbols] SpinData symbols processed successfully
+ [WinLineDrawer] Emitting WIN_STOP for no-wins scenario
+ [SlotController] WIN_STOP received - checking if spin button should be enabled
+ [SlotController] Bonus in progress - skipping UI re-enable in WIN_STOP
+ [Symbols] WIN_STOP event received - resuming autoplay
+ [Symbols] freeSpinAutoplayWaitingForReelsStop: false
+ [Symbols] freeSpinAutoplayActive: true
+ [Symbols] handleFreeSpinAutoplayWinStop called - freeSpinAutoplayWaitingForWinlines: true
+ [Symbols] WIN_STOP received - continuing free spin autoplay after winlines complete
+ [Symbols] Scheduling next free spin in 400ms (base: 500ms, turbo: true)
+ [GameData] Autoplay resumed after winline animations
+ [BonusHeader] WIN_STOP (bonus): accumulated spinWin=$0, cumulativeBonusWin=$35.5
+ [Symbols] ===== PERFORMING FREE SPIN AUTOPLAY =====
+ [Symbols] Free spin autoplay: 3 spins remaining
+ [Symbols] Triggering free spin via SlotController...
+ [SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation
+ [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+ [Symbols] Cleaned state for 9 symbols before spin (converted 6 Spine symbols to WEBP/PNG)
+ [SymbolFlash] Overlays created: 15
+ [Symbols] Turbo mode enabled for winline animations
+ [SlotController] Turbo mode enabled for winline animations via Symbols component
+ Using Fake API for bonus free spins
+  ===== FAKE FREE SPIN SIMULATION =====
+  Using fake data from: /fake-response.json
+  Current free spin index: 22
+  Spins left: 3
+  Sub total win: 120
+  Area: Array(5)
+  Paylines: Array(0)
+  Collector count: 37
+  Money: Array(5)
+  ===== FAKE FREE SPIN COMPLETE =====
+  Remaining fake free spins: 2
+  Next fake spin will use index: 23
+ [Symbols] Free spin triggered. 2 spins remaining.
+ [Symbols] Waiting for reels to stop before continuing free spin autoplay
+ [Symbols] ===== FREE SPIN AUTOPLAY COMPLETED =====
+ [SlotController] Free spin number updated to 2 (actual: 2)
+ [SlotController] Updated free spin display to 2 remaining
+ [SlotController] Processing free spin data directly via symbols component
+ [Symbols] Processing spin data directly: Object
+ [Symbols] Stored current spin data for access by other components
+ [Symbols] Using symbols from SpinData slot.area: Array(5)
+ [Symbols] Processing SpinData symbols: Array(5)
+ [ScatterAnimationManager] Cleared all scatter symbol references
+ [Symbols] Resetting symbols and clearing previous state for new spin
+ [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+ [Symbols] Cleaned state for 9 symbols before spin (converted 0 Spine symbols to WEBP/PNG)
+ [Symbols] Clearing win lines and overlay for new spin
+ [Symbols] Converted SpinData paylines to win format: Map(0)
+ [Symbols] Setting animation timing: Object
+ [SlotController] Reels started - disabling amplify and bet UI
+ [SlotController] Amplify button disabled
+ [SlotController] Decrease bet button disabled
+ [SlotController] Increase bet button disabled
+ [Header] Reels started - hiding winnings display
+ [Header] Winnings display hidden
+ [BonusHeader] Reels started
+ [BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $35.5
+ [BonusHeader] Winnings display shown: $35.50 (raw: 35.5)
+ [Symbols] Disposing old symbols...
+ [Symbols] Disposed 0 symbols
+ [Symbols] New symbols from spin response: Array(5)
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 5
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 5
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 50
+ [ReelDropScript] Anticipation check (reel 1 AND reel 3 scatter): r1=false, r3=false → extend=false
+ [ReelDropScript] Processing reel 0
+ [ReelDropScript] Processing reel 1
+ [ReelDropScript] Processing reel 2
+ [ReelDropScript] Processing reel 3
+ [ReelDropScript] Processing reel 4
+ [ReelDropScript] Waiting for all reels to complete animation...
+ [Symbols] Triggering _idle animations for NEW reel 0
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 10 at (0, 1) - no Spine data
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 8 at (0, 2) - no Spine data
+ [Symbols] Triggering _idle animations for NEW reel 1
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 9 at (1, 0) - no Spine data
+ [Symbols] Converted PNG/WEBP symbol 7 at (1, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (1, 1) to idle animation: Symbol7_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 4 at (1, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (1, 2) to idle animation: Symbol4_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 2
+ [Symbols] Converted PNG/WEBP symbol 1 at (2, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (2, 0) to idle animation: symbol1_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 3 at (2, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (2, 1) to idle animation: Symbol3_TB_idle
+ [Symbols] Set new symbol at (2, 2) to idle animation: Symbol5-1_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 3
+ [Symbols] Converted PNG/WEBP symbol 3 at (3, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (3, 0) to idle animation: Symbol3_TB_idle
+ [Symbols] Set new symbol at (3, 1) to idle animation: Symbol5-1_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 4 at (3, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (3, 2) to idle animation: Symbol4_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 4
+ [Symbols] Converted PNG/WEBP symbol 2 at (4, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (4, 0) to idle animation: symbol2_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 4 at (4, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (4, 1) to idle animation: Symbol4_TB_idle
+ [Symbols] Set new symbol at (4, 2) to idle animation: Symbol5-4_TB_idle
+ [ReelDropScript] All reels have completed animation
+ [Symbols] Disposing old symbols...
+ [Symbols] Disposed 15 symbols
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 5
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 5
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 50
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 5
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 5
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 50
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 0
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 5
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 5
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 50
+ [NumberDisplay] Displaying: 5
+ [NumberDisplay] Displaying: 10
+ [NumberDisplay] Displaying: 60
+ [NumberDisplay] Displaying: 120
+ [SlotController] Autoplay button disabled and greyed out
+ [SlotController] Decrease bet button disabled
+ [SlotController] Increase bet button disabled
+ [SlotController] Feature button disabled
+ [SlotController] Amplify button disabled
+ [SlotController] Turbo button disabled and greyed out
+ [SlotController] enableSpinButton skipped - isSpinLocked or reels still spinning
+ [SlotController] Autoplay button enabled
+ [SlotController] Decrease bet button enabled
+ [SlotController] Increase bet button enabled
+ [SlotController] Skipping feature enable (reels spinning or spin locked)
+ [SlotController] Amplify button enabled
+ [SlotController] Turbo button enabled
+ [SlotController] Disabling autoplay button - isReelSpinning: true
+ [SlotController] Autoplay button disabled and greyed out
+ [Symbols] Checking for scatter symbols...
+ [Symbols] Symbols grid: Array(5)
+ [Symbols] SCATTER_SYMBOL from GameConfig: Array(1)
+ [Symbols] ScatterGrids found: Array(0)
+ [Symbols] ScatterGrids length: 0
+ [Symbols] No paylines in SpinData, calling WinLineDrawer for no-wins scenario
+ [WinLineDrawer] No paylines to draw lines for (once)
+ [Symbols] No scatter detected (found 0 scatter symbols, need 3+)
+ [SlotController] Reels stopped event received - updating spin button state
+ [SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)
+ [SlotController] No pending balance update to apply
+ [SlotController] Bonus active - keeping buttons disabled on REELS_STOP
+ [Symbols] REELS_STOP event received
+ [Symbols] REELS_STOP received - autoplay continuation handled separately in onSpinDataReceived
+ [Symbols] Ensuring symbols remain visible after autoplay stop
+ [Symbols] Container visibility ensured after autoplay stop
+ [Symbols] Ensured 15 symbols are visible after autoplay stop
+ [Symbols] Cleared winlines after autoplay stop
+ [Symbols] Hidden winning overlay after autoplay stop
+ [Symbols] REELS_STOP received - continuing free spin autoplay
+ [Symbols] ===== CONTINUING FREE SPIN AUTOPLAY =====
+ [Symbols] Free spin autoplay: 2 spins remaining
+ [Symbols] Waiting for WIN_STOP event before continuing free spin autoplay
+ [Symbols] Setting freeSpinAutoplayWaitingForWinlines to true
+ [Symbols] freeSpinAutoplayWaitingForWinlines is now: true
+ [Symbols] ===== FREE SPIN AUTOPLAY CONTINUED =====
+ [Header] REELS_STOP received - checking for wins
+ [Header] Ignoring REELS_STOP before first spin event
+ [Header] Winnings display hidden
+ [BonusHeader] REELS_STOP received - checking for wins
+ [BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)
+ [Symbols] SpinData symbols processed successfully
+ [WinLineDrawer] Emitting WIN_STOP for no-wins scenario
+ [SlotController] WIN_STOP received - checking if spin button should be enabled
+ [SlotController] Bonus in progress - skipping UI re-enable in WIN_STOP
+ [Symbols] WIN_STOP event received - resuming autoplay
+ [Symbols] freeSpinAutoplayWaitingForReelsStop: false
+ [Symbols] freeSpinAutoplayActive: true
+ [Symbols] handleFreeSpinAutoplayWinStop called - freeSpinAutoplayWaitingForWinlines: true
+ [Symbols] WIN_STOP received - continuing free spin autoplay after winlines complete
+ [Symbols] Scheduling next free spin in 400ms (base: 500ms, turbo: true)
+ [GameData] Autoplay resumed after winline animations
+ [BonusHeader] WIN_STOP (bonus): accumulated spinWin=$0, cumulativeBonusWin=$35.5
+ [Symbols] ===== PERFORMING FREE SPIN AUTOPLAY =====
+ [Symbols] Free spin autoplay: 2 spins remaining
+ [Symbols] Triggering free spin via SlotController...
+ [SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation
+ [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+ [Symbols] Cleaned state for 12 symbols before spin (converted 8 Spine symbols to WEBP/PNG)
+ [SymbolFlash] Overlays created: 15
+ [Symbols] Turbo mode enabled for winline animations
+ [SlotController] Turbo mode enabled for winline animations via Symbols component
+ Using Fake API for bonus free spins
+  ===== FAKE FREE SPIN SIMULATION =====
+  Using fake data from: /fake-response.json
+  Current free spin index: 23
+  Spins left: 2
+  Sub total win: 12
+  Area: Array(5)
+  Paylines: Array(0)
+  Collector count: 40
+  Money: Array(5)
+  ===== FAKE FREE SPIN COMPLETE =====
+  Remaining fake free spins: 1
+  Next fake spin will use index: 24
+ [Symbols] Free spin triggered. 1 spins remaining.
+ [Symbols] Waiting for reels to stop before continuing free spin autoplay
+ [Symbols] ===== FREE SPIN AUTOPLAY COMPLETED =====
+ [SlotController] Free spin number updated to 1 (actual: 1)
+ [SlotController] Updated free spin display to 1 remaining
+ [SlotController] Processing free spin data directly via symbols component
+ [Symbols] Processing spin data directly: Object
+ [Symbols] Stored current spin data for access by other components
+ [Symbols] Using symbols from SpinData slot.area: Array(5)
+ [Symbols] Processing SpinData symbols: Array(5)
+ [ScatterAnimationManager] Cleared all scatter symbol references
+ [Symbols] Resetting symbols and clearing previous state for new spin
+ [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+ [Symbols] Cleaned state for 12 symbols before spin (converted 0 Spine symbols to WEBP/PNG)
+ [Symbols] Clearing win lines and overlay for new spin
+ [Symbols] Converted SpinData paylines to win format: Map(0)
+ [Symbols] Setting animation timing: Object
+ [SlotController] Reels started - disabling amplify and bet UI
+ [SlotController] Amplify button disabled
+ [SlotController] Decrease bet button disabled
+ [SlotController] Increase bet button disabled
+ [Header] Reels started - hiding winnings display
+ [Header] Winnings display hidden
+ [BonusHeader] Reels started
+ [BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $35.5
+ [BonusHeader] Winnings display shown: $35.50 (raw: 35.5)
+ [Symbols] Disposing old symbols...
+ [Symbols] Disposed 0 symbols
+ [Symbols] New symbols from spin response: Array(5)
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [ReelDropScript] Anticipation check (reel 1 AND reel 3 scatter): r1=false, r3=false → extend=false
+ [ReelDropScript] Processing reel 0
+ [ReelDropScript] Processing reel 1
+ [ReelDropScript] Processing reel 2
+ [ReelDropScript] Processing reel 3
+ [ReelDropScript] Processing reel 4
+ [ReelDropScript] Waiting for all reels to complete animation...
+ [Symbols] Triggering _idle animations for NEW reel 0
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 8 at (0, 0) - no Spine data
+ [Symbols] Converted PNG/WEBP symbol 3 at (0, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (0, 1) to idle animation: Symbol3_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 6 at (0, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (0, 2) to idle animation: Symbol6_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 1
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 9 at (1, 0) - no Spine data
+ [Symbols] Converted PNG/WEBP symbol 1 at (1, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (1, 1) to idle animation: symbol1_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 4 at (1, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (1, 2) to idle animation: Symbol4_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 2
+ [Symbols] Converted PNG/WEBP symbol 7 at (2, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (2, 1) to idle animation: Symbol7_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 2 at (2, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (2, 2) to idle animation: symbol2_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 3
+ [Symbols] Set new symbol at (3, 0) to idle animation: Symbol5-1_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 4 at (3, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (3, 1) to idle animation: Symbol4_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 4
+ [Symbols] Converted PNG/WEBP symbol 2 at (4, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (4, 1) to idle animation: symbol2_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 6 at (4, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (4, 2) to idle animation: Symbol6_TB_idle
+ [ReelDropScript] All reels have completed animation
+ [Symbols] Disposing old symbols...
+ [Symbols] Disposed 15 symbols
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 0
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Displaying: 4
+ [SlotController] Autoplay button disabled and greyed out
+ [SlotController] Decrease bet button disabled
+ [SlotController] Increase bet button disabled
+ [SlotController] Feature button disabled
+ [SlotController] Amplify button disabled
+ [SlotController] Turbo button disabled and greyed out
+ [SlotController] enableSpinButton skipped - isSpinLocked or reels still spinning
+ [SlotController] Autoplay button enabled
+ [SlotController] Decrease bet button enabled
+ [SlotController] Increase bet button enabled
+ [SlotController] Skipping feature enable (reels spinning or spin locked)
+ [SlotController] Amplify button enabled
+ [SlotController] Turbo button enabled
+ [SlotController] Disabling autoplay button - isReelSpinning: true
+ [SlotController] Autoplay button disabled and greyed out
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 0
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Displaying: 4
+ [SlotController] Autoplay button disabled and greyed out
+ [SlotController] Decrease bet button disabled
+ [SlotController] Increase bet button disabled
+ [SlotController] Feature button disabled
+ [SlotController] Amplify button disabled
+ [SlotController] Turbo button disabled and greyed out
+ [SlotController] enableSpinButton skipped - isSpinLocked or reels still spinning
+ [SlotController] Autoplay button enabled
+ [SlotController] Decrease bet button enabled
+ [SlotController] Increase bet button enabled
+ [SlotController] Skipping feature enable (reels spinning or spin locked)
+ [SlotController] Amplify button enabled
+ [SlotController] Turbo button enabled
+ [SlotController] Disabling autoplay button - isReelSpinning: true
+ [SlotController] Autoplay button disabled and greyed out
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 0
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Displaying: 4
+ [SlotController] Autoplay button disabled and greyed out
+ [SlotController] Decrease bet button disabled
+ [SlotController] Increase bet button disabled
+ [SlotController] Feature button disabled
+ [SlotController] Amplify button disabled
+ [SlotController] Turbo button disabled and greyed out
+ [SlotController] enableSpinButton skipped - isSpinLocked or reels still spinning
+ [SlotController] Autoplay button enabled
+ [SlotController] Decrease bet button enabled
+ [SlotController] Increase bet button enabled
+ [SlotController] Skipping feature enable (reels spinning or spin locked)
+ [SlotController] Amplify button enabled
+ [SlotController] Turbo button enabled
+ [SlotController] Disabling autoplay button - isReelSpinning: true
+ [SlotController] Autoplay button disabled and greyed out
+ [Symbols] Checking for scatter symbols...
+ [Symbols] Symbols grid: Array(5)
+ [Symbols] SCATTER_SYMBOL from GameConfig: Array(1)
+ [Symbols] ScatterGrids found: Array(0)
+ [Symbols] ScatterGrids length: 0
+ [Symbols] No paylines in SpinData, calling WinLineDrawer for no-wins scenario
+ [WinLineDrawer] No paylines to draw lines for (once)
+ [Symbols] No scatter detected (found 0 scatter symbols, need 3+)
+ [SlotController] Reels stopped event received - updating spin button state
+ [SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)
+ [SlotController] No pending balance update to apply
+ [SlotController] Bonus active - keeping buttons disabled on REELS_STOP
+ [Symbols] REELS_STOP event received
+ [Symbols] REELS_STOP received - autoplay continuation handled separately in onSpinDataReceived
+ [Symbols] Ensuring symbols remain visible after autoplay stop
+ [Symbols] Container visibility ensured after autoplay stop
+ [Symbols] Ensured 15 symbols are visible after autoplay stop
+ [Symbols] Cleared winlines after autoplay stop
+ [Symbols] Hidden winning overlay after autoplay stop
+ [Symbols] REELS_STOP received - continuing free spin autoplay
+ [Symbols] ===== CONTINUING FREE SPIN AUTOPLAY =====
+ [Symbols] Free spin autoplay: 1 spins remaining
+ [Symbols] Waiting for WIN_STOP event before continuing free spin autoplay
+ [Symbols] Setting freeSpinAutoplayWaitingForWinlines to true
+ [Symbols] freeSpinAutoplayWaitingForWinlines is now: true
+ [Symbols] ===== FREE SPIN AUTOPLAY CONTINUED =====
+ [Header] REELS_STOP received - checking for wins
+ [Header] Ignoring REELS_STOP before first spin event
+ [Header] Winnings display hidden
+ [BonusHeader] REELS_STOP received - checking for wins
+ [BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)
+ [Symbols] SpinData symbols processed successfully
+ [WinLineDrawer] Emitting WIN_STOP for no-wins scenario
+ [SlotController] WIN_STOP received - checking if spin button should be enabled
+ [SlotController] Bonus in progress - skipping UI re-enable in WIN_STOP
+ [Symbols] WIN_STOP event received - resuming autoplay
+ [Symbols] freeSpinAutoplayWaitingForReelsStop: false
+ [Symbols] freeSpinAutoplayActive: true
+ [Symbols] handleFreeSpinAutoplayWinStop called - freeSpinAutoplayWaitingForWinlines: true
+ [Symbols] WIN_STOP received - continuing free spin autoplay after winlines complete
+ [Symbols] Scheduling next free spin in 400ms (base: 500ms, turbo: true)
+ [GameData] Autoplay resumed after winline animations
+ [BonusHeader] WIN_STOP (bonus): accumulated spinWin=$0, cumulativeBonusWin=$35.5
+ [Symbols] ===== PERFORMING FREE SPIN AUTOPLAY =====
+ [Symbols] Free spin autoplay: 1 spins remaining
+ [Symbols] Triggering free spin via SlotController...
+ [SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation
+ [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+ [Symbols] Cleaned state for 14 symbols before spin (converted 9 Spine symbols to WEBP/PNG)
+ [SymbolFlash] Overlays created: 15
+ [Symbols] Turbo mode enabled for winline animations
+ [SlotController] Turbo mode enabled for winline animations via Symbols component
+ Using Fake API for bonus free spins
+  ===== FAKE FREE SPIN SIMULATION =====
+  Using fake data from: /fake-response.json
+  Current free spin index: 24
+  Spins left: 1
+  Sub total win: 43
+  Area: Array(5)
+  Paylines: Array(3)
+  Collector count: 42
+  Money: Array(5)
+  ===== FAKE FREE SPIN COMPLETE =====
+  Remaining fake free spins: 0
+  Next fake spin will use index: 25
+ [Symbols] Free spin triggered. 0 spins remaining.
+ [Symbols] Waiting for reels to stop before continuing free spin autoplay
+ [Symbols] ===== FREE SPIN AUTOPLAY COMPLETED =====
+ [SlotController] Free spin number updated to 0 (actual: 0)
+ [SlotController] Updated free spin display to 0 remaining
+ [SlotController] Processing free spin data directly via symbols component
+ [Symbols] Processing spin data directly: Object
+ [Symbols] Stored current spin data for access by other components
+ [Symbols] Using symbols from SpinData slot.area: Array(5)
+ [Symbols] Processing SpinData symbols: Array(5)
+ [ScatterAnimationManager] Cleared all scatter symbol references
+ [Symbols] Resetting symbols and clearing previous state for new spin
+ [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+ [Symbols] Cleaned state for 14 symbols before spin (converted 0 Spine symbols to WEBP/PNG)
+ [Symbols] Clearing win lines and overlay for new spin
+ [Symbols] Converted SpinData paylines to win format: Map(1)
+ [Symbols] Setting animation timing: Object
+ [SlotController] Reels started - disabling amplify and bet UI
+ [SlotController] Amplify button disabled
+ [SlotController] Decrease bet button disabled
+ [SlotController] Increase bet button disabled
+ [Header] Reels started - hiding winnings display
+ [Header] Winnings display hidden
+ [BonusHeader] Reels started
+ [BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $35.5
+ [BonusHeader] Winnings display shown: $35.50 (raw: 35.5)
+ [Symbols] Disposing old symbols...
+ [Symbols] Disposed 0 symbols
+ [Symbols] New symbols from spin response: Array(5)
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 10
+ [ReelDropScript] Anticipation check (reel 1 AND reel 3 scatter): r1=false, r3=false → extend=false
+ [ReelDropScript] Processing reel 0
+ [ReelDropScript] Processing reel 1
+ [ReelDropScript] Processing reel 2
+ [ReelDropScript] Processing reel 3
+ [ReelDropScript] Processing reel 4
+ [ReelDropScript] Waiting for all reels to complete animation...
+ [Symbols] Triggering _idle animations for NEW reel 0
+ [Symbols] Converted PNG/WEBP symbol 3 at (0, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (0, 1) to idle animation: Symbol3_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 4 at (0, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (0, 2) to idle animation: Symbol4_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 1
+ [Symbols] Converted PNG/WEBP symbol 1 at (1, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (1, 0) to idle animation: symbol1_TB_idle
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 9 at (1, 1) - no Spine data
+ [Symbols] Converted PNG/WEBP symbol 3 at (1, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (1, 2) to idle animation: Symbol3_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 2
+ [Symbols] Converted PNG/WEBP symbol 7 at (2, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (2, 0) to idle animation: Symbol7_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 2 at (2, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (2, 1) to idle animation: symbol2_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 3 at (2, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (2, 2) to idle animation: Symbol3_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 3
+ [Symbols] Converted PNG/WEBP symbol 3 at (3, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (3, 0) to idle animation: Symbol3_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 6 at (3, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (3, 2) to idle animation: Symbol6_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 4
+ [Symbols] Set new symbol at (4, 0) to idle animation: Symbol5-2_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 3 at (4, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (4, 1) to idle animation: Symbol3_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 1 at (4, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (4, 2) to idle animation: symbol1_TB_idle
+ [ReelDropScript] All reels have completed animation
+ [Symbols] Disposing old symbols...
+ [Symbols] Disposed 15 symbols
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 10
+ [Symbols] Checking for scatter symbols...
+ [Symbols] Symbols grid: Array(5)
+ [Symbols] SCATTER_SYMBOL from GameConfig: Array(1)
+ [Symbols] ScatterGrids found: Array(0)
+ [Symbols] ScatterGrids length: 0
+ [Symbols] Win below dialog threshold (6.00x) - autoplay continues
+ [Symbols] Drawing win lines from SpinData (single-pass for free spin autoplay)
+ [Symbols] Applying turbo mode to winlines via SlotController (same as normal autoplay)
+ [Symbols] Turbo mode enabled for winline animations
+ [SlotController] Turbo mode enabled for winline animations via Symbols component
+ [WinLineDrawer] Dynamic timing applied: lines=1, turbo=true, perLine=765ms, endPause=135ms, speed=2x
+ [WinLineDrawer] Emitting WIN_START for winline animations
+ [Symbols] WIN_START event received - pausing autoplay
+ [GameData] Autoplay paused for winline animations
+ [BonusHeader] Winnings display shown: $6.00 (raw: 6)
+ [Symbols] No scatter detected (found 0 scatter symbols, need 3+)
+ [SlotController] Reels stopped event received - updating spin button state
+ [SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)
+ [SlotController] No pending balance update to apply
+ [SlotController] Bonus mode: incremented balance by subtotalWin 6. 2558423.29 -> 2558429.29
+ [SlotController] Bonus active - keeping buttons disabled on REELS_STOP
+ [Symbols] REELS_STOP event received
+ [Symbols] REELS_STOP received - autoplay continuation handled separately in onSpinDataReceived
+ [Symbols] REELS_STOP received - continuing free spin autoplay
+ [Symbols] ===== CONTINUING FREE SPIN AUTOPLAY =====
+ [Symbols] Free spin autoplay: 0 spins remaining
+ [Symbols] Waiting for WIN_STOP event before continuing free spin autoplay
+ [Symbols] Setting freeSpinAutoplayWaitingForWinlines to true
+ [Symbols] freeSpinAutoplayWaitingForWinlines is now: true
+ [Symbols] ===== FREE SPIN AUTOPLAY CONTINUED =====
+ [Header] REELS_STOP received - checking for wins
+ [Header] Ignoring REELS_STOP before first spin event
+ [Header] Winnings display hidden
+ [BonusHeader] REELS_STOP received - checking for wins
+ [BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)
+ [Symbols] SpinData symbols processed successfully
+ [SlotController] Reels stopped event received - updating spin button state
+ [SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)
+ [SlotController] No pending balance update to apply
+ [SlotController] Bonus mode: incremented balance by subtotalWin 6. 2558429.29 -> 2558435.29
+ [SlotController] Bonus active - keeping buttons disabled on REELS_STOP
+ [Symbols] REELS_STOP event received
+ [Symbols] REELS_STOP received - autoplay continuation handled separately in onSpinDataReceived
+ [Header] REELS_STOP received - checking for wins
+ [Header] Ignoring REELS_STOP before first spin event
+ [Header] Winnings display hidden
+ [BonusHeader] REELS_STOP received - checking for wins
+ [BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)
+ [SlotController] WIN_STOP received - checking if spin button should be enabled
+ [SlotController] Bonus in progress - skipping UI re-enable in WIN_STOP
+ [Symbols] WIN_STOP event received - resuming autoplay
+ [Symbols] freeSpinAutoplayWaitingForReelsStop: false
+ [Symbols] freeSpinAutoplayActive: true
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 10
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 0
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 10
+ [BonusHeader] WIN_STOP (bonus): accumulated spinWin=$6, cumulativeBonusWin=$41.5
+ [WinLineDrawer] Cleared win lines and overlay (autoplay) after extra delay
+ [NumberDisplay] Displaying: 10
+ [NumberDisplay] Displaying: 20
+ [SlotController] Autoplay button disabled and greyed out
+ [SlotController] Decrease bet button disabled
+ [SlotController] Increase bet button disabled
+ [SlotController] Feature button disabled
+ [SlotController] Amplify button disabled
+ [SlotController] Turbo button disabled and greyed out
+ [SlotController] Spin button enabled
+ [SlotController] Autoplay button enabled
+ [SlotController] Decrease bet button enabled
+ [SlotController] Increase bet button enabled
+ [SlotController] Skipping feature enable (bonus active or not allowed yet)
+ [SlotController] Amplify button enabled
+ [SlotController] Turbo button enabled
+ [SlotController] Enabling autoplay button - not spinning
+ [SlotController] Autoplay button enabled
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 0
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 10
+ [NumberDisplay] Displaying: 10
+ [NumberDisplay] Displaying: 20
+ [SlotController] Autoplay button disabled and greyed out
+ [SlotController] Decrease bet button disabled
+ [SlotController] Increase bet button disabled
+ [SlotController] Feature button disabled
+ [SlotController] Amplify button disabled
+ [SlotController] Turbo button disabled and greyed out
+ [SlotController] Spin button enabled
+ [SlotController] Autoplay button enabled
+ [SlotController] Decrease bet button enabled
+ [SlotController] Increase bet button enabled
+ [SlotController] Skipping feature enable (bonus active or not allowed yet)
+ [SlotController] Amplify button enabled
+ [SlotController] Turbo button enabled
+ [SlotController] Enabling autoplay button - not spinning
+ [SlotController] Autoplay button enabled
+ [Symbols] handleFreeSpinAutoplayWinStop called - freeSpinAutoplayWaitingForWinlines: true
+ [Symbols] WIN_STOP received - continuing free spin autoplay after winlines complete
+ [Symbols] Scheduling next free spin in 400ms (base: 500ms, turbo: true)
+ [GameData] Autoplay resumed after winline animations
+ [GameStateManager] isBonusFinished re-set to same value: false
+ [SlotController] Free spin number updated to 10 (actual: 10)
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 10
+ [Symbols] ===== PERFORMING FREE SPIN AUTOPLAY =====
+ [Symbols] Free spin autoplay: 10 spins remaining
+ [Symbols] Triggering free spin via SlotController...
+ [SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation
+ [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+ [Symbols] Cleaned state for 15 symbols before spin (converted 3 Spine symbols to WEBP/PNG)
+ [SymbolFlash] Overlays created: 15
+ [Symbols] Turbo mode enabled for winline animations
+ [SlotController] Turbo mode enabled for winline animations via Symbols component
+ Using Fake API for bonus free spins
+  ===== FAKE FREE SPIN SIMULATION =====
+  Using fake data from: /fake-response.json
+  Current free spin index: 25
+  Spins left: 10
+  Sub total win: 0
+  Area: Array(5)
+  Paylines: Array(0)
+  Collector count: 42
+  Money: Array(5)
+  ===== FAKE FREE SPIN COMPLETE =====
+  Remaining fake free spins: 9
+  Next fake spin will use index: 26
+ [Symbols] Free spin triggered. 9 spins remaining.
+ [Symbols] Waiting for reels to stop before continuing free spin autoplay
+ [Symbols] ===== FREE SPIN AUTOPLAY COMPLETED =====
+ [SlotController] Free spin number updated to 9 (actual: 9)
+ [SlotController] Updated free spin display to 9 remaining
+ [SlotController] Processing free spin data directly via symbols component
+ [Symbols] Processing spin data directly: Object
+ [Symbols] Stored current spin data for access by other components
+ [Symbols] Using symbols from SpinData slot.area: Array(5)
+ [Symbols] Processing SpinData symbols: Array(5)
+ [ScatterAnimationManager] Cleared all scatter symbol references
+ [Symbols] Resetting symbols and clearing previous state for new spin
+ [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+ [Symbols] Cleaned state for 15 symbols before spin (converted 0 Spine symbols to WEBP/PNG)
+ [Symbols] Clearing win lines and overlay for new spin
+ [Symbols] Converted SpinData paylines to win format: Map(0)
+ [Symbols] Setting animation timing: Object
+ [SlotController] Reels started - disabling amplify and bet UI
+ [SlotController] Amplify button disabled
+ [SlotController] Decrease bet button disabled
+ [SlotController] Increase bet button disabled
+ [Header] Reels started - hiding winnings display
+ [Header] Winnings display hidden
+ [BonusHeader] Reels started
+ [BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $41.5
+ [BonusHeader] Winnings display shown: $41.50 (raw: 41.5)
+ [Symbols] Disposing old symbols...
+ [Symbols] Disposed 0 symbols
+ [Symbols] New symbols from spin response: Array(5)
+ [ReelDropScript] Anticipation check (reel 1 AND reel 3 scatter): r1=false, r3=false → extend=false
+ [ReelDropScript] Processing reel 0
+ [ReelDropScript] Processing reel 1
+ [ReelDropScript] Processing reel 2
+ [ReelDropScript] Processing reel 3
+ [ReelDropScript] Processing reel 4
+ [ReelDropScript] Waiting for all reels to complete animation...
+ [Symbols] Triggering _idle animations for NEW reel 0
+ [Symbols] Converted PNG/WEBP symbol 1 at (0, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (0, 0) to idle animation: symbol1_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 4 at (0, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (0, 1) to idle animation: Symbol4_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 6 at (0, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (0, 2) to idle animation: Symbol6_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 1
+ [Symbols] Converted PNG/WEBP symbol 3 at (1, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (1, 0) to idle animation: Symbol3_TB_idle
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 8 at (1, 1) - no Spine data
+ [Symbols] Converted PNG/WEBP symbol 4 at (1, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (1, 2) to idle animation: Symbol4_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 2
+ [Symbols] Converted PNG/WEBP symbol 3 at (2, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (2, 0) to idle animation: Symbol3_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 4 at (2, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (2, 1) to idle animation: Symbol4_TB_idle
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 9 at (2, 2) - no Spine data
+ [Symbols] Triggering _idle animations for NEW reel 3
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 9 at (3, 0) - no Spine data
+ [Symbols] Converted PNG/WEBP symbol 1 at (3, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (3, 1) to idle animation: symbol1_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 7 at (3, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (3, 2) to idle animation: Symbol7_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 4
+ [Symbols] Converted PNG/WEBP symbol 3 at (4, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (4, 0) to idle animation: Symbol3_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 1 at (4, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (4, 1) to idle animation: symbol1_TB_idle
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 10 at (4, 2) - no Spine data
+ [ReelDropScript] All reels have completed animation
+ [Symbols] Disposing old symbols...
+ [Symbols] Disposed 15 symbols
+ [Symbols] Checking for scatter symbols...
+ [Symbols] Symbols grid: Array(5)
+ [Symbols] SCATTER_SYMBOL from GameConfig: Array(1)
+ [Symbols] ScatterGrids found: Array(0)
+ [Symbols] ScatterGrids length: 0
+ [Symbols] No paylines in SpinData, calling WinLineDrawer for no-wins scenario
+ [WinLineDrawer] No paylines to draw lines for (once)
+ [Symbols] No scatter detected (found 0 scatter symbols, need 3+)
+ [SlotController] Reels stopped event received - updating spin button state
+ [SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)
+ [SlotController] No pending balance update to apply
+ [SlotController] Bonus active - keeping buttons disabled on REELS_STOP
+ [Symbols] REELS_STOP event received
+ [Symbols] REELS_STOP received - autoplay continuation handled separately in onSpinDataReceived
+ [Symbols] REELS_STOP received - continuing free spin autoplay
+ [Symbols] ===== CONTINUING FREE SPIN AUTOPLAY =====
+ [Symbols] Free spin autoplay: 9 spins remaining
+ [Symbols] Waiting for WIN_STOP event before continuing free spin autoplay
+ [Symbols] Setting freeSpinAutoplayWaitingForWinlines to true
+Symbols.ts:3252 [Symbols] freeSpinAutoplayWaitingForWinlines is now: true
+Symbols.ts:3258 [Symbols] ===== FREE SPIN AUTOPLAY CONTINUED =====
+Header.ts:132 [Header] REELS_STOP received - checking for wins
+Header.ts:135 [Header] Ignoring REELS_STOP before first spin event
+Header.ts:208 [Header] Winnings display hidden
+BonusHeader.ts:243 [BonusHeader] REELS_STOP received - checking for wins
+BonusHeader.ts:247 [BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)
+Symbols.ts:4006 [Symbols] SpinData symbols processed successfully
+WinLineDrawer.ts:106 [WinLineDrawer] Emitting WIN_STOP for no-wins scenario
+SlotController.ts:2583 [SlotController] WIN_STOP received - checking if spin button should be enabled
+SlotController.ts:2587 [SlotController] Bonus in progress - skipping UI re-enable in WIN_STOP
+Symbols.ts:1088 [Symbols] WIN_STOP event received - resuming autoplay
+Symbols.ts:1089 [Symbols] freeSpinAutoplayWaitingForReelsStop: false
+Symbols.ts:1090 [Symbols] freeSpinAutoplayActive: true
+Symbols.ts:3265 [Symbols] handleFreeSpinAutoplayWinStop called - freeSpinAutoplayWaitingForWinlines: true
+Symbols.ts:3271 [Symbols] WIN_STOP received - continuing free spin autoplay after winlines complete
+Symbols.ts:3284 [Symbols] Scheduling next free spin in 400ms (base: 500ms, turbo: true)
+GameData.ts:64 [GameData] Autoplay resumed after winline animations
+BonusHeader.ts:314 [BonusHeader] WIN_STOP (bonus): accumulated spinWin=$0, cumulativeBonusWin=$41.5
+Symbols.ts:2984 [Symbols] ===== PERFORMING FREE SPIN AUTOPLAY =====
+Symbols.ts:2985 [Symbols] Free spin autoplay: 9 spins remaining
+Symbols.ts:3201 [Symbols] Triggering free spin via SlotController...
+SlotController.ts:4230 [SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation
+Symbols.ts:1296 [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+Symbols.ts:1395 [Symbols] Cleaned state for 15 symbols before spin (converted 11 Spine symbols to WEBP/PNG)
+SymbolFlash.ts:212 [SymbolFlash] Overlays created: 15
+Symbols.ts:2735 [Symbols] Turbo mode enabled for winline animations
+SlotController.ts:4529 [SlotController] Turbo mode enabled for winline animations via Symbols component
+GameAPI.ts:563 Using Fake API for bonus free spins
+FakeBonusAPI.ts:136  ===== FAKE FREE SPIN SIMULATION =====
+FakeBonusAPI.ts:137  Using fake data from: /fake-response.json
+FakeBonusAPI.ts:138  Current free spin index: 26
+FakeBonusAPI.ts:139  Spins left: 9
+FakeBonusAPI.ts:140  Sub total win: 42
+FakeBonusAPI.ts:141  Area: Array(5)
+FakeBonusAPI.ts:142  Paylines: Array(0)
+FakeBonusAPI.ts:143  Collector count: 43
+FakeBonusAPI.ts:144  Money: Array(5)
+FakeBonusAPI.ts:172  ===== FAKE FREE SPIN COMPLETE =====
+FakeBonusAPI.ts:173  Remaining fake free spins: 8
+FakeBonusAPI.ts:174  Next fake spin will use index: 27
+Symbols.ts:3211 [Symbols] Free spin triggered. 8 spins remaining.
+Symbols.ts:3215 [Symbols] Waiting for reels to stop before continuing free spin autoplay
+Symbols.ts:3222 [Symbols] ===== FREE SPIN AUTOPLAY COMPLETED =====
+SlotController.ts:3649 [SlotController] Free spin number updated to 8 (actual: 8)
+SlotController.ts:4262 [SlotController] Updated free spin display to 8 remaining
+SlotController.ts:4268 [SlotController] Processing free spin data directly via symbols component
+Symbols.ts:3459 [Symbols] Processing spin data directly: Object
+Symbols.ts:3468 [Symbols] Stored current spin data for access by other components
+Symbols.ts:3509 [Symbols] Using symbols from SpinData slot.area: Array(5)
+Symbols.ts:3699 [Symbols] Processing SpinData symbols: Array(5)
+ScatterAnimationManager.ts:854 [ScatterAnimationManager] Cleared all scatter symbol references
+Symbols.ts:3723 [Symbols] Resetting symbols and clearing previous state for new spin
+Symbols.ts:1296 [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+Symbols.ts:1395 [Symbols] Cleaned state for 15 symbols before spin (converted 0 Spine symbols to WEBP/PNG)
+Symbols.ts:3727 [Symbols] Clearing win lines and overlay for new spin
+Symbols.ts:3751 [Symbols] Converted SpinData paylines to win format: Map(0)
+Symbols.ts:3758 [Symbols] Setting animation timing: Object
+SlotController.ts:2328 [SlotController] Reels started - disabling amplify and bet UI
+SlotController.ts:3025 [SlotController] Amplify button disabled
+SlotController.ts:508 [SlotController] Decrease bet button disabled
+SlotController.ts:514 [SlotController] Increase bet button disabled
+Header.ts:126 [Header] Reels started - hiding winnings display
+Header.ts:208 [Header] Winnings display hidden
+BonusHeader.ts:218 [BonusHeader] Reels started
+BonusHeader.ts:227 [BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $41.5
+BonusHeader.ts:141 [BonusHeader] Winnings display shown: $41.50 (raw: 41.5)
+Symbols.ts:4464 [Symbols] Disposing old symbols...
+Symbols.ts:4483 [Symbols] Disposed 0 symbols
+Symbols.ts:4268 [Symbols] New symbols from spin response: Array(5)
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 10
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+ReelDropScript.ts:31 [ReelDropScript] Anticipation check (reel 1 AND reel 3 scatter): r1=false, r3=false → extend=false
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 0
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 1
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 2
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 3
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 4
+ReelDropScript.ts:54 [ReelDropScript] Waiting for all reels to complete animation...
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 0
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 10 at (0, 0) - no Spine data
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 8 at (0, 1) - no Spine data
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 7 at (0, 2) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (0, 2) to idle animation: Symbol7_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 1
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 10 at (1, 1) - no Spine data
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 7 at (1, 2) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (1, 2) to idle animation: Symbol7_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 2
+Symbols.ts:2177 [Symbols] Set new symbol at (2, 0) to idle animation: Symbol5-2_TB_idle
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 9 at (2, 1) - no Spine data
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 1 at (2, 2) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (2, 2) to idle animation: symbol1_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 3
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 3 at (3, 0) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (3, 0) to idle animation: Symbol3_TB_idle
+Symbols.ts:2177 [Symbols] Set new symbol at (3, 1) to idle animation: Symbol5-1_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 4 at (3, 2) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (3, 2) to idle animation: Symbol4_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 4
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 2 at (4, 0) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (4, 0) to idle animation: symbol2_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 4 at (4, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (4, 1) to idle animation: Symbol4_TB_idle
+Symbols.ts:2177 [Symbols] Set new symbol at (4, 2) to idle animation: Symbol5-1_TB_idle
+ReelDropScript.ts:56 [ReelDropScript] All reels have completed animation
+Symbols.ts:4464 [Symbols] Disposing old symbols...
+Symbols.ts:4483 [Symbols] Disposed 15 symbols
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 10
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 10
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 0
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 10
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 10
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 12
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 14
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 42
+SlotController.ts:3663 [SlotController] Autoplay button disabled and greyed out
+SlotController.ts:508 [SlotController] Decrease bet button disabled
+SlotController.ts:514 [SlotController] Increase bet button disabled
+SlotController.ts:569 [SlotController] Feature button disabled
+SlotController.ts:3025 [SlotController] Amplify button disabled
+SlotController.ts:3002 [SlotController] Turbo button disabled and greyed out
+SlotController.ts:4356 [SlotController] enableSpinButton skipped - isSpinLocked or reels still spinning
+SlotController.ts:3675 [SlotController] Autoplay button enabled
+SlotController.ts:539 [SlotController] Decrease bet button enabled
+SlotController.ts:545 [SlotController] Increase bet button enabled
+SlotController.ts:582 [SlotController] Skipping feature enable (reels spinning or spin locked)
+SlotController.ts:3036 [SlotController] Amplify button enabled
+SlotController.ts:3014 [SlotController] Turbo button enabled
+SlotController.ts:3693 [SlotController] Disabling autoplay button - isReelSpinning: true
+SlotController.ts:3663 [SlotController] Autoplay button disabled and greyed out
+Symbols.ts:3862 [Symbols] Checking for scatter symbols...
+Symbols.ts:3863 [Symbols] Symbols grid: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+Symbols.ts:3864 [Symbols] SCATTER_SYMBOL from GameConfig: [0]
+Symbols.ts:3867 [Symbols] ScatterGrids found: []
+Symbols.ts:3868 [Symbols] ScatterGrids length: 0
+Symbols.ts:3923 [Symbols] No paylines in SpinData, calling WinLineDrawer for no-wins scenario
+WinLineDrawer.ts:101 [WinLineDrawer] No paylines to draw lines for (once)
+Symbols.ts:3993 [Symbols] No scatter detected (found 0 scatter symbols, need 3+)
+SlotController.ts:2349 [SlotController] Reels stopped event received - updating spin button state
+SlotController.ts:2383 [SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)
+SlotController.ts:2406 [SlotController] No pending balance update to apply
+SlotController.ts:2433 [SlotController] Bonus active - keeping buttons disabled on REELS_STOP
+Symbols.ts:1734 [Symbols] REELS_STOP event received
+Symbols.ts:1744 [Symbols] REELS_STOP received - autoplay continuation handled separately in onSpinDataReceived
+Symbols.ts:1861 [Symbols] REELS_STOP received - continuing free spin autoplay
+Symbols.ts:3229 [Symbols] ===== CONTINUING FREE SPIN AUTOPLAY =====
+Symbols.ts:3230 [Symbols] Free spin autoplay: 8 spins remaining
+Symbols.ts:3249 [Symbols] Waiting for WIN_STOP event before continuing free spin autoplay
+Symbols.ts:3250 [Symbols] Setting freeSpinAutoplayWaitingForWinlines to true
+Symbols.ts:3252 [Symbols] freeSpinAutoplayWaitingForWinlines is now: true
+Symbols.ts:3258 [Symbols] ===== FREE SPIN AUTOPLAY CONTINUED =====
+Header.ts:132 [Header] REELS_STOP received - checking for wins
+Header.ts:135 [Header] Ignoring REELS_STOP before first spin event
+Header.ts:208 [Header] Winnings display hidden
+BonusHeader.ts:243 [BonusHeader] REELS_STOP received - checking for wins
+BonusHeader.ts:247 [BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)
+Symbols.ts:4006 [Symbols] SpinData symbols processed successfully
+WinLineDrawer.ts:106 [WinLineDrawer] Emitting WIN_STOP for no-wins scenario
+SlotController.ts:2583 [SlotController] WIN_STOP received - checking if spin button should be enabled
+SlotController.ts:2587 [SlotController] Bonus in progress - skipping UI re-enable in WIN_STOP
+Symbols.ts:1088 [Symbols] WIN_STOP event received - resuming autoplay
+Symbols.ts:1089 [Symbols] freeSpinAutoplayWaitingForReelsStop: false
+Symbols.ts:1090 [Symbols] freeSpinAutoplayActive: true
+Symbols.ts:3265 [Symbols] handleFreeSpinAutoplayWinStop called - freeSpinAutoplayWaitingForWinlines: true
+Symbols.ts:3271 [Symbols] WIN_STOP received - continuing free spin autoplay after winlines complete
+Symbols.ts:3284 [Symbols] Scheduling next free spin in 400ms (base: 500ms, turbo: true)
+GameData.ts:64 [GameData] Autoplay resumed after winline animations
+BonusHeader.ts:314 [BonusHeader] WIN_STOP (bonus): accumulated spinWin=$0, cumulativeBonusWin=$41.5
+Symbols.ts:2984 [Symbols] ===== PERFORMING FREE SPIN AUTOPLAY =====
+Symbols.ts:2985 [Symbols] Free spin autoplay: 8 spins remaining
+Symbols.ts:3201 [Symbols] Triggering free spin via SlotController...
+SlotController.ts:4230 [SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation
+Symbols.ts:1296 [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+Symbols.ts:1395 [Symbols] Cleaned state for 12 symbols before spin (converted 7 Spine symbols to WEBP/PNG)
+SymbolFlash.ts:212 [SymbolFlash] Overlays created: 15
+Symbols.ts:2735 [Symbols] Turbo mode enabled for winline animations
+SlotController.ts:4529 [SlotController] Turbo mode enabled for winline animations via Symbols component
+GameAPI.ts:563 Using Fake API for bonus free spins
+FakeBonusAPI.ts:136  ===== FAKE FREE SPIN SIMULATION =====
+FakeBonusAPI.ts:137  Using fake data from: /fake-response.json
+FakeBonusAPI.ts:138  Current free spin index: 27
+FakeBonusAPI.ts:139  Spins left: 8
+FakeBonusAPI.ts:140  Sub total win: 0
+FakeBonusAPI.ts:141  Area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+FakeBonusAPI.ts:142  Paylines: []
+FakeBonusAPI.ts:143  Collector count: 43
+FakeBonusAPI.ts:144  Money: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+FakeBonusAPI.ts:172  ===== FAKE FREE SPIN COMPLETE =====
+FakeBonusAPI.ts:173  Remaining fake free spins: 7
+FakeBonusAPI.ts:174  Next fake spin will use index: 28
+Symbols.ts:3211 [Symbols] Free spin triggered. 7 spins remaining.
+Symbols.ts:3215 [Symbols] Waiting for reels to stop before continuing free spin autoplay
+Symbols.ts:3222 [Symbols] ===== FREE SPIN AUTOPLAY COMPLETED =====
+SlotController.ts:3649 [SlotController] Free spin number updated to 7 (actual: 7)
+SlotController.ts:4262 [SlotController] Updated free spin display to 7 remaining
+SlotController.ts:4268 [SlotController] Processing free spin data directly via symbols component
+Symbols.ts:3459 [Symbols] Processing spin data directly: {playerId: 'local', bet: '1', baseBet: '1', slot: {…}}
+Symbols.ts:3468 [Symbols] Stored current spin data for access by other components
+Symbols.ts:3509 [Symbols] Using symbols from SpinData slot.area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+Symbols.ts:3699 [Symbols] Processing SpinData symbols: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ScatterAnimationManager.ts:854 [ScatterAnimationManager] Cleared all scatter symbol references
+Symbols.ts:3723 [Symbols] Resetting symbols and clearing previous state for new spin
+Symbols.ts:1296 [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+Symbols.ts:1395 [Symbols] Cleaned state for 12 symbols before spin (converted 0 Spine symbols to WEBP/PNG)
+Symbols.ts:3727 [Symbols] Clearing win lines and overlay for new spin
+Symbols.ts:3751 [Symbols] Converted SpinData paylines to win format: Map(0) {size: 0}
+Symbols.ts:3758 [Symbols] Setting animation timing: {baseDelay: 2500, isTurbo: true, adjustedDelay: 2000}
+SlotController.ts:2328 [SlotController] Reels started - disabling amplify and bet UI
+SlotController.ts:3025 [SlotController] Amplify button disabled
+SlotController.ts:508 [SlotController] Decrease bet button disabled
+SlotController.ts:514 [SlotController] Increase bet button disabled
+Header.ts:126 [Header] Reels started - hiding winnings display
+Header.ts:208 [Header] Winnings display hidden
+BonusHeader.ts:218 [BonusHeader] Reels started
+BonusHeader.ts:227 [BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $41.5
+BonusHeader.ts:141 [BonusHeader] Winnings display shown: $41.50 (raw: 41.5)
+Symbols.ts:4464 [Symbols] Disposing old symbols...
+Symbols.ts:4483 [Symbols] Disposed 0 symbols
+Symbols.ts:4268 [Symbols] New symbols from spin response: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+ReelDropScript.ts:31 [ReelDropScript] Anticipation check (reel 1 AND reel 3 scatter): r1=false, r3=false → extend=false
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 0
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 1
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 2
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 3
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 4
+ReelDropScript.ts:54 [ReelDropScript] Waiting for all reels to complete animation...
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 0
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 1 at (0, 0) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (0, 0) to idle animation: symbol1_TB_idle
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 10 at (0, 1) - no Spine data
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 6 at (0, 2) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (0, 2) to idle animation: Symbol6_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 1
+Symbols.ts:2177 [Symbols] Set new symbol at (1, 0) to idle animation: Symbol5-1_TB_idle
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 9 at (1, 1) - no Spine data
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 3 at (1, 2) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (1, 2) to idle animation: Symbol3_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 2
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 2 at (2, 0) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (2, 0) to idle animation: symbol2_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 1 at (2, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (2, 1) to idle animation: symbol1_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 6 at (2, 2) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (2, 2) to idle animation: Symbol6_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 3
+Symbols.ts:2177 [Symbols] Set new symbol at (3, 0) to idle animation: Symbol5-1_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 4 at (3, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (3, 1) to idle animation: Symbol4_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 2 at (3, 2) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (3, 2) to idle animation: symbol2_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 4
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 3 at (4, 0) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (4, 0) to idle animation: Symbol3_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 1 at (4, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (4, 1) to idle animation: symbol1_TB_idle
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 10 at (4, 2) - no Spine data
+ReelDropScript.ts:56 [ReelDropScript] All reels have completed animation
+Symbols.ts:4464 [Symbols] Disposing old symbols...
+Symbols.ts:4483 [Symbols] Disposed 15 symbols
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+Symbols.ts:3862 [Symbols] Checking for scatter symbols...
+Symbols.ts:3863 [Symbols] Symbols grid: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+Symbols.ts:3864 [Symbols] SCATTER_SYMBOL from GameConfig: [0]
+Symbols.ts:3867 [Symbols] ScatterGrids found: []
+Symbols.ts:3868 [Symbols] ScatterGrids length: 0
+Symbols.ts:3923 [Symbols] No paylines in SpinData, calling WinLineDrawer for no-wins scenario
+WinLineDrawer.ts:101 [WinLineDrawer] No paylines to draw lines for (once)
+Symbols.ts:3993 [Symbols] No scatter detected (found 0 scatter symbols, need 3+)
+SlotController.ts:2349 [SlotController] Reels stopped event received - updating spin button state
+SlotController.ts:2383 [SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)
+SlotController.ts:2406 [SlotController] No pending balance update to apply
+SlotController.ts:2433 [SlotController] Bonus active - keeping buttons disabled on REELS_STOP
+Symbols.ts:1734 [Symbols] REELS_STOP event received
+Symbols.ts:1744 [Symbols] REELS_STOP received - autoplay continuation handled separately in onSpinDataReceived
+Symbols.ts:1861 [Symbols] REELS_STOP received - continuing free spin autoplay
+Symbols.ts:3229 [Symbols] ===== CONTINUING FREE SPIN AUTOPLAY =====
+Symbols.ts:3230 [Symbols] Free spin autoplay: 7 spins remaining
+Symbols.ts:3249 [Symbols] Waiting for WIN_STOP event before continuing free spin autoplay
+Symbols.ts:3250 [Symbols] Setting freeSpinAutoplayWaitingForWinlines to true
+Symbols.ts:3252 [Symbols] freeSpinAutoplayWaitingForWinlines is now: true
+Symbols.ts:3258 [Symbols] ===== FREE SPIN AUTOPLAY CONTINUED =====
+Header.ts:132 [Header] REELS_STOP received - checking for wins
+Header.ts:135 [Header] Ignoring REELS_STOP before first spin event
+Header.ts:208 [Header] Winnings display hidden
+BonusHeader.ts:243 [BonusHeader] REELS_STOP received - checking for wins
+BonusHeader.ts:247 [BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)
+Symbols.ts:4006 [Symbols] SpinData symbols processed successfully
+WinLineDrawer.ts:106 [WinLineDrawer] Emitting WIN_STOP for no-wins scenario
+SlotController.ts:2583 [SlotController] WIN_STOP received - checking if spin button should be enabled
+SlotController.ts:2587 [SlotController] Bonus in progress - skipping UI re-enable in WIN_STOP
+Symbols.ts:1088 [Symbols] WIN_STOP event received - resuming autoplay
+Symbols.ts:1089 [Symbols] freeSpinAutoplayWaitingForReelsStop: false
+Symbols.ts:1090 [Symbols] freeSpinAutoplayActive: true
+Symbols.ts:3265 [Symbols] handleFreeSpinAutoplayWinStop called - freeSpinAutoplayWaitingForWinlines: true
+Symbols.ts:3271 [Symbols] WIN_STOP received - continuing free spin autoplay after winlines complete
+Symbols.ts:3284 [Symbols] Scheduling next free spin in 400ms (base: 500ms, turbo: true)
+GameData.ts:64 [GameData] Autoplay resumed after winline animations
+BonusHeader.ts:314 [BonusHeader] WIN_STOP (bonus): accumulated spinWin=$0, cumulativeBonusWin=$41.5
+Symbols.ts:2984 [Symbols] ===== PERFORMING FREE SPIN AUTOPLAY =====
+Symbols.ts:2985 [Symbols] Free spin autoplay: 7 spins remaining
+Symbols.ts:3201 [Symbols] Triggering free spin via SlotController...
+SlotController.ts:4230 [SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation
+Symbols.ts:1296 [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+Symbols.ts:1395 [Symbols] Cleaned state for 13 symbols before spin (converted 10 Spine symbols to WEBP/PNG)
+SymbolFlash.ts:212 [SymbolFlash] Overlays created: 15
+Symbols.ts:2735 [Symbols] Turbo mode enabled for winline animations
+SlotController.ts:4529 [SlotController] Turbo mode enabled for winline animations via Symbols component
+GameAPI.ts:563 Using Fake API for bonus free spins
+FakeBonusAPI.ts:136  ===== FAKE FREE SPIN SIMULATION =====
+FakeBonusAPI.ts:137  Using fake data from: /fake-response.json
+FakeBonusAPI.ts:138  Current free spin index: 28
+FakeBonusAPI.ts:139  Spins left: 7
+FakeBonusAPI.ts:140  Sub total win: 27
+FakeBonusAPI.ts:141  Area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+FakeBonusAPI.ts:142  Paylines: []
+FakeBonusAPI.ts:143  Collector count: 44
+FakeBonusAPI.ts:144  Money: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+FakeBonusAPI.ts:172  ===== FAKE FREE SPIN COMPLETE =====
+FakeBonusAPI.ts:173  Remaining fake free spins: 6
+FakeBonusAPI.ts:174  Next fake spin will use index: 29
+Symbols.ts:3211 [Symbols] Free spin triggered. 6 spins remaining.
+Symbols.ts:3215 [Symbols] Waiting for reels to stop before continuing free spin autoplay
+Symbols.ts:3222 [Symbols] ===== FREE SPIN AUTOPLAY COMPLETED =====
+SlotController.ts:3649 [SlotController] Free spin number updated to 6 (actual: 6)
+SlotController.ts:4262 [SlotController] Updated free spin display to 6 remaining
+SlotController.ts:4268 [SlotController] Processing free spin data directly via symbols component
+Symbols.ts:3459 [Symbols] Processing spin data directly: {playerId: 'local', bet: '1', baseBet: '1', slot: {…}}
+Symbols.ts:3468 [Symbols] Stored current spin data for access by other components
+Symbols.ts:3509 [Symbols] Using symbols from SpinData slot.area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+Symbols.ts:3699 [Symbols] Processing SpinData symbols: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ScatterAnimationManager.ts:854 [ScatterAnimationManager] Cleared all scatter symbol references
+Symbols.ts:3723 [Symbols] Resetting symbols and clearing previous state for new spin
+Symbols.ts:1296 [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+Symbols.ts:1395 [Symbols] Cleaned state for 13 symbols before spin (converted 0 Spine symbols to WEBP/PNG)
+Symbols.ts:3727 [Symbols] Clearing win lines and overlay for new spin
+Symbols.ts:3751 [Symbols] Converted SpinData paylines to win format: Map(0) {size: 0}
+Symbols.ts:3758 [Symbols] Setting animation timing: {baseDelay: 2500, isTurbo: true, adjustedDelay: 2000}
+SlotController.ts:2328 [SlotController] Reels started - disabling amplify and bet UI
+SlotController.ts:3025 [SlotController] Amplify button disabled
+SlotController.ts:508 [SlotController] Decrease bet button disabled
+SlotController.ts:514 [SlotController] Increase bet button disabled
+Header.ts:126 [Header] Reels started - hiding winnings display
+Header.ts:208 [Header] Winnings display hidden
+BonusHeader.ts:218 [BonusHeader] Reels started
+BonusHeader.ts:227 [BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $41.5
+BonusHeader.ts:141 [BonusHeader] Winnings display shown: $41.50 (raw: 41.5)
+Symbols.ts:4464 [Symbols] Disposing old symbols...
+Symbols.ts:4483 [Symbols] Disposed 0 symbols
+Symbols.ts:4268 [Symbols] New symbols from spin response: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+ReelDropScript.ts:31 [ReelDropScript] Anticipation check (reel 1 AND reel 3 scatter): r1=false, r3=false → extend=false
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 0
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 1
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 2
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 3
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 4
+ReelDropScript.ts:54 [ReelDropScript] Waiting for all reels to complete animation...
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 0
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 3 at (0, 0) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (0, 0) to idle animation: Symbol3_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 6 at (0, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (0, 1) to idle animation: Symbol6_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 2 at (0, 2) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (0, 2) to idle animation: symbol2_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 1
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 7 at (1, 0) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (1, 0) to idle animation: Symbol7_TB_idle
+Symbols.ts:2177 [Symbols] Set new symbol at (1, 1) to idle animation: Symbol5-1_TB_idle
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 9 at (1, 2) - no Spine data
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 2
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 7 at (2, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (2, 1) to idle animation: Symbol7_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 2 at (2, 2) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (2, 2) to idle animation: symbol2_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 3
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 4 at (3, 0) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (3, 0) to idle animation: Symbol4_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 2 at (3, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (3, 1) to idle animation: symbol2_TB_idle
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 9 at (3, 2) - no Spine data
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 4
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 10 at (4, 0) - no Spine data
+Symbols.ts:2177 [Symbols] Set new symbol at (4, 1) to idle animation: Symbol5-1_TB_idle
+Symbols.ts:2177 [Symbols] Set new symbol at (4, 2) to idle animation: Symbol5-1_TB_idle
+ReelDropScript.ts:56 [ReelDropScript] All reels have completed animation
+Symbols.ts:4464 [Symbols] Disposing old symbols...
+Symbols.ts:4483 [Symbols] Disposed 15 symbols
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 0
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 7
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 9
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 27
+SlotController.ts:3663 [SlotController] Autoplay button disabled and greyed out
+SlotController.ts:508 [SlotController] Decrease bet button disabled
+SlotController.ts:514 [SlotController] Increase bet button disabled
+SlotController.ts:569 [SlotController] Feature button disabled
+SlotController.ts:3025 [SlotController] Amplify button disabled
+SlotController.ts:3002 [SlotController] Turbo button disabled and greyed out
+SlotController.ts:4356 [SlotController] enableSpinButton skipped - isSpinLocked or reels still spinning
+SlotController.ts:3675 [SlotController] Autoplay button enabled
+SlotController.ts:539 [SlotController] Decrease bet button enabled
+SlotController.ts:545 [SlotController] Increase bet button enabled
+SlotController.ts:582 [SlotController] Skipping feature enable (reels spinning or spin locked)
+SlotController.ts:3036 [SlotController] Amplify button enabled
+SlotController.ts:3014 [SlotController] Turbo button enabled
+SlotController.ts:3693 [SlotController] Disabling autoplay button - isReelSpinning: true
+SlotController.ts:3663 [SlotController] Autoplay button disabled and greyed out
+Symbols.ts:3862 [Symbols] Checking for scatter symbols...
+Symbols.ts:3863 [Symbols] Symbols grid: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+Symbols.ts:3864 [Symbols] SCATTER_SYMBOL from GameConfig: [0]
+Symbols.ts:3867 [Symbols] ScatterGrids found: []
+Symbols.ts:3868 [Symbols] ScatterGrids length: 0
+Symbols.ts:3923 [Symbols] No paylines in SpinData, calling WinLineDrawer for no-wins scenario
+WinLineDrawer.ts:101 [WinLineDrawer] No paylines to draw lines for (once)
+Symbols.ts:3993 [Symbols] No scatter detected (found 0 scatter symbols, need 3+)
+SlotController.ts:2349 [SlotController] Reels stopped event received - updating spin button state
+SlotController.ts:2383 [SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)
+SlotController.ts:2406 [SlotController] No pending balance update to apply
+SlotController.ts:2433 [SlotController] Bonus active - keeping buttons disabled on REELS_STOP
+Symbols.ts:1734 [Symbols] REELS_STOP event received
+Symbols.ts:1744 [Symbols] REELS_STOP received - autoplay continuation handled separately in onSpinDataReceived
+Symbols.ts:1861 [Symbols] REELS_STOP received - continuing free spin autoplay
+Symbols.ts:3229 [Symbols] ===== CONTINUING FREE SPIN AUTOPLAY =====
+Symbols.ts:3230 [Symbols] Free spin autoplay: 6 spins remaining
+Symbols.ts:3249 [Symbols] Waiting for WIN_STOP event before continuing free spin autoplay
+Symbols.ts:3250 [Symbols] Setting freeSpinAutoplayWaitingForWinlines to true
+Symbols.ts:3252 [Symbols] freeSpinAutoplayWaitingForWinlines is now: true
+Symbols.ts:3258 [Symbols] ===== FREE SPIN AUTOPLAY CONTINUED =====
+Header.ts:132 [Header] REELS_STOP received - checking for wins
+Header.ts:135 [Header] Ignoring REELS_STOP before first spin event
+Header.ts:208 [Header] Winnings display hidden
+BonusHeader.ts:243 [BonusHeader] REELS_STOP received - checking for wins
+BonusHeader.ts:247 [BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)
+Symbols.ts:4006 [Symbols] SpinData symbols processed successfully
+WinLineDrawer.ts:106 [WinLineDrawer] Emitting WIN_STOP for no-wins scenario
+SlotController.ts:2583 [SlotController] WIN_STOP received - checking if spin button should be enabled
+SlotController.ts:2587 [SlotController] Bonus in progress - skipping UI re-enable in WIN_STOP
+Symbols.ts:1088 [Symbols] WIN_STOP event received - resuming autoplay
+Symbols.ts:1089 [Symbols] freeSpinAutoplayWaitingForReelsStop: false
+Symbols.ts:1090 [Symbols] freeSpinAutoplayActive: true
+Symbols.ts:3265 [Symbols] handleFreeSpinAutoplayWinStop called - freeSpinAutoplayWaitingForWinlines: true
+Symbols.ts:3271 [Symbols] WIN_STOP received - continuing free spin autoplay after winlines complete
+Symbols.ts:3284 [Symbols] Scheduling next free spin in 400ms (base: 500ms, turbo: true)
+GameData.ts:64 [GameData] Autoplay resumed after winline animations
+BonusHeader.ts:314 [BonusHeader] WIN_STOP (bonus): accumulated spinWin=$0, cumulativeBonusWin=$41.5
+Symbols.ts:2984 [Symbols] ===== PERFORMING FREE SPIN AUTOPLAY =====
+Symbols.ts:2985 [Symbols] Free spin autoplay: 6 spins remaining
+Symbols.ts:3201 [Symbols] Triggering free spin via SlotController...
+SlotController.ts:4230 [SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation
+Symbols.ts:1296 [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+Symbols.ts:1395 [Symbols] Cleaned state for 12 symbols before spin (converted 8 Spine symbols to WEBP/PNG)
+SymbolFlash.ts:212 [SymbolFlash] Overlays created: 15
+Symbols.ts:2735 [Symbols] Turbo mode enabled for winline animations
+SlotController.ts:4529 [SlotController] Turbo mode enabled for winline animations via Symbols component
+GameAPI.ts:563 Using Fake API for bonus free spins
+FakeBonusAPI.ts:136  ===== FAKE FREE SPIN SIMULATION =====
+FakeBonusAPI.ts:137  Using fake data from: /fake-response.json
+FakeBonusAPI.ts:138  Current free spin index: 29
+FakeBonusAPI.ts:139  Spins left: 6
+FakeBonusAPI.ts:140  Sub total win: 5
+FakeBonusAPI.ts:141  Area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+FakeBonusAPI.ts:142  Paylines: [{…}]
+FakeBonusAPI.ts:143  Collector count: 44
+FakeBonusAPI.ts:144  Money: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+FakeBonusAPI.ts:172  ===== FAKE FREE SPIN COMPLETE =====
+FakeBonusAPI.ts:173  Remaining fake free spins: 5
+FakeBonusAPI.ts:174  Next fake spin will use index: 30
+Symbols.ts:3211 [Symbols] Free spin triggered. 5 spins remaining.
+Symbols.ts:3215 [Symbols] Waiting for reels to stop before continuing free spin autoplay
+Symbols.ts:3222 [Symbols] ===== FREE SPIN AUTOPLAY COMPLETED =====
+SlotController.ts:3649 [SlotController] Free spin number updated to 5 (actual: 5)
+SlotController.ts:4262 [SlotController] Updated free spin display to 5 remaining
+SlotController.ts:4268 [SlotController] Processing free spin data directly via symbols component
+Symbols.ts:3459 [Symbols] Processing spin data directly: {playerId: 'local', bet: '1', baseBet: '1', slot: {…}}
+Symbols.ts:3468 [Symbols] Stored current spin data for access by other components
+Symbols.ts:3509 [Symbols] Using symbols from SpinData slot.area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+Symbols.ts:3699 [Symbols] Processing SpinData symbols: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ScatterAnimationManager.ts:854 [ScatterAnimationManager] Cleared all scatter symbol references
+Symbols.ts:3723 [Symbols] Resetting symbols and clearing previous state for new spin
+Symbols.ts:1296 [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+Symbols.ts:1395 [Symbols] Cleaned state for 12 symbols before spin (converted 0 Spine symbols to WEBP/PNG)
+Symbols.ts:3727 [Symbols] Clearing win lines and overlay for new spin
+Symbols.ts:3751 [Symbols] Converted SpinData paylines to win format: Map(1) {7 => Array(4)}
+Symbols.ts:3758 [Symbols] Setting animation timing: {baseDelay: 2500, isTurbo: true, adjustedDelay: 2000}
+SlotController.ts:2328 [SlotController] Reels started - disabling amplify and bet UI
+SlotController.ts:3025 [SlotController] Amplify button disabled
+SlotController.ts:508 [SlotController] Decrease bet button disabled
+SlotController.ts:514 [SlotController] Increase bet button disabled
+Header.ts:126 [Header] Reels started - hiding winnings display
+Header.ts:208 [Header] Winnings display hidden
+BonusHeader.ts:218 [BonusHeader] Reels started
+BonusHeader.ts:227 [BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $41.5
+BonusHeader.ts:141 [BonusHeader] Winnings display shown: $41.50 (raw: 41.5)
+Symbols.ts:4464 [Symbols] Disposing old symbols...
+Symbols.ts:4483 [Symbols] Disposed 0 symbols
+Symbols.ts:4268 [Symbols] New symbols from spin response: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+ReelDropScript.ts:31 [ReelDropScript] Anticipation check (reel 1 AND reel 3 scatter): r1=false, r3=false → extend=false
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 0
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 1
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 2
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 3
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 4
+ReelDropScript.ts:54 [ReelDropScript] Waiting for all reels to complete animation...
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 0
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 4 at (0, 0) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (0, 0) to idle animation: Symbol4_TB_idle
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 10 at (0, 1) - no Spine data
+Symbols.ts:2177 [Symbols] Set new symbol at (0, 2) to idle animation: Symbol5-1_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 1
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 1 at (1, 0) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (1, 0) to idle animation: symbol1_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 7 at (1, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (1, 1) to idle animation: Symbol7_TB_idle
+Symbols.ts:2177 [Symbols] Set new symbol at (1, 2) to idle animation: Symbol5-1_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 2
+Symbols.ts:2177 [Symbols] Set new symbol at (2, 0) to idle animation: Symbol5-1_TB_idle
+Symbols.ts:2177 [Symbols] Set new symbol at (2, 1) to idle animation: Symbol5-1_TB_idle
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 10 at (2, 2) - no Spine data
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 3
+Symbols.ts:2177 [Symbols] Set new symbol at (3, 0) to idle animation: Symbol5-1_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 4 at (3, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (3, 1) to idle animation: Symbol4_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 2 at (3, 2) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (3, 2) to idle animation: symbol2_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 4
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 2 at (4, 0) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (4, 0) to idle animation: symbol2_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 4 at (4, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (4, 1) to idle animation: Symbol4_TB_idle
+Symbols.ts:2177 [Symbols] Set new symbol at (4, 2) to idle animation: Symbol5-1_TB_idle
+ReelDropScript.ts:56 [ReelDropScript] All reels have completed animation
+Symbols.ts:4464 [Symbols] Disposing old symbols...
+Symbols.ts:4483 [Symbols] Disposed 15 symbols
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+Symbols.ts:3862 [Symbols] Checking for scatter symbols...
+Symbols.ts:3863 [Symbols] Symbols grid: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+Symbols.ts:3864 [Symbols] SCATTER_SYMBOL from GameConfig: [0]
+Symbols.ts:3867 [Symbols] ScatterGrids found: []
+Symbols.ts:3868 [Symbols] ScatterGrids length: 0
+Symbols.ts:3879 [Symbols] Win below dialog threshold (15.00x) - autoplay continues
+Symbols.ts:3898 [Symbols] Drawing win lines from SpinData (single-pass for free spin autoplay)
+Symbols.ts:3901 [Symbols] Applying turbo mode to winlines via SlotController (same as normal autoplay)
+Symbols.ts:2735 [Symbols] Turbo mode enabled for winline animations
+SlotController.ts:4529 [SlotController] Turbo mode enabled for winline animations via Symbols component
+WinLineDrawer.ts:126 [WinLineDrawer] Dynamic timing applied: lines=1, turbo=true, perLine=765ms, endPause=135ms, speed=2x
+WinLineDrawer.ts:137 [WinLineDrawer] Emitting WIN_START for winline animations
+Symbols.ts:1269 [Symbols] WIN_START event received - pausing autoplay
+GameData.ts:59 [GameData] Autoplay paused for winline animations
+BonusHeader.ts:141 [BonusHeader] Winnings display shown: $15.00 (raw: 15)
+Symbols.ts:3993 [Symbols] No scatter detected (found 0 scatter symbols, need 3+)
+SlotController.ts:2349 [SlotController] Reels stopped event received - updating spin button state
+SlotController.ts:2383 [SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)
+SlotController.ts:2406 [SlotController] No pending balance update to apply
+SlotController.ts:2421 [SlotController] Bonus mode: incremented balance by subtotalWin 15. 2558435.29 -> 2558450.29
+SlotController.ts:2433 [SlotController] Bonus active - keeping buttons disabled on REELS_STOP
+Symbols.ts:1734 [Symbols] REELS_STOP event received
+Symbols.ts:1744 [Symbols] REELS_STOP received - autoplay continuation handled separately in onSpinDataReceived
+Symbols.ts:1861 [Symbols] REELS_STOP received - continuing free spin autoplay
+Symbols.ts:3229 [Symbols] ===== CONTINUING FREE SPIN AUTOPLAY =====
+Symbols.ts:3230 [Symbols] Free spin autoplay: 5 spins remaining
+Symbols.ts:3249 [Symbols] Waiting for WIN_STOP event before continuing free spin autoplay
+Symbols.ts:3250 [Symbols] Setting freeSpinAutoplayWaitingForWinlines to true
+Symbols.ts:3252 [Symbols] freeSpinAutoplayWaitingForWinlines is now: true
+Symbols.ts:3258 [Symbols] ===== FREE SPIN AUTOPLAY CONTINUED =====
+Header.ts:132 [Header] REELS_STOP received - checking for wins
+Header.ts:135 [Header] Ignoring REELS_STOP before first spin event
+Header.ts:208 [Header] Winnings display hidden
+BonusHeader.ts:243 [BonusHeader] REELS_STOP received - checking for wins
+BonusHeader.ts:247 [BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)
+Symbols.ts:4006 [Symbols] SpinData symbols processed successfully
+SlotController.ts:2349 [SlotController] Reels stopped event received - updating spin button state
+SlotController.ts:2383 [SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)
+SlotController.ts:2406 [SlotController] No pending balance update to apply
+SlotController.ts:2421 [SlotController] Bonus mode: incremented balance by subtotalWin 15. 2558450.29 -> 2558465.29
+SlotController.ts:2433 [SlotController] Bonus active - keeping buttons disabled on REELS_STOP
+Symbols.ts:1734 [Symbols] REELS_STOP event received
+Symbols.ts:1744 [Symbols] REELS_STOP received - autoplay continuation handled separately in onSpinDataReceived
+Header.ts:132 [Header] REELS_STOP received - checking for wins
+Header.ts:135 [Header] Ignoring REELS_STOP before first spin event
+Header.ts:208 [Header] Winnings display hidden
+BonusHeader.ts:243 [BonusHeader] REELS_STOP received - checking for wins
+BonusHeader.ts:247 [BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)
+SlotController.ts:2583 [SlotController] WIN_STOP received - checking if spin button should be enabled
+SlotController.ts:2587 [SlotController] Bonus in progress - skipping UI re-enable in WIN_STOP
+Symbols.ts:1088 [Symbols] WIN_STOP event received - resuming autoplay
+Symbols.ts:1089 [Symbols] freeSpinAutoplayWaitingForReelsStop: false
+Symbols.ts:1090 [Symbols] freeSpinAutoplayActive: true
+Symbols.ts:3265 [Symbols] handleFreeSpinAutoplayWinStop called - freeSpinAutoplayWaitingForWinlines: true
+Symbols.ts:3271 [Symbols] WIN_STOP received - continuing free spin autoplay after winlines complete
+Symbols.ts:3284 [Symbols] Scheduling next free spin in 400ms (base: 500ms, turbo: true)
+GameData.ts:64 [GameData] Autoplay resumed after winline animations
+BonusHeader.ts:314 [BonusHeader] WIN_STOP (bonus): accumulated spinWin=$15, cumulativeBonusWin=$56.5
+WinLineDrawer.ts:186 [WinLineDrawer] Cleared win lines and overlay (autoplay) after extra delay
+Symbols.ts:2984 [Symbols] ===== PERFORMING FREE SPIN AUTOPLAY =====
+Symbols.ts:2985 [Symbols] Free spin autoplay: 5 spins remaining
+Symbols.ts:3201 [Symbols] Triggering free spin via SlotController...
+SlotController.ts:4230 [SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation
+Symbols.ts:1296 [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+Symbols.ts:1395 [Symbols] Cleaned state for 11 symbols before spin (converted 0 Spine symbols to WEBP/PNG)
+SymbolFlash.ts:212 [SymbolFlash] Overlays created: 15
+Symbols.ts:2735 [Symbols] Turbo mode enabled for winline animations
+SlotController.ts:4529 [SlotController] Turbo mode enabled for winline animations via Symbols component
+GameAPI.ts:563 Using Fake API for bonus free spins
+FakeBonusAPI.ts:136  ===== FAKE FREE SPIN SIMULATION =====
+FakeBonusAPI.ts:137  Using fake data from: /fake-response.json
+FakeBonusAPI.ts:138  Current free spin index: 30
+FakeBonusAPI.ts:139  Spins left: 5
+FakeBonusAPI.ts:140  Sub total win: 0
+FakeBonusAPI.ts:141  Area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+FakeBonusAPI.ts:142  Paylines: []
+FakeBonusAPI.ts:143  Collector count: 44
+FakeBonusAPI.ts:144  Money: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+FakeBonusAPI.ts:172  ===== FAKE FREE SPIN COMPLETE =====
+FakeBonusAPI.ts:173  Remaining fake free spins: 4
+FakeBonusAPI.ts:174  Next fake spin will use index: 31
+Symbols.ts:3211 [Symbols] Free spin triggered. 4 spins remaining.
+Symbols.ts:3215 [Symbols] Waiting for reels to stop before continuing free spin autoplay
+Symbols.ts:3222 [Symbols] ===== FREE SPIN AUTOPLAY COMPLETED =====
+SlotController.ts:3649 [SlotController] Free spin number updated to 4 (actual: 4)
+SlotController.ts:4262 [SlotController] Updated free spin display to 4 remaining
+SlotController.ts:4268 [SlotController] Processing free spin data directly via symbols component
+Symbols.ts:3459 [Symbols] Processing spin data directly: {playerId: 'local', bet: '1', baseBet: '1', slot: {…}}
+Symbols.ts:3468 [Symbols] Stored current spin data for access by other components
+Symbols.ts:3509 [Symbols] Using symbols from SpinData slot.area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+Symbols.ts:3699 [Symbols] Processing SpinData symbols: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ScatterAnimationManager.ts:854 [ScatterAnimationManager] Cleared all scatter symbol references
+Symbols.ts:3723 [Symbols] Resetting symbols and clearing previous state for new spin
+Symbols.ts:1296 [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+Symbols.ts:1395 [Symbols] Cleaned state for 11 symbols before spin (converted 0 Spine symbols to WEBP/PNG)
+Symbols.ts:3727 [Symbols] Clearing win lines and overlay for new spin
+Symbols.ts:3751 [Symbols] Converted SpinData paylines to win format: Map(0) {size: 0}
+Symbols.ts:3758 [Symbols] Setting animation timing: {baseDelay: 2500, isTurbo: true, adjustedDelay: 2000}
+SlotController.ts:2328 [SlotController] Reels started - disabling amplify and bet UI
+SlotController.ts:3025 [SlotController] Amplify button disabled
+SlotController.ts:508 [SlotController] Decrease bet button disabled
+SlotController.ts:514 [SlotController] Increase bet button disabled
+Header.ts:126 [Header] Reels started - hiding winnings display
+Header.ts:208 [Header] Winnings display hidden
+BonusHeader.ts:218 [BonusHeader] Reels started
+BonusHeader.ts:227 [BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $56.5
+BonusHeader.ts:141 [BonusHeader] Winnings display shown: $56.50 (raw: 56.5)
+Symbols.ts:4464 [Symbols] Disposing old symbols...
+Symbols.ts:4483 [Symbols] Disposed 0 symbols
+Symbols.ts:4268 [Symbols] New symbols from spin response: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 10
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+ReelDropScript.ts:31 [ReelDropScript] Anticipation check (reel 1 AND reel 3 scatter): r1=false, r3=false → extend=false
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 0
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 1
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 2
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 3
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 4
+ReelDropScript.ts:54 [ReelDropScript] Waiting for all reels to complete animation...
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 0
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 8 at (0, 0) - no Spine data
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 7 at (0, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (0, 1) to idle animation: Symbol7_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 2 at (0, 2) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (0, 2) to idle animation: symbol2_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 1
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 10 at (1, 0) - no Spine data
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 7 at (1, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (1, 1) to idle animation: Symbol7_TB_idle
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 8 at (1, 2) - no Spine data
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 2
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 1 at (2, 0) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (2, 0) to idle animation: symbol1_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 3 at (2, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (2, 1) to idle animation: Symbol3_TB_idle
+Symbols.ts:2177 [Symbols] Set new symbol at (2, 2) to idle animation: Symbol5-2_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 3
+Symbols.ts:2177 [Symbols] Set new symbol at (3, 0) to idle animation: Symbol5-1_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 4 at (3, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (3, 1) to idle animation: Symbol4_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 2 at (3, 2) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (3, 2) to idle animation: symbol2_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 4
+Symbols.ts:2177 [Symbols] Set new symbol at (4, 0) to idle animation: Symbol5-1_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 3 at (4, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (4, 1) to idle animation: Symbol3_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 1 at (4, 2) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (4, 2) to idle animation: symbol1_TB_idle
+ReelDropScript.ts:56 [ReelDropScript] All reels have completed animation
+Symbols.ts:4464 [Symbols] Disposing old symbols...
+Symbols.ts:4483 [Symbols] Disposed 15 symbols
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 10
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 10
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+Symbols.ts:3862 [Symbols] Checking for scatter symbols...
+Symbols.ts:3863 [Symbols] Symbols grid: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+Symbols.ts:3864 [Symbols] SCATTER_SYMBOL from GameConfig: [0]
+Symbols.ts:3867 [Symbols] ScatterGrids found: []
+Symbols.ts:3868 [Symbols] ScatterGrids length: 0
+Symbols.ts:3923 [Symbols] No paylines in SpinData, calling WinLineDrawer for no-wins scenario
+WinLineDrawer.ts:101 [WinLineDrawer] No paylines to draw lines for (once)
+Symbols.ts:3993 [Symbols] No scatter detected (found 0 scatter symbols, need 3+)
+SlotController.ts:2349 [SlotController] Reels stopped event received - updating spin button state
+SlotController.ts:2383 [SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)
+SlotController.ts:2406 [SlotController] No pending balance update to apply
+SlotController.ts:2433 [SlotController] Bonus active - keeping buttons disabled on REELS_STOP
+Symbols.ts:1734 [Symbols] REELS_STOP event received
+Symbols.ts:1744 [Symbols] REELS_STOP received - autoplay continuation handled separately in onSpinDataReceived
+Symbols.ts:1861 [Symbols] REELS_STOP received - continuing free spin autoplay
+Symbols.ts:3229 [Symbols] ===== CONTINUING FREE SPIN AUTOPLAY =====
+Symbols.ts:3230 [Symbols] Free spin autoplay: 4 spins remaining
+Symbols.ts:3249 [Symbols] Waiting for WIN_STOP event before continuing free spin autoplay
+Symbols.ts:3250 [Symbols] Setting freeSpinAutoplayWaitingForWinlines to true
+Symbols.ts:3252 [Symbols] freeSpinAutoplayWaitingForWinlines is now: true
+Symbols.ts:3258 [Symbols] ===== FREE SPIN AUTOPLAY CONTINUED =====
+Header.ts:132 [Header] REELS_STOP received - checking for wins
+Header.ts:135 [Header] Ignoring REELS_STOP before first spin event
+Header.ts:208 [Header] Winnings display hidden
+BonusHeader.ts:243 [BonusHeader] REELS_STOP received - checking for wins
+BonusHeader.ts:247 [BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)
+Symbols.ts:4006 [Symbols] SpinData symbols processed successfully
+WinLineDrawer.ts:106 [WinLineDrawer] Emitting WIN_STOP for no-wins scenario
+SlotController.ts:2583 [SlotController] WIN_STOP received - checking if spin button should be enabled
+SlotController.ts:2587 [SlotController] Bonus in progress - skipping UI re-enable in WIN_STOP
+Symbols.ts:1088 [Symbols] WIN_STOP event received - resuming autoplay
+Symbols.ts:1089 [Symbols] freeSpinAutoplayWaitingForReelsStop: false
+Symbols.ts:1090 [Symbols] freeSpinAutoplayActive: true
+Symbols.ts:3265 [Symbols] handleFreeSpinAutoplayWinStop called - freeSpinAutoplayWaitingForWinlines: true
+Symbols.ts:3271 [Symbols] WIN_STOP received - continuing free spin autoplay after winlines complete
+Symbols.ts:3284 [Symbols] Scheduling next free spin in 400ms (base: 500ms, turbo: true)
+GameData.ts:64 [GameData] Autoplay resumed after winline animations
+BonusHeader.ts:314 [BonusHeader] WIN_STOP (bonus): accumulated spinWin=$0, cumulativeBonusWin=$56.5
+Symbols.ts:2984 [Symbols] ===== PERFORMING FREE SPIN AUTOPLAY =====
+Symbols.ts:2985 [Symbols] Free spin autoplay: 4 spins remaining
+Symbols.ts:3201 [Symbols] Triggering free spin via SlotController...
+SlotController.ts:4230 [SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation
+Symbols.ts:1296 [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+Symbols.ts:1395 [Symbols] Cleaned state for 12 symbols before spin (converted 9 Spine symbols to WEBP/PNG)
+SymbolFlash.ts:212 [SymbolFlash] Overlays created: 15
+Symbols.ts:2735 [Symbols] Turbo mode enabled for winline animations
+SlotController.ts:4529 [SlotController] Turbo mode enabled for winline animations via Symbols component
+GameAPI.ts:563 Using Fake API for bonus free spins
+FakeBonusAPI.ts:136  ===== FAKE FREE SPIN SIMULATION =====
+FakeBonusAPI.ts:137  Using fake data from: /fake-response.json
+FakeBonusAPI.ts:138  Current free spin index: 31
+FakeBonusAPI.ts:139  Spins left: 4
+FakeBonusAPI.ts:140  Sub total win: 15
+FakeBonusAPI.ts:141  Area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+FakeBonusAPI.ts:142  Paylines: []
+FakeBonusAPI.ts:143  Collector count: 45
+FakeBonusAPI.ts:144  Money: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+FakeBonusAPI.ts:172  ===== FAKE FREE SPIN COMPLETE =====
+FakeBonusAPI.ts:173  Remaining fake free spins: 3
+FakeBonusAPI.ts:174  Next fake spin will use index: 32
+Symbols.ts:3211 [Symbols] Free spin triggered. 3 spins remaining.
+Symbols.ts:3215 [Symbols] Waiting for reels to stop before continuing free spin autoplay
+Symbols.ts:3222 [Symbols] ===== FREE SPIN AUTOPLAY COMPLETED =====
+SlotController.ts:3649 [SlotController] Free spin number updated to 3 (actual: 3)
+SlotController.ts:4262 [SlotController] Updated free spin display to 3 remaining
+SlotController.ts:4268 [SlotController] Processing free spin data directly via symbols component
+Symbols.ts:3459 [Symbols] Processing spin data directly: {playerId: 'local', bet: '1', baseBet: '1', slot: {…}}
+Symbols.ts:3468 [Symbols] Stored current spin data for access by other components
+Symbols.ts:3509 [Symbols] Using symbols from SpinData slot.area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+Symbols.ts:3699 [Symbols] Processing SpinData symbols: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ScatterAnimationManager.ts:854 [ScatterAnimationManager] Cleared all scatter symbol references
+Symbols.ts:3723 [Symbols] Resetting symbols and clearing previous state for new spin
+Symbols.ts:1296 [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+Symbols.ts:1395 [Symbols] Cleaned state for 12 symbols before spin (converted 0 Spine symbols to WEBP/PNG)
+Symbols.ts:3727 [Symbols] Clearing win lines and overlay for new spin
+Symbols.ts:3751 [Symbols] Converted SpinData paylines to win format: Map(0) {size: 0}
+Symbols.ts:3758 [Symbols] Setting animation timing: {baseDelay: 2500, isTurbo: true, adjustedDelay: 2000}
+SlotController.ts:2328 [SlotController] Reels started - disabling amplify and bet UI
+SlotController.ts:3025 [SlotController] Amplify button disabled
+SlotController.ts:508 [SlotController] Decrease bet button disabled
+SlotController.ts:514 [SlotController] Increase bet button disabled
+Header.ts:126 [Header] Reels started - hiding winnings display
+Header.ts:208 [Header] Winnings display hidden
+BonusHeader.ts:218 [BonusHeader] Reels started
+BonusHeader.ts:227 [BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $56.5
+BonusHeader.ts:141 [BonusHeader] Winnings display shown: $56.50 (raw: 56.5)
+Symbols.ts:4464 [Symbols] Disposing old symbols...
+Symbols.ts:4483 [Symbols] Disposed 0 symbols
+Symbols.ts:4268 [Symbols] New symbols from spin response: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+ReelDropScript.ts:31 [ReelDropScript] Anticipation check (reel 1 AND reel 3 scatter): r1=false, r3=false → extend=false
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 0
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 1
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 2
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 3
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 4
+ReelDropScript.ts:54 [ReelDropScript] Waiting for all reels to complete animation...
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 0
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 3 at (0, 0) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (0, 0) to idle animation: Symbol3_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 6 at (0, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (0, 1) to idle animation: Symbol6_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 2 at (0, 2) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (0, 2) to idle animation: symbol2_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 1
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 9 at (1, 0) - no Spine data
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 3 at (1, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (1, 1) to idle animation: Symbol3_TB_idle
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 8 at (1, 2) - no Spine data
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 2
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 1 at (2, 0) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (2, 0) to idle animation: symbol1_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 4 at (2, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (2, 1) to idle animation: Symbol4_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 2 at (2, 2) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (2, 2) to idle animation: symbol2_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 3
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 1 at (3, 0) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (3, 0) to idle animation: symbol1_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 3 at (3, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (3, 1) to idle animation: Symbol3_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 4
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 4 at (4, 0) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (4, 0) to idle animation: Symbol4_TB_idle
+Symbols.ts:2177 [Symbols] Set new symbol at (4, 1) to idle animation: Symbol5-1_TB_idle
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 9 at (4, 2) - no Spine data
+ReelDropScript.ts:56 [ReelDropScript] All reels have completed animation
+Symbols.ts:4464 [Symbols] Disposing old symbols...
+Symbols.ts:4483 [Symbols] Disposed 15 symbols
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 0
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 15
+SlotController.ts:3663 [SlotController] Autoplay button disabled and greyed out
+SlotController.ts:508 [SlotController] Decrease bet button disabled
+SlotController.ts:514 [SlotController] Increase bet button disabled
+SlotController.ts:569 [SlotController] Feature button disabled
+SlotController.ts:3025 [SlotController] Amplify button disabled
+SlotController.ts:3002 [SlotController] Turbo button disabled and greyed out
+SlotController.ts:4356 [SlotController] enableSpinButton skipped - isSpinLocked or reels still spinning
+SlotController.ts:3675 [SlotController] Autoplay button enabled
+SlotController.ts:539 [SlotController] Decrease bet button enabled
+SlotController.ts:545 [SlotController] Increase bet button enabled
+SlotController.ts:582 [SlotController] Skipping feature enable (reels spinning or spin locked)
+SlotController.ts:3036 [SlotController] Amplify button enabled
+SlotController.ts:3014 [SlotController] Turbo button enabled
+SlotController.ts:3693 [SlotController] Disabling autoplay button - isReelSpinning: true
+SlotController.ts:3663 [SlotController] Autoplay button disabled and greyed out
+Symbols.ts:3862 [Symbols] Checking for scatter symbols...
+Symbols.ts:3863 [Symbols] Symbols grid: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+Symbols.ts:3864 [Symbols] SCATTER_SYMBOL from GameConfig: [0]
+Symbols.ts:3867 [Symbols] ScatterGrids found: []
+ [Symbols] ScatterGrids length: 0
+ [Symbols] No paylines in SpinData, calling WinLineDrawer for no-wins scenario
+ [WinLineDrawer] No paylines to draw lines for (once)
+ [Symbols] No scatter detected (found 0 scatter symbols, need 3+)
+ [SlotController] Reels stopped event received - updating spin button state
+ [SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)
+ [SlotController] No pending balance update to apply
+ [SlotController] Bonus active - keeping buttons disabled on REELS_STOP
+ [Symbols] REELS_STOP event received
+ [Symbols] REELS_STOP received - autoplay continuation handled separately in onSpinDataReceived
+ [Symbols] REELS_STOP received - continuing free spin autoplay
+ [Symbols] ===== CONTINUING FREE SPIN AUTOPLAY =====
+ [Symbols] Free spin autoplay: 3 spins remaining
+ [Symbols] Waiting for WIN_STOP event before continuing free spin autoplay
+ [Symbols] Setting freeSpinAutoplayWaitingForWinlines to true
+ [Symbols] freeSpinAutoplayWaitingForWinlines is now: true
+ [Symbols] ===== FREE SPIN AUTOPLAY CONTINUED =====
+ [Header] REELS_STOP received - checking for wins
+ [Header] Ignoring REELS_STOP before first spin event
+ [Header] Winnings display hidden
+ [BonusHeader] REELS_STOP received - checking for wins
+ [BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)
+ [Symbols] SpinData symbols processed successfully
+ [WinLineDrawer] Emitting WIN_STOP for no-wins scenario
+ [SlotController] WIN_STOP received - checking if spin button should be enabled
+ [SlotController] Bonus in progress - skipping UI re-enable in WIN_STOP
+ [Symbols] WIN_STOP event received - resuming autoplay
+ [Symbols] freeSpinAutoplayWaitingForReelsStop: false
+ [Symbols] freeSpinAutoplayActive: true
+ [Symbols] handleFreeSpinAutoplayWinStop called - freeSpinAutoplayWaitingForWinlines: true
+ [Symbols] WIN_STOP received - continuing free spin autoplay after winlines complete
+ [Symbols] Scheduling next free spin in 400ms (base: 500ms, turbo: true)
+ [GameData] Autoplay resumed after winline animations
+ [BonusHeader] WIN_STOP (bonus): accumulated spinWin=$0, cumulativeBonusWin=$56.5
+ [Symbols] ===== PERFORMING FREE SPIN AUTOPLAY =====
+ [Symbols] Free spin autoplay: 3 spins remaining
+ [Symbols] Triggering free spin via SlotController...
+ [SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation
+ [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+ [Symbols] Cleaned state for 14 symbols before spin (converted 10 Spine symbols to WEBP/PNG)
+ [SymbolFlash] Overlays created: 15
+ [Symbols] Turbo mode enabled for winline animations
+ [SlotController] Turbo mode enabled for winline animations via Symbols component
+ Using Fake API for bonus free spins
+  ===== FAKE FREE SPIN SIMULATION =====
+  Using fake data from: /fake-response.json
+  Current free spin index: 32
+  Spins left: 3
+  Sub total win: 90
+  Area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+  Paylines: []
+  Collector count: 47
+  Money: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+  ===== FAKE FREE SPIN COMPLETE =====
+  Remaining fake free spins: 2
+  Next fake spin will use index: 33
+ [Symbols] Free spin triggered. 2 spins remaining.
+ [Symbols] Waiting for reels to stop before continuing free spin autoplay
+ [Symbols] ===== FREE SPIN AUTOPLAY COMPLETED =====
+ [SlotController] Free spin number updated to 2 (actual: 2)
+ [SlotController] Updated free spin display to 2 remaining
+ [SlotController] Processing free spin data directly via symbols component
+ [Symbols] Processing spin data directly: {playerId: 'local', bet: '1', baseBet: '1', slot: {…}}
+ [Symbols] Stored current spin data for access by other components
+ [Symbols] Using symbols from SpinData slot.area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ [Symbols] Processing SpinData symbols: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ [ScatterAnimationManager] Cleared all scatter symbol references
+ [Symbols] Resetting symbols and clearing previous state for new spin
+ [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+ [Symbols] Cleaned state for 14 symbols before spin (converted 0 Spine symbols to WEBP/PNG)
+ [Symbols] Clearing win lines and overlay for new spin
+ [Symbols] Converted SpinData paylines to win format: Map(0) {size: 0}
+ [Symbols] Setting animation timing: {baseDelay: 2500, isTurbo: true, adjustedDelay: 2000}
+ [SlotController] Reels started - disabling amplify and bet UI
+ [SlotController] Amplify button disabled
+ [SlotController] Decrease bet button disabled
+ [SlotController] Increase bet button disabled
+ [Header] Reels started - hiding winnings display
+ [Header] Winnings display hidden
+ [BonusHeader] Reels started
+ [BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $56.5
+ [BonusHeader] Winnings display shown: $56.50 (raw: 56.5)
+ [Symbols] Disposing old symbols...
+ [Symbols] Disposed 0 symbols
+ [Symbols] New symbols from spin response: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 5
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 5
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 5
+ReelDropScript.ts:31 [ReelDropScript] Anticipation check (reel 1 AND reel 3 scatter): r1=false, r3=false → extend=false
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 0
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 1
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 2
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 3
+ReelDropScript.ts:41 [ReelDropScript] Processing reel 4
+ReelDropScript.ts:54 [ReelDropScript] Waiting for all reels to complete animation...
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 0
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 10 at (0, 0) - no Spine data
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 6 at (0, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (0, 1) to idle animation: Symbol6_TB_idle
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 8 at (0, 2) - no Spine data
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 1
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 7 at (1, 0) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (1, 0) to idle animation: Symbol7_TB_idle
+Symbols.ts:2177 [Symbols] Set new symbol at (1, 1) to idle animation: Symbol5-1_TB_idle
+Symbols.ts:2177 [Symbols] Set new symbol at (1, 2) to idle animation: Symbol5-1_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 2
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 3 at (2, 0) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (2, 0) to idle animation: Symbol3_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 7 at (2, 2) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (2, 2) to idle animation: Symbol7_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 3
+Symbols.ts:2142 [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 10 at (3, 0) - no Spine data
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 3 at (3, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (3, 1) to idle animation: Symbol3_TB_idle
+Symbols.ts:2008 [Symbols] Triggering _idle animations for NEW reel 4
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 2 at (4, 0) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (4, 0) to idle animation: symbol2_TB_idle
+Symbols.ts:2166 [Symbols] Converted PNG/WEBP symbol 4 at (4, 1) back to Spine for idle animation
+Symbols.ts:2177 [Symbols] Set new symbol at (4, 1) to idle animation: Symbol4_TB_idle
+Symbols.ts:2177 [Symbols] Set new symbol at (4, 2) to idle animation: Symbol5-1_TB_idle
+ReelDropScript.ts:56 [ReelDropScript] All reels have completed animation
+Symbols.ts:4464 [Symbols] Disposing old symbols...
+Symbols.ts:4483 [Symbols] Disposed 15 symbols
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 0
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 10
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 15
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 45
+SlotController.ts:3663 [SlotController] Autoplay button disabled and greyed out
+SlotController.ts:508 [SlotController] Decrease bet button disabled
+SlotController.ts:514 [SlotController] Increase bet button disabled
+SlotController.ts:569 [SlotController] Feature button disabled
+SlotController.ts:3025 [SlotController] Amplify button disabled
+SlotController.ts:3002 [SlotController] Turbo button disabled and greyed out
+SlotController.ts:4356 [SlotController] enableSpinButton skipped - isSpinLocked or reels still spinning
+SlotController.ts:3675 [SlotController] Autoplay button enabled
+SlotController.ts:539 [SlotController] Decrease bet button enabled
+SlotController.ts:545 [SlotController] Increase bet button enabled
+SlotController.ts:582 [SlotController] Skipping feature enable (reels spinning or spin locked)
+SlotController.ts:3036 [SlotController] Amplify button enabled
+SlotController.ts:3014 [SlotController] Turbo button enabled
+SlotController.ts:3693 [SlotController] Disabling autoplay button - isReelSpinning: true
+SlotController.ts:3663 [SlotController] Autoplay button disabled and greyed out
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 0
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 5
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 10
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 15
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 45
+SlotController.ts:3663 [SlotController] Autoplay button disabled and greyed out
+SlotController.ts:508 [SlotController] Decrease bet button disabled
+SlotController.ts:514 [SlotController] Increase bet button disabled
+SlotController.ts:569 [SlotController] Feature button disabled
+SlotController.ts:3025 [SlotController] Amplify button disabled
+SlotController.ts:3002 [SlotController] Turbo button disabled and greyed out
+SlotController.ts:4356 [SlotController] enableSpinButton skipped - isSpinLocked or reels still spinning
+SlotController.ts:3675 [SlotController] Autoplay button enabled
+SlotController.ts:539 [SlotController] Decrease bet button enabled
+SlotController.ts:545 [SlotController] Increase bet button enabled
+SlotController.ts:582 [SlotController] Skipping feature enable (reels spinning or spin locked)
+SlotController.ts:3036 [SlotController] Amplify button enabled
+SlotController.ts:3014 [SlotController] Turbo button enabled
+SlotController.ts:3693 [SlotController] Disabling autoplay button - isReelSpinning: true
+SlotController.ts:3663 [SlotController] Autoplay button disabled and greyed out
+Symbols.ts:3862 [Symbols] Checking for scatter symbols...
+Symbols.ts:3863 [Symbols] Symbols grid: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ [Symbols] SCATTER_SYMBOL from GameConfig: [0]
+ [Symbols] ScatterGrids found: []
+ [Symbols] ScatterGrids length: 0
+ [Symbols] No paylines in SpinData, calling WinLineDrawer for no-wins scenario
+ [WinLineDrawer] No paylines to draw lines for (once)
+ [Symbols] No scatter detected (found 0 scatter symbols, need 3+)
+ [SlotController] Reels stopped event received - updating spin button state
+ [SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)
+ [SlotController] No pending balance update to apply
+ [SlotController] Bonus active - keeping buttons disabled on REELS_STOP
+ [Symbols] REELS_STOP event received
+ [Symbols] REELS_STOP received - autoplay continuation handled separately in onSpinDataReceived
+ [Symbols] REELS_STOP received - continuing free spin autoplay
+ [Symbols] ===== CONTINUING FREE SPIN AUTOPLAY =====
+ [Symbols] Free spin autoplay: 2 spins remaining
+ [Symbols] Waiting for WIN_STOP event before continuing free spin autoplay
+ [Symbols] Setting freeSpinAutoplayWaitingForWinlines to true
+ [Symbols] freeSpinAutoplayWaitingForWinlines is now: true
+ [Symbols] ===== FREE SPIN AUTOPLAY CONTINUED =====
+ [Header] REELS_STOP received - checking for wins
+ [Header] Ignoring REELS_STOP before first spin event
+ [Header] Winnings display hidden
+ [BonusHeader] REELS_STOP received - checking for wins
+ [BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)
+ [Symbols] SpinData symbols processed successfully
+ [WinLineDrawer] Emitting WIN_STOP for no-wins scenario
+ [SlotController] WIN_STOP received - checking if spin button should be enabled
+ [SlotController] Bonus in progress - skipping UI re-enable in WIN_STOP
+ [Symbols] WIN_STOP event received - resuming autoplay
+ [Symbols] freeSpinAutoplayWaitingForReelsStop: false
+ [Symbols] freeSpinAutoplayActive: true
+ [Symbols] handleFreeSpinAutoplayWinStop called - freeSpinAutoplayWaitingForWinlines: true
+ [Symbols] WIN_STOP received - continuing free spin autoplay after winlines complete
+ [Symbols] Scheduling next free spin in 400ms (base: 500ms, turbo: true)
+ [GameData] Autoplay resumed after winline animations
+ [BonusHeader] WIN_STOP (bonus): accumulated spinWin=$0, cumulativeBonusWin=$56.5
+ [Symbols] ===== PERFORMING FREE SPIN AUTOPLAY =====
+ [Symbols] Free spin autoplay: 2 spins remaining
+ [Symbols] Triggering free spin via SlotController...
+ [SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation
+ [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+ [Symbols] Cleaned state for 12 symbols before spin (converted 7 Spine symbols to WEBP/PNG)
+ [SymbolFlash] Overlays created: 15
+ [Symbols] Turbo mode enabled for winline animations
+ [SlotController] Turbo mode enabled for winline animations via Symbols component
+ Using Fake API for bonus free spins
+  ===== FAKE FREE SPIN SIMULATION =====
+  Using fake data from: /fake-response.json
+  Current free spin index: 33
+  Spins left: 2
+  Sub total win: 0
+  Area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+  Paylines: []
+  Collector count: 47
+  Money: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+  ===== FAKE FREE SPIN COMPLETE =====
+  Remaining fake free spins: 1
+  Next fake spin will use index: 34
+ [Symbols] Free spin triggered. 1 spins remaining.
+ [Symbols] Waiting for reels to stop before continuing free spin autoplay
+ [Symbols] ===== FREE SPIN AUTOPLAY COMPLETED =====
+ [SlotController] Free spin number updated to 1 (actual: 1)
+ [SlotController] Updated free spin display to 1 remaining
+ [SlotController] Processing free spin data directly via symbols component
+ [Symbols] Processing spin data directly: {playerId: 'local', bet: '1', baseBet: '1', slot: {…}}
+ [Symbols] Stored current spin data for access by other components
+ [Symbols] Using symbols from SpinData slot.area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ [Symbols] Processing SpinData symbols: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ [ScatterAnimationManager] Cleared all scatter symbol references
+ [Symbols] Resetting symbols and clearing previous state for new spin
+ [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+ [Symbols] Cleaned state for 12 symbols before spin (converted 0 Spine symbols to WEBP/PNG)
+ [Symbols] Clearing win lines and overlay for new spin
+ [Symbols] Converted SpinData paylines to win format: Map(0) {size: 0}
+ [Symbols] Setting animation timing: {baseDelay: 2500, isTurbo: true, adjustedDelay: 2000}
+ [SlotController] Reels started - disabling amplify and bet UI
+ [SlotController] Amplify button disabled
+ [SlotController] Decrease bet button disabled
+ [SlotController] Increase bet button disabled
+ [Header] Reels started - hiding winnings display
+ [Header] Winnings display hidden
+ [BonusHeader] Reels started
+ [BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $56.5
+ [BonusHeader] Winnings display shown: $56.50 (raw: 56.5)
+ [Symbols] Disposing old symbols...
+ [Symbols] Disposed 0 symbols
+ [Symbols] New symbols from spin response: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2000
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [ReelDropScript] Anticipation check (reel 1 AND reel 3 scatter): r1=false, r3=false → extend=false
+ [ReelDropScript] Processing reel 0
+ [ReelDropScript] Processing reel 1
+ [ReelDropScript] Processing reel 2
+ [ReelDropScript] Processing reel 3
+ [ReelDropScript] Processing reel 4
+ [ReelDropScript] Waiting for all reels to complete animation...
+ [Symbols] Triggering _idle animations for NEW reel 0
+ [Symbols] Converted PNG/WEBP symbol 4 at (0, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (0, 0) to idle animation: Symbol4_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 3 at (0, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (0, 1) to idle animation: Symbol3_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 6 at (0, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (0, 2) to idle animation: Symbol6_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 1
+ [Symbols] Converted PNG/WEBP symbol 7 at (1, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (1, 0) to idle animation: Symbol7_TB_idle
+ [Symbols] Set new symbol at (1, 1) to idle animation: Symbol5-4_TB_idle
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 9 at (1, 2) - no Spine data
+ [Symbols] Triggering _idle animations for NEW reel 2
+ [Symbols] Set new symbol at (2, 0) to idle animation: Symbol5-1_TB_idle
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 8 at (2, 1) - no Spine data
+ [Symbols] Converted PNG/WEBP symbol 2 at (2, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (2, 2) to idle animation: symbol2_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 3
+ [Symbols] Converted PNG/WEBP symbol 4 at (3, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (3, 0) to idle animation: Symbol4_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 2 at (3, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (3, 1) to idle animation: symbol2_TB_idle
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 9 at (3, 2) - no Spine data
+ [Symbols] Triggering _idle animations for NEW reel 4
+ [Symbols] Set new symbol at (4, 0) to idle animation: Symbol5-1_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 3 at (4, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (4, 1) to idle animation: Symbol3_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 1 at (4, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (4, 2) to idle animation: symbol1_TB_idle
+ [ReelDropScript] All reels have completed animation
+ [Symbols] Disposing old symbols...
+ [Symbols] Disposed 15 symbols
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2000
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2000
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [Symbols] Checking for scatter symbols...
+ [Symbols] Symbols grid: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ [Symbols] SCATTER_SYMBOL from GameConfig: [0]
+ [Symbols] ScatterGrids found: []
+ [Symbols] ScatterGrids length: 0
+ [Symbols] No paylines in SpinData, calling WinLineDrawer for no-wins scenario
+ [WinLineDrawer] No paylines to draw lines for (once)
+ [Symbols] No scatter detected (found 0 scatter symbols, need 3+)
+ [SlotController] Reels stopped event received - updating spin button state
+ [SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)
+ [SlotController] No pending balance update to apply
+ [SlotController] Bonus active - keeping buttons disabled on REELS_STOP
+ [Symbols] REELS_STOP event received
+ [Symbols] REELS_STOP received - autoplay continuation handled separately in onSpinDataReceived
+ [Symbols] REELS_STOP received - continuing free spin autoplay
+ [Symbols] ===== CONTINUING FREE SPIN AUTOPLAY =====
+ [Symbols] Free spin autoplay: 1 spins remaining
+ [Symbols] Waiting for WIN_STOP event before continuing free spin autoplay
+ [Symbols] Setting freeSpinAutoplayWaitingForWinlines to true
+ [Symbols] freeSpinAutoplayWaitingForWinlines is now: true
+ [Symbols] ===== FREE SPIN AUTOPLAY CONTINUED =====
+ [Header] REELS_STOP received - checking for wins
+ [Header] Ignoring REELS_STOP before first spin event
+ [Header] Winnings display hidden
+ [BonusHeader] REELS_STOP received - checking for wins
+ [BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)
+ [Symbols] SpinData symbols processed successfully
+ [WinLineDrawer] Emitting WIN_STOP for no-wins scenario
+ [SlotController] WIN_STOP received - checking if spin button should be enabled
+ [SlotController] Bonus in progress - skipping UI re-enable in WIN_STOP
+ [Symbols] WIN_STOP event received - resuming autoplay
+ [Symbols] freeSpinAutoplayWaitingForReelsStop: false
+ [Symbols] freeSpinAutoplayActive: true
+ [Symbols] handleFreeSpinAutoplayWinStop called - freeSpinAutoplayWaitingForWinlines: true
+ [Symbols] WIN_STOP received - continuing free spin autoplay after winlines complete
+ [Symbols] Scheduling next free spin in 400ms (base: 500ms, turbo: true)
+ [GameData] Autoplay resumed after winline animations
+ [BonusHeader] WIN_STOP (bonus): accumulated spinWin=$0, cumulativeBonusWin=$56.5
+ [Symbols] ===== PERFORMING FREE SPIN AUTOPLAY =====
+ [Symbols] Free spin autoplay: 1 spins remaining
+ [Symbols] Triggering free spin via SlotController...
+ [SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation
+ [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+ [Symbols] Cleaned state for 12 symbols before spin (converted 9 Spine symbols to WEBP/PNG)
+ [SymbolFlash] Overlays created: 15
+ [Symbols] Turbo mode enabled for winline animations
+ [SlotController] Turbo mode enabled for winline animations via Symbols component
+ Using Fake API for bonus free spins
+  ===== FAKE FREE SPIN SIMULATION =====
+  Using fake data from: /fake-response.json
+  Current free spin index: 34
+  Spins left: 1
+  Sub total win: 27
+  Area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+  Paylines: [{…}]
+  Collector count: 49
+  Money: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+  ===== FAKE FREE SPIN COMPLETE =====
+  Remaining fake free spins: 0
+  Next fake spin will use index: 35
+ [Symbols] Free spin triggered. 0 spins remaining.
+ [Symbols] Waiting for reels to stop before continuing free spin autoplay
+ [Symbols] ===== FREE SPIN AUTOPLAY COMPLETED =====
+ [SlotController] Free spin number updated to 0 (actual: 0)
+ [SlotController] Updated free spin display to 0 remaining
+ [SlotController] Processing free spin data directly via symbols component
+ [Symbols] Processing spin data directly: {playerId: 'local', bet: '1', baseBet: '1', slot: {…}}
+ [Symbols] Stored current spin data for access by other components
+ [Symbols] Using symbols from SpinData slot.area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ [Symbols] Processing SpinData symbols: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ [ScatterAnimationManager] Cleared all scatter symbol references
+ [Symbols] Resetting symbols and clearing previous state for new spin
+ [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+ [Symbols] Cleaned state for 12 symbols before spin (converted 0 Spine symbols to WEBP/PNG)
+ [Symbols] Clearing win lines and overlay for new spin
+ [Symbols] Converted SpinData paylines to win format: Map(0) {size: 0}
+ [Symbols] Setting animation timing: {baseDelay: 2500, isTurbo: true, adjustedDelay: 2000}
+ [SlotController] Reels started - disabling amplify and bet UI
+ [SlotController] Amplify button disabled
+ [SlotController] Decrease bet button disabled
+ [SlotController] Increase bet button disabled
+ [Header] Reels started - hiding winnings display
+ [Header] Winnings display hidden
+ [BonusHeader] Reels started
+ [BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $56.5
+ [BonusHeader] Winnings display shown: $56.50 (raw: 56.5)
+ [Symbols] Disposing old symbols...
+ [Symbols] Disposed 0 symbols
+ [Symbols] New symbols from spin response: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [ReelDropScript] Anticipation check (reel 1 AND reel 3 scatter): r1=false, r3=false → extend=false
+ [ReelDropScript] Processing reel 0
+ [ReelDropScript] Processing reel 1
+ [ReelDropScript] Processing reel 2
+ [ReelDropScript] Processing reel 3
+ [ReelDropScript] Processing reel 4
+ [ReelDropScript] Waiting for all reels to complete animation...
+ [Symbols] Triggering _idle animations for NEW reel 0
+ [Symbols] Set new symbol at (0, 0) to idle animation: Symbol5-1_TB_idle
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 10 at (0, 1) - no Spine data
+ [Symbols] Converted PNG/WEBP symbol 2 at (0, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (0, 2) to idle animation: symbol2_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 1
+ [Symbols] Converted PNG/WEBP symbol 4 at (1, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (1, 0) to idle animation: Symbol4_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 7 at (1, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (1, 2) to idle animation: Symbol7_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 2
+ [Symbols] Converted PNG/WEBP symbol 1 at (2, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (2, 1) to idle animation: symbol1_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 4 at (2, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (2, 2) to idle animation: Symbol4_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 3
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 9 at (3, 0) - no Spine data
+ [Symbols] Converted PNG/WEBP symbol 1 at (3, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (3, 1) to idle animation: symbol1_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 7 at (3, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (3, 2) to idle animation: Symbol7_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 4
+ [Symbols] Converted PNG/WEBP symbol 2 at (4, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (4, 0) to idle animation: symbol2_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 4 at (4, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (4, 1) to idle animation: Symbol4_TB_idle
+ [Symbols] Set new symbol at (4, 2) to idle animation: Symbol5-1_TB_idle
+ [ReelDropScript] All reels have completed animation
+ [Symbols] Disposing old symbols...
+ [Symbols] Disposed 15 symbols
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [Symbols] Checking for scatter symbols...
+ [Symbols] Symbols grid: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ [Symbols] SCATTER_SYMBOL from GameConfig: [0]
+ [Symbols] ScatterGrids found: []
+ [Symbols] ScatterGrids length: 0
+ [Symbols] Win below dialog threshold (9.00x) - autoplay continues
+ [Symbols] Drawing win lines from SpinData (single-pass for free spin autoplay)
+ [Symbols] Applying turbo mode to winlines via SlotController (same as normal autoplay)
+ [Symbols] Turbo mode enabled for winline animations
+ [SlotController] Turbo mode enabled for winline animations via Symbols component
+ [WinLineDrawer] Dynamic timing applied: lines=1, turbo=true, perLine=765ms, endPause=135ms, speed=2x
+ [WinLineDrawer] No win patterns stored, emitting WIN_STOP immediately
+ [SlotController] WIN_STOP received - checking if spin button should be enabled
+ [SlotController] Bonus in progress - skipping UI re-enable in WIN_STOP
+ [Symbols] WIN_STOP event received - resuming autoplay
+ [Symbols] freeSpinAutoplayWaitingForReelsStop: true
+ [Symbols] freeSpinAutoplayActive: true
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 0
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [BonusHeader] WIN_STOP (bonus): accumulated spinWin=$9, cumulativeBonusWin=$65.5
+ [Symbols] No scatter detected (found 0 scatter symbols, need 3+)
+ [SlotController] Reels stopped event received - updating spin button state
+SlotController.ts:2383 [SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)
+SlotController.ts:2406 [SlotController] No pending balance update to apply
+SlotController.ts:2421 [SlotController] Bonus mode: incremented balance by subtotalWin 9. 2558465.29 -> 2558474.29
+SlotController.ts:2433 [SlotController] Bonus active - keeping buttons disabled on REELS_STOP
+Symbols.ts:1734 [Symbols] REELS_STOP event received
+Symbols.ts:1744 [Symbols] REELS_STOP received - autoplay continuation handled separately in onSpinDataReceived
+Symbols.ts:2757 [Symbols] Ensuring symbols remain visible after autoplay stop
+Symbols.ts:2763 [Symbols] Container visibility ensured after autoplay stop
+Symbols.ts:2778 [Symbols] Ensured 15 symbols are visible after autoplay stop
+Symbols.ts:2784 [Symbols] Cleared winlines after autoplay stop
+Symbols.ts:2788 [Symbols] Hidden winning overlay after autoplay stop
+Symbols.ts:1861 [Symbols] REELS_STOP received - continuing free spin autoplay
+Symbols.ts:3229 [Symbols] ===== CONTINUING FREE SPIN AUTOPLAY =====
+Symbols.ts:3230 [Symbols] Free spin autoplay: 0 spins remaining
+Symbols.ts:3249 [Symbols] Waiting for WIN_STOP event before continuing free spin autoplay
+Symbols.ts:3250 [Symbols] Setting freeSpinAutoplayWaitingForWinlines to true
+Symbols.ts:3252 [Symbols] freeSpinAutoplayWaitingForWinlines is now: true
+Symbols.ts:3258 [Symbols] ===== FREE SPIN AUTOPLAY CONTINUED =====
+Header.ts:132 [Header] REELS_STOP received - checking for wins
+Header.ts:135 [Header] Ignoring REELS_STOP before first spin event
+Header.ts:208 [Header] Winnings display hidden
+BonusHeader.ts:243 [BonusHeader] REELS_STOP received - checking for wins
+BonusHeader.ts:247 [BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)
+Symbols.ts:4006 [Symbols] SpinData symbols processed successfully
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 4
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 12
+SlotController.ts:3663 [SlotController] Autoplay button disabled and greyed out
+SlotController.ts:508 [SlotController] Decrease bet button disabled
+SlotController.ts:514 [SlotController] Increase bet button disabled
+SlotController.ts:569 [SlotController] Feature button disabled
+SlotController.ts:3025 [SlotController] Amplify button disabled
+SlotController.ts:3002 [SlotController] Turbo button disabled and greyed out
+SlotController.ts:4362 [SlotController] Spin button enabled
+SlotController.ts:3675 [SlotController] Autoplay button enabled
+SlotController.ts:539 [SlotController] Decrease bet button enabled
+SlotController.ts:545 [SlotController] Increase bet button enabled
+SlotController.ts:588 [SlotController] Skipping feature enable (bonus active or not allowed yet)
+SlotController.ts:3036 [SlotController] Amplify button enabled
+SlotController.ts:3014 [SlotController] Turbo button enabled
+SlotController.ts:3696 [SlotController] Enabling autoplay button - not spinning
+SlotController.ts:3675 [SlotController] Autoplay button enabled
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 0
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 2
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 4
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 12
+SlotController.ts:3663 [SlotController] Autoplay button disabled and greyed out
+SlotController.ts:508 [SlotController] Decrease bet button disabled
+SlotController.ts:514 [SlotController] Increase bet button disabled
+SlotController.ts:569 [SlotController] Feature button disabled
+SlotController.ts:3025 [SlotController] Amplify button disabled
+SlotController.ts:3002 [SlotController] Turbo button disabled and greyed out
+SlotController.ts:4362 [SlotController] Spin button enabled
+SlotController.ts:3675 [SlotController] Autoplay button enabled
+SlotController.ts:539 [SlotController] Decrease bet button enabled
+SlotController.ts:545 [SlotController] Increase bet button enabled
+SlotController.ts:588 [SlotController] Skipping feature enable (bonus active or not allowed yet)
+SlotController.ts:3036 [SlotController] Amplify button enabled
+SlotController.ts:3014 [SlotController] Turbo button enabled
+SlotController.ts:3696 [SlotController] Enabling autoplay button - not spinning
+SlotController.ts:3675 [SlotController] Autoplay button enabled
+Symbols.ts:3265 [Symbols] handleFreeSpinAutoplayWinStop called - freeSpinAutoplayWaitingForWinlines: true
+Symbols.ts:3271 [Symbols] WIN_STOP received - continuing free spin autoplay after winlines complete
+Symbols.ts:3284 [Symbols] Scheduling next free spin in 400ms (base: 500ms, turbo: true)
+GameData.ts:64 [GameData] Autoplay resumed after winline animations
+GameStateManager.ts:162 [GameStateManager] isBonusFinished re-set to same value: false
+SlotController.ts:3649 [SlotController] Free spin number updated to 10 (actual: 10)
+NumberDisplay.ts:68 [NumberDisplay] Creating number display
+NumberDisplay.ts:103 [NumberDisplay] Displaying: 10
+Symbols.ts:2984 [Symbols] ===== PERFORMING FREE SPIN AUTOPLAY =====
+Symbols.ts:2985 [Symbols] Free spin autoplay: 10 spins remaining
+Symbols.ts:3201 [Symbols] Triggering free spin via SlotController...
+SlotController.ts:4230 [SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation
+Symbols.ts:1296 [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+Symbols.ts:1395 [Symbols] Cleaned state for 13 symbols before spin (converted 9 Spine symbols to WEBP/PNG)
+SymbolFlash.ts:212 [SymbolFlash] Overlays created: 15
+Symbols.ts:2735 [Symbols] Turbo mode enabled for winline animations
+SlotController.ts:4529 [SlotController] Turbo mode enabled for winline animations via Symbols component
+GameAPI.ts:563 Using Fake API for bonus free spins
+FakeBonusAPI.ts:136  ===== FAKE FREE SPIN SIMULATION =====
+FakeBonusAPI.ts:137  Using fake data from: /fake-response.json
+FakeBonusAPI.ts:138  Current free spin index: 35
+FakeBonusAPI.ts:139  Spins left: 10
+FakeBonusAPI.ts:140  Sub total win: 20
+FakeBonusAPI.ts:141  Area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+FakeBonusAPI.ts:142  Paylines: []
+FakeBonusAPI.ts:143  Collector count: 50
+FakeBonusAPI.ts:144  Money: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+FakeBonusAPI.ts:172  ===== FAKE FREE SPIN COMPLETE =====
+FakeBonusAPI.ts:173  Remaining fake free spins: 9
+FakeBonusAPI.ts:174  Next fake spin will use index: 36
+Symbols.ts:3211 [Symbols] Free spin triggered. 9 spins remaining.
+Symbols.ts:3215 [Symbols] Waiting for reels to stop before continuing free spin autoplay
+Symbols.ts:3222 [Symbols] ===== FREE SPIN AUTOPLAY COMPLETED =====
+SlotController.ts:3649 [SlotController] Free spin number updated to 9 (actual: 9)
+SlotController.ts:4262 [SlotController] Updated free spin display to 9 remaining
+SlotController.ts:4268 [SlotController] Processing free spin data directly via symbols component
+Symbols.ts:3459 [Symbols] Processing spin data directly: {playerId: 'local', bet: '1', baseBet: '1', slot: {…}}
+Symbols.ts:3468 [Symbols] Stored current spin data for access by other components
+Symbols.ts:3509 [Symbols] Using symbols from SpinData slot.area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+Symbols.ts:3699 [Symbols] Processing SpinData symbols: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ScatterAnimationManager.ts:854 [ScatterAnimationManager] Cleared all scatter symbol references
+Symbols.ts:3723 [Symbols] Resetting symbols and clearing previous state for new spin
+Symbols.ts:1296 [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+Symbols.ts:1395 [Symbols] Cleaned state for 13 symbols before spin (converted 0 Spine symbols to WEBP/PNG)
+Symbols.ts:3727 [Symbols] Clearing win lines and overlay for new spin
+Symbols.ts:3751 [Symbols] Converted SpinData paylines to win format: Map(0) {size: 0}
+Symbols.ts:3758 [Symbols] Setting animation timing: {baseDelay: 2500, isTurbo: true, adjustedDelay: 2000}
+SlotController.ts:2328 [SlotController] Reels started - disabling amplify and bet UI
+SlotController.ts:3025 [SlotController] Amplify button disabled
+SlotController.ts:508 [SlotController] Decrease bet button disabled
+SlotController.ts:514 [SlotController] Increase bet button disabled
+Header.ts:126 [Header] Reels started - hiding winnings display
+Header.ts:208 [Header] Winnings display hidden
+BonusHeader.ts:218 [BonusHeader] Reels started
+BonusHeader.ts:227 [BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $65.5
+ [BonusHeader] Winnings display shown: $65.50 (raw: 65.5)
+ [Symbols] Disposing old symbols...
+ [Symbols] Disposed 0 symbols
+ [Symbols] New symbols from spin response: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [ReelDropScript] Anticipation check (reel 1 AND reel 3 scatter): r1=false, r3=false → extend=false
+ [ReelDropScript] Processing reel 0
+ [ReelDropScript] Processing reel 1
+ [ReelDropScript] Processing reel 2
+ [ReelDropScript] Processing reel 3
+ [ReelDropScript] Processing reel 4
+ [ReelDropScript] Waiting for all reels to complete animation...
+ [Symbols] Triggering _idle animations for NEW reel 0
+ [Symbols] Converted PNG/WEBP symbol 6 at (0, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (0, 0) to idle animation: Symbol6_TB_idle
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 8 at (0, 1) - no Spine data
+ [Symbols] Converted PNG/WEBP symbol 2 at (0, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (0, 2) to idle animation: symbol2_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 1
+ [Symbols] Converted PNG/WEBP symbol 6 at (1, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (1, 0) to idle animation: Symbol6_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 4 at (1, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (1, 1) to idle animation: Symbol4_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 1 at (1, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (1, 2) to idle animation: symbol1_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 2
+ [Symbols] Converted PNG/WEBP symbol 2 at (2, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (2, 0) to idle animation: symbol2_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 3 at (2, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (2, 1) to idle animation: Symbol3_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 4 at (2, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (2, 2) to idle animation: Symbol4_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 3
+ [Symbols] Set new symbol at (3, 0) to idle animation: Symbol5-1_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 4 at (3, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (3, 1) to idle animation: Symbol4_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 2 at (3, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (3, 2) to idle animation: symbol2_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 4
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 9 at (4, 0) - no Spine data
+ [Symbols] Converted PNG/WEBP symbol 2 at (4, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (4, 2) to idle animation: symbol2_TB_idle
+ [ReelDropScript] All reels have completed animation
+ [Symbols] Disposing old symbols...
+ [Symbols] Disposed 15 symbols
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 0
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Displaying: 20
+ [SlotController] Autoplay button disabled and greyed out
+ [SlotController] Decrease bet button disabled
+ [SlotController] Increase bet button disabled
+ [SlotController] Feature button disabled
+ [SlotController] Amplify button disabled
+ [SlotController] Turbo button disabled and greyed out
+ [SlotController] enableSpinButton skipped - isSpinLocked or reels still spinning
+ [SlotController] Autoplay button enabled
+ [SlotController] Decrease bet button enabled
+ [SlotController] Increase bet button enabled
+ [SlotController] Skipping feature enable (reels spinning or spin locked)
+ [SlotController] Amplify button enabled
+ [SlotController] Turbo button enabled
+ [SlotController] Disabling autoplay button - isReelSpinning: true
+ [SlotController] Autoplay button disabled and greyed out
+ [Symbols] Checking for scatter symbols...
+ [Symbols] Symbols grid: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ [Symbols] SCATTER_SYMBOL from GameConfig: [0]
+ [Symbols] ScatterGrids found: []
+ [Symbols] ScatterGrids length: 0
+ [Symbols] No paylines in SpinData, calling WinLineDrawer for no-wins scenario
+ [WinLineDrawer] No paylines to draw lines for (once)
+ [Symbols] No scatter detected (found 0 scatter symbols, need 3+)
+ [SlotController] Reels stopped event received - updating spin button state
+ [SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)
+ [SlotController] No pending balance update to apply
+ [SlotController] Bonus active - keeping buttons disabled on REELS_STOP
+ [Symbols] REELS_STOP event received
+ [Symbols] REELS_STOP received - autoplay continuation handled separately in onSpinDataReceived
+ [Symbols] Ensuring symbols remain visible after autoplay stop
+ [Symbols] Container visibility ensured after autoplay stop
+ [Symbols] Ensured 15 symbols are visible after autoplay stop
+ [Symbols] Cleared winlines after autoplay stop
+ [Symbols] Hidden winning overlay after autoplay stop
+ [Symbols] REELS_STOP received - continuing free spin autoplay
+ [Symbols] ===== CONTINUING FREE SPIN AUTOPLAY =====
+ [Symbols] Free spin autoplay: 9 spins remaining
+ [Symbols] Waiting for WIN_STOP event before continuing free spin autoplay
+ [Symbols] Setting freeSpinAutoplayWaitingForWinlines to true
+ [Symbols] freeSpinAutoplayWaitingForWinlines is now: true
+ [Symbols] ===== FREE SPIN AUTOPLAY CONTINUED =====
+ [Header] REELS_STOP received - checking for wins
+ [Header] Ignoring REELS_STOP before first spin event
+ [Header] Winnings display hidden
+ [BonusHeader] REELS_STOP received - checking for wins
+ [BonusHeader] In bonus mode - skipping REELS_STOP winnings update (handled on WIN_STOP)
+ [Symbols] SpinData symbols processed successfully
+ [WinLineDrawer] Emitting WIN_STOP for no-wins scenario
+ [SlotController] WIN_STOP received - checking if spin button should be enabled
+ [SlotController] Bonus in progress - skipping UI re-enable in WIN_STOP
+ [Symbols] WIN_STOP event received - resuming autoplay
+ [Symbols] freeSpinAutoplayWaitingForReelsStop: false
+ [Symbols] freeSpinAutoplayActive: true
+ [Symbols] handleFreeSpinAutoplayWinStop called - freeSpinAutoplayWaitingForWinlines: true
+ [Symbols] WIN_STOP received - continuing free spin autoplay after winlines complete
+ [Symbols] Scheduling next free spin in 400ms (base: 500ms, turbo: true)
+ [GameData] Autoplay resumed after winline animations
+ [BonusHeader] WIN_STOP (bonus): accumulated spinWin=$0, cumulativeBonusWin=$65.5
+ [Symbols] ===== PERFORMING FREE SPIN AUTOPLAY =====
+ [Symbols] Free spin autoplay: 9 spins remaining
+ [Symbols] Triggering free spin via SlotController...
+ [SlotController] FREE_SPIN_AUTOPLAY event received - triggering free spin simulation
+ [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+ [Symbols] Cleaned state for 14 symbols before spin (converted 11 Spine symbols to WEBP/PNG)
+ [SymbolFlash] Overlays created: 15
+ [Symbols] Turbo mode enabled for winline animations
+ [SlotController] Turbo mode enabled for winline animations via Symbols component
+ Using Fake API for bonus free spins
+  ===== FAKE FREE SPIN SIMULATION =====
+  Using fake data from: /fake-response.json
+  Current free spin index: 36
+  Spins left: 9
+  Sub total win: 40
+  Area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+  Paylines: []
+  Collector count: 52
+  Money: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+  ===== FAKE FREE SPIN COMPLETE =====
+  Remaining fake free spins: 8
+  Next fake spin will use index: 37
+ [Symbols] Free spin triggered. 8 spins remaining.
+ [Symbols] Waiting for reels to stop before continuing free spin autoplay
+ [Symbols] ===== FREE SPIN AUTOPLAY COMPLETED =====
+ [SlotController] Free spin number updated to 8 (actual: 8)
+ [SlotController] Updated free spin display to 8 remaining
+ [SlotController] Processing free spin data directly via symbols component
+ [Symbols] Processing spin data directly: {playerId: 'local', bet: '1', baseBet: '1', slot: {…}}
+ [Symbols] Stored current spin data for access by other components
+ [Symbols] Using symbols from SpinData slot.area: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ [Symbols] Processing SpinData symbols: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ [ScatterAnimationManager] Cleared all scatter symbol references
+ [Symbols] Resetting symbols and clearing previous state for new spin
+ [Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)
+ [Symbols] Cleaned state for 14 symbols before spin (converted 0 Spine symbols to WEBP/PNG)
+ [Symbols] Clearing win lines and overlay for new spin
+ [Symbols] Converted SpinData paylines to win format: Map(0) {size: 0}
+ [Symbols] Setting animation timing: {baseDelay: 2500, isTurbo: true, adjustedDelay: 2000}
+ [SlotController] Reels started - disabling amplify and bet UI
+ [SlotController] Amplify button disabled
+ [SlotController] Decrease bet button disabled
+ [SlotController] Increase bet button disabled
+ [Header] Reels started - hiding winnings display
+ [Header] Winnings display hidden
+ [BonusHeader] Reels started
+ [BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $65.5
+ [BonusHeader] Winnings display shown: $65.50 (raw: 65.5)
+ [Symbols] Disposing old symbols...
+ [Symbols] Disposed 0 symbols
+ [Symbols] New symbols from spin response: (5) [Array(3), Array(3), Array(3), Array(3), Array(3)]
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [ReelDropScript] Anticipation check (reel 1 AND reel 3 scatter): r1=false, r3=false → extend=false
+ [ReelDropScript] Processing reel 0
+ [ReelDropScript] Processing reel 1
+ [ReelDropScript] Processing reel 2
+ [ReelDropScript] Processing reel 3
+ [ReelDropScript] Processing reel 4
+ [ReelDropScript] Waiting for all reels to complete animation...
+ [Symbols] Triggering _idle animations for NEW reel 0
+ [Symbols] Converted PNG/WEBP symbol 4 at (0, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (0, 0) to idle animation: Symbol4_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 3 at (0, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (0, 1) to idle animation: Symbol3_TB_idle
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 8 at (0, 2) - no Spine data
+ [Symbols] Triggering _idle animations for NEW reel 1
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 9 at (1, 0) - no Spine data
+ [Symbols] Converted PNG/WEBP symbol 4 at (1, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (1, 1) to idle animation: Symbol4_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 1 at (1, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (1, 2) to idle animation: symbol1_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 2
+ [Symbols] Converted PNG/WEBP symbol 2 at (2, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (2, 0) to idle animation: symbol2_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 1 at (2, 1) back to Spine for idle animation
+ [Symbols] Set new symbol at (2, 1) to idle animation: symbol1_TB_idle
+ [Symbols] Converted PNG/WEBP symbol 6 at (2, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (2, 2) to idle animation: Symbol6_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 3
+ [Symbols] Converted PNG/WEBP symbol 3 at (3, 0) back to Spine for idle animation
+ [Symbols] Set new symbol at (3, 0) to idle animation: Symbol3_TB_idle
+ [Symbols] Set new symbol at (3, 2) to idle animation: Symbol5-1_TB_idle
+ [Symbols] Triggering _idle animations for NEW reel 4
+ [Symbols] Skipping idle Spine animation for PNG/WEBP symbol 9 at (4, 0) - no Spine data
+ [Symbols] Converted PNG/WEBP symbol 2 at (4, 2) back to Spine for idle animation
+ [Symbols] Set new symbol at (4, 2) to idle animation: symbol2_TB_idle
+ [ReelDropScript] All reels have completed animation
+ [Symbols] Disposing old symbols...
+ [Symbols] Disposed 15 symbols
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 0
+ [NumberDisplay] Creating number display
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Displaying: 2
+ [NumberDisplay] Displaying: 20
+ [SlotController] Autoplay button disabled and greyed out
+ [SlotController] Decrease bet button disabled
+ [SlotController] Increase bet button disabled
+ [SlotController] Feature button disabled
+ [SlotController] Amplify button disabled
+ [SlotController] Turbo button disabled and greyed out

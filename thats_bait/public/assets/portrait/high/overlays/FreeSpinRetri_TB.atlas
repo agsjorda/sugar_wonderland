@@ -1,7 +1,7 @@
 FreeSpinRetri_TB.webp
 size:339,343
 filter:Linear,Linear
-pma:true
+pma:false
 MORE
 bounds:2,2,335,129
 offsets:0,0,336,129

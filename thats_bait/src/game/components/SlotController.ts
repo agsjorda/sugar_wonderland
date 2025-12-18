@@ -30,7 +30,7 @@ import {
 import { AMPLIFY_DESCRIPTION_OFFSET_X, AMPLIFY_DESCRIPTION_OFFSET_Y } from '../../config/UIPositionConfig';
 
 export class SlotController {
-	private controllerContainer: Phaser.GameObjects.Container;
+	private controllerContainer!: Phaser.GameObjects.Container;
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
 	private scene: Scene | null = null;
@@ -38,15 +38,15 @@ export class SlotController {
 	private gameAPI: GameAPI | null = null;
 	private symbols: Symbols | null = null;
 	private buttons: Map<string, Phaser.GameObjects.Image> = new Map();
-	private betAmountText: Phaser.GameObjects.Text;
-	private betDollarText: Phaser.GameObjects.Text;
-	private balanceAmountText: Phaser.GameObjects.Text;
-	private balanceDollarText: Phaser.GameObjects.Text;
-	private featureAmountText: Phaser.GameObjects.Text;
-	private featureDollarText: Phaser.GameObjects.Text;
-	private primaryControllers: Phaser.GameObjects.Container;
+	private betAmountText!: Phaser.GameObjects.Text;
+	private betDollarText!: Phaser.GameObjects.Text;
+	private balanceAmountText!: Phaser.GameObjects.Text;
+	private balanceDollarText!: Phaser.GameObjects.Text;
+	private featureAmountText!: Phaser.GameObjects.Text;
+	private featureDollarText!: Phaser.GameObjects.Text;
+	private primaryControllers!: Phaser.GameObjects.Container;
 	private controllerTexts: Phaser.GameObjects.Text[] = [];
-	private amplifyDescriptionContainer: Phaser.GameObjects.Container;
+	private amplifyDescriptionContainer!: Phaser.GameObjects.Container;
 	// References for bet UI interactivity control
 	private betLabelRef: Phaser.GameObjects.Text | null = null;
 	private betCentralZone: Phaser.GameObjects.Zone | null = null;
@@ -66,11 +66,11 @@ export class SlotController {
 		featureTrimLeftPx: 0,
 		featureTrimRightPx: 0
 	};
-    private freeSpinLabel: Phaser.GameObjects.Text;
-    private freeSpinNumber: Phaser.GameObjects.Text;
-    private freeSpinSubLabel: Phaser.GameObjects.Text;
+	private freeSpinLabel!: Phaser.GameObjects.Text;
+	private freeSpinNumber!: Phaser.GameObjects.Text;
+	private freeSpinSubLabel!: Phaser.GameObjects.Text;
     // Digit-based free spin number display (using number_0..9 images)
-    private freeSpinDigitsContainer: Phaser.GameObjects.Container;
+	private freeSpinDigitsContainer!: Phaser.GameObjects.Container;
     private freeSpinNumberDigitSprites: Phaser.GameObjects.Image[] = [];
     private freeSpinDigitsScale: number = .5;
     private freeSpinDigitsOffsetX: number = -4;
@@ -975,6 +975,7 @@ export class SlotController {
 			try {
 				// Disable spin button, bet buttons, feature button and play animations
 				this.disableSpinButton();
+				this.disableAutoplayButton();
 				this.disableBetButtons();
 				this.disableFeatureButton();
 				this.playSpinButtonAnimation();
@@ -1846,6 +1847,7 @@ export class SlotController {
 			
 			// Disable spin button, bet buttons, feature button and play animations
 			this.disableSpinButton();
+			this.disableAutoplayButton();
 			this.disableBetButtons();
 			this.disableFeatureButton();
 			this.playSpinButtonAnimation();
@@ -2421,28 +2423,6 @@ setBuyFeatureBetAmount(amount: number): void {
 						}
 					}
 					
-					const gameScene: any = this.scene as any;
-					const symbolsComponent = gameScene?.symbols;
-					// Prefer Symbols' remaining counter if available
-					if (symbolsComponent && typeof symbolsComponent.freeSpinAutoplaySpinsRemaining === 'number') {
-						const remaining: number = symbolsComponent.freeSpinAutoplaySpinsRemaining;
-						// If after this spin there are no spins remaining, flag bonus finished
-						if (remaining <= 0) {
-							console.log('[SlotController] REELS_STOP: remaining free spins <= 0 – setting isBonusFinished=true');
-							gameStateManager.isBonusFinished = true;
-						}
-					} else if (this.gameAPI && typeof this.gameAPI.getCurrentSpinData === 'function') {
-						// Fallback: inspect GameAPI spin data for remaining spins
-						const apiSpinData: any = this.gameAPI.getCurrentSpinData();
-						const fs = apiSpinData?.slot?.freespin || apiSpinData?.slot?.freeSpin;
-						if (fs?.items && Array.isArray(fs.items)) {
-							const totalRemaining = fs.items.reduce((sum: number, it: any) => sum + (it?.spinsLeft || 0), 0);
-							if (totalRemaining <= 1) {
-								console.log('[SlotController] REELS_STOP: totalRemaining free spins <= 1 – setting isBonusFinished=true');
-								gameStateManager.isBonusFinished = true;
-							}
-						}
-					}
 				} catch (e) {
 					console.warn('[SlotController] REELS_STOP: Unable to evaluate bonus finish state:', e);
 				}
@@ -3852,24 +3832,6 @@ public updateAutoplayButtonState(): void {
 					if (gameScene?.symbols && gameScene.symbols.freeSpinAutoplaySpinsRemaining !== undefined) {
 						this.updateFreeSpinNumber(gameScene.symbols.freeSpinAutoplaySpinsRemaining);
 						console.log(`[SlotController] Updated free spin display to ${gameScene.symbols.freeSpinAutoplaySpinsRemaining} remaining`);
-						
-						// Check if there are any more free spins available
-						const hasMoreFreeSpins = spinData.slot.freespin.items.some((item: any) => item.spinsLeft > 0);
-						if (!hasMoreFreeSpins) {
-							console.log('[SlotController] No more free spins available - ending bonus mode');
-							gameStateManager.isBonus = false;
-							gameStateManager.isBonusFinished = true;
-							if (this.scene) {
-								this.scene.events.emit('setBonusMode', false);
-							}
-						}
-					} else {
-						console.log('[SlotController] No more free spins - ending bonus mode');
-						gameStateManager.isBonus = false;
-						gameStateManager.isBonusFinished = true;
-						if (this.scene) {
-							this.scene.events.emit('setBonusMode', false);
-						}
 					}
 				}
 			}
@@ -4087,6 +4049,7 @@ public updateAutoplayButtonState(): void {
 				return;
 			}
 			
+			const oldBalance = this.getBalanceAmount();
 			const balanceResponse = await this.gameAPI.getBalance();
 			console.log('[SlotController] Balance response received:', balanceResponse);
 			
@@ -4101,11 +4064,17 @@ public updateAutoplayButtonState(): void {
 				return;
 			}
 			
-			const oldBalance = this.getBalanceAmount();
 			console.log(`[SlotController] 💰 Server balance update: $${oldBalance} -> $${newBalance}`);
 			
 			// Update the balance display
 			this.updateBalanceAmount(newBalance);
+			try {
+				gameEventManager.emit(GameEventType.BALANCE_UPDATE, {
+					newBalance,
+					previousBalance: oldBalance,
+					change: newBalance - oldBalance,
+				});
+			} catch {}
 			if (newBalance <= 0) {
 				this.showOutOfBalancePopup();
 			}
@@ -4266,90 +4235,48 @@ public updateAutoplayButtonState(): void {
 					try { symbolsComponent.restoreSymbolsAboveReelBg?.(); } catch {}
 				}
 			} catch {}
-			
-			// Apply turbo mode to game data and winlines (same as normal autoplay)
-			this.forceApplyTurboToSceneGameData();
-			this.applyTurboToWinlineAnimations();
-			
-			if (gameStateManager.isBonus && this.gameAPI && this.symbols) {
-				try {
-					// Get free spin data from GameAPI directly (this should have the original scatter data)
-					const gameAPISpinData = this.gameAPI.getCurrentSpinData();
-					if (gameAPISpinData && (gameAPISpinData.slot?.freespin?.items || gameAPISpinData.slot?.freeSpin?.items)) {
-						console.log('[SlotController] Found free spin data in GameAPI');
-						const freespinData = gameAPISpinData.slot?.freespin || gameAPISpinData.slot?.freeSpin;
-						console.log('[SlotController] GameAPI currentSpinData has freespin:', !!gameAPISpinData.slot?.freespin);
-						console.log('[SlotController] GameAPI currentSpinData has freeSpin:', !!gameAPISpinData.slot?.freeSpin);
-						console.log('[SlotController] GameAPI currentSpinData has items:', !!freespinData?.items);
-						console.log('[SlotController] GameAPI currentSpinData items count:', freespinData?.items?.length);
-					} else {
-						console.error('[SlotController] No free spin data available in GameAPI');
-						console.error('[SlotController] GameAPI currentSpinData:', gameAPISpinData);
-						console.error('[SlotController] GameAPI currentSpinData.slot:', gameAPISpinData?.slot);
-						console.error('[SlotController] GameAPI currentSpinData.slot.freespin:', gameAPISpinData?.slot?.freespin);
-						console.error('[SlotController] GameAPI currentSpinData.slot.freeSpin:', gameAPISpinData?.slot?.freeSpin);
-						console.error('[SlotController] GameAPI currentSpinData.slot.freespin.items:', gameAPISpinData?.slot?.freespin?.items);
-						console.error('[SlotController] GameAPI currentSpinData.slot.freeSpin.items:', gameAPISpinData?.slot?.freeSpin?.items);
-						return;
-					}
-					
-					// Use our free spin simulation
-					const spinData = await this.gameAPI.simulateFreeSpin();
-					
-					// Update free spin display with remaining count from Symbols component
-					const gameScene = this.scene as any; // Cast to access symbols property
-					if (gameScene.symbols && gameScene.symbols.freeSpinAutoplaySpinsRemaining !== undefined) {
-						this.updateFreeSpinNumber(gameScene.symbols.freeSpinAutoplaySpinsRemaining);
-						console.log(`[SlotController] Updated free spin display to ${gameScene.symbols.freeSpinAutoplaySpinsRemaining} remaining`);
-						
-						// Check if there are any more free spins available
-						const freespinData = spinData.slot?.freespin || spinData.slot?.freeSpin;
-						const hasMoreFreeSpins = freespinData?.items?.some(item => item.spinsLeft > 0);
-						if (!hasMoreFreeSpins) {
-							// No more free spins - end bonus mode
-							console.log('[SlotController] No more free spins available - ending bonus mode');
-							gameStateManager.isBonus = false;
-							gameStateManager.isBonusFinished = true;
-							// Emit event to show primary controller and hide bonus components
-							if (this.scene) {
-								this.scene.events.emit('setBonusMode', false);
-							}
-						}
-					} else {
-						// No more free spins - end bonus mode
-						console.log('[SlotController] No more free spins - ending bonus mode');
-						gameStateManager.isBonus = false;
-						gameStateManager.isBonusFinished = true;
-						// Emit event to show primary controller and hide bonus components
-						if (this.scene) {
-							this.scene.events.emit('setBonusMode', false);
-						}
-					}
 
-					// Process the spin data directly for free spin autoplay
-					if (this.scene && (this.scene as any).symbols) {
-						const symbolsComponent = (this.scene as any).symbols;
-						if (symbolsComponent && typeof symbolsComponent.processSpinData === 'function') {
-							console.log('[SlotController] Processing free spin data directly via symbols component');
-							symbolsComponent.processSpinData(spinData);
-						} else {
-							console.log('[SlotController] Symbols component not available, falling back to SPIN_DATA_RESPONSE');
-							gameEventManager.emit(GameEventType.SPIN_DATA_RESPONSE, {
-								spinData: spinData
-							});
-						}
-					} else {
-						console.log('[SlotController] Scene or symbols not available, falling back to SPIN_DATA_RESPONSE');
-						gameEventManager.emit(GameEventType.SPIN_DATA_RESPONSE, {
-							spinData: spinData
-						});
-					}
+			try {
+				this.forceApplyTurboToSceneGameData();
+				this.applyTurboToWinlineAnimations();
+			} catch {}
 
-				} catch (error) {
-					console.error('[SlotController] Free spin simulation failed:', error);
-				}
-			} else {
+			if (!(gameStateManager.isBonus && this.gameAPI && this.symbols)) {
 				console.warn('[SlotController] Not in bonus mode or GameAPI not available for free spin autoplay');
+				return;
+			}
+
+			try {
+				const gameAPISpinData = this.gameAPI.getCurrentSpinData();
+				if (!(gameAPISpinData && (gameAPISpinData.slot?.freespin?.items || gameAPISpinData.slot?.freeSpin?.items))) {
+					console.error('[SlotController] No free spin data available in GameAPI');
+					console.error('[SlotController] GameAPI currentSpinData:', gameAPISpinData);
+					return;
+				}
+
+				const spinData = await this.gameAPI.simulateFreeSpin();
+
+				const gameScene = this.scene as any;
+				if (gameScene?.symbols && gameScene.symbols.freeSpinAutoplaySpinsRemaining !== undefined) {
+					this.updateFreeSpinNumber(gameScene.symbols.freeSpinAutoplaySpinsRemaining);
+					console.log(`[SlotController] Updated free spin display to ${gameScene.symbols.freeSpinAutoplaySpinsRemaining} remaining`);
+				}
+
+				if (this.scene && (this.scene as any).symbols) {
+					const symbolsComponent = (this.scene as any).symbols;
+					if (symbolsComponent && typeof symbolsComponent.processSpinData === 'function') {
+						console.log('[SlotController] Processing free spin data directly via symbols component');
+						symbolsComponent.processSpinData(spinData);
+					} else {
+						console.log('[SlotController] Symbols component not available, falling back to SPIN_DATA_RESPONSE');
+						gameEventManager.emit(GameEventType.SPIN_DATA_RESPONSE, { spinData });
+					}
+				} else {
+					console.log('[SlotController] Scene or symbols not available, falling back to SPIN_DATA_RESPONSE');
+					gameEventManager.emit(GameEventType.SPIN_DATA_RESPONSE, { spinData });
+				}
+			} catch (error) {
+				console.error('[SlotController] Free spin simulation failed:', error);
 			}
 		});
 

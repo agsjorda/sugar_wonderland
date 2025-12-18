@@ -625,18 +625,44 @@ export class WinLineDrawer {
 
     winlinePositions.sort((a, b) => a.x - b.x);
 
-    const streak: Grid[] = [];
-    for (const pos of winlinePositions) {
-      const symbolAtPosition = spinData.slot.area?.[pos.x]?.[pos.y];
+    const requiredMin = 3;
+    const requiredCount = Math.max(0, Number(count) || 0);
+    if (requiredCount > 0 && requiredCount < requiredMin) {
+      return [];
+    }
 
-      if (symbolAtPosition === targetSymbol) {
-        streak.push({ x: pos.x, y: pos.y, symbol: symbolAtPosition });
-        if (count > 0 && streak.length === count) {
-          break;
-        }
-      } else if (streak.length > 0) {
+    const firstPos = winlinePositions[0];
+    if (!firstPos || firstPos.x !== 0) {
+      return [];
+    }
+
+    const firstSymbol = spinData.slot.area?.[firstPos.x]?.[firstPos.y];
+    if (firstSymbol !== targetSymbol) {
+      return [];
+    }
+
+    const streak: Grid[] = [{ x: firstPos.x, y: firstPos.y, symbol: firstSymbol }];
+    for (let i = 1; i < winlinePositions.length; i++) {
+      const pos = winlinePositions[i];
+      const prev = winlinePositions[i - 1];
+
+      if (pos.x !== prev.x + 1) {
         break;
       }
+
+      const symbolAtPosition = spinData.slot.area?.[pos.x]?.[pos.y];
+      if (symbolAtPosition === targetSymbol) {
+        streak.push({ x: pos.x, y: pos.y, symbol: symbolAtPosition });
+        if (requiredCount > 0 && streak.length === requiredCount) {
+          break;
+        }
+      } else {
+        break;
+      }
+    }
+
+    if (streak.length < requiredMin) {
+      return [];
     }
 
     return streak;

@@ -23,6 +23,9 @@ export function applyImageSymbolWinRipple(scene: Phaser.Scene, symbol: any): voi
       return;
     }
     const anySymbol: any = symbol as any;
+    if (anySymbol.__isCollectorPlaceholder) {
+      return;
+    }
     // If a ripple ring already exists, do not stack another one on top.
     if (anySymbol.__winRippleRing) {
       return;

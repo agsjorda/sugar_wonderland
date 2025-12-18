@@ -37,6 +37,21 @@ export class BubbleOverlayTransitionScene extends Scene {
 		this.cameras.main.setBackgroundColor(0x000000);
 		try { (this.cameras.main.backgroundColor as any).alpha = 0; } catch {}
 
+		try {
+			this.events.once('shutdown', () => {
+				try { this.ensureOnTopTimer?.destroy(); } catch {}
+				try { this.ensureOnTopTimer = undefined; } catch {}
+				try { this.hardStopTimer?.destroy(); } catch {}
+				try { this.hardStopTimer = undefined; } catch {}
+				try { this.overlayRect?.destroy(); } catch {}
+				try { this.transitionSpine?.destroy(); } catch {}
+				for (const b of this.bubbles) {
+					try { b.destroy(); } catch {}
+				}
+				this.bubbles = [];
+			});
+		} catch {}
+
 		try { this.hardStopTimer?.destroy(); } catch {}
 		try {
 			this.hardStopTimer = this.time.delayedCall(4500, () => {

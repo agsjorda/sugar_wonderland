@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import { SpinData } from '../backend/SpinData';
+import { fakeBonusAPI } from '../backend/FakeBonusAPI';
 
 import { gameEventManager, GameEventType } from '../event/EventManager';
 import { gameStateManager } from './GameStateManager';
@@ -15,6 +16,7 @@ export interface ScatterAnimationConfig {
 }
 
 export class ScatterAnimationManager {
+
   private static instance: ScatterAnimationManager;
   private scene: Scene | null = null;
   private symbolsContainer: Phaser.GameObjects.Container | null = null;
@@ -27,6 +29,8 @@ export class ScatterAnimationManager {
   public delayedScatterData: any = null;
   private scatterSymbols: any[] = []; // Store references to scatter symbols
   private useSpinner: boolean = false; // TEMP: disable spinner, use overlay
+
+  private bonusEntryFreeSpinsOverride: number | null = null;
 
   // Event listener references for cleanup
   private wheelSpinStartListener: ((data?: any) => void) | null = null;
@@ -103,6 +107,7 @@ export class ScatterAnimationManager {
   }
 
   public async playScatterAnimation(): Promise<void> {
+
     if (this.isAnimating || !this.scene || !this.symbolsContainer) {
       console.warn('[ScatterAnimationManager] Cannot play animation - scene or symbols container not ready');
       return;
@@ -124,6 +129,23 @@ export class ScatterAnimationManager {
 
       gameStateManager.isScatter = true;
       gameStateManager.scatterIndex = scatterIndex;
+
+      try {
+        if (!this.bonusEntryFreeSpinsOverride && fakeBonusAPI.isEnabled()) {
+          try { await fakeBonusAPI.initializeBonusData(); } catch {}
+          try { fakeBonusAPI.resetFreeSpinIndex(); } catch {}
+          const fakeSpinData: any = fakeBonusAPI.getCurrentSpinData();
+          const fsFake: any = fakeSpinData?.slot?.freespin || fakeSpinData?.slot?.freeSpin;
+          const items = fsFake?.items;
+          if (Array.isArray(items) && items.length > 0) {
+            const v = Number(items[0]?.spinsLeft);
+            if (isFinite(v) && v > 0) {
+              this.bonusEntryFreeSpinsOverride = v;
+            }
+          }
+        }
+      } catch {}
+
       let requestedBonusVisualActivation = false;
       let requestedBonusTransitionFinish = false;
       let bonusTransitionListenersRegistered = false;
@@ -153,29 +175,58 @@ export class ScatterAnimationManager {
         try {
           const gameScene = this.scene as any;
           const currentSpinData: SpinData | any = gameScene?.symbols?.currentSpinData;
+
           // Smoothly fade out reel background while overlay is visible
           try { gameScene?.symbols?.fadeOutReelBackground?.(400); } catch {}
           // Compute display free spins from backend freespin count (fallback to items.spinsLeft)
           let spinsToDisplay = 0;
           try {
-            const fs: any = currentSpinData?.slot?.freespin || currentSpinData?.slot?.freeSpin;
-            let maxSpinsLeft = 0;
-            if (fs?.items && Array.isArray(fs.items) && fs.items.length > 0) {
-              for (const it of fs.items) {
-                const v = Number((it as any)?.spinsLeft);
-                if (isFinite(v) && v > maxSpinsLeft) maxSpinsLeft = v;
+            // If fake bonus debug is enabled, prefer the fake-response.json first batch spinsLeft.
+            if (fakeBonusAPI.isEnabled()) {
+              try { await fakeBonusAPI.initializeBonusData(); } catch {}
+              try { fakeBonusAPI.resetFreeSpinIndex(); } catch {}
+              const fakeSpinData: any = fakeBonusAPI.getCurrentSpinData();
+              const fsFake: any = fakeSpinData?.slot?.freespin || fakeSpinData?.slot?.freeSpin;
+              const items = fsFake?.items;
+              if (Array.isArray(items) && items.length > 0) {
+                const v = Number(items[0]?.spinsLeft);
+                if (isFinite(v) && v > 0) {
+                  spinsToDisplay = v;
+                }
               }
             }
-            if (maxSpinsLeft > 0) {
-              spinsToDisplay = maxSpinsLeft;
-            } else if (typeof fs?.count === 'number' && isFinite(fs.count) && fs.count > 0) {
-              spinsToDisplay = Number(fs.count) || 0;
+          } catch {}
+
+          try {
+            if (spinsToDisplay > 0) {
+              this.bonusEntryFreeSpinsOverride = spinsToDisplay;
+            }
+          } catch {}
+
+          try {
+            if (spinsToDisplay > 0) {
+              // already set
+            } else {
+              const fs: any = currentSpinData?.slot?.freespin || currentSpinData?.slot?.freeSpin;
+              let maxSpinsLeft = 0;
+              if (fs?.items && Array.isArray(fs.items) && fs.items.length > 0) {
+                for (const it of fs.items) {
+                  const v = Number((it as any)?.spinsLeft);
+                  if (isFinite(v) && v > maxSpinsLeft) maxSpinsLeft = v;
+                }
+              }
+              if (maxSpinsLeft > 0) {
+                spinsToDisplay = maxSpinsLeft;
+              } else if (typeof fs?.count === 'number' && isFinite(fs.count) && fs.count > 0) {
+                spinsToDisplay = Number(fs.count) || 0;
+              }
             }
           } catch {}
           await new Promise<void>((resolve) => {
             this.scatterWinOverlay.show(spinsToDisplay, async () => {
               console.log('[ScatterAnimationManager] FreeSpinOverlay shown');
               // Hide base symbols while overlay is up
+
               await this.disableSymbols();
               if (typeof this.scatterWinOverlay.waitUntilDismissed === 'function') {
                 await this.scatterWinOverlay.waitUntilDismissed();
@@ -183,6 +234,8 @@ export class ScatterAnimationManager {
               }
               this.scatterWinOverlay.hide(300, () => {
                 console.log('[ScatterAnimationManager] FreeSpinOverlay hidden');
+
+                try { this.resetRegisteredScatterSymbolsToIdle(); } catch {}
 
                 // Bubble transition into bonus visuals
                 try {
@@ -277,11 +330,11 @@ export class ScatterAnimationManager {
     const isBuyFeatureSpin = !!gameStateManager.isBuyFeatureSpin;
 
     // Immediately disable symbols by setting alpha to 0
-    this.symbolsContainer.setAlpha(0);
+    this.symbolsContainer.setAlpha(1);
 
     // Also hide scatter symbols that are added directly to the scene
     if (!isBuyFeatureSpin) {
-      this.hideScatterSymbols();
+      try { this.resetRegisteredScatterSymbolsToIdle(); } catch {}
     }
 
     // Add a small delay to ensure the disable is visible
@@ -290,60 +343,65 @@ export class ScatterAnimationManager {
     console.log('[ScatterAnimationManager] Symbols disabled');
   }
 
-  private async slideSpinnerIn(): Promise<void> {
-    if (!this.spinnerContainer) return;
+  private resetRegisteredScatterSymbolsToIdle(): void {
+    if (!this.scene) return;
 
-    console.log('[ScatterAnimationManager] Sliding spinner in...');
-
-    // Store original position
-    const originalY = this.spinnerContainer.y;
-    const targetY = originalY;
-    const startY = originalY - this.config.slideDistance;
-
-    // Set initial position above and make visible
-    this.spinnerContainer.setPosition(this.spinnerContainer.x, startY);
-    this.spinnerContainer.setVisible(true);
-
-    return new Promise<void>((resolve) => {
-      this.scene!.tweens.add({
-        targets: this.spinnerContainer,
-        y: targetY,
-        duration: this.config.slideInDuration,
-        ease: 'Back.easeOut',
-        onComplete: () => {
-          console.log('[ScatterAnimationManager] Spinner slid in and is in place');
-          this.startSpin03Pulse();
-          resolve();
-        }
-      });
-    });
-  }
-
-  private startSpin03Pulse(): void {
-    if (!this.spinnerContainer) return;
-
-    // Find the spin_03 element in the spinner container
-    const spin03 = this.spinnerContainer.getByName('spin_03') as Phaser.GameObjects.Image;
-    if (!spin03) {
-      console.warn('[ScatterAnimationManager] spin_03 element not found');
+    if (!Array.isArray(this.scatterSymbols) || this.scatterSymbols.length === 0) {
       return;
     }
 
-    console.log('[ScatterAnimationManager] Starting spin_03 pulse animation...');
+    const symbolValue = 0;
+    const spineKey = `symbol_${symbolValue}_spine`;
+    const symbolName = `Symbol${symbolValue}_TB`;
+    let idleAnimationName: string | null = null;
 
-    // Create a single pulse animation at 10% bigger scale
-    this.scene!.tweens.add({
-      targets: spin03,
-      scaleX: 0.65,
-      scaleY: 0.65,
-      duration: 300,
-      ease: 'Sine.easeInOut',
-      yoyo: true,
-      repeat: 0, // Pulse only once
-      onComplete: () => {
-        console.log('[ScatterAnimationManager] spin_03 pulse animation completed');
+    try {
+      const cachedJson: any = (this.scene.cache.json as any).get(spineKey);
+      const anims = cachedJson?.animations ? Object.keys(cachedJson.animations) : [];
+      const preferred = [`${symbolName}_idle`, `${symbolName}_Idle`, 'idle', 'Idle'];
+      for (const cand of preferred) {
+        if (anims.includes(cand)) {
+          idleAnimationName = cand;
+          break;
+        }
       }
-    });
+      if (!idleAnimationName) {
+        const found = anims.find((a: string) => /idle/i.test(a));
+        if (found) idleAnimationName = found;
+      }
+      if (!idleAnimationName && anims.length > 0) {
+        idleAnimationName = anims[0];
+      }
+    } catch {}
+
+    const symbolsAny: any = (this.scene as any)?.symbols;
+    const cellW = Number(symbolsAny?.displayWidth) || 0;
+    const cellH = Number(symbolsAny?.displayHeight) || 0;
+    const baseScale = (typeof symbolsAny?.getIdleSpineSymbolScale === 'function')
+      ? Number(symbolsAny.getIdleSpineSymbolScale(symbolValue)) || 0.6
+      : 0.6;
+    const idleNudge = (typeof symbolsAny?.getIdleSymbolNudge === 'function')
+      ? symbolsAny.getIdleSymbolNudge(symbolValue)
+      : undefined;
+
+    for (const symbol of this.scatterSymbols) {
+      if (!symbol || symbol.destroyed) continue;
+      try { this.scene.tweens.killTweensOf(symbol); } catch {}
+      try { symbol.setVisible?.(true); } catch {}
+      try { symbol.setAlpha?.(1); } catch {}
+      try { symbol.setDepth?.(990); } catch {}
+
+      if (idleAnimationName && symbol?.animationState?.setAnimation) {
+        try { symbol.animationState.setAnimation(0, idleAnimationName, true); } catch {}
+      }
+
+      if (cellW > 0 && cellH > 0 && typeof symbolsAny?.centerAndFitSpine === 'function') {
+        const home = (symbol as any).__pngHome;
+        const cx = (home && typeof home.x === 'number') ? home.x : symbol.x;
+        const cy = (home && typeof home.y === 'number') ? home.y : symbol.y;
+        try { symbolsAny.centerAndFitSpine(symbol, cx, cy, cellW, cellH, baseScale, idleNudge); } catch {}
+      }
+    }
   }
 
   private async delay(ms: number): Promise<void> {
@@ -479,37 +537,58 @@ export class ScatterAnimationManager {
     // Get free spins count from the current spinData
     let freeSpins = 0; // Default to 0, will be set from spinData
 
+    try {
+      if (this.bonusEntryFreeSpinsOverride && this.bonusEntryFreeSpinsOverride > 0) {
+        freeSpins = this.bonusEntryFreeSpinsOverride;
+        this.bonusEntryFreeSpinsOverride = null;
+      }
+    } catch {}
+
+    // If we're running fake bonus debugging, prefer the fake-response.json first batch count.
+    // This avoids showing the scatter-trigger SpinData count (often 10) as the bonus entry remaining.
+    if (freeSpins <= 0) {
+      try {
+        if (fakeBonusAPI.isEnabled()) {
+          try {
+            // Best-effort init; FakeBonusAPI self-disables on load error.
+            fakeBonusAPI.initializeBonusData();
+          } catch {}
+          try { fakeBonusAPI.resetFreeSpinIndex(); } catch {}
+          const fakeSpinData: any = fakeBonusAPI.getCurrentSpinData();
+          const fsFake: any = fakeSpinData?.slot?.freespin || fakeSpinData?.slot?.freeSpin;
+          const items = fsFake?.items;
+          if (Array.isArray(items) && items.length > 0) {
+            const v = Number(items[0]?.spinsLeft);
+            if (isFinite(v) && v > 0) {
+              freeSpins = v;
+            }
+          }
+        }
+      } catch {}
+    }
+
     // Get free spins from the current spinData directly from symbols
-    if (this.scene) {
+    if (freeSpins <= 0 && this.scene) {
       const gameScene = this.scene as any; // Cast to access symbols property
       if (gameScene.symbols && gameScene.symbols.currentSpinData) {
         const currentSpinData = gameScene.symbols.currentSpinData;
         if (currentSpinData.slot) {
+
           // Handle both freespin and freeSpin property names
           const freespinData = currentSpinData.slot.freespin || currentSpinData.slot.freeSpin;
           if (freespinData) {
             let maxSpinsLeft = 0;
-            if (Array.isArray(freespinData.items) && freespinData.items.length > 0) {
+            if (freespinData?.items && Array.isArray(freespinData.items) && freespinData.items.length > 0) {
               for (const it of freespinData.items) {
                 const v = Number((it as any)?.spinsLeft);
                 if (isFinite(v) && v > maxSpinsLeft) maxSpinsLeft = v;
               }
             }
+
             if (maxSpinsLeft > 0) {
               freeSpins = maxSpinsLeft;
-              console.log(`[ScatterAnimationManager] Using current spinData max spinsLeft: ${freeSpins}`);
-            } else if (freespinData.count !== undefined) {
-              freeSpins = Number((freespinData as any).count) || 0;
-              console.log(`[ScatterAnimationManager] Using current spinData free spins count: ${freeSpins}`);
-            } else {
-              console.warn(`[ScatterAnimationManager] No free spin data in current spinData`);
-            }
-
-            const index = SCATTER_MULTIPLIERS.indexOf(freeSpins);
-            if (index >= 0) {
-              console.log(`[ScatterAnimationManager] Current spinData freeSpins ${freeSpins} found at index ${index} in SCATTER_MULTIPLIERS`);
-            } else {
-              console.log(`[ScatterAnimationManager] Current spinData freeSpins ${freeSpins} not found in SCATTER_MULTIPLIERS`);
+            } else if (typeof freespinData.count === 'number' && isFinite(freespinData.count) && freespinData.count > 0) {
+              freeSpins = Number(freespinData.count) || 0;
             }
           } else {
             console.warn(`[ScatterAnimationManager] No free spin data in current spinData`);
@@ -527,7 +606,6 @@ export class ScatterAnimationManager {
       console.error(`[ScatterAnimationManager] Could not get freeSpins from current spinData - dialog will show 0`);
     }
 
-    console.log(`[ScatterAnimationManager] Free spins awarded: ${freeSpins}. Skipping legacy FreeSpinDialog_KA.`);
     console.log(`[ScatterAnimationManager] Backend data state: freeSpins=${freeSpins}, scatterIndex=${this.getFreeSpinIndexFromSpinData()}`);
 
     // Update game state to reflect bonus mode
@@ -538,7 +616,15 @@ export class ScatterAnimationManager {
     // Do not force-dismiss overlays; bonus will continue after overlays end
 
     // Directly emit events and proceed to bonus without showing an intermediate dialog
-    const scatterIndex = this.getFreeSpinIndexFromSpinData();
+    let scatterIndex = this.getFreeSpinIndexFromSpinData();
+    try {
+      if (freeSpins > 0) {
+        const idx = SCATTER_MULTIPLIERS.indexOf(freeSpins);
+        if (idx >= 0) {
+          scatterIndex = idx;
+        }
+      }
+    } catch {}
     gameEventManager.emit(GameEventType.IS_BONUS, {
       scatterCount: scatterIndex,
       bonusType: 'freeSpins'
@@ -558,7 +644,6 @@ export class ScatterAnimationManager {
       } catch {}
     }
   }
-
   public isAnimationInProgress(): boolean {
     return this.isAnimating;
   }
