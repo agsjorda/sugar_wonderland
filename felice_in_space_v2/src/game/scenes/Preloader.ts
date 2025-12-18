@@ -336,6 +336,8 @@ export class Preloader extends Scene
 		this.assetLoader.loadBuyFeatureAssets(this);
 		this.assetLoader.loadMenuAssets(this);
 		this.assetLoader.loadHelpScreenAssets(this);
+		// Start downloading audio early, but don't wait for it in StudioLoadingScreen
+		this.assetLoader.loadAudioAssets(this);
 		
 		console.log(`[Preloader] Loading assets for Preloader and Game scenes`);
 	}
