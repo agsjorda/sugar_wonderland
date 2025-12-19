@@ -182,7 +182,7 @@ export class Game extends Scene
 			// Small buffer so any first-tick UI toggles (mode/visibility/state) happen while still fully black.
 			// Keep this short so the player gets control quickly.
 			const holdMs = 60;
-			const fadeMs = 350;
+			const fadeMs = 200;
 
 			this.time.delayedCall(holdMs, () => {
 				this.tweens.add({

@@ -7,7 +7,7 @@ import { SymbolDetector, Grid, Wins } from "../../tmp_backend/SymbolDetector";
 import { GameEventData, gameEventManager, GameEventType, UpdateMultiplierValueEventData } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { TurboConfig } from '../../config/TurboConfig';
-import { SLOT_ROWS, SLOT_COLUMNS, DELAY_BETWEEN_SPINS, WILDCARD_SYMBOLS } from '../../config/GameConfig';
+import { SLOT_ROWS, SLOT_COLUMNS, DELAY_BETWEEN_SPINS, WILDCARD_SYMBOLS, SCATTER_MULTIPLIERS, AUTO_SPIN_WIN_DIALOG_TIMEOUT } from '../../config/GameConfig';
 import { AudioManager, SoundEffectType } from '../../managers/AudioManager';
 import { Dialogs } from "./Dialogs";
 import { SpineGameObject } from "@esotericsoftware/spine-phaser-v3";
@@ -61,6 +61,8 @@ export class Symbols {
   public cachedPreBonusWins: number = 0;
   private dialogs: Dialogs;
   public dropSparkPlayedColumns: Set<number> = new Set();
+  // Turbo drop SFX guard to ensure we only fire once per spin.
+  public turboDropSfxPlayedThisSpin: boolean = false;
   public sparkVFXPool: SpineGameObject[] = [];
   public symbolSpritePool: GameObjects.Sprite[] = [];
   public spinePools: { [key: string]: SpineGameObject[] } = {};
@@ -171,7 +173,7 @@ export class Symbols {
    * Scatter (value 0) is rendered as a PNG on the reels (Spine is only used for the big center hit).
    * Use a multiplier here to make the Scatter PNG visually larger than the standard symbol box.
    */
-  public static readonly SCATTER_PNG_SCALE_MULTIPLIER: number = 1.2;
+  public static readonly SCATTER_PNG_SCALE_MULTIPLIER: number = 1.25;
 
   /**
    * When scaling Scatter up, optionally offset it to keep it visually aligned inside the symbol box.
@@ -179,7 +181,7 @@ export class Symbols {
    * - 0.0 = no auto-offset
    * - 1.0 = full bottom alignment correction
    */
-  public static readonly SCATTER_PNG_BOTTOM_ALIGN_FACTOR: number = 1.0;
+  public static readonly SCATTER_PNG_BOTTOM_ALIGN_FACTOR: number = 0.5;
 
   // Store current symbol data for reset purposes
   public currentSymbolData: number[][] | null = null;
@@ -1076,6 +1078,96 @@ export class Symbols {
   }
 
   /**
+   * Handle scatter retriggers that occur while already in bonus/free-spin mode.
+   * Shows a short Bonus Free Spin dialog, auto-closes it, and resumes play.
+   */
+  public async handleBonusScatterRetrigger(mockData: any, scatterGrids: any[], spinData: any): Promise<void> {
+    console.log('[Symbols] Handling bonus-mode scatter retrigger');
+
+    const awardedFreeSpins = this.scene.gameData?.bonusRetriggerFreeSpins ?? 5;
+    console.log(`[Symbols] Bonus scatter retrigger - awarding ${awardedFreeSpins} extra free spins from GameData`);
+
+    // Extend the free-spin autoplay counter when active so the UI/state stay in sync.
+    if (this.freeSpinAutoplayActive && awardedFreeSpins > 0) {
+      const before = this.freeSpinAutoplaySpinsRemaining;
+      this.freeSpinAutoplaySpinsRemaining += awardedFreeSpins;
+      console.log(`[Symbols] Extended free spin autoplay remaining: ${before} -> ${this.freeSpinAutoplaySpinsRemaining}`);
+    } else {
+      console.log('[Symbols] Free spin autoplay not active when retrigger hit - no remaining counter to extend');
+    }
+
+    const scatterIndex = this.getScatterIndexForRetrigger(scatterGrids.length, awardedFreeSpins);
+    const dialogs = (this.scene as any)?.dialogs as Dialogs | undefined;
+
+    if (awardedFreeSpins > 0) {
+      try {
+        this.scene.events.emit('scatterBonusActivated', {
+          scatterIndex,
+          actualFreeSpins: awardedFreeSpins,
+          isRetrigger: true,
+        });
+      } catch (error) {
+        console.warn('[Symbols] Failed to emit scatterBonusActivated during bonus retrigger:', error);
+      }
+    }
+
+    if (!dialogs || typeof dialogs.showBonusFreeSpinDialog !== 'function') {
+      console.warn('[Symbols] Dialogs component unavailable - skipping bonus retrigger dialog');
+      gameStateManager.isScatter = false;
+      return;
+    }
+
+    try {
+      gameStateManager.isShowingWinDialog = true;
+      dialogs.showBonusFreeSpinDialog(this.scene, {
+        freeSpins: awardedFreeSpins,
+      });
+    } catch (error) {
+      console.error('[Symbols] Failed to show bonus free spin dialog during retrigger:', error);
+      gameStateManager.isShowingWinDialog = false;
+      gameStateManager.isScatter = false;
+      return;
+    }
+
+    await delay(AUTO_SPIN_WIN_DIALOG_TIMEOUT);
+
+    try {
+      if (typeof (dialogs as any).hideDialogWithoutFade === 'function' && dialogs.isDialogShowing()) {
+        (dialogs as any).hideDialogWithoutFade();
+      } else if (typeof dialogs.hideDialog === 'function' && dialogs.isDialogShowing()) {
+        dialogs.hideDialog();
+      }
+    } catch (error) {
+      console.warn('[Symbols] Failed to auto-hide bonus free spin dialog:', error);
+    } finally {
+      gameStateManager.isShowingWinDialog = false;
+      gameStateManager.isScatter = false;
+      try {
+        gameEventManager.emit(GameEventType.WIN_DIALOG_CLOSED);
+      } catch (error) {
+        console.warn('[Symbols] Failed to emit WIN_DIALOG_CLOSED after bonus retrigger dialog:', error);
+      }
+      try {
+        this.scene.events.emit('dialogAnimationsComplete');
+      } catch (error) {
+        console.warn('[Symbols] Failed to emit dialogAnimationsComplete after bonus retrigger dialog:', error);
+      }
+    }
+  }
+
+  private getScatterIndexForRetrigger(scatterCount: number, freeSpinAward: number): number {
+    if (freeSpinAward > 0) {
+      const derivedIndex = SCATTER_MULTIPLIERS.indexOf(freeSpinAward);
+      if (derivedIndex >= 0) {
+        return derivedIndex;
+      }
+    }
+
+    const baseIndex = Math.max(0, scatterCount - 3);
+    return Math.min(baseIndex, SCATTER_MULTIPLIERS.length - 1);
+  }
+
+  /**
    * Release the pooled "big-center" scatter Spine (spawned during scatter gather) if it's still active.
    * Prevents the scatter Spine from persisting across spins / bonus transitions.
    */
@@ -1390,6 +1482,15 @@ export class Symbols {
           const state = (bigScatter as any)?.animationState;
 
           if (nameToPlay && state?.setAnimation) {
+            const playScatterAnimSfx = () => {
+              try {
+                const audio = (window as any)?.audioManager;
+                if (audio && typeof audio.playSoundEffect === 'function') {
+                  audio.playSoundEffect(SoundEffectType.SCATTER_ANIMATION);
+                }
+              } catch { }
+            };
+
             try { state.clearTracks?.(); } catch { }
 
             waitForTwoPlays = new Promise<void>((resolve) => {
@@ -1415,6 +1516,7 @@ export class Symbols {
                     completedCount++;
                     if (completedCount === 1) {
                       // Immediately replay the same animation once more
+                      playScatterAnimSfx();
                       try { state.setAnimation(0, nameToPlay, false); } catch { }
                       return;
                     }
@@ -1437,7 +1539,10 @@ export class Symbols {
               } catch { }
 
               try { state.addListener?.(listener as any); } catch { }
-              try { state.setAnimation(0, nameToPlay, false); } catch { safeResolve(); }
+              try {
+                playScatterAnimSfx();
+                state.setAnimation(0, nameToPlay, false);
+              } catch { safeResolve(); }
             });
           }
         } catch (e) {
@@ -2370,16 +2475,24 @@ function prewarmSymbolSpinePools(self: Symbols, countPerSymbol: number = 8) {
     const spineKey = `symbol${value}_spine`;
     const atlasKey = `${spineKey}-atlas`;
 
+    let failedForValue = false; // stop noisy retries if the asset is missing
     for (let i = 0; i < countPerSymbol; i++) {
       try {
         const spine = acquireSpineFromPool(self, spineKey, atlasKey);
-        if (spine) {
-          releaseSpineToPool(self, spine);
+        if (!spine) {
+          console.warn('[Symbols] Spine not available during prewarm, skipping further attempts for', spineKey);
+          failedForValue = true;
+          break;
         }
+        releaseSpineToPool(self, spine);
       } catch (e) {
         console.warn('[Symbols] Failed to prewarm Spine pool for', spineKey, e);
+        failedForValue = true;
         break;
       }
+    }
+    if (failedForValue) {
+      continue;
     }
   }
 }
@@ -2390,9 +2503,11 @@ function prewarmSparkSpinePool(self: Symbols, count: number = 6) {
   for (let i = 0; i < count; i++) {
     try {
       const spine = acquireSpineFromPool(self, spineKey, atlasKey);
-      if (spine) {
-        releaseSpineToPool(self, spine);
+      if (!spine) {
+        console.warn('[Symbols] Spark VFX spine not available during prewarm, skipping further attempts');
+        break;
       }
+      releaseSpineToPool(self, spine);
     } catch (e) {
       console.warn('[Symbols] Failed to prewarm spark Spine pool', e);
       break;
@@ -2872,6 +2987,31 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   // }
 
 
+  const finalizeSpinFlow = () => {
+    // Set spinning state to false
+    gameStateManager.isReelSpinning = false;
+
+    console.log('[Symbols] SpinData symbols processed successfully');
+
+    // Mark spin as done after all animations and tumbles finish (no winline drawer flow)
+    console.log('[Symbols] Emitting REELS_STOP and WIN_STOP after symbol animations and tumbles (no winlines flow)');
+    try {
+      // Pass spinData to match warfreaks_v2 event payload
+      gameEventManager.emit(GameEventType.WIN_STOP, { spinData });
+      const scene = self.scene;
+      if (scene?.time) {
+        scene.time.delayedCall(50, () => {
+          gameEventManager.emit(GameEventType.REELS_STOP, { spinData });
+        });
+      } else {
+        // Fallback if scene/time is unavailable; emit immediately to avoid stalling
+        gameEventManager.emit(GameEventType.REELS_STOP, { spinData });
+      }
+    } catch (e) {
+      console.warn('[Symbols] Failed to emit REELS_STOP/WIN_STOP:', e);
+    }
+  };
+
   // NOW handle scatter symbols AFTER winlines are drawn
   const targetScatterSymbolCount = gameStateManager.isBonus ? 3 : 4;
   if (scatterGrids.length >= targetScatterSymbolCount) {
@@ -2893,23 +3033,7 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
       }
     } catch { }
 
-
-
-    /**
-     * During autoplay, we must know *before* WIN_STOP is emitted whether
-     * a win dialog will be shown, so that SlotController's WIN_STOP handler
-     * can pause scheduling the next autoplay spin.
-     *
-     * This early check mirrors the win-dialog multiplier thresholds used in
-     * Game.checkAndShowWinDialog():
-     *   - BigWin   : multiplier >= 2
-     *   - MegaWin  : multiplier >= 4
-     *   - EpicWin  : multiplier >= 6
-     *   - SuperWin : multiplier >= 8
-     *
-     * Any win at or above 2x bet will trigger a dialog and should therefore
-     * pause autoplay until the dialog is closed.
-     */
+    // During autoplay, ensure we pause when a dialog will show
     if (spinData) {
       const currentSpinWin = gameStateManager.isScatter
         ? SpinDataUtils.getScatterSpinWins(spinData)
@@ -2927,8 +3051,6 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
         console.log(`[Symbols] Win below dialog threshold (${winRatio.toFixed(2)}x) - autoplay continues (winRatio < 20x)`);
       }
 
-      // Wait up to 1 second, or exit sooner once any win dialog has fully closed
-      // (i.e., gameStateManager.isShowingWinDialog becomes false).
       const maxWaitMs = 500;
       const pollIntervalMs = 50;
       let waitedMs = 0;
@@ -2942,7 +3064,6 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
     // Stop normal autoplay immediately when scatter is detected
     if (gameStateManager.isAutoPlaying) {
       console.log('[Symbols] Scatter detected during autoplay - stopping normal autoplay immediately');
-      // Access SlotController to stop autoplay
       const slotController = (self.scene as any).slotController;
       if (slotController && typeof slotController.stopAutoplay === 'function') {
         slotController.stopAutoplay();
@@ -2952,11 +3073,9 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
       }
     }
 
-    // Always show the winning overlay behind symbols for scatter
     self.showWinningOverlay();
     console.log('[Symbols] Showing winning overlay for scatter symbols');
 
-    // Animate the individual scatter symbols with their hit animations
     console.log('[Symbols] Starting scatter symbol hit animations...');
     try {
       await self.animateScatterSymbols(mockData, scatterGrids);
@@ -2965,52 +3084,44 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
       console.error('[Symbols] Error animating scatter symbols:', error);
     }
 
-    // Reset winning symbols spine animations back to PNG after scatter symbol animations
-    // Check if win dialog is showing - if so, wait for it to close before starting scatter animation
-    if (gameStateManager.isShowingWinDialog) {
-      console.log('[Symbols] Win dialog is showing - waiting for WIN_DIALOG_CLOSED event before starting scatter animation');
-
-      // Listen for WIN_DIALOG_CLOSED event to start scatter animation
-      const onWinDialogClosed = () => {
-        console.log('[Symbols] WIN_DIALOG_CLOSED received - starting scatter animation sequence');
-        gameEventManager.off(GameEventType.WIN_DIALOG_CLOSED, onWinDialogClosed); // Remove listener
-
-        // Start scatter animation after win dialog closes
+    const runScatterFlow = async () => {
+      if (gameStateManager.isBonus) {
+        console.log('[Symbols] Bonus mode active - starting bonus scatter retrigger flow');
+        await self.handleBonusScatterRetrigger(mockData, scatterGrids, spinData);
+      } else {
+        console.log('[Symbols] Starting standard scatter animation sequence');
         self.startScatterAnimationSequence(mockData);
+      }
+    };
+
+    if (gameStateManager.isShowingWinDialog) {
+      console.log('[Symbols] Win dialog is showing - waiting for WIN_DIALOG_CLOSED event before continuing scatter flow');
+      const onWinDialogClosed = async () => {
+        console.log('[Symbols] WIN_DIALOG_CLOSED received - continuing scatter flow');
+        try { gameEventManager.off(GameEventType.WIN_DIALOG_CLOSED, onWinDialogClosed); } catch { }
+        try {
+          await runScatterFlow();
+        } catch (error) {
+          console.warn('[Symbols] Scatter flow failed after WIN_DIALOG_CLOSED:', error);
+        }
+        finalizeSpinFlow();
       };
 
       gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, onWinDialogClosed);
-    } else {
-      console.log('[Symbols] No win dialog showing - starting scatter animation immediately');
-      // No win dialog, start scatter animation immediately
-      self.startScatterAnimationSequence(mockData);
+      return;
     }
-  } else {
-    console.log(`[Symbols] No scatter detected (found ${scatterGrids.length} scatter symbols, need ${targetScatterSymbolCount}+)`);
+
+    try {
+      await runScatterFlow();
+    } catch (error) {
+      console.warn('[Symbols] Scatter flow failed:', error);
+    }
+    finalizeSpinFlow();
+    return;
   }
 
-  // Set spinning state to false
-  gameStateManager.isReelSpinning = false;
-
-  console.log('[Symbols] SpinData symbols processed successfully');
-
-  // Mark spin as done after all animations and tumbles finish (no winline drawer flow)
-  console.log('[Symbols] Emitting REELS_STOP and WIN_STOP after symbol animations and tumbles (no winlines flow)');
-  try {
-    // Pass spinData to match warfreaks_v2 event payload
-    gameEventManager.emit(GameEventType.WIN_STOP, { spinData });
-    const scene = self.scene;
-    if (scene?.time) {
-      scene.time.delayedCall(50, () => {
-        gameEventManager.emit(GameEventType.REELS_STOP, { spinData });
-      });
-    } else {
-      // Fallback if scene/time is unavailable; emit immediately to avoid stalling
-      gameEventManager.emit(GameEventType.REELS_STOP, { spinData });
-    }
-  } catch (e) {
-    console.warn('[Symbols] Failed to emit REELS_STOP/WIN_STOP:', e);
-  }
+  console.log(`[Symbols] No scatter detected (found ${scatterGrids.length} scatter symbols, need ${targetScatterSymbolCount}+)`);
+  finalizeSpinFlow();
 }
 
 /**
@@ -3392,11 +3503,8 @@ async function dropReels(self: Symbols, data: Data): Promise<void> {
 
   self.isReelDropping = true;
   self.dropSparkPlayedColumns.clear();
-  // Play turbo drop sound effect at the start of reel drop sequence when in turbo mode
-  if (self.scene.gameData.isTurbo && (window as any).audioManager) {
-    (window as any).audioManager.playSoundEffect(SoundEffectType.TURBO_DROP);
-    console.log('[Symbols] Playing turbo drop sound effect at start of reel drop sequence');
-  }
+  // Reset turbo drop guard so it can fire once during this spin's overshoot.
+  self.turboDropSfxPlayedThisSpin = false;
 
   try {
     // Stagger reel starts at a fixed interval and let them overlap
@@ -3596,7 +3704,10 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
 
     // Play reel drop SFX per-symbol, timed to the overshoot (settle) start.
     const playReelDropSfx = (phase: 'overshoot' | 'landing', col: number) => {
-      playReelDropSfxIfAllowed(self);
+      const playedTurbo = playTurboDropSfxOnce(self, phase);
+      if (!playedTurbo) {
+        playReelDropSfxIfAllowed(self);
+      }
       console.log(`[Symbols] Playing reel drop sound effect for symbol col ${col}, reel ${index} at ${phase}`);
     };
 
@@ -3724,6 +3835,31 @@ function playReelDropSfxIfAllowed(self: Symbols): void {
       );
     }
   } catch { }
+}
+
+/**
+ * Guarded turbo drop SFX trigger.
+ * Fires once per spin, specifically at the start of the overshoot phase.
+ */
+function playTurboDropSfxOnce(self: Symbols, phase: 'overshoot' | 'landing'): boolean {
+  try {
+    const isTurbo = !!(self?.scene?.gameData?.isTurbo || gameStateManager.isTurbo);
+    if (!isTurbo) return false;
+    // Only allow during the overshoot start and once per spin.
+    if (phase !== 'overshoot' || self.turboDropSfxPlayedThisSpin) return false;
+
+    const audio = (window as any)?.audioManager;
+    if (!audio || typeof audio.playSoundEffect !== 'function') return false;
+
+    const sfx = gameStateManager.isBonus ? SoundEffectType.BONUS_TURBO_DROP : SoundEffectType.TURBO_DROP;
+    audio.playSoundEffect(sfx);
+    self.turboDropSfxPlayedThisSpin = true;
+    console.log('[Symbols] Playing turbo drop sound effect at overshoot start', { sfx });
+    return true;
+  } catch (e) {
+    console.warn('[Symbols] Failed to play turbo drop SFX:', e);
+    return false;
+  }
 }
 
 function reevaluateWinsFromGrid(self: Symbols): void {
@@ -4285,6 +4421,29 @@ function playTumbleSfx(self: Symbols): void {
 }
 
 /**
+ * Map the symbol index to the hit/effect sound effect that should be used.
+ * Lower symbol indices take precedence when multiple symbols are removed.
+ */
+function resolveSymbolHitSfx(symbolIndex: number): SoundEffectType | null {
+  if (!Number.isFinite(symbolIndex) || symbolIndex <= 0) {
+    return null;
+  }
+  if (symbolIndex === 1) {
+    return SoundEffectType.SYMBOL_PUNCH;
+  }
+  if (symbolIndex === 2) {
+    return SoundEffectType.SYMBOL_PAU;
+  }
+  if (symbolIndex === 3) {
+    return SoundEffectType.HIT_WIN;
+  }
+  if (symbolIndex === 4) {
+    return SoundEffectType.SYMBOL_NYET;
+  }
+  return SoundEffectType.SYMBOL_KISS;
+}
+
+/**
  * Apply a sequence of tumble steps: remove "out" symbols, compress columns down, and drop "in" symbols from top.
  * Expects tumbles to be in the SpinData format: [{ symbols: { in: number[][], out: {symbol:number,count:number,win:number}[] }, win: number }, ...]
  */
@@ -4298,6 +4457,7 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
   self.dropSparkPlayedColumns.clear();
   const outs = (tumble?.symbols?.out || []) as Array<{ symbol: number; count: number }>;
   const ins = (tumble?.symbols?.in || []) as number[][]; // per real column (x index)
+  let symbolHitSfxSelection: { type: SoundEffectType; priority: number } | null = null;
 
   if (!self.symbols || !self.symbols.length || !self.symbols[0] || !self.symbols[0].length) {
     console.warn('[Symbols] applySingleTumble: Symbols grid not initialized');
@@ -4467,6 +4627,15 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
             try {
               const value = self.currentSymbolData?.[row]?.[col];
               const vNum = Number(value);
+                const sfxTypeCandidate = resolveSymbolHitSfx(vNum);
+                if (sfxTypeCandidate) {
+                  const candidatePriority = Number.isFinite(vNum) ? vNum : Number.POSITIVE_INFINITY;
+                  if (Number.isFinite(candidatePriority)) {
+                    if (!symbolHitSfxSelection || candidatePriority < symbolHitSfxSelection.priority) {
+                      symbolHitSfxSelection = { type: sfxTypeCandidate, priority: candidatePriority };
+                    }
+                  }
+                }
               const x = obj.x;
               const y = obj.y;
 
@@ -4512,11 +4681,6 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
                     try { scheduleScaleUp(self, png, 20, durationMs, 1.1); } catch { }
                     try { scheduleTranslate(self, png, 20, durationMs, 0, -3); } catch { }
                     self.scene.time.delayedCall(durationMs, () => {
-                      // play hit_win 
-                      const audio = (window as any)?.audioManager;
-                      if (audio && typeof audio.playSingleInstanceSoundEffect === 'function') {
-                        audio.playSingleInstanceSoundEffect(SoundEffectType.HIT_WIN);
-                      }
                       try { png.destroy(); } catch { }
                       // Spawn a brief hit effect when the PNG is removed
                       const playHitEffect = () => {
@@ -4596,13 +4760,7 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
                       // Unified completion handler
                       const onDone = () => {
                         console.log('[Symbols] Animation complete (track/state listener)');
-                        try {
-                          const audio = (window as any)?.audioManager;
-                          if (audio && typeof audio.playSoundEffect === 'function') {
-                            audio.playSoundEffect(SoundEffectType.HIT_WIN);
-                          }
-                        } catch { }
-                        try { fx.destroy(); } catch { }
+                          try { fx.destroy(); } catch { }
                         finish();
                       };
                       // Prefer TrackEntry listener if available
@@ -4718,6 +4876,15 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
       const delayMs = 500 / (self.scene.gameData.isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
       const durationMs = 1000;
       scheduleWinAmountPopup(self, selectedPosition.x, selectedPosition.y, displayAmount, delayMs, durationMs);
+    } catch { }
+  }
+
+  if (symbolHitSfxSelection) {
+    try {
+      const audio = (window as any)?.audioManager;
+      if (audio && typeof audio.playSingleInstanceSoundEffect === 'function') {
+        audio.playSingleInstanceSoundEffect(symbolHitSfxSelection.type);
+      }
     } catch { }
   }
 

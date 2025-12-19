@@ -4,14 +4,14 @@ import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { AssetConfig } from "../../config/AssetConfig";
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { SpineGameObject } from "@esotericsoftware/spine-phaser-v3";
-import { playSpineAnimationSequenceWithConfig } from "./SpineBehaviorHelper";
+import { getFullScreenSpineScale, playSpineAnimationSequence } from "./SpineBehaviorHelper";
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { SoundEffectType } from "../../managers/AudioManager";
 import { gameStateManager } from "../../managers/GameStateManager";
 
 export class Background {
 	private bgContainer: Phaser.GameObjects.Container;
-	private bgDefault: Phaser.GameObjects.Image;
+	private backgroundVisual?: Phaser.GameObjects.Image | SpineGameObject;
 	private rifleSpine: SpineGameObject;
 	private reelFrame?: Phaser.GameObjects.Image;
 	private networkManager: NetworkManager;
@@ -47,14 +47,10 @@ export class Background {
 	}
 
 	private createBackgroundLayers(scene: Scene, assetScale: number): void {
-		// Add main background
-		this.bgDefault = scene.add.image(
-			scene.scale.width * 0.5,
-			scene.scale.height * 0.5,
-			'default_background'
-		).setOrigin(0.5, 0.5);
+		const backgroundVisual = this.createBackgroundVisual(scene, 'default_background', 'default_background_spine');
+		this.backgroundVisual = backgroundVisual;
+		this.bgContainer.add(backgroundVisual);
 		this.fitBackgroundToScreen(scene);
-		this.bgContainer.add(this.bgDefault);
 
 		// Add reel frame
 		this.reelFrame = scene.add.image(
@@ -71,23 +67,50 @@ export class Background {
 	}
 
 	private fitBackgroundToScreen(scene: Scene): void {
-		if (!this.bgDefault) return;
+		if (!this.backgroundVisual) return;
 
 		const screenWidth = scene.scale.width;
 		const screenHeight = scene.scale.height;
 
-		// Use frame width/height (intrinsic texture size) to avoid compounding scales
-		const imageWidth = this.bgDefault.frame.width;
-		const imageHeight = this.bgDefault.frame.height;
+		if (this.backgroundVisual instanceof Phaser.GameObjects.Image) {
+			const imageWidth = this.backgroundVisual.frame.width;
+			const imageHeight = this.backgroundVisual.frame.height;
+			if (imageWidth === 0 || imageHeight === 0) {
+				return;
+			}
+			const scaleX = screenWidth / imageWidth;
+			const scaleY = screenHeight / imageHeight;
+			const scale = Math.max(scaleX, scaleY);
+			this.backgroundVisual.setScale(scale);
+		} else {
+			const scale = getFullScreenSpineScale(scene, this.backgroundVisual, true);
+			this.backgroundVisual.setScale(scale.x, scale.y);
+		}
 
-		if (imageWidth === 0 || imageHeight === 0) return;
+		this.backgroundVisual.setPosition(screenWidth * 0.5, screenHeight * 0.5);
+	}
 
-		const scaleX = screenWidth / imageWidth;
-		const scaleY = screenHeight / imageHeight;
-		const scale = Math.max(scaleX, scaleY);
+	private createBackgroundVisual(scene: Scene, imageKey: string, spineKey: string): Phaser.GameObjects.Image | SpineGameObject {
+		const centerX = scene.scale.width * 0.5;
+		const centerY = scene.scale.height * 0.5;
+		const context = `[Background] ${spineKey}`;
 
-		this.bgDefault.setScale(scale);
-		this.bgDefault.setPosition(screenWidth * 0.5, screenHeight * 0.5);
+		if (ensureSpineFactory(scene, context)) {
+			try {
+				const addAny: any = scene.add;
+				const spine = addAny.spine?.(centerX, centerY, spineKey, `${spineKey}-atlas`) as SpineGameObject;
+				if (spine) {
+					spine.setOrigin(0.32925, 0.5);
+					playSpineAnimationSequence(spine, [0], true);
+					return spine;
+				}
+			} catch (error) {
+				console.warn(`[Background] Failed to create spine '${spineKey}':`, error);
+			}
+		}
+
+		console.warn(`[Background] Spine '${spineKey}' unavailable. Falling back to image '${imageKey}'`);
+		return scene.add.image(centerX, centerY, imageKey).setOrigin(0.5, 0.5);
 	}
 
 	/**

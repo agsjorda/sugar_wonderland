@@ -89,6 +89,16 @@ export class SlotController {
 	// Store the base bet amount (without amplify bet increase) for API calls
 	private baseBetAmount: number = 0;
 
+	// Bet ladder (keep in sync with BetOptions.ts)
+	private readonly betLevels: number[] = [
+		0.2, 0.4, 0.6, 0.8, 1,
+		1.2, 1.6, 2, 2.4, 2.8,
+		3.2, 3.6, 4, 5, 6,
+		8, 10, 14, 18, 24,
+		32, 40, 60, 80, 100,
+		110, 120, 130, 140, 150
+	];
+
 	// Simple autoplay system
 	private autoplaySpinsRemaining: number = 0;
 	private autoplayTimer: Phaser.Time.TimerEvent | null = null;
@@ -1337,33 +1347,25 @@ export class SlotController {
 		});
 		this.buttons.set('increase_bet', increaseBetButton);
 		this.controllerContainer.add(increaseBetButton);
+
+		this.updateBetButtonStates(this.baseBetAmount);
 	}
 
 	/** Move the bet to the next/previous level based on the BetOptions ladder */
 	private adjustBetByStep(direction: 1 | -1): void {
 		try {
-			// Keep the ladder in sync with BetOptions.ts
-			const betLevels: number[] = [
-				0.2, 0.4, 0.6, 0.8, 1,
-				1.2, 1.6, 2, 2.4, 2.8,
-				3.2, 3.6, 4, 5, 6,
-				8, 10, 14, 18, 24,
-				32, 40, 60, 80, 100,
-				110, 120, 130, 140, 150
-			];
-
 			// Use base bet (without amplify) to find current index
 			const currentBaseBet = this.getBaseBetAmount() || 0.2;
 			let idx = 0;
 			let bestDiff = Number.POSITIVE_INFINITY;
-			for (let i = 0; i < betLevels.length; i++) {
-				const diff = Math.abs(betLevels[i] - currentBaseBet);
+			for (let i = 0; i < this.betLevels.length; i++) {
+				const diff = Math.abs(this.betLevels[i] - currentBaseBet);
 				if (diff < bestDiff) { bestDiff = diff; idx = i; }
 			}
 
-			const newIdx = Math.max(0, Math.min(betLevels.length - 1, idx + direction));
+			const newIdx = Math.max(0, Math.min(this.betLevels.length - 1, idx + direction));
 			const previousBet = currentBaseBet;
-			const newBet = betLevels[newIdx];
+			const newBet = this.betLevels[newIdx];
 
 			// Update UI and internal base bet via existing API (resets amplify if active)
 			this.updateBetAmount(newBet);
@@ -1741,6 +1743,76 @@ export class SlotController {
 		return this.buttons.get(buttonName);
 	}
 
+	private updateBetButtonStates(currentBet: number): void {
+		const decreaseButton = this.buttons.get('decrease_bet');
+		const increaseButton = this.buttons.get('increase_bet');
+
+		if (!decreaseButton && !increaseButton) {
+			return;
+		}
+
+		let idx = -1;
+		let bestDiff = Number.POSITIVE_INFINITY;
+		for (let i = 0; i < this.betLevels.length; i++) {
+			const diff = Math.abs(this.betLevels[i] - currentBet);
+			if (diff < bestDiff) {
+				bestDiff = diff;
+				idx = i;
+			}
+		}
+
+		if (idx === -1) {
+			this.setBetButtonEnabled(decreaseButton, true);
+			this.setBetButtonEnabled(increaseButton, true);
+			return;
+		}
+
+		const lastIndex = this.betLevels.length - 1;
+		if (idx <= 0) {
+			this.disableDecreaseBetButton();
+		} else {
+			this.enableDecreaseBetButton();
+		}
+
+		if (idx >= lastIndex) {
+			this.disableIncreaseBetButton();
+		} else {
+			this.enableIncreaseBetButton();
+		}
+	}
+
+	private setBetButtonEnabled(button: Phaser.GameObjects.Image | undefined, enabled: boolean): void {
+		if (!button) return;
+
+		button.setAlpha(enabled ? 1.0 : 0.3);
+
+		if (enabled) {
+			if (!button.input || !button.input.enabled) {
+				button.setInteractive();
+			} else {
+				button.input.enabled = true;
+			}
+		} else if (button.input) {
+			button.input.enabled = false;
+		}
+	}
+
+	private enableIncreaseBetButton(): void {
+		this.setBetButtonEnabled(this.buttons.get('increase_bet'), true);
+	}
+
+	private disableIncreaseBetButton(): void {
+		this.setBetButtonEnabled(this.buttons.get('increase_bet'), false);
+	}
+
+	private enableDecreaseBetButton(): void {
+		this.setBetButtonEnabled(this.buttons.get('decrease_bet'), true);
+	}
+
+	private disableDecreaseBetButton(): void {
+		this.setBetButtonEnabled(this.buttons.get('decrease_bet'), false);
+	}
+
 	updateBetAmount(betAmount: number): void {
 		// Preserve enhanced bet state and display the correct value
 		const gameData = this.getGameData();
@@ -1766,6 +1838,8 @@ export class SlotController {
 			this.baseBetAmount = betAmount;
 			// Do NOT reset enhanced bet or re-enable feature; retain current state
 		}
+
+		this.updateBetButtonStates(betAmount);
 	}
 
 	/**
@@ -3837,9 +3911,9 @@ export class SlotController {
 		});
 
 		// Listen for scatter bonus events with scatter index and actual free spins
-		this.scene.events.on('scatterBonusActivated', (data: { scatterIndex: number; actualFreeSpins: number }) => {
+		this.scene.events.on('scatterBonusActivated', (data: { scatterIndex: number; actualFreeSpins: number; isRetrigger?: boolean }) => {
 			console.log(`[SlotController] scatterBonusActivated event received with data:`, data);
-			console.log(`[SlotController] Data validation: scatterIndex=${data.scatterIndex}, actualFreeSpins=${data.actualFreeSpins}`);
+			console.log(`[SlotController] Data validation: scatterIndex=${data.scatterIndex}, actualFreeSpins=${data.actualFreeSpins}, isRetrigger=${!!data.isRetrigger}`);
 
 			// Stop normal autoplay when scatter is hit
 			if (this.autoplaySpinsRemaining > 0) {
@@ -3854,8 +3928,13 @@ export class SlotController {
 
 			console.log(`[SlotController] Scatter bonus activated with index ${data.scatterIndex} and ${data.actualFreeSpins} free spins - hiding primary controller, free spin display will appear after dialog closes`);
 			this.hidePrimaryControllerWithScatter(data.scatterIndex);
-			// Store the free spins data for later display after dialog closes
-			this.pendingFreeSpinsData = data;
+			// Store the free spins data for later display after dialog closes.
+			// For retriggers, keep the existing remaining display value instead of resetting.
+			if (!data.isRetrigger) {
+				this.pendingFreeSpinsData = data;
+			} else {
+				console.log('[SlotController] Bonus scatter retrigger detected - keeping existing free spin display value');
+			}
 		});
 
 		// Listen for dialog animations completion to show free spin display

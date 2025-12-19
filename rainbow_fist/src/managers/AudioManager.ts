@@ -18,6 +18,7 @@ export enum SoundEffectType {
 	HIT_WIN = 'hitwin',
 	WILD_MULTI = 'wildmulti',
 	SCATTER = 'scatter',
+	SCATTER_ANIMATION = 'scatter_animation',
 	ANTICIPATION = 'anticipation',
 	WIN_LINE_1 = 'winline_1',
 	WIN_LINE_2 = 'winline_2',
@@ -52,6 +53,10 @@ export enum SoundEffectType {
 	TWIN3 = 'twin3',
 	TWIN4 = 'twin4',
 	MULTIPLIER_HIT = "MULTIPLIER_HIT",
+	SYMBOL_KISS = 'symbol_kiss',
+	SYMBOL_NYET = 'symbol_nyet',
+	SYMBOL_PAU = 'symbol_pau',
+	SYMBOL_PUNCH = 'symbol_punch',
 }
 
 export class AudioManager {
@@ -161,6 +166,11 @@ export class AudioManager {
 		addSfxInstance(SoundEffectType.TURBO_DROP, 'turbodrop');
 		addSfxInstance(SoundEffectType.HIT_WIN, 'hit_win');
 		addSfxInstance(SoundEffectType.SCATTER, 'scatter');
+		addSfxInstance(SoundEffectType.SCATTER_ANIMATION, 'scatter_animation');
+		addSfxInstance(SoundEffectType.SYMBOL_KISS, 'symbol_kiss');
+		addSfxInstance(SoundEffectType.SYMBOL_NYET, 'symbol_nyet');
+		addSfxInstance(SoundEffectType.SYMBOL_PAU, 'symbol_pau');
+		addSfxInstance(SoundEffectType.SYMBOL_PUNCH, 'symbol_punch');
 		addSfxInstance(SoundEffectType.MULTIPLIER_HIT, 'multiplier_hit');
 
 		// Win dialog SFX instances

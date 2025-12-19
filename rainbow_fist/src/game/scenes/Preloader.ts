@@ -341,7 +341,7 @@ export class Preloader extends Scene
             });
 
 			// Cleanly fade out any remaining studio loading UI so it never overlaps gameplay.
-			this.studioLoadingScreen?.fadeOutRemainingElements(500);
+			// this.studioLoadingScreen?.fadeOutRemainingElements(500);
         });
 
 		// Ensure web fonts are applied after they are ready

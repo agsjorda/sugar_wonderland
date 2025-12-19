@@ -9,6 +9,8 @@ export class GameData {
 	public isTurbo: boolean = false;
 	public isReelSpinning: boolean = false;
 	public isEnhancedBet: boolean = false; // Track amplify bet toggle state
+	// Number of extra free spins awarded when scatters retrigger during bonus
+	public bonusRetriggerFreeSpins: number = 5;
 	public winUpHeight: number = GameData.WIN_UP_HEIGHT;
 	public winUpDuration: number = 0;
 	public dropDuration: number = 0;

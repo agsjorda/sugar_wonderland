@@ -96,7 +96,7 @@ export class Header {
 	}
 
 	private createMultiplierBar(scene: Scene, x: number, y: number, assetScale: number): void {
-		const multiplierBar = scene.add.image(x, y, 'multiplier-bar')
+		const multiplierBar = scene.add.image(x, y, 'multiplier_bar')
 		.setOrigin(0.5, 0.5)
 		.setScale(assetScale * 1.2)
 		.setDepth(300); // Above idle symbols (0) but below winning symbols (600) and overlay (500)
@@ -155,7 +155,7 @@ export class Header {
 	}
 
 	private createWinBar(scene: Scene, winBarX: number, winBarY: number, assetScale: number): void {
-		const winBar = scene.add.image(winBarX, winBarY, 'win-bar')
+		const winBar = scene.add.image(winBarX, winBarY, 'win_bar')
 		.setOrigin(0.5, 0.5)
 		.setScale(assetScale)
 		.setDepth(501); // Above idle symbols (0) but below winning symbols (600) and overlay (500)

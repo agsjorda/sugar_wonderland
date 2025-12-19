@@ -123,7 +123,7 @@ export class BonusHeader {
 	}
 	
 	private createMultiplierBar(scene: Scene, x: number, y: number, assetScale: number): void {
-		const multiplierBar = scene.add.image(x, y, 'multiplier-bar-bonus')
+		const multiplierBar = scene.add.image(x, y, 'multiplier_bar')
 		.setOrigin(0.5, 0.5)
 		.setScale(assetScale * 1.2)
 		.setDepth(10);
@@ -176,7 +176,7 @@ export class BonusHeader {
 		const winBarBonus = scene.add.image(
 			x,
 			y,
-			'win-bar-bonus'
+			'win_bar'
 		).setOrigin(0.5, 0.5)
 		.setScale(assetScale)
 		.setDepth(501);

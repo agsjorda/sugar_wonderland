@@ -422,33 +422,30 @@ export class Menu {
 
     private async showHistoryContent(scene: GameScene, page: number, limit: number): Promise<void> {
         const contentArea = this.historyContent;
-        // Keep old rows until new data is ready; build containers on first run
-        const historyHeaders : string[] = ['Spin', 'Currency', 'Bet', 'Win'];
-        // Recreate or reparent containers if needed (handles menu reopen)
+        const historyHeaders: string[] = ['Spin', 'Currency', 'Bet', 'Win'];
+
+        // Build or reuse containers so they persist across tab toggles
         if (!this.historyHeaderContainer || !this.historyHeaderContainer.scene) {
             this.historyHeaderContainer = scene.add.container(0, 0);
-            const historyText = scene.add.text(15, 15,'History', this.titleStyle) as ButtonText;
+            const historyText = scene.add.text(15, 15, 'History', this.titleStyle) as ButtonText;
             historyText.setOrigin(0, 0);
             this.historyHeaderContainer.add(historyText);
         }
-        // Recreate rows and pagination containers fresh to avoid recursive destroy issues
-        if (this.historyRowsContainer && this.historyRowsContainer.scene) {
-            this.historyRowsContainer.destroy(true);
+        if (!this.historyRowsContainer || !this.historyRowsContainer.scene) {
+            this.historyRowsContainer = scene.add.container(0, 0);
         }
-        this.historyRowsContainer = scene.add.container(0, 0);
+        if (!this.historyPaginationContainer || !this.historyPaginationContainer.scene) {
+            this.historyPaginationContainer = scene.add.container(0, 0);
+        }
+
+        if ((this.historyHeaderContainer as any).parentContainer !== contentArea) {
+            contentArea.add(this.historyHeaderContainer);
+        }
         if ((this.historyRowsContainer as any).parentContainer !== contentArea) {
             contentArea.add(this.historyRowsContainer);
         }
-
-        if (this.historyPaginationContainer && this.historyPaginationContainer.scene) {
-            this.historyPaginationContainer.destroy(true);
-        }
-        this.historyPaginationContainer = scene.add.container(0, 0);
         if ((this.historyPaginationContainer as any).parentContainer !== contentArea) {
             contentArea.add(this.historyPaginationContainer);
-        }
-        if ((this.historyHeaderContainer as any).parentContainer !== contentArea) {
-            contentArea.add(this.historyHeaderContainer);
         }
 
         // Prevent stacking requests
@@ -473,7 +470,7 @@ export class Menu {
         });
 
         let result: any;
-        try{
+        try {
             result = await scene.gameAPI.getHistory(page, limit);
         } finally {
             spinTween.stop();
@@ -490,7 +487,6 @@ export class Menu {
         // Display headers centered per column (only once)
         const columnCenters = this.getHistoryColumnCenters(scene);
         const headerContainer = this.historyHeaderContainer as GameObjects.Container;
-        // When reopening, header could have been destroyed; rebuild if empty or missing headers
         if (headerContainer.length <= 1) { // only title exists
             const headerY = 60;
             historyHeaders.forEach((header, idx) => {
@@ -505,28 +501,33 @@ export class Menu {
             });
         }
 
-        let spinDate = '26/7/2025, 16:00';
-        let currency = 'usd';
-        let bet = '250.00';
-        let win = 250000000;
-
-        let contentY = 100;
+        // Clear previous rows and pagination so subsequent loads don't stack
         const rowsContainer = this.historyRowsContainer as GameObjects.Container;
-        result.data?.forEach((v?:any)=>{
-            spinDate = this.formatISOToDMYHM(v.created_at);
-            currency = v.currency == ''?'usd':v.currency;
-            bet = v.total_bet;
-            win = v.total_win;
+        rowsContainer.removeAll(true);
+        let contentY = 100;
+        result.data?.forEach((v?: any) => {
+            const spinDate = this.formatISOToDMYHM(v.created_at);
+            const currency = v.currency == '' ? 'usd' : v.currency;
+            const bet = v.total_bet;
+            const win = v.total_win;
 
             contentY += 30;
-            // Create row centered per column
-            this.createHistoryEntry(contentY, scene, rowsContainer, spinDate, currency, bet, win.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), columnCenters);
+            this.createHistoryEntry(
+                contentY,
+                scene,
+                rowsContainer,
+                spinDate,
+                currency,
+                bet,
+                win.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                columnCenters
+            );
             this.addDividerHistory(scene, rowsContainer, contentY);
             contentY += 20;
         });
         
-        // Add pagination buttons at bottom-center
         const paginationContainer = this.historyPaginationContainer as GameObjects.Container;
+        paginationContainer.removeAll(true);
         this.addHistoryPagination(scene, paginationContainer, this.historyCurrentPage, this.historyTotalPages, this.historyPageLimit);
     }
 

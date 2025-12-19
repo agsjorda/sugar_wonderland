@@ -33,10 +33,14 @@ export class AssetConfig {
 
 		return {
 			images: {
-				'default_background': `${prefix}/background/default_background.png`,
-				'reel_frame': `${prefix}/background/reel_frame.png`,
+				'default_background': `${prefix}/background/default_background.webp`,
+				'reel_frame': `${prefix}/background/reel_frame.webp`,
 			},
 			spine: {
+				'default_background_spine': {
+					atlas: `${prefix}/background/default_background_spine/Main game Background RIG.atlas`,
+					json: `${prefix}/background/default_background_spine/Main game Background RIG.json`
+				},
 			}
 		};
 	}
@@ -48,9 +52,12 @@ export class AssetConfig {
 		return {
 			images: {
 				'bonus_background': `${prefix}/bonus_background/bonus_background.webp`,
-				'bonus_reel_frame': `${prefix}/background/reel_frame.png`,
 			},
 			spine: {
+				'bonus_background_spine': {
+					atlas: `${prefix}/bonus_background/bonus_background_spine/Bonus Background RIG.atlas`,
+					json: `${prefix}/bonus_background/bonus_background_spine/Bonus Background RIG.json`
+				},
 			}
 		};
 	}
@@ -61,9 +68,9 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				'win-bar': `${prefix}/header/win_bar.png`,
-				'multiplier-bar': `${prefix}/header/multiplier_bar.png`,
-				'logo': `${prefix}/header/logo.png`,
+				'win_bar': `${prefix}/header/win_bar.webp`,
+				'multiplier_bar': `${prefix}/header/multiplier_bar.webp`,
+				'logo': `${prefix}/logo/logo.webp`,
 				// Add more header images here
 			},
 			spine: {
@@ -77,8 +84,6 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				'win-bar-bonus': `${prefix}/header/win_bar.png`,
-				'multiplier-bar-bonus': `${prefix}/header/multiplier_bar.png`,
 			},
 			spine: {
 			}
@@ -91,11 +96,11 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				'loading_background': `${prefix}/loading/loading_background.png`,
-				'loading_character': `${prefix}/loading/loading_character.png`,
-				'loading_footer': `${prefix}/loading/loading_footer.png`,
-				'loading_header': `${prefix}/loading/loading_header.png`,
-				'loading_footer_feather': `${prefix}/loading/loading_footer_feather.png`,
+				'loading_background': `${prefix}/loading/loading_background.webp`,
+				'loading_character': `${prefix}/loading/loading_character.webp`,
+				'loading_footer': `${prefix}/loading/loading_footer.webp`,
+				'loading_header': `${prefix}/loading/loading_header.webp`,
+				'loading_footer_feather': `${prefix}/loading/loading_footer_feather.webp`,
 
 				'button_bg': `${prefix}/loading/button_bg.webp`,
 				'button_spin': `${prefix}/loading/button_spin.webp`,
@@ -108,10 +113,6 @@ export class AssetConfig {
 				'di_joker': {
 					atlas: `assets/portrait/high/dijoker_loading/DI JOKER.atlas`,
 					json: `assets/portrait/high/dijoker_loading/DI JOKER.json`
-				},
-				'logo_spine': {
-					atlas: `${prefix}/logo/logo_250.atlas`,
-					json: `${prefix}/logo/logo_250.json`
 				},
 			}
 		};
@@ -449,6 +450,12 @@ export class AssetConfig {
 				'multiplier_hit': 'assets/sounds/SFX/ringbell_RF.ogg',
 				// 'hit_win_2_wf': 'assets/sounds/SFX/hit_win_2_wf.ogg',
 				'hit_win': 'assets/sounds/SFX/texplosion_RF.ogg',
+
+				'scatter_animation': 'assets/sounds/SFX/scatter_anim_RF.ogg',
+				'symbol_kiss': 'assets/sounds/SFX/kiss_RF.ogg',
+				'symbol_nyet': 'assets/sounds/SFX/nyetnyet_RF.ogg',
+				'symbol_pau': 'assets/sounds/SFX/pau_RF.ogg',
+				'symbol_punch': 'assets/sounds/SFX/punch_RF.ogg',
 			}
 		};
 	}

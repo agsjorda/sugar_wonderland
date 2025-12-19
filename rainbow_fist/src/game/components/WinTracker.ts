@@ -256,7 +256,8 @@ export class WinTracker {
 			fontFamily: 'Poppins-Bold',
 			fontSize: this.config.textFontSize ?? '16px',
 			color: this.config.textColor ?? '#ffffff',
-			stroke: '#ff00f6',
+			// Dark green stroke for stronger contrast against the bright fill
+			stroke: '#006400',
 			strokeThickness: 2,
 			...this.config.textStyle,
 		};

@@ -2,12 +2,12 @@ import { Scene } from "phaser";
 import { ensureSpineFactory } from "../../utils/SpineGuard";
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
-import { playSpineAnimationSequenceWithConfig } from "./SpineBehaviorHelper";
+import { getFullScreenSpineScale, playSpineAnimationSequence } from "./SpineBehaviorHelper";
 import { SpineGameObject } from "@esotericsoftware/spine-phaser-v3";
 
 export class BonusBackground {
 	private bonusContainer: Phaser.GameObjects.Container;
-	private bonusBg: Phaser.GameObjects.Image;
+	private bonusBackgroundVisual?: Phaser.GameObjects.Image | SpineGameObject;
 	private arch: Phaser.GameObjects.Image;
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
@@ -44,23 +44,20 @@ export class BonusBackground {
 		this.createBonusElements(scene, assetScale);
 	}
 
-	private createBonusElements(scene: Scene, assetScale: number): void {
-		const screenConfig = this.screenModeManager.getScreenConfig();
-		
-		this.createPortraitBonusBackground(scene, assetScale);
+	private createBonusElements(scene: Scene, _assetScale: number): void {
+		void _assetScale;
+		this.createPortraitBonusBackground(scene, _assetScale);
 	}
 
-	private createPortraitBonusBackground(scene: Scene, assetScale: number): void {
+	private createPortraitBonusBackground(scene: Scene, _assetScale: number): void {
+		void _assetScale;
 		console.log("[BonusBackground] Creating portrait bonus background layout");
 		
-		// Main bonus background
-		this.bonusBg = scene.add.image(
-			scene.scale.width * 0.5,
-			scene.scale.height * 0.5,
-			'bonus_background'
-		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(1);
+		const backgroundVisual = this.createBonusBackgroundVisual(scene, 'bonus_background', 'bonus_background_spine');
+		this.bonusBackgroundVisual = backgroundVisual;
+		backgroundVisual.setDepth(1);
+		this.bonusContainer.add(backgroundVisual);
 		this.fitBackgroundToScreen(scene);
-		this.bonusContainer.add(this.bonusBg);
 
 		// Arch – fit to width and anchor to bottom
 		// this.createArchImage(scene, assetScale);
@@ -69,7 +66,7 @@ export class BonusBackground {
 		this.reelFrame = scene.add.image(
 			scene.scale.width * this.reelFramePosition.x,
 			scene.scale.height * 0.415,
-			'bonus_reel_frame'
+			'reel_frame'
 		).setOrigin(0.5, 0.5)
 		.setDepth(this.reelFrameDepth);
 
@@ -80,23 +77,50 @@ export class BonusBackground {
 	}
 
 	private fitBackgroundToScreen(scene: Scene): void {
-		if (!this.bonusBg) return;
+		if (!this.bonusBackgroundVisual) return;
 
 		const screenWidth = scene.scale.width;
 		const screenHeight = scene.scale.height;
 
-		// Use frame width/height (intrinsic texture size) to avoid compounding scales
-		const imageWidth = this.bonusBg.frame.width;
-		const imageHeight = this.bonusBg.frame.height;
+		if (this.bonusBackgroundVisual instanceof Phaser.GameObjects.Image) {
+			const imageWidth = this.bonusBackgroundVisual.frame.width;
+			const imageHeight = this.bonusBackgroundVisual.frame.height;
+			if (imageWidth === 0 || imageHeight === 0) {
+				return;
+			}
+			const scaleX = screenWidth / imageWidth;
+			const scaleY = screenHeight / imageHeight;
+			const scale = Math.max(scaleX, scaleY);
+			this.bonusBackgroundVisual.setScale(scale);
+		} else {
+			const scale = getFullScreenSpineScale(scene, this.bonusBackgroundVisual, true);
+			this.bonusBackgroundVisual.setScale(scale.x, scale.y);
+		}
 
-		if (imageWidth === 0 || imageHeight === 0) return;
+		this.bonusBackgroundVisual.setPosition(screenWidth * 0.5, screenHeight * 0.5);
+	}
 
-		const scaleX = screenWidth / imageWidth;
-		const scaleY = screenHeight / imageHeight;
-		const scale = Math.max(scaleX, scaleY);
+	private createBonusBackgroundVisual(scene: Scene, imageKey: string, spineKey: string): Phaser.GameObjects.Image | SpineGameObject {
+		const centerX = scene.scale.width * 0.5;
+		const centerY = scene.scale.height * 0.5;
+		const context = `[BonusBackground] ${spineKey}`;
 
-		this.bonusBg.setScale(scale);
-		this.bonusBg.setPosition(screenWidth * 0.5, screenHeight * 0.5);
+		if (ensureSpineFactory(scene, context)) {
+			try {
+				const addAny: any = scene.add;
+				const spine = addAny.spine?.(centerX, centerY, spineKey, `${spineKey}-atlas`) as SpineGameObject;
+				if (spine) {
+					spine.setOrigin(0.5075, 0.5);
+					playSpineAnimationSequence(spine, [0], true);
+					return spine;
+				}
+			} catch (error) {
+				console.warn(`[BonusBackground] Failed to create spine '${spineKey}':`, error);
+			}
+		}
+
+		console.warn(`[BonusBackground] Spine '${spineKey}' unavailable. Falling back to image '${imageKey}'`);
+		return scene.add.image(centerX, centerY, imageKey).setOrigin(0.5, 0.5);
 	}
 
 	resize(scene: Scene): void {

@@ -315,12 +315,66 @@ export class BetOptions {
 		selectedBg.strokeRoundedRect(0, 0, 60, 50, 5);
 		
 		this.updateBetDisplay();
+		this.updateButtonStates();
 	}
 
 	private updateBetDisplay(): void {
 		if (this.betDisplay) {
 			this.betDisplay.setText(`$${this.currentBet.toFixed(2)}`);
 		}
+	}
+
+	private updateButtonStates(): void {
+		if (this.selectedButtonIndex === -1) {
+			this.enableMinusButton();
+			this.enablePlusButton();
+			return;
+		}
+
+		const lastIndex = this.betOptions.length - 1;
+		if (this.selectedButtonIndex <= 0) {
+			this.disableMinusButton();
+		} else {
+			this.enableMinusButton();
+		}
+
+		if (this.selectedButtonIndex >= lastIndex) {
+			this.disablePlusButton();
+		} else {
+			this.enablePlusButton();
+		}
+	}
+
+	private setButtonEnabled(button: Phaser.GameObjects.Text | undefined, enabled: boolean): void {
+		if (!button) return;
+
+		button.setAlpha(enabled ? 1.0 : 0.3);
+
+		if (enabled) {
+			if (!button.input || !button.input.enabled) {
+				button.setInteractive();
+			} else {
+				button.input.enabled = true;
+			}
+		} else if (button.input) {
+			button.input.enabled = false;
+		}
+	}
+
+	private enablePlusButton(): void {
+		this.setButtonEnabled(this.plusButton, true);
+	}
+
+	private disablePlusButton(): void {
+		this.setButtonEnabled(this.plusButton, false);
+	}
+
+	private enableMinusButton(): void {
+		this.setButtonEnabled(this.minusButton, true);
+	}
+
+	private disableMinusButton(): void {
+		this.setButtonEnabled(this.minusButton, false);
 	}
 
 	private selectPreviousBet(): void {
@@ -402,7 +456,14 @@ export class BetOptions {
 
 	setCurrentBet(bet: number): void {
 		this.currentBet = bet;
+
+		const matchingIndex = this.betOptions.findIndex(option => Math.abs(option - bet) < 0.01);
+		if (matchingIndex !== -1) {
+			this.selectedButtonIndex = matchingIndex;
+		}
+
 		this.updateBetDisplay();
+		this.updateButtonStates();
 	}
 
 	getCurrentBet(): number {

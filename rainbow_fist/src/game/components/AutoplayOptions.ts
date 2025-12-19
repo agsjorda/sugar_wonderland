@@ -316,6 +316,8 @@ export class AutoplayOptions {
 			this.selectNextBet();
 		});
 		this.container.add(this.plusButton);
+
+		this.updateBetButtonStates();
 	}
 
 	/**
@@ -475,6 +477,59 @@ export class AutoplayOptions {
 		}
 	}
 
+	private updateBetButtonStates(): void {
+		if (this.selectedBetIndex === -1) {
+			this.enableBetMinusButton();
+			this.enableBetPlusButton();
+			return;
+		}
+
+		const lastIndex = this.betOptions.length - 1;
+		if (this.selectedBetIndex <= 0) {
+			this.disableBetMinusButton();
+		} else {
+			this.enableBetMinusButton();
+		}
+
+		if (this.selectedBetIndex >= lastIndex) {
+			this.disableBetPlusButton();
+		} else {
+			this.enableBetPlusButton();
+		}
+	}
+
+	private setBetButtonEnabled(button: Phaser.GameObjects.Text | undefined, enabled: boolean): void {
+		if (!button) return;
+
+		button.setAlpha(enabled ? 1.0 : 0.3);
+
+		if (enabled) {
+			if (!button.input || !button.input.enabled) {
+				button.setInteractive();
+			} else {
+				button.input.enabled = true;
+			}
+		} else if (button.input) {
+			button.input.enabled = false;
+		}
+	}
+
+	private enableBetPlusButton(): void {
+		this.setBetButtonEnabled(this.plusButton, true);
+	}
+
+	private disableBetPlusButton(): void {
+		this.setBetButtonEnabled(this.plusButton, false);
+	}
+
+	private enableBetMinusButton(): void {
+		this.setBetButtonEnabled(this.minusButton, true);
+	}
+
+	private disableBetMinusButton(): void {
+		this.setBetButtonEnabled(this.minusButton, false);
+	}
+
 	private updateBalanceDisplay(): void {
 		if (this.balanceAmountText) {
 			this.balanceAmountText.setText(`$${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
@@ -497,6 +552,7 @@ export class AutoplayOptions {
 		this.selectedBetIndex = index;
 		this.currentBet = value;
 		this.updateAutoplayDisplay();
+		this.updateBetButtonStates();
 	}
 
 	private selectPreviousBet(): void {
@@ -626,7 +682,16 @@ export class AutoplayOptions {
 
 	setCurrentBet(bet: number): void {
 		this.currentBet = bet;
+
+		const matchingIndex = this.betOptions.findIndex(option => Math.abs(option - bet) < 0.01);
+		if (matchingIndex !== -1) {
+			this.selectedBetIndex = matchingIndex;
+		} else {
+			this.selectedBetIndex = -1;
+		}
+
 		this.updateAutoplayDisplay();
+		this.updateBetButtonStates();
 	}
 
 	setCurrentBalance(balance: number): void {
