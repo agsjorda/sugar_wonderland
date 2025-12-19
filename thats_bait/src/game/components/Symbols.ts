@@ -280,6 +280,51 @@ export class Symbols {
 		}
 	}
 
+	private shouldWaitForBonusStageCompletionAtZero(): boolean {
+		try {
+			if (!gameStateManager.isBonus) return false;
+			if (!this.freeSpinAutoplayActive) return false;
+			const current = Number(this.freeSpinAutoplaySpinsRemaining) || 0;
+			if (current > 0) return false;
+			const gm: any = (this.scene as any)?.gaugeMeter;
+			if (!gm) return false;
+			const s1p = Number(gm.stage1Progress) || 0;
+			const s2p = Number(gm.stage2Progress) || 0;
+			const s3p = Number(gm.stage3Progress) || 0;
+			const s1Done = !!gm.stage1CompleteDone;
+			const s2Done = !!gm.stage2CompleteDone;
+			const s3Done = !!gm.stage3CompleteDone;
+			if (s1p >= 4 && !s1Done) return true;
+			if (s2p >= 4 && !s2Done) return true;
+			if (s3p >= 4 && !s3Done) return true;
+			const s1Anim = !!gm.stage1CompleteAnimating;
+			const s2Anim = !!gm.stage2CompleteAnimating;
+			const s3Anim = !!gm.stage3CompleteAnimating;
+			if (s1Anim || s2Anim || s3Anim) return true;
+		} catch {}
+		return false;
+	}
+
+	private waitForBonusStageCompletionSignals(waitMs: number): Promise<void> {
+		return new Promise<void>((resolve) => {
+			let finished = false;
+			const finish = () => {
+				if (finished) return;
+				finished = true;
+				try { this.scene?.events?.off?.('bonusStage1Complete', finish); } catch {}
+				try { this.scene?.events?.off?.('bonusStage2Complete', finish); } catch {}
+				try { this.scene?.events?.off?.('bonusStage3Complete', finish); } catch {}
+				resolve();
+			};
+			try { this.scene?.events?.once?.('bonusStage1Complete', finish); } catch {}
+			try { this.scene?.events?.once?.('bonusStage2Complete', finish); } catch {}
+			try { this.scene?.events?.once?.('bonusStage3Complete', finish); } catch {}
+			try { this.scene?.time?.delayedCall?.(waitMs, finish); } catch {
+				try { setTimeout(finish, waitMs); } catch { finish(); }
+			}
+		});
+	}
+
   // Optional override scales for winning-symbol Spine animations (per symbol).
   // When not specified for a given symbol, win animations fall back to idle scales.
   private winSpineSymbolScales: { [key: number]: number } = {
@@ -2946,6 +2991,28 @@ export class Symbols {
         allowContinue = !!(gameStateManager.isBonus && availableCredits > 0);
       } catch {}
 
+			try {
+				if (!allowContinue && gameStateManager.isBonus) {
+					await this.waitForBonusStageCompletionSignals(250);
+					try {
+						const availableCredits2 = Math.max(0, (Number(this.bonusLevelsCompleted) || 0) - (Number(this.bonusRetriggersConsumed) || 0));
+						allowContinue = !!(gameStateManager.isBonus && availableCredits2 > 0);
+					} catch {}
+				}
+			} catch {}
+
+			try {
+				if (!allowContinue && this.shouldWaitForBonusStageCompletionAtZero()) {
+					const baseDelay = 900;
+					const waitMs = Math.max(250, Math.floor(baseDelay * (gameStateManager.isTurbo ? TurboConfig.TURBO_DELAY_MULTIPLIER : 1)));
+					await this.waitForBonusStageCompletionSignals(waitMs);
+					try {
+						const availableCredits2 = Math.max(0, (Number(this.bonusLevelsCompleted) || 0) - (Number(this.bonusRetriggersConsumed) || 0));
+						allowContinue = !!(gameStateManager.isBonus && availableCredits2 > 0);
+					} catch {}
+				}
+			} catch {}
+
 			// If we're at 0 spins but we still have more fake spins queued, we might be in the
 			// "retrigger boundary" case where the final collector animation completes Stage 1
 			// slightly after the spins counter hits 0. Wait briefly for stage completion signals
@@ -2956,19 +3023,7 @@ export class Symbols {
 					if (hasMore) {
 						const baseDelay = 900;
 						const waitMs = Math.max(250, Math.floor(baseDelay * (gameStateManager.isTurbo ? TurboConfig.TURBO_DELAY_MULTIPLIER : 1)));
-						let finished = false;
-						const finish = () => { finished = true; };
-						try { this.scene.events.once('bonusStage1Complete', finish); } catch {}
-						try { this.scene.events.once('bonusStage2Complete', finish); } catch {}
-						try { this.scene.events.once('bonusStage3Complete', finish); } catch {}
-						try { this.scene.time.delayedCall(waitMs, finish); } catch {
-							try { setTimeout(finish, waitMs); } catch { finish(); }
-						}
-						while (!finished) {
-							await new Promise<void>((resolve) => {
-								try { this.scene.time.delayedCall(40, () => resolve()); } catch { try { setTimeout(() => resolve(), 40); } catch { resolve(); } }
-							});
-						}
+						await this.waitForBonusStageCompletionSignals(waitMs);
 						try {
 							const availableCredits2 = Math.max(0, (Number(this.bonusLevelsCompleted) || 0) - (Number(this.bonusRetriggersConsumed) || 0));
 							allowContinue = !!(gameStateManager.isBonus && availableCredits2 > 0 && fakeBonusAPI.isEnabled() && fakeBonusAPI.hasMoreFreeSpins());
@@ -3226,6 +3281,30 @@ export class Symbols {
   private continueFreeSpinAutoplay(): void {
     console.log(`[Symbols] ===== CONTINUING FREE SPIN AUTOPLAY =====`);
     console.log(`[Symbols] Free spin autoplay: ${this.freeSpinAutoplaySpinsRemaining} spins remaining`);
+		const atZero = this.freeSpinAutoplaySpinsRemaining <= 0;
+		if (gameStateManager.isBonus && atZero) {
+			let winlines = false;
+			try {
+				const gd: any = (this.scene as any)?.gameData;
+				winlines = !!(gd && isWinlinesShowing(gd));
+			} catch { winlines = false; }
+			let hasRetriggerOverlay = false;
+			try {
+				const sp: any = (this.scene as any)?.scene;
+				hasRetriggerOverlay = !!(sp?.isActive?.('FreeSpinRetriggerOverlay') || sp?.isSleeping?.('FreeSpinRetriggerOverlay'));
+			} catch { hasRetriggerOverlay = false; }
+			if (!winlines && !gameStateManager.isShowingWinDialog && !hasRetriggerOverlay) {
+				console.log('[Symbols] Reels stopped at 0 spins - running final bonus completion check');
+				try {
+					this.scene?.time?.delayedCall?.(0, () => { try { void this.performFreeSpinAutoplay(); } catch {} });
+					return;
+				} catch {}
+				try {
+					setTimeout(() => { try { void this.performFreeSpinAutoplay(); } catch {} }, 0);
+					return;
+				} catch {}
+			}
+		}
 
     // If we reached 0, we may still need to do a probe spin to pull the next batch (re-trigger).
     let hasMoreQueued = false;
@@ -3235,13 +3314,21 @@ export class Symbols {
     let allowContinueAtZero = false;
     try {
       const availableCredits = Math.max(0, (Number(this.bonusLevelsCompleted) || 0) - (Number(this.bonusRetriggersConsumed) || 0));
-      allowContinueAtZero = !!(gameStateManager.isBonus && availableCredits > 0 && fakeBonusAPI.isEnabled() && fakeBonusAPI.hasMoreFreeSpins());
+			if (gameStateManager.isBonus && availableCredits > 0) {
+				if (!fakeBonusAPI.isEnabled()) {
+					allowContinueAtZero = true;
+				} else {
+					allowContinueAtZero = !!fakeBonusAPI.hasMoreFreeSpins();
+				}
+			}
     } catch {}
+		let shouldWaitAtZero = false;
+		try { shouldWaitAtZero = this.shouldWaitForBonusStageCompletionAtZero(); } catch { shouldWaitAtZero = false; }
 
     // Check if we still have spins remaining
     // IMPORTANT: even if allowContinueAtZero is currently false, if we still have queued fake spins
     // we must wait for WIN_STOP so stage completion can update availableCredits.
-    if (this.freeSpinAutoplaySpinsRemaining > 0 || allowContinueAtZero || hasMoreQueued) {
+		if (this.freeSpinAutoplaySpinsRemaining > 0 || allowContinueAtZero || hasMoreQueued || shouldWaitAtZero) {
       // Wait for WIN_STOP event to ensure winlines complete before next spin
       // This is the same approach as normal autoplay - no safety timer needed
       console.log('[Symbols] Waiting for WIN_STOP event before continuing free spin autoplay');
@@ -3472,6 +3559,29 @@ export class Symbols {
     if (gameStateManager.isBonus && spinsWereComplete) {
       console.log('[Symbols] All free spins complete - marking bonus as finished');
       gameStateManager.isBonusFinished = true;
+			try {
+				this.scene?.time?.delayedCall?.(100, () => {
+					try {
+						if (!gameStateManager.isBonus || !gameStateManager.isBonusFinished) return;
+						if (gameStateManager.isShowingWinDialog) return;
+						let winlines = false;
+						try {
+							const gd: any = (this.scene as any)?.gameData;
+							winlines = !!(gd && isWinlinesShowing(gd));
+						} catch { winlines = false; }
+						if (winlines) return;
+						let hasRetriggerOverlay = false;
+						try {
+							const sp: any = (this.scene as any)?.scene;
+							hasRetriggerOverlay = !!(sp?.isActive?.('FreeSpinRetriggerOverlay') || sp?.isSleeping?.('FreeSpinRetriggerOverlay'));
+						} catch { hasRetriggerOverlay = false; }
+						if (hasRetriggerOverlay) return;
+						console.log('[Symbols] Bonus finished at 0 spins with no win visuals - showing congrats');
+						this.showCongratsDialogAfterDelay();
+						gameStateManager.isBonusFinished = false;
+					} catch {}
+				});
+			} catch {}
       // Note: We don't emit setBonusMode(false) here because it should be handled by SlotController
       // or by the win overlay dismissal handler. This ensures we don't have duplicate transitions.
     }
