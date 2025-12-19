@@ -22,6 +22,12 @@ import { Dialogs } from '../components/Dialogs';
 import { ScatterAnimationManager } from '../../managers/ScatterAnimationManager';
 import { BonusHeader } from '../components/BonusHeader';
 import { GaugeMeter } from '../components/GaugeMeter';
+import {
+  WINTRACKER_BASE_OFFSET_X,
+  WINTRACKER_BASE_OFFSET_Y,
+  WINTRACKER_BONUS_OFFSET_X,
+  WINTRACKER_BONUS_OFFSET_Y
+} from '../../config/UIPositionConfig';
 
 export class Game extends Phaser.Scene {
 	private networkManager!: NetworkManager;
@@ -170,6 +176,15 @@ export class Game extends Phaser.Scene {
 		this.winTracker = new WinTracker();
 		(this as any).winTracker = this.winTracker;
 		this.winTracker.create(this);
+		try {
+			this.winTracker.setLayout({
+				useAutoPosition: true,
+				baseOffsetX: WINTRACKER_BASE_OFFSET_X,
+				baseOffsetY: WINTRACKER_BASE_OFFSET_Y,
+				bonusOffsetX: WINTRACKER_BONUS_OFFSET_X,
+				bonusOffsetY: WINTRACKER_BONUS_OFFSET_Y
+			});
+		} catch {}
 		try {
 			this.dialogs = new Dialogs(this.networkManager, this.screenModeManager);
 			(this as any).dialogs = this.dialogs;

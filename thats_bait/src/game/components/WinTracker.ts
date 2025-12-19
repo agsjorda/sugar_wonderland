@@ -4,11 +4,16 @@ import { SpinData, PaylineData } from '../../backend/SpinData';
 interface WinTrackerLayoutOptions {
   offsetX?: number;
   offsetY?: number;
+  baseOffsetX?: number;
+  baseOffsetY?: number;
+  bonusOffsetX?: number;
+  bonusOffsetY?: number;
   spacing?: number;
   iconScale?: number;
   innerGap?: number;
   multiplierIconScale?: number;
   multiplierIconGap?: number;
+  useAutoPosition?: boolean;
 }
 
 interface SymbolSummary {
@@ -31,15 +36,25 @@ export class WinTracker {
 
   private baseX: number = 0;
   private baseY: number = 0;
+  private isBonusMode: boolean = false;
+  private useAutoPosition: boolean = true;
+  private baseModeOffsetX: number = 0;
+  private baseModeOffsetY: number = 0;
+  private bonusModeOffsetX: number = 0;
+  private bonusModeOffsetY: number = 0;
   private offsetX: number = 0;
   private offsetY: number = -460;
   private itemSpacing: number = 80;
-  private iconScale: number = 0.3;
+  private iconScale: number = 1;
   private innerGap: number = 13;
   private horizontalGap: number = 20;
   private multiplierIconScale: number = 2;
   private multiplierIconGap: number = 0.5;
   private autoHideTimer: Phaser.Time.TimerEvent | null = null;
+
+  private maxWidth: number = 0;
+  private rowHeight: number = 0;
+  private rowSpacing: number = 0;
 
   private readonly depth: number = 905;
   private readonly shadowOffsetX: number = 4;
@@ -65,6 +80,16 @@ export class WinTracker {
 
     this.refreshLayout();
     try {
+      const bonusModeHandler = (isBonus: boolean) => {
+        try { this.isBonusMode = !!isBonus; } catch {}
+        try { this.refreshLayout(); } catch {}
+        try {
+          if (this.container && this.container.visible && !this.isFadingOut && this.lastRenderedSummary) {
+            this.renderFromSummary(this.lastRenderedSummary);
+          }
+        } catch {}
+      };
+
       this.resizeHandler = () => {
         try { this.refreshLayout(); } catch {}
         try {
@@ -74,12 +99,14 @@ export class WinTracker {
         } catch {}
       };
       this.scene.scale.on('resize', this.resizeHandler);
+      try { this.scene.events.on('setBonusMode', bonusModeHandler); } catch {}
       this.scene.events.once('shutdown', () => {
         try {
           if (this.resizeHandler) {
             this.scene.scale.off('resize', this.resizeHandler);
           }
         } catch {}
+        try { this.scene.events.off('setBonusMode', bonusModeHandler); } catch {}
         this.resizeHandler = undefined;
       });
     } catch {}
@@ -89,18 +116,48 @@ export class WinTracker {
     if (!this.scene || !this.container) {
       return;
     }
-    this.baseX = this.scene.scale.width * 0.5;
-    this.baseY = this.scene.scale.height * 0.76;
-
     const anyScene: any = this.scene as any;
+    const symbolsAny: any = anyScene?.symbols;
+
+    const slotX = Number(symbolsAny?.slotX);
+    const slotY = Number(symbolsAny?.slotY);
+    this.baseX = (isFinite(slotX) && slotX !== 0) ? slotX : (this.scene.scale.width * 0.5);
+    this.baseY = (isFinite(slotY) && slotY !== 0) ? slotY : (this.scene.scale.height * 0.76);
+
     const assetScale = Number(anyScene?.networkManager?.getAssetScale?.() ?? 1) || 1;
     const widthScale = (this.scene.scale.width && isFinite(this.scene.scale.width)) ? (this.scene.scale.width / 428) : 1;
     const computed = assetScale * widthScale;
     this.renderScale = (isFinite(computed) && computed > 0) ? computed : 1;
 
+    const gridW = Number(symbolsAny?.totalGridWidth) || 0;
+    const gridH = Number(symbolsAny?.totalGridHeight) || 0;
+    const symbolH = Number(symbolsAny?.displayHeight) || 0;
+
+    const maxW = (gridW > 0) ? (gridW * 0.95) : (this.scene.scale.width * 0.92);
+    this.maxWidth = Math.max(180, Math.min(this.scene.scale.width * 0.98, maxW));
+
+    const baseRowHeight = (symbolH > 0) ? (symbolH * 0.42) : (26 * this.renderScale);
+    this.rowHeight = Math.max(18, Math.min(70, baseRowHeight));
+
+    const desiredSpacing = this.itemSpacing * this.renderScale;
+    const minSpacing = Math.max(6, this.rowHeight * 1.05);
+    const maxSpacing = Math.max(minSpacing, this.rowHeight * 1.75);
+    this.rowSpacing = Math.max(minSpacing, Math.min(maxSpacing, desiredSpacing));
+
+    const autoOffsetX = 0;
+    const autoOffsetY = (gridH > 0)
+      ? (-(gridH * 0.5) - (this.rowHeight * 0.6))
+      : this.offsetY;
+
+    const effectiveOffsetX = this.useAutoPosition ? autoOffsetX : this.offsetX;
+    const effectiveOffsetY = this.useAutoPosition ? autoOffsetY : this.offsetY;
+
+    const modeOffsetX = this.isBonusMode ? this.bonusModeOffsetX : this.baseModeOffsetX;
+    const modeOffsetY = this.isBonusMode ? this.bonusModeOffsetY : this.baseModeOffsetY;
+
     this.container.setPosition(
-      this.baseX + this.offsetX,
-      this.baseY + this.offsetY
+      this.baseX + effectiveOffsetX + modeOffsetX,
+      this.baseY + effectiveOffsetY + modeOffsetY
     );
   }
 
@@ -192,15 +249,147 @@ export class WinTracker {
       (a, b) => b[1].totalWin - a[1].totalWin
     );
 
-    const spacing = this.itemSpacing * this.renderScale;
-    const startX = -((items.length - 1) * spacing) / 2;
-    let index = 0;
+    const maxW = Math.max(140, this.maxWidth || (this.scene.scale.width * 0.92));
+    const baseGap = Math.max(8, Math.floor((this.horizontalGap || 20) * this.renderScale));
+    const count = Math.max(0, items.length | 0);
 
-    for (const [symbolId, data] of items) {
-      const x = startX + index * spacing;
-      this.addSymbolItem(x, symbolId, data);
-      index += 1;
+    if (count <= 0) {
+      return;
     }
+
+    const gap = (count > 1) ? baseGap : 0;
+    const computedPer = (count > 1) ? ((maxW - gap * (count - 1)) / count) : maxW;
+    const perItemMaxW = Math.max(10, computedPer);
+    const totalAllocW = (perItemMaxW * count) + gap * Math.max(0, count - 1);
+    const startX = -(totalAllocW * 0.5) + (perItemMaxW * 0.5);
+
+    for (let i = 0; i < count; i++) {
+      const [symbolId, data] = items[i];
+      const x = startX + i * (perItemMaxW + gap);
+      this.addSymbolRow(x, 0, symbolId, data, perItemMaxW);
+    }
+  }
+
+  private addSymbolRow(x: number, y: number, symbolId: number, data: SymbolSummary, maxWOverride?: number): void {
+    const key = `symbol_${symbolId}`;
+
+    const s = this.renderScale;
+    const rowH = Math.max(12, this.rowHeight || (24 * s));
+    const maxW = (typeof maxWOverride === 'number')
+      ? Math.max(10, maxWOverride)
+      : Math.max(140, (this.maxWidth || (this.scene.scale.width * 0.92)));
+
+    const fontPx = Math.max(10, Math.min(24, rowH * 0.65));
+    const gap = Math.max(4, Math.min(22, (this.innerGap * s) * 0.6));
+
+    const countLabel = this.scene.add.text(
+      0,
+      0,
+      `${data.lines}`,
+      {
+        fontSize: `${fontPx}px`,
+        color: '#ffffff',
+        fontFamily: this.labelFontFamily,
+        stroke: '#000000',
+        strokeThickness: 4,
+        align: 'center'
+      }
+    );
+    countLabel.setOrigin(0.5, 0.5);
+    countLabel.setShadow(1 * s, .5 * s, this.accentShadowColor, 1 * s, true, true);
+
+    const icon = this.scene.add.image(0, 0, key);
+    icon.setOrigin(0.5, 0.5);
+    const shadow = this.scene.add.image(0, 0, key);
+    shadow.setOrigin(0.5, 0.5);
+    shadow.setTint(0x000000);
+    shadow.setAlpha(this.shadowAlpha);
+
+    const iconTargetH = Math.max(10, rowH * 0.9);
+    const srcH = (icon as any).height || 0;
+    const baseIconScale = (srcH > 0) ? (iconTargetH / srcH) : 1;
+    const iconScale = baseIconScale * (this.iconScale || 1);
+    icon.setScale(iconScale);
+    shadow.setScale(iconScale);
+
+    const eqLabel = this.scene.add.text(
+      0,
+      0,
+      '=',
+      {
+        fontSize: `${fontPx}px`,
+        color: '#ffffff',
+        fontFamily: this.labelFontFamily,
+        stroke: '#000000',
+        strokeThickness: 4,
+        align: 'center'
+      }
+    );
+    eqLabel.setOrigin(0.5, 0.5);
+    eqLabel.setShadow(1 * s, .5 * s, this.accentShadowColor, 1 * s, true, true);
+
+    const valueLabel = this.scene.add.text(
+      0,
+      0,
+      `$${data.totalWin.toFixed(2)}`,
+      {
+        fontSize: `${fontPx}px`,
+        color: '#ffffff',
+        fontFamily: this.labelFontFamily,
+        stroke: '#000000',
+        strokeThickness: 4,
+        align: 'center'
+      }
+    );
+    valueLabel.setOrigin(0.5, 0.5);
+    valueLabel.setShadow(1 * s, .5 * s, this.accentShadowColor, 1 * s, true, true);
+
+    let totalWidth =
+      countLabel.displayWidth +
+      gap +
+      icon.displayWidth +
+      gap +
+      eqLabel.displayWidth +
+      gap +
+      valueLabel.displayWidth;
+
+    const fit = (totalWidth > 0) ? Math.min(1, maxW / totalWidth) : 1;
+    if (fit < 1) {
+      countLabel.setScale(fit);
+      eqLabel.setScale(fit);
+      valueLabel.setScale(fit);
+      icon.setScale(icon.scaleX * fit, icon.scaleY * fit);
+      shadow.setScale(shadow.scaleX * fit, shadow.scaleY * fit);
+    }
+
+    totalWidth =
+      countLabel.displayWidth +
+      gap +
+      icon.displayWidth +
+      gap +
+      eqLabel.displayWidth +
+      gap +
+      valueLabel.displayWidth;
+
+    let cursor = x - (totalWidth * 0.5);
+
+    countLabel.setPosition(cursor + countLabel.displayWidth * 0.5, y);
+    cursor += countLabel.displayWidth + gap;
+
+    icon.setPosition(cursor + icon.displayWidth * 0.5, y);
+    shadow.setPosition(icon.x + this.shadowOffsetX * s, icon.y + this.shadowOffsetY * s);
+    cursor += icon.displayWidth + gap;
+
+    eqLabel.setPosition(cursor + eqLabel.displayWidth * 0.5, y);
+    cursor += eqLabel.displayWidth + gap;
+
+    valueLabel.setPosition(cursor + valueLabel.displayWidth * 0.5, y);
+
+    this.container.add(shadow);
+    this.container.add(icon);
+    this.container.add(countLabel);
+    this.container.add(eqLabel);
+    this.container.add(valueLabel);
   }
 
   private buildSummary(spinData: SpinData | null): Map<number, SymbolSummary> | null {
@@ -500,11 +689,29 @@ export class WinTracker {
   }
 
   public setLayout(options: WinTrackerLayoutOptions): void {
+    let hasOffsetUpdate = false;
+    if (typeof options.useAutoPosition === 'boolean') {
+      this.useAutoPosition = options.useAutoPosition;
+    }
     if (typeof options.offsetX === 'number') {
       this.offsetX = options.offsetX;
+      hasOffsetUpdate = true;
     }
     if (typeof options.offsetY === 'number') {
       this.offsetY = options.offsetY;
+      hasOffsetUpdate = true;
+    }
+    if (typeof options.baseOffsetX === 'number') {
+      this.baseModeOffsetX = options.baseOffsetX;
+    }
+    if (typeof options.baseOffsetY === 'number') {
+      this.baseModeOffsetY = options.baseOffsetY;
+    }
+    if (typeof options.bonusOffsetX === 'number') {
+      this.bonusModeOffsetX = options.bonusOffsetX;
+    }
+    if (typeof options.bonusOffsetY === 'number') {
+      this.bonusModeOffsetY = options.bonusOffsetY;
     }
     if (typeof options.spacing === 'number' && options.spacing > 0) {
       this.itemSpacing = options.spacing;
@@ -522,11 +729,12 @@ export class WinTracker {
       this.multiplierIconGap = options.multiplierIconGap;
     }
 
+    if (hasOffsetUpdate && options.useAutoPosition !== true) {
+      this.useAutoPosition = false;
+    }
+
     if (this.container) {
-      this.container.setPosition(
-        this.baseX + this.offsetX,
-        this.baseY + this.offsetY
-      );
+      this.refreshLayout();
     }
 
     if (this.container && this.container.visible && !this.isFadingOut && this.lastRenderedSummary) {

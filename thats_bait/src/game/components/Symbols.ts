@@ -88,6 +88,8 @@ export class Symbols {
   // Skip-drop state
   private skipReelDropsActive: boolean = false;
 
+  private waveShadersSuppressedDuringSpin: boolean = false;
+
   // Flash overlay configuration
   public flashOverlayAlphaStart: number = 1;
   public flashOverlayFadeTo: number = 0.0;
@@ -180,6 +182,122 @@ export class Symbols {
 			}
 		} catch {}
 	}
+
+  private setupShaderSymbolSpinBehavior(): void {
+    try {
+      const onReelsStart = () => {
+        try { this.disableWaveShadersForSpin(); } catch {}
+      };
+      const onReelsStop = () => {
+        try { this.restoreWaveShadersAfterSpin(); } catch {}
+      };
+
+      gameEventManager.on(GameEventType.REELS_START, onReelsStart);
+      gameEventManager.on(GameEventType.REELS_STOP, onReelsStop);
+
+      this.scene.events.once('shutdown', () => {
+        try { gameEventManager.off(GameEventType.REELS_START, onReelsStart); } catch {}
+        try { gameEventManager.off(GameEventType.REELS_STOP, onReelsStop); } catch {}
+      });
+    } catch {}
+  }
+
+  private disableWaveShadersForSpin(): void {
+    try {
+      if (this.waveShadersSuppressedDuringSpin) {
+        return;
+      }
+      this.waveShadersSuppressedDuringSpin = true;
+
+      const waveKeys = new Set(['symbol_8', 'symbol_9', 'symbol_10']);
+      const grids: Array<any[][] | undefined> = [this.symbols, this.newSymbols];
+
+      for (const grid of grids) {
+        if (!Array.isArray(grid)) continue;
+        for (let col = 0; col < grid.length; col++) {
+          const column = grid[col];
+          if (!Array.isArray(column)) continue;
+          for (let row = 0; row < column.length; row++) {
+            const symbol: any = column[row];
+            if (!symbol) continue;
+            const anySymbol: any = symbol;
+
+            const key = anySymbol?.texture?.key;
+            if (!waveKeys.has(key)) continue;
+
+            try {
+              if (typeof anySymbol.__spinWaveOriginalPipeline === 'undefined') {
+                anySymbol.__spinWaveOriginalPipeline = anySymbol.pipeline ?? null;
+              }
+            } catch {}
+
+            try {
+              if (typeof anySymbol.resetPipeline === 'function') {
+                anySymbol.resetPipeline();
+              }
+            } catch {}
+          }
+        }
+      }
+    } catch {}
+  }
+
+  private restoreWaveShadersAfterSpin(): void {
+    try {
+      if (gameStateManager.isReelSpinning) {
+        return;
+      }
+
+      this.waveShadersSuppressedDuringSpin = false;
+
+      const waveKeys = new Set(['symbol_8', 'symbol_9', 'symbol_10']);
+      const grid = this.symbols;
+      if (!Array.isArray(grid)) return;
+
+      for (let col = 0; col < grid.length; col++) {
+        const column = grid[col];
+        if (!Array.isArray(column)) continue;
+        for (let row = 0; row < column.length; row++) {
+          const symbol: any = column[row];
+          if (!symbol) continue;
+          const anySymbol: any = symbol;
+
+          const originalPipeline = anySymbol.__spinWaveOriginalPipeline;
+          if (originalPipeline && typeof anySymbol.setPipeline === 'function') {
+            try { anySymbol.setPipeline(originalPipeline); } catch {}
+            try { delete anySymbol.__spinWaveOriginalPipeline; } catch {}
+            continue;
+          }
+          try { delete anySymbol.__spinWaveOriginalPipeline; } catch {}
+
+          const key = anySymbol?.texture?.key;
+          if (!waveKeys.has(key)) continue;
+
+          let symbolValue: number | undefined;
+          try {
+            const v = (this.currentSymbolData as any)?.[col]?.[row];
+            if (typeof v === 'number') {
+              symbolValue = v;
+            }
+          } catch {}
+
+          if (typeof symbolValue !== 'number') {
+            try {
+              const m = String(key || '').match(/^symbol_(\d+)$/);
+              if (m && m[1]) {
+                const n = parseInt(m[1], 10);
+                if (!Number.isNaN(n)) symbolValue = n;
+              }
+            } catch {}
+          }
+
+          if (typeof symbolValue === 'number') {
+            try { this.applyIdleWaveShaderIfSymbolImage(anySymbol, symbolValue); } catch {}
+          }
+        }
+      }
+    } catch {}
+  }
 
 	private getBackendCollectorCount(spinData: any): number | null {
 		try {
@@ -817,6 +935,7 @@ export class Symbols {
     this.onSpinDone(this.scene);
     this.setupDialogEventListeners();
     this.setupSpinEventListener(); // Re-enabled to clean up symbols at spin start
+    this.setupShaderSymbolSpinBehavior();
 
     // Stage completion gating for re-triggers
     try {
@@ -1084,6 +1203,8 @@ export class Symbols {
         console.log('[Symbols] Manual spins are still allowed to proceed');
         return;
       }
+
+      try { this.disableWaveShadersForSpin(); } catch {}
       // using the *previous* spin's symbol data before the new spin result arrives.
       try { this.ensureCleanSymbolState(); } catch {}
       // Clean up any orphaned display objects from previous spins
@@ -1152,8 +1273,23 @@ export class Symbols {
 				let hasDynamite = false;
 				try {
 					const special = spinData && spinData.slot && spinData.slot.special ? spinData.slot.special : null;
-					if (special && special.action === 'dynamite' && Array.isArray(special.items)) {
-						hasDynamite = true;
+					if (special && special.action === 'dynamite') {
+						const grid: any[][] | undefined = (Array.isArray(special.items) && Array.isArray(special.items[0]))
+							? special.items
+							: spinData?.slot?.money;
+						if (Array.isArray(grid) && Array.isArray(grid[0])) {
+							for (let c = 0; c < grid.length && !hasDynamite; c++) {
+								const colArr = grid[c];
+								if (!Array.isArray(colArr)) continue;
+								for (let r = 0; r < colArr.length; r++) {
+									const v = Number(colArr[r] ?? 0);
+									if (isFinite(v) && v > 0) {
+										hasDynamite = true;
+										break;
+									}
+								}
+							}
+						}
 					}
 				} catch {}
 
@@ -1430,8 +1566,22 @@ export class Symbols {
 			if (!special || special.action !== 'dynamite') {
 				return;
 			}
-			const items: any[][] | undefined = special.items;
-			if (!Array.isArray(items) || !Array.isArray(items[0])) {
+			let items: any[][] | undefined = undefined;
+			try {
+				const raw: any = special.items;
+				if (Array.isArray(raw) && Array.isArray(raw[0])) {
+					items = raw;
+				}
+			} catch {}
+			if (!items) {
+				try {
+					const rawMoney: any = spinData?.slot?.money;
+					if (Array.isArray(rawMoney) && Array.isArray(rawMoney[0])) {
+						items = rawMoney;
+					}
+				} catch {}
+			}
+			if (!items) {
 				return;
 			}
 
@@ -1909,9 +2059,12 @@ export class Symbols {
     return 1;
   }
 
-	public applyIdleWaveShaderIfSymbolImage(symbol: any, symbolValue: number): void {
+  public applyIdleWaveShaderIfSymbolImage(symbol: any, symbolValue: number): void {
 		try {
 			if (!symbol || !(symbolValue === 8 || symbolValue === 9 || symbolValue === 10)) {
+				return;
+			}
+			if (this.waveShadersSuppressedDuringSpin || gameStateManager.isReelSpinning) {
 				return;
 			}
 			const sceneAny: any = this.scene as any;
@@ -3857,7 +4010,26 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
 
 	try {
 		const special = spinData && spinData.slot && spinData.slot.special ? spinData.slot.special : null;
-		(self as any).hasPendingDynamite = !!(special && special.action === 'dynamite' && Array.isArray(special.items));
+		let hasDynamite = false;
+		if (special && special.action === 'dynamite') {
+			const grid: any[][] | undefined = (Array.isArray(special.items) && Array.isArray(special.items[0]))
+				? special.items
+				: spinData?.slot?.money;
+			if (Array.isArray(grid) && Array.isArray(grid[0])) {
+				for (let c = 0; c < grid.length && !hasDynamite; c++) {
+					const colArr = grid[c];
+					if (!Array.isArray(colArr)) continue;
+					for (let r = 0; r < colArr.length; r++) {
+						const v = Number(colArr[r] ?? 0);
+						if (isFinite(v) && v > 0) {
+							hasDynamite = true;
+							break;
+						}
+					}
+				}
+			}
+		}
+		(self as any).hasPendingDynamite = hasDynamite;
 	} catch {
 		(self as any).hasPendingDynamite = false;
 	}

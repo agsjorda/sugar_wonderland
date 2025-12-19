@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
 	<meta charset="UTF-8" />
-	<link rel="icon" type="image/png" href="/favicon.webp" />
+	<link rel="icon" type="image/png" href="/favicon.png" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<link rel="stylesheet" href="/style.css">
-	<title>That's Bait</title>
+	<title>Hustle The Blazing Horse</title>
 	<link rel="stylesheet" href="/main.scss">
 	<style>
 		body {
@@ -22,18 +22,41 @@
 			width: 100%;
 			height: 100%;
 			z-index: -1;
+			overflow: hidden;
+		}
+		
+		.background-image-wrapper {
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 112%;
+			transform: translate(var(--bg-offset-x, 0px), var(--bg-offset-y, 0px));
 		}
 		
 		.background-image {
+			position: absolute;
+			top: 0;
+			left: 0;
 			width: 100%;
 			height: 100%;
 			object-fit: cover;
-			filter: blur(20px);
+			object-position: center bottom;
+			border-radius: 0;
+			transform-origin: center bottom;
+			transform: scale(var(--bg-scale-x, 1), var(--bg-scale-y, 1));
 		}
 		
 		#root {
 			position: relative;
 			z-index: 1;
+		}
+
+		/* Add drop shadow under the game view (canvas inside #root) */
+		#root canvas {
+			filter: drop-shadow(0 16px 24px rgba(0, 0, 0, 0.7));
+			border-radius: 8px;      /* or whatever radius you want */
+			overflow: hidden;         /* helps ensure content respects rounding */
 		}
 
 		#game-container {
@@ -162,13 +185,22 @@
 </head>
 
 <body>
+	<div class="background-container">
+		<div class="background-image-wrapper">
+			<img
+				class="background-image"
+				src="/fullscreen_bg.webp"
+				alt="Fullscreen background"
+			/>
+		</div>
+	</div>
 	<div id="boot-loader" aria-live="polite">
 		<div class="bl-stage">
 			<div class="bl-grid"></div>
 			<div class="bl-content">
 				<div class="bl-spine-slot">
-					<img class="bl-dijoker-left" src="assets/portrait/high/loading/DiJoker.webp" alt="DiJoker" onerror="this.style.display='none'"/>
-					<img class="bl-dijoker-logo" src="assets/portrait/high/loading/DiJoker-logo.webp" alt="DiJoker Logo" onerror="this.style.display='none'"/>
+					<img class="bl-dijoker-left" src="assets/portrait/high/loading/DiJoker.png" alt="DiJoker" onerror="this.style.display='none'"/>
+					<img class="bl-dijoker-logo" src="assets/portrait/high/loading/DiJoker-logo.png" alt="DiJoker Logo" onerror="this.style.display='none'"/>
 				</div>
 				<div class="bl-progress-slot">
 					<div class="bl-spinner"></div>
@@ -181,6 +213,17 @@
 	<script type="module" src="/src/main.tsx"></script>
 	<script>
 		(function(){
+			window.setBackgroundImageModifier = function(opts){
+				try{
+					opts = opts || {};
+					var root = document.documentElement;
+					if ('offsetX' in opts) root.style.setProperty('--bg-offset-x', String(opts.offsetX));
+					if ('offsetY' in opts) root.style.setProperty('--bg-offset-y', String(opts.offsetY));
+					if ('scaleX' in opts) root.style.setProperty('--bg-scale-x', String(opts.scaleX));
+					if ('scaleY' in opts) root.style.setProperty('--bg-scale-y', String(opts.scaleY));
+				}catch(e){}
+			};
+			
 			window.setBootLoaderProgress = function(p){
 				try{
 					var v = Math.max(0, Math.min(100, Math.floor((p||0)*100)));

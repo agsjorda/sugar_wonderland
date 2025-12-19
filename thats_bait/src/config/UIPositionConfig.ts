@@ -79,6 +79,11 @@ export const HEADER_YOUWIN_OFFSET_Y = 16;
 export const HEADER_AMOUNT_OFFSET_X = 0;
 export const HEADER_AMOUNT_OFFSET_Y = 21;
 
+export const WINTRACKER_BASE_OFFSET_X = 0;
+export const WINTRACKER_BASE_OFFSET_Y = -55;
+export const WINTRACKER_BONUS_OFFSET_X = 0;
+export const WINTRACKER_BONUS_OFFSET_Y = 180;
+
 // BUY FEATURE label offsets
 export const FEATURE_LABEL1_OFFSET_X = 0;
 export const FEATURE_LABEL1_OFFSET_Y = 0;
