@@ -104,6 +104,7 @@ export class WinLineDrawer {
       }
       this.scene.time.delayedCall(50, () => {
         console.log('[WinLineDrawer] Emitting WIN_STOP for no-wins scenario');
+        gameEventManager.emit(GameEventType.REELS_STOP);
         gameEventManager.emit(GameEventType.WIN_STOP);
       });
       return;
@@ -130,6 +131,7 @@ export class WinLineDrawer {
 
     if (this.currentWinPatterns.length === 0) {
       console.log('[WinLineDrawer] No win patterns stored, emitting WIN_STOP immediately');
+      gameEventManager.emit(GameEventType.REELS_STOP);
       gameEventManager.emit(GameEventType.WIN_STOP);
       return;
     }
@@ -143,6 +145,7 @@ export class WinLineDrawer {
   private drawWinLinesSequentiallyOnce(currentIndex: number): void {
     if (this.currentWinPatterns.length === 0) {
       console.log('[WinLineDrawer] No win patterns to draw, emitting WIN_STOP immediately');
+      gameEventManager.emit(GameEventType.REELS_STOP);
       gameEventManager.emit(GameEventType.WIN_STOP);
       return;
     }

@@ -210,6 +210,27 @@ export class Symbols {
 		}
 	}
 
+	private scheduleFreeSpinAutoplayResumeAfterRetriggerOverlay(): void {
+		try {
+			if (this.freeSpinAutoplayTimer) {
+				try { this.freeSpinAutoplayTimer.destroy(); } catch {}
+				this.freeSpinAutoplayTimer = null;
+			}
+		} catch {}
+		const delayMs = 1000;
+		try {
+			this.freeSpinAutoplayTimer = this.scene.time.delayedCall(delayMs, () => {
+				try { void this.performFreeSpinAutoplay(); } catch {}
+			});
+		} catch {
+			try {
+				setTimeout(() => {
+					try { void this.performFreeSpinAutoplay(); } catch {}
+				}, delayMs);
+			} catch {}
+		}
+	}
+
 	private tryApplyQueuedRetriggerAtZero(): boolean {
 		try {
 			if (!gameStateManager.isBonus) return false;
@@ -245,46 +266,11 @@ export class Symbols {
 				if (!this.freeSpinAutoplayWaitingForRetriggerOverlay) {
 					this.freeSpinAutoplayWaitingForRetriggerOverlay = true;
 					this.scene?.events?.once?.('freeSpinRetriggerOverlayClosed', () => {
+						try { this.freeSpinAutoplayResumeImmediateOnce = false; } catch {}
 						try { this.freeSpinAutoplayWaitingForRetriggerOverlay = false; } catch {}
 						try { gameStateManager.isShowingWinDialog = false; } catch {}
-						try {
-							const sp: any = (this.scene as any)?.scene;
-							if (sp?.isActive?.('FreeSpinRetriggerOverlay') || sp?.isSleeping?.('FreeSpinRetriggerOverlay')) {
-								try { sp.stop('FreeSpinRetriggerOverlay'); } catch {}
-							}
-						} catch {}
-						try {
-							if (this.freeSpinAutoplayTimer) {
-								try { this.freeSpinAutoplayTimer.destroy(); } catch {}
-								this.freeSpinAutoplayTimer = null;
-							}
-						} catch {}
-						try { this.scene?.time?.delayedCall?.(0, () => { void this.performFreeSpinAutoplay(); }); } catch { try { void this.performFreeSpinAutoplay(); } catch {} }
+						try { this.scheduleFreeSpinAutoplayResumeAfterRetriggerOverlay(); } catch { try { void this.performFreeSpinAutoplay(); } catch {} }
 					});
-					try {
-						const baseMs = 9000;
-						this.scene?.time?.delayedCall?.(baseMs, () => {
-							try {
-								if (this.freeSpinAutoplayWaitingForRetriggerOverlay) {
-									this.freeSpinAutoplayWaitingForRetriggerOverlay = false;
-									try { gameStateManager.isShowingWinDialog = false; } catch {}
-									try {
-										const sp: any = (this.scene as any)?.scene;
-										if (sp?.isActive?.('FreeSpinRetriggerOverlay') || sp?.isSleeping?.('FreeSpinRetriggerOverlay')) {
-											try { sp.stop('FreeSpinRetriggerOverlay'); } catch {}
-										}
-									} catch {}
-									try {
-										if (this.freeSpinAutoplayTimer) {
-											try { this.freeSpinAutoplayTimer.destroy(); } catch {}
-											this.freeSpinAutoplayTimer = null;
-										}
-									} catch {}
-									try { this.scene?.time?.delayedCall?.(0, () => { void this.performFreeSpinAutoplay(); }); } catch { try { void this.performFreeSpinAutoplay(); } catch {} }
-								}
-							} catch {}
-						});
-					} catch {}
 				}
 			} catch {}
 			try { (this.scene as any)?.events?.emit?.('bonusRetrigger', { addedSpins, totalSpins, stage: nextStage }); } catch {}
@@ -459,45 +445,21 @@ export class Symbols {
         } catch {
           nextStage = 0;
         }
+
         try { this.bonusRetriggersConsumed = nextStage; } catch {}
         try { this.lastAppliedRetriggerTotal = Number(proposed); } catch { this.lastAppliedRetriggerTotal = null; }
         try { this.refreshBonusCollectorVisuals(); } catch {}
         try { gameStateManager.isBonusFinished = false; } catch {}
         if (nextStage >= 1 && nextStage <= 3) {
-          // Block autoplay immediately; Game.ts will launch the overlay via the bonus overlay queue.
-          // This prevents consuming spins from the *new* batch before the retrigger overlay is shown.
           try {
             if (!this.freeSpinAutoplayWaitingForRetriggerOverlay) {
               this.freeSpinAutoplayWaitingForRetriggerOverlay = true;
               this.scene?.events?.once?.('freeSpinRetriggerOverlayClosed', () => {
+                try { this.freeSpinAutoplayResumeImmediateOnce = false; } catch {}
                 try { this.freeSpinAutoplayWaitingForRetriggerOverlay = false; } catch {}
                 try { gameStateManager.isShowingWinDialog = false; } catch {}
-                try {
-                  if (this.freeSpinAutoplayTimer) {
-                    try { this.freeSpinAutoplayTimer.destroy(); } catch {}
-                    this.freeSpinAutoplayTimer = null;
-                  }
-                } catch {}
-                try { this.scene?.time?.delayedCall?.(0, () => { void this.performFreeSpinAutoplay(); }); } catch { try { void this.performFreeSpinAutoplay(); } catch {} }
+                try { this.scheduleFreeSpinAutoplayResumeAfterRetriggerOverlay(); } catch { try { void this.performFreeSpinAutoplay(); } catch {} }
               });
-              try {
-                const baseMs = 9000;
-                this.scene?.time?.delayedCall?.(baseMs, () => {
-                  try {
-                    if (this.freeSpinAutoplayWaitingForRetriggerOverlay) {
-                      this.freeSpinAutoplayWaitingForRetriggerOverlay = false;
-                      try { gameStateManager.isShowingWinDialog = false; } catch {}
-                      try {
-                        if (this.freeSpinAutoplayTimer) {
-                          try { this.freeSpinAutoplayTimer.destroy(); } catch {}
-                          this.freeSpinAutoplayTimer = null;
-                        }
-                      } catch {}
-                      try { this.scene?.time?.delayedCall?.(0, () => { void this.performFreeSpinAutoplay(); }); } catch { try { void this.performFreeSpinAutoplay(); } catch {} }
-                    }
-                  } catch {}
-                });
-              } catch {}
             }
           } catch {}
           try { (this.scene as any)?.events?.emit?.('bonusRetrigger', { addedSpins: added, totalSpins: proposed, stage: nextStage }); } catch {}
@@ -1762,6 +1724,10 @@ export class Symbols {
 
     });
 
+		this.scene.events.on('resetSymbolsForBase', () => {
+			try { this.resetAllSymbolsToNormalState(); } catch {}
+		});
+
     // Listen for scatter bonus activation to capture free spins data
     this.scene.events.on('scatterBonusActivated', (data: { scatterIndex: number; actualFreeSpins: number }) => {
       console.log(`[Symbols] Scatter bonus activated with ${data.actualFreeSpins} free spins - storing data for autoplay`);
@@ -2227,6 +2193,63 @@ export class Symbols {
       }
     } catch {}
   }
+
+	public resetAllSymbolsToNormalState(): void {
+		try {
+			if (!this.scene) return;
+			try { this.clearWinLines(); } catch {}
+			try { (this.winLineDrawer as any)?.stopLooping?.(); } catch {}
+			try { (this.winLineDrawer as any)?.clearLines?.(); } catch {}
+			try { (this.scene as any).currentWinningPositions = new Set<string>(); } catch {}
+			try {
+				const bg: any = (this.scene as any).background;
+				bg?.restoreDepthAfterWinSequence?.();
+			} catch {}
+			try { this.restoreSymbolsAboveReelBg(); } catch {}
+			try {
+				if (this.overlayRect) {
+					this.scene.tweens.killTweensOf(this.overlayRect);
+					this.overlayRect.setAlpha(0);
+					this.overlayRect.setVisible(false);
+				}
+			} catch {}
+			try {
+				if (this.baseOverlayRect) {
+					this.scene.tweens.killTweensOf(this.baseOverlayRect);
+					this.baseOverlayRect.setAlpha(0);
+					this.baseOverlayRect.setVisible(false);
+				}
+			} catch {}
+
+			try {
+				const grid: any[][] = this.symbols;
+				if (Array.isArray(grid)) {
+					for (const col of grid) {
+						if (!Array.isArray(col)) continue;
+						for (const sym of col) {
+							if (!sym) continue;
+							try { this.scene.tweens.killTweensOf(sym); } catch {}
+							try { clearImageSymbolWinRipple(this.scene as any, sym); } catch {}
+							try { clearNonWinningSymbolDim(this.scene as any, sym); } catch {}
+							try { (sym as any).clearTint?.(); } catch {}
+							try { if (typeof (sym as any).setAlpha === 'function') (sym as any).setAlpha(1); } catch {}
+							try { (sym as any).alpha = 1; } catch {}
+						}
+					}
+				}
+			} catch {}
+
+			try {
+				if (this.symbols && this.symbols[0]) {
+					const reels = this.symbols.length;
+					const emptyWinners = new Set<string>();
+					for (let reelIndex = 0; reelIndex < reels; reelIndex++) {
+						this.triggerIdleAnimationsForReel(reelIndex, emptyWinners);
+					}
+				}
+			} catch {}
+		} catch {}
+	}
 
   /**
    * Clear win lines and stop looping
@@ -3028,17 +3051,9 @@ export class Symbols {
       this.scene.events.once('freeSpinRetriggerOverlayClosed', () => {
         console.log('[Symbols] freeSpinRetriggerOverlayClosed received');
         this.freeSpinAutoplayWaitingForRetriggerOverlay = false;
-				this.freeSpinAutoplayResumeImmediateOnce = true;
+				this.freeSpinAutoplayResumeImmediateOnce = false;
         try { gameStateManager.isShowingWinDialog = false; } catch {}
-        try {
-          const sp: any = (this.scene as any)?.scene;
-          if (sp?.isActive?.('FreeSpinRetriggerOverlay') || sp?.isSleeping?.('FreeSpinRetriggerOverlay')) {
-            try { sp.stop('FreeSpinRetriggerOverlay'); } catch {}
-          }
-        } catch {}
-        this.scene.time.delayedCall(0, () => {
-          this.performFreeSpinAutoplay();
-        });
+				try { this.scheduleFreeSpinAutoplayResumeAfterRetriggerOverlay(); } catch { try { this.performFreeSpinAutoplay(); } catch {} }
       });
       return;
     }
@@ -3074,21 +3089,6 @@ export class Symbols {
         } catch {}
         try { setTimeout(() => { fireOnce(); }, delayMs); } catch {}
       };
-      try {
-        setTimeout(() => {
-          if (resumed) return;
-          try {
-            const sp: any = (this.scene as any)?.scene;
-            const stillOverlay = !!(sp?.isActive?.('FreeSpinRetriggerOverlay') || sp?.isSleeping?.('FreeSpinRetriggerOverlay'));
-            if (stillOverlay) {
-              try { sp?.stop?.('FreeSpinRetriggerOverlay'); } catch {}
-            }
-          } catch {}
-          try { gameStateManager.isShowingWinDialog = false; } catch {}
-          try { this.freeSpinAutoplayWaitingForRetriggerOverlay = false; } catch {}
-          resume();
-        }, 4500);
-      } catch {}
       if (!gameStateManager.isShowingWinDialog && !hasRetriggerOverlay()) { resume(true); return; }
       try {
         if (gameStateManager.isShowingWinDialog && !hasRetriggerOverlay() && !hasActiveDialogUi()) {
@@ -3126,16 +3126,11 @@ export class Symbols {
         this.freeSpinAutoplayWaitingForRetriggerOverlay = true;
         this.scene.events.once('freeSpinRetriggerOverlayClosed', () => {
           console.log('[Symbols] freeSpinRetriggerOverlayClosed received');
+					resumed = true;
           this.freeSpinAutoplayWaitingForRetriggerOverlay = false;
-				this.freeSpinAutoplayResumeImmediateOnce = true;
+				this.freeSpinAutoplayResumeImmediateOnce = false;
           try { gameStateManager.isShowingWinDialog = false; } catch {}
-          try {
-            const sp: any = (this.scene as any)?.scene;
-            if (sp?.isActive?.('FreeSpinRetriggerOverlay') || sp?.isSleeping?.('FreeSpinRetriggerOverlay')) {
-              try { sp.stop('FreeSpinRetriggerOverlay'); } catch {}
-            }
-          } catch {}
-          resume(true);
+				try { this.scheduleFreeSpinAutoplayResumeAfterRetriggerOverlay(); } catch { try { this.performFreeSpinAutoplay(); } catch {} }
         });
       }
       try {
@@ -3286,7 +3281,15 @@ export class Symbols {
     const baseDelay = 500;
     let delayMs = baseDelay;
     try {
-      if (this.freeSpinAutoplayResumeImmediateOnce) {
+      let forceImmediate = false;
+      try {
+        const sp: any = (this.scene as any)?.scene;
+        const hasOverlay = !!(sp?.isActive?.('FreeSpinRetriggerOverlay') || sp?.isSleeping?.('FreeSpinRetriggerOverlay'));
+        forceImmediate = !!this.freeSpinAutoplayWaitingForRetriggerOverlay || hasOverlay;
+      } catch {}
+      if (forceImmediate) {
+        delayMs = 0;
+      } else if (this.freeSpinAutoplayResumeImmediateOnce) {
         delayMs = 0;
         this.freeSpinAutoplayResumeImmediateOnce = false;
       } else if (gameStateManager.isTurbo) {
@@ -3401,8 +3404,27 @@ export class Symbols {
       }
       if (shouldShowTotal) {
         try {
-          (this.scene as any)?.events?.emit?.('showTotalWinOverlay');
-          console.log('[Symbols] Fallback: emitted showTotalWinOverlay (Dialogs unavailable)');
+          const s: any = this.scene as any;
+          const mgr: any = s?.scene;
+          const canLaunch = !!(mgr && typeof mgr.launch === 'function');
+          if (canLaunch) {
+            try {
+              if (mgr.isActive?.('BubbleOverlayTransition') || mgr.isSleeping?.('BubbleOverlayTransition')) {
+                try { mgr.stop('BubbleOverlayTransition'); } catch {}
+              }
+            } catch {}
+            mgr.launch('BubbleOverlayTransition', {
+              fromSceneKey: 'Game',
+              toSceneKey: 'Game',
+              stopFromScene: false,
+              toSceneEvent: 'prepareBonusExit',
+              toSceneEventOnFinish: 'finalizeBonusExit'
+            });
+            try { mgr.bringToTop?.('BubbleOverlayTransition'); } catch {}
+          } else {
+            s?.events?.emit?.('finalizeBonusExit');
+          }
+          console.log('[Symbols] Fallback: triggered bonus exit transition (Dialogs unavailable)');
         } catch {}
       }
     }

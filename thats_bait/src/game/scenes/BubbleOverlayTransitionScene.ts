@@ -10,6 +10,10 @@ interface BubbleTransitionData {
 	toSceneEventData?: any;
 	toSceneEventOnFinish?: string;
 	toSceneEventOnFinishData?: any;
+	overlayAlpha?: number;
+	overlayFadeInDurationMs?: number;
+	overlayFadeInDelayMs?: number;
+	spineFadeInDurationMs?: number;
 }
 
 export class BubbleOverlayTransitionScene extends Scene {
@@ -29,10 +33,16 @@ export class BubbleOverlayTransitionScene extends Scene {
 
 	init(data: BubbleTransitionData): void {
 		this.transitionData = data;
+		try { this.hasStarted = false; } catch {}
+		try { this.hasFinished = false; } catch {}
+		try { this.toSceneKey = undefined; } catch {}
 	}
 
 	create(): void {
 		console.log('[BubbleOverlayTransitionScene] create');
+		try { this.hasStarted = false; } catch {}
+		try { this.hasFinished = false; } catch {}
+		try { this.toSceneKey = undefined; } catch {}
 		try { this.scene.bringToTop('BubbleOverlayTransition'); } catch {}
 		this.cameras.main.setBackgroundColor(0x000000);
 		try { (this.cameras.main.backgroundColor as any).alpha = 0; } catch {}
@@ -122,18 +132,27 @@ export class BubbleOverlayTransitionScene extends Scene {
 		try { spine.setAlpha(0); } catch {}
 
 		try {
+			const overlayAlphaRaw = Number(this.transitionData?.overlayAlpha);
+			const overlayAlpha = (isFinite(overlayAlphaRaw) ? overlayAlphaRaw : 0.65);
+			const overlayFadeInDurationMsRaw = Number(this.transitionData?.overlayFadeInDurationMs);
+			const overlayFadeInDurationMs = (isFinite(overlayFadeInDurationMsRaw) ? Math.max(0, overlayFadeInDurationMsRaw | 0) : 200);
+			const overlayFadeInDelayMsRaw = Number(this.transitionData?.overlayFadeInDelayMs);
+			const overlayFadeInDelayMs = (isFinite(overlayFadeInDelayMsRaw) ? Math.max(0, overlayFadeInDelayMsRaw | 0) : 0);
+			const spineFadeInDurationMsRaw = Number(this.transitionData?.spineFadeInDurationMs);
+			const spineFadeInDurationMs = (isFinite(spineFadeInDurationMsRaw) ? Math.max(0, spineFadeInDurationMsRaw | 0) : 800);
 			if (this.overlayRect) {
 				this.tweens.add({
 					targets: this.overlayRect,
-					alpha: 0.65,
-					duration: 200,
+					alpha: Math.max(0, Math.min(1, overlayAlpha)),
+					duration: overlayFadeInDurationMs,
+					delay: overlayFadeInDelayMs,
 					ease: 'Power2'
 				});
 			}
 			this.tweens.add({
 				targets: spine,
 				alpha: 1,
-				duration: 800,
+				duration: spineFadeInDurationMs,
 				ease: 'Power2'
 			});
 		} catch {}
@@ -214,10 +233,17 @@ export class BubbleOverlayTransitionScene extends Scene {
 
 	private playFallbackOverlay(): void {
 		try {
+			const overlayAlphaRaw = Number(this.transitionData?.overlayAlpha);
+			const overlayAlpha = (isFinite(overlayAlphaRaw) ? overlayAlphaRaw : 0.65);
+			const overlayFadeInDurationMsRaw = Number(this.transitionData?.overlayFadeInDurationMs);
+			const overlayFadeInDurationMs = (isFinite(overlayFadeInDurationMsRaw) ? Math.max(0, overlayFadeInDurationMsRaw | 0) : 200);
+			const overlayFadeInDelayMsRaw = Number(this.transitionData?.overlayFadeInDelayMs);
+			const overlayFadeInDelayMs = (isFinite(overlayFadeInDelayMsRaw) ? Math.max(0, overlayFadeInDelayMsRaw | 0) : 0);
 			this.tweens.add({
 				targets: this.overlayRect,
-				alpha: 0.65,
-				duration: 200,
+				alpha: Math.max(0, Math.min(1, overlayAlpha)),
+				duration: overlayFadeInDurationMs,
+				delay: overlayFadeInDelayMs,
 				ease: 'Power2'
 			});
 		} catch {}
@@ -317,14 +343,21 @@ export class BubbleOverlayTransitionScene extends Scene {
 		try {
 			const stopFrom = this.transitionData?.stopFromScene;
 			const shouldStopFrom = stopFrom !== false;
-			if (shouldStopFrom && fromKey && fromKey !== toKey && this.scene.isActive(fromKey)) {
+			if (
+				shouldStopFrom &&
+				fromKey &&
+				fromKey !== toKey &&
+				(this.scene.isActive(fromKey) || this.scene.isSleeping(fromKey))
+			) {
 				this.scene.stop(fromKey);
 			}
 		} catch {}
 
 		let toScene: any;
 		try {
-			if (!this.scene.isActive(toKey)) {
+			if (this.scene.isSleeping(toKey)) {
+				this.scene.wake(toKey);
+			} else if (!this.scene.isActive(toKey)) {
 				this.scene.launch(toKey, startData);
 			}
 			toScene = this.scene.get(toKey) as any;

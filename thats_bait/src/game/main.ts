@@ -4,13 +4,89 @@ import { AUTO, Game } from 'phaser';
 import { Preloader } from './scenes/Preloader';
 import { BubbleTransitionScene } from './scenes/BubbleTransitionScene';
 import { BubbleOverlayTransitionScene } from './scenes/BubbleOverlayTransitionScene';
-import { TotalWinOverlayScene } from './scenes/TotalWinOverlayScene';
-import { FreeSpinRetriggerOverlayScene } from './scenes/FreeSpinRetriggerOverlayScene';
 // Import Spine runtime and plugin
 import * as Spine from '@esotericsoftware/spine-phaser-v3';
 
 // Make Spine available globally for debugging
 (window as any).Spine = Spine;
+
+const isClosedAudioContextError = (err: any): boolean => {
+    try {
+        const name = (err && (err.name || err.constructor?.name)) ? String(err.name || err.constructor?.name) : '';
+        const message = err && (err.message || err.toString) ? String(err.message ?? err.toString()) : '';
+        if (name && name !== 'InvalidStateError' && name !== 'DOMException') return false;
+        return /closed\s+AudioContext/i.test(message) && /(suspend|resume)/i.test(message);
+    } catch {
+        return false;
+    }
+};
+
+const patchAudioContextSuspendResume = (): void => {
+    const w: any = window as any;
+    if (w.__patchedClosedAudioContextSuspendResume) return;
+    w.__patchedClosedAudioContextSuspendResume = true;
+
+    const patchCtor = (Ctor: any) => {
+        try {
+            if (!Ctor || !Ctor.prototype) return;
+            const proto: any = Ctor.prototype;
+
+            const origSuspend = proto.suspend;
+            if (typeof origSuspend === 'function' && !origSuspend.__patchedClosedGuard) {
+                const wrappedSuspend = function (this: any, ...args: any[]) {
+                    try {
+                        if (this && this.state === 'closed') return Promise.resolve();
+                    } catch {}
+                    try {
+                        const p = origSuspend.apply(this, args);
+                        if (p && typeof p.catch === 'function') {
+                            return p.catch((e: any) => {
+                                if (isClosedAudioContextError(e)) return;
+                                throw e;
+                            });
+                        }
+                        return p;
+                    } catch (e: any) {
+                        if (isClosedAudioContextError(e)) return Promise.resolve();
+                        throw e;
+                    }
+                };
+                (wrappedSuspend as any).__patchedClosedGuard = true;
+                proto.suspend = wrappedSuspend;
+                (proto.suspend as any).__patchedClosedGuard = true;
+            }
+
+            const origResume = proto.resume;
+            if (typeof origResume === 'function' && !origResume.__patchedClosedGuard) {
+                const wrappedResume = function (this: any, ...args: any[]) {
+                    try {
+                        if (this && this.state === 'closed') return Promise.resolve();
+                    } catch {}
+                    try {
+                        const p = origResume.apply(this, args);
+                        if (p && typeof p.catch === 'function') {
+                            return p.catch((e: any) => {
+                                if (isClosedAudioContextError(e)) return;
+                                throw e;
+                            });
+                        }
+                        return p;
+                    } catch (e: any) {
+                        if (isClosedAudioContextError(e)) return Promise.resolve();
+                        throw e;
+                    }
+                };
+                (wrappedResume as any).__patchedClosedGuard = true;
+                proto.resume = wrappedResume;
+                (proto.resume as any).__patchedClosedGuard = true;
+            }
+        } catch {
+        }
+    };
+
+    try { patchCtor((window as any).AudioContext); } catch {}
+    try { patchCtor((window as any).webkitAudioContext); } catch {}
+};
 
 //  Find out more information about the Game Config at:
 //  https://docs.phaser.io/api-documentation/typedef/types-core#gameconfig
@@ -36,8 +112,6 @@ const config: Phaser.Types.Core.GameConfig = {
         Preloader,
         BubbleTransitionScene,
         BubbleOverlayTransitionScene,
-        FreeSpinRetriggerOverlayScene,
-        TotalWinOverlayScene,
         MainGame,
     ],
     plugins: {
@@ -66,6 +140,8 @@ const StartGame = (parent: string) => {
             return false;
         }
     };
+
+    patchAudioContextSuspendResume();
 
     let game: Phaser.Game = new Game({ ...config, parent });
     (window as any).game = game;
@@ -199,6 +275,13 @@ const StartGame = (parent: string) => {
     const onUnhandledRejection = (e: any) => {
         try {
             (window as any).__lastGameRejection = e;
+        } catch {}
+        try {
+            const reason = e?.reason ?? e;
+            if (isClosedAudioContextError(reason)) {
+                try { e?.preventDefault?.(); } catch {}
+                return;
+            }
         } catch {}
         try {
             console.error('[Game] Unhandled rejection', e?.reason ?? e);

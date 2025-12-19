@@ -9,6 +9,7 @@ import { EventBus } from '../EventBus';
 import { GameAPI } from '../../backend/GameAPI';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
+import { AudioManager, MusicType } from '../../managers/AudioManager';
 import { RopeCable } from '../components/RopeCable';
 import { Background } from '../components/Background';
 import { BonusBackground } from '../components/BonusBackground';
@@ -17,10 +18,10 @@ import { AutoplayOptions } from '../components/AutoplayOptions';
 import { Header } from '../components/Header';
 import { WinTracker } from '../components/WinTracker';
 import { FreeSpinOverlay } from '../components/FreeSpinOverlay';
+import { Dialogs } from '../components/Dialogs';
 import { ScatterAnimationManager } from '../../managers/ScatterAnimationManager';
 import { BonusHeader } from '../components/BonusHeader';
 import { GaugeMeter } from '../components/GaugeMeter';
-import { Dialogs } from '../components/Dialogs';
 
 export class Game extends Phaser.Scene {
 	private networkManager!: NetworkManager;
@@ -96,8 +97,9 @@ export class Game extends Phaser.Scene {
 	private bonusHeader!: BonusHeader;
 	private gaugeMeter!: GaugeMeter;
 	private winTracker!: WinTracker;
-	private dialogs!: Dialogs;
+	private dialogs?: Dialogs;
 	private freeSpinOverlay?: FreeSpinOverlay;
+	private audioManager?: AudioManager;
 	private readonly freeSpinRetriggerMultiplierDisplayOptions: Record<string, { offsetX?: number; offsetY?: number; scale?: number }> = {
 		'2x_multiplier': { offsetX: 0, offsetY: 0, scale: 1 },
 		'3x_Multiplier_TB': { offsetX: 0, offsetY: 0, scale: 1 },
@@ -176,25 +178,16 @@ export class Game extends Phaser.Scene {
 			try { console.warn('[Game] Failed to initialize Dialogs component:', e); } catch {}
 			try { (this as any).dialogs = undefined; } catch {}
 		}
-		// Initialize free spin overlay for scatter bonus entry
-		this.freeSpinOverlay = new FreeSpinOverlay(this, this.networkManager, this.screenModeManager);
-		(this as any).freeSpinOverlay = this.freeSpinOverlay;
-		// End-of-bonus total win overlay (TotalW_TB) shown after Congrats closes
-		this.events.on('showTotalWinOverlay', () => {
-			try {
-				try {
-					if ((this as any).__shownBonusTotalWinOverlay) {
-						return;
-					}
-					(this as any).__shownBonusTotalWinOverlay = true;
-				} catch {}
-
-				// Serialize end-of-bonus overlay with retrigger overlays.
-				this.enqueueBonusOverlay(async () => {
-					await this.showTotalWinOverlayFlow();
-				});
-			} catch {}
-		});
+		try {
+			this.freeSpinOverlay = (this.dialogs as any)?.getFreeSpinOverlay?.() || undefined;
+			if (!this.freeSpinOverlay) {
+				this.freeSpinOverlay = new FreeSpinOverlay(this, this.networkManager, this.screenModeManager);
+			}
+			(this as any).freeSpinOverlay = this.freeSpinOverlay;
+		} catch {
+			this.freeSpinOverlay = new FreeSpinOverlay(this, this.networkManager, this.screenModeManager);
+			(this as any).freeSpinOverlay = this.freeSpinOverlay;
+		}
 
 		// Called when TotalWinOverlay is dismissed (triggered by BubbleOverlayTransition from TotalWinOverlay)
 		this.events.on('finalizeBonusExit', () => {
@@ -207,6 +200,29 @@ export class Game extends Phaser.Scene {
 				try { gameStateManager.isBonus = false; } catch {}
 				try { gameStateManager.isBonusFinished = false; } catch {}
 				try { gameStateManager.isShowingWinDialog = false; } catch {}
+				try { gameStateManager.isHookScatterActive = false; } catch {}
+				try { (this as any).isHookScatterEventActive = false; } catch {}
+				try { this.input.enabled = true; } catch {}
+				try { this.slotController?.setExternalControlLock(false); } catch {}
+				try {
+					if (this.scene.isActive('BubbleOverlayTransition') || this.scene.isSleeping('BubbleOverlayTransition')) {
+						this.scene.stop('BubbleOverlayTransition');
+					}
+				} catch {}
+			} catch {}
+		});
+		this.events.on('prepareBonusExit', () => {
+			try {
+				try { this.events.emit('deactivateBonusMode'); } catch {}
+				try { this.events.emit('resetSymbolsForBase'); } catch {}
+				try { gameEventManager.emit(GameEventType.WIN_STOP); } catch {}
+				try { this.events.emit('enableSymbols'); } catch {}
+				try { gameStateManager.isBonus = false; } catch {}
+				try { gameStateManager.isBonusFinished = false; } catch {}
+				try { gameStateManager.isShowingWinDialog = false; } catch {}
+				try { gameStateManager.isHookScatterActive = false; } catch {}
+				try { (this as any).isHookScatterEventActive = false; } catch {}
+				try { this.input.enabled = true; } catch {}
 				try { this.slotController?.setExternalControlLock(false); } catch {}
 			} catch {}
 		});
@@ -263,6 +279,17 @@ export class Game extends Phaser.Scene {
 		this.events.on('hook-scatter', this.handleHookScatter, this);
 		this.events.on('hook-collector', this.handleHookCollector, this);
 		this.registerBonusUiEventListeners();
+		try {
+			this.audioManager = new AudioManager(this);
+			(this as any).audioManager = this.audioManager;
+			(window as any).audioManager = this.audioManager;
+			this.audioManager.createMusicInstances();
+			try {
+				this.input.once('pointerdown', () => {
+					try { this.audioManager?.playBackgroundMusic(MusicType.MAIN); } catch {}
+				});
+			} catch {}
+		} catch {}
 
 		// Let any downstream listeners know the simple scene is ready.
 		gameEventManager.emit(GameEventType.START);
@@ -292,7 +319,6 @@ export class Game extends Phaser.Scene {
 			try { this.events.emit('showBonusBackground'); } catch {}
 			try { this.events.emit('showBonusHeader'); } catch {}
 			try { this.events.emit('enableSymbols'); } catch {}
-			try { (this as any).__shownBonusTotalWinOverlay = false; } catch {}
 			try { this.freeSpinRetriggerOverlaySeq = 0; } catch {}
 			try { this.shownBonusRetriggerStages.clear(); } catch {}
 		});
@@ -360,9 +386,46 @@ export class Game extends Phaser.Scene {
 			this.shownBonusRetriggerStages.add(stage);
 		} catch {}
 
+		// If a win dialog is currently up, wait for it to close before showing retrigger overlay.
+		try {
+			const dlg: any = this.dialogs as any;
+			const shouldWait = !!(dlg && typeof dlg.isDialogShowing === 'function' && dlg.isDialogShowing());
+			if (shouldWait) {
+				await new Promise<void>((resolve) => {
+					let done = false;
+					const finish = () => {
+						if (done) return;
+						done = true;
+						try { gameEventManager.off(GameEventType.WIN_DIALOG_CLOSED, finish as any); } catch {}
+						resolve();
+					};
+					try { gameEventManager.once(GameEventType.WIN_DIALOG_CLOSED, finish as any); } catch {}
+					try { this.time.delayedCall(4500, () => finish()); } catch { try { setTimeout(() => finish(), 4500); } catch { finish(); } }
+				});
+			}
+		} catch {}
+
+		// Ensure we don't show the retrigger overlay while reels are still animating.
+		// This prevents the "symbols still spinning behind overlay" effect.
+		try {
+			if (gameStateManager.isReelSpinning) {
+				try { (this as any)?.symbols?.requestSkipReelDrops?.(); } catch {}
+				await new Promise<void>((resolve) => {
+					let done = false;
+					const finish = () => {
+						if (done) return;
+						done = true;
+						try { gameEventManager.off(GameEventType.REELS_STOP, finish as any); } catch {}
+						resolve();
+					};
+					try { gameEventManager.once(GameEventType.REELS_STOP, finish as any); } catch {}
+					try { this.time.delayedCall(1600, () => finish()); } catch { try { setTimeout(() => finish(), 1600); } catch { finish(); } }
+				});
+			}
+		} catch {}
+
 		const overlayId = (Number(this.freeSpinRetriggerOverlaySeq) || 0) + 1;
 		this.freeSpinRetriggerOverlaySeq = overlayId;
-		try { gameStateManager.isShowingWinDialog = true; } catch {}
 		await new Promise<void>((resolve) => {
 			let finished = false;
 			const finish = () => {
@@ -372,70 +435,25 @@ export class Game extends Phaser.Scene {
 			};
 			const onClosed = (id?: any) => {
 				try { if (Number(id) !== overlayId) return; } catch {}
-				// Clear immediately to avoid a race where Symbols tries to resume autoplay while
-				// isShowingWinDialog is still true.
 				try { gameStateManager.isShowingWinDialog = false; } catch {}
 				finish();
 			};
 			try { this.events.once('freeSpinRetriggerOverlayClosed', onClosed); } catch {}
-			try { this.time.delayedCall(6000, () => finish()); } catch { try { setTimeout(() => finish(), 6000); } catch { finish(); } }
 			try {
-				if (this.scene.isActive('FreeSpinRetriggerOverlay') || this.scene.isSleeping('FreeSpinRetriggerOverlay')) {
-					try { this.scene.stop('FreeSpinRetriggerOverlay'); } catch {}
+				if (this.dialogs && typeof (this.dialogs as any).showFreeSpinRetriggerOverlay === 'function') {
+					(this.dialogs as any).showFreeSpinRetriggerOverlay({
+						overlayId,
+						spinsLeft: Number(data?.totalSpins) || 0,
+						multiplierKey: data?.multKey ?? null,
+						multiplierOptionsByKey: this.freeSpinRetriggerMultiplierDisplayOptions
+					}).then(() => finish()).catch(() => finish());
+				} else {
+					finish();
 				}
-			} catch {}
-			let launched = false;
-			try {
-				this.scene.launch('FreeSpinRetriggerOverlay', {
-					fromSceneKey: 'Game',
-					overlayId,
-					spinsLeft: Number(data?.totalSpins) || 0,
-					multiplierKey: data?.multKey ?? null,
-					multiplierOptionsByKey: this.freeSpinRetriggerMultiplierDisplayOptions
-				});
-				launched = true;
-				try { this.scene.bringToTop('FreeSpinRetriggerOverlay'); } catch {}
-			} catch {
-				try {
-					if (!launched) {
-						this.shownBonusRetriggerStages.delete(stage);
-					}
-				} catch {}
-				finish();
-			}
-		});
-		try { gameStateManager.isShowingWinDialog = false; } catch {}
-		try {
-			if (this.scene.isActive('FreeSpinRetriggerOverlay') || this.scene.isSleeping('FreeSpinRetriggerOverlay')) {
-				try { this.scene.stop('FreeSpinRetriggerOverlay'); } catch {}
-			}
-		} catch {}
-	}
-
-	private async showTotalWinOverlayFlow(): Promise<void> {
-		try { gameStateManager.isShowingWinDialog = true; } catch {}
-		await new Promise<void>((resolve) => {
-			let finished = false;
-			const finish = () => {
-				if (finished) return;
-				finished = true;
-				resolve();
-			};
-			try { this.events.once('finalizeBonusExit', () => finish()); } catch {}
-			try { this.time.delayedCall(20000, () => finish()); } catch { try { setTimeout(() => finish(), 20000); } catch { finish(); } }
-			try {
-				if (this.scene.isActive('TotalWinOverlay') || this.scene.isSleeping('TotalWinOverlay')) {
-					try { this.scene.stop('TotalWinOverlay'); } catch {}
-				}
-			} catch {}
-			try {
-				this.scene.launch('TotalWinOverlay');
-				try { this.scene.bringToTop('TotalWinOverlay'); } catch {}
 			} catch {
 				finish();
 			}
 		});
-		try { gameStateManager.isShowingWinDialog = false; } catch {}
 	}
 
 	public updateGaugeMeterModifiers(mods: { offsetX?: number; offsetY?: number; spacingX?: number; barThickness?: number; indicatorOffsetX?: number; indicatorOffsetY?: number; indicatorScale?: number; indicatorIntroDuration?: number; stage1OffsetX?: number; stage1OffsetY?: number; stage1Scale?: number; stage1Gap?: number; stage1ShadowOffsetX?: number; stage1ShadowOffsetY?: number; stage1ShadowAlpha?: number; stage1ShadowScale?: number; stage1GlowTint?: number; stage1GlowAlpha?: number; stage1GlowScale?: number; stage1GlowDuration?: number; stage1UnlockDuration?: number; stage1UnlockYOffset?: number; stage1FloatAmplitude?: number; stage1FloatDuration?: number; scale?: number; depth?: number }): void {

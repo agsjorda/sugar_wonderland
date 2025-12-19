@@ -345,26 +345,53 @@ export class AssetConfig {
 
 	getDialogAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix();
+		const forcedPortraitHighPrefix = `assets/portrait/high`;
+		const forcedPortraitLowPrefix = `assets/portrait/low`;
 		
 		console.log(`[AssetConfig] Loading dialog assets with prefix: ${prefix}`);
 		
 		return {
 			images: {
-				'congrats-bg': `${prefix}/dialogs/congrats-bg.png`,
-				'congratulations-you-won': `${prefix}/dialogs/congratulations-you-won.png`
+				'congrats-bg': `${forcedPortraitLowPrefix}/dialogs/congrats-bg.png`,
+				'congratulations-you-won': `${forcedPortraitLowPrefix}/dialogs/congratulations-you-won.png`
 			},
-			// Dialog Spine characters and fire animations were removed for this game
-			spine: {}
+			spine: {
+				'BigW_TB': {
+					atlas: `${forcedPortraitHighPrefix}/dialogs/BigW_TB.atlas`,
+					json: `${forcedPortraitHighPrefix}/dialogs/BigW_TB.json`
+				},
+				'EpicW_TB': {
+					atlas: `${forcedPortraitHighPrefix}/dialogs/EpicW_TB.atlas`,
+					json: `${forcedPortraitHighPrefix}/dialogs/EpicW_TB.json`
+				},
+				'MegaW_TB': {
+					atlas: `${forcedPortraitHighPrefix}/dialogs/MegaW_TB.atlas`,
+					json: `${forcedPortraitHighPrefix}/dialogs/MegaW_TB.json`
+				},
+				'SuperW_TB': {
+					atlas: `${forcedPortraitHighPrefix}/dialogs/SuperW_TB.atlas`,
+					json: `${forcedPortraitHighPrefix}/dialogs/SuperW_TB.json`
+				},
+				'TotalW_TB': {
+					atlas: `${forcedPortraitHighPrefix}/dialogs/TotalW_TB.atlas`,
+					json: `${forcedPortraitHighPrefix}/dialogs/TotalW_TB.json`
+				},
+				'FreeSpin_TB': {
+					atlas: `${forcedPortraitHighPrefix}/dialogs/FreeSpin_TB.atlas`,
+					json: `${forcedPortraitHighPrefix}/dialogs/FreeSpin_TB.json`
+				},
+				'FreeSpinRetri_TB': {
+					atlas: `${forcedPortraitHighPrefix}/dialogs/FreeSpinRetri_TB.atlas`,
+					json: `${forcedPortraitHighPrefix}/dialogs/FreeSpinRetri_TB.json`
+				}
+			}
 		};
 	}
 
-	/** Free spin card assets (Spine) used by ScatterWinOverlay cards */
 	getFreeSpinCardAssets(): AssetGroup {
 		console.log('[AssetConfig] Loading free spin card (spine) assets');
 		return {
 			images: {
-				// Temporary placeholder mappings while dedicated free-spin assets are removed.
-				// All three keys point to the root coin.png so the feature keeps working without 404s.
 				'free_spin_card': `assets/coin.png`,
 				'free_spin_card_front': `assets/coin.png`,
 				'free_spin_text': `assets/coin.png`
@@ -372,32 +399,22 @@ export class AssetConfig {
 		};
 	}
 
-	/**
-	 * Scatter Anticipation assets – only available in portrait/high for now.
-	 * We intentionally do not use getAssetPrefix() to avoid missing assets on low quality.
-	 */
 	getScatterAnticipationAssets(): AssetGroup {
-		// Force portrait/high paths to ensure presence (these packs may be absent in low quality builds)
 		const forcedPortraitHighPrefix = `assets/portrait/high`;
 		console.log('[AssetConfig] Loading Scatter Anticipation assets (forced portrait/high)');
-		// Reel background visuals are no longer used in this game; no images are required here.
 		return {
 			images: {},
-			// Sparkler_Reel spine assets were removed for this game
 			spine: {}
 		};
 	}
 
 	getNumberAssets(): AssetGroup {
-		// Number sprites now live only under portrait/high; always load from there
 		const prefix = `assets/portrait/high`;
 		
 		console.log(`[AssetConfig] Loading number assets with prefix: ${prefix}`);
 		
-		// Generate number assets for digits 0-9, plus comma and dot
 		const numberImages: { [key: string]: string } = {};
 		
-		// Add digit images (0-9)
 		for (let i = 0; i <= 9; i++) {
 			const key = `number_${i}`;
 			const path = `${prefix}/numbers/number_${i}.webp`;
@@ -405,7 +422,6 @@ export class AssetConfig {
 			console.log(`[AssetConfig] Number ${key}: ${path}`);
 		}
 		
-		// Add comma and dot
 		numberImages['number_comma'] = `${prefix}/numbers/number_comma.webp`;
 		numberImages['number_dot'] = `${prefix}/numbers/number_dot.webp`;
 		
@@ -434,7 +450,6 @@ export class AssetConfig {
 
 	getBuyFeatureAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix();
-		// Force high-quality portrait paths for logo assets to avoid missing files on low quality
 		const portraitHighPrefix = `assets/portrait/high`;
 		
 		console.log(`[AssetConfig] Loading buy feature assets with prefix: ${prefix} (logos forced to ${portraitHighPrefix})`);
@@ -453,34 +468,17 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				// Scatter win overlays currently reuse the low-quality portrait assets for all modes
 				'PickACard': `assets/portrait/low/scatter_win/PickACard.png`,
 				'congrats': `assets/portrait/low/scatter_win/congrats.png`,
-				// PNG fallback for overlay fire; original fire_animations sprites were removed
 				'fireanimation01_HTBH_img': `assets/portrait/low/scatter_win/Winfontfire.png`
 			}
 		};
 	}
 
-	/** Free spin overlay Spine assets (FreeSpin_TB in overlays folder). */
 	getFreeSpinOverlayAssets(): AssetGroup {
-		const forcedPortraitHighPrefix = `assets/portrait/high`;
 		console.log('[AssetConfig] Loading free spin overlay assets');
 		return {
-			spine: {
-				'FreeSpin_TB': {
-					atlas: `${forcedPortraitHighPrefix}/overlays/FreeSpin_TB.atlas`,
-					json: `${forcedPortraitHighPrefix}/overlays/FreeSpin_TB.json`
-				},
-				'FreeSpinRetri_TB': {
-					atlas: `${forcedPortraitHighPrefix}/overlays/FreeSpinRetri_TB.atlas`,
-					json: `${forcedPortraitHighPrefix}/overlays/FreeSpinRetri_TB.json`
-				},
-				'TotalW_TB': {
-					atlas: `${forcedPortraitHighPrefix}/overlays/TotalW_TB.atlas`,
-					json: `${forcedPortraitHighPrefix}/overlays/TotalW_TB.json`
-				}
-			}
+			spine: {}
 		};
 	}
 

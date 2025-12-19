@@ -626,7 +626,11 @@ export class AudioManager {
 			const keys = Object.values(this.musicKeyByType);
 			for (const key of keys) {
 				try {
-					// Stop ALL instances with this key, not just the first
+					// Stop via SoundManager if possible
+					(this.scene.sound as any).stopByKey?.(key);
+				} catch {}
+				try {
+					// Fallback: scan active sounds and stop matching keys
 					const sounds: Phaser.Sound.BaseSound[] = (this.scene.sound as any).sounds || [];
 					for (const s of sounds) {
 						if ((s as any).key === key && s.isPlaying) {
@@ -641,6 +645,35 @@ export class AudioManager {
 		} catch (e) {
 			console.warn('[AudioManager] stopAllMusicByKeys failed:', e);
 		}
+	}
+
+	private stopAllNonMusic(): void {
+		try {
+			this.sfxInstances.forEach((sfx) => {
+				try {
+					if (sfx && sfx.isPlaying) sfx.stop();
+				} catch {}
+			});
+		} catch {}
+
+		try {
+			if (this.currentWinSfx && this.currentWinSfx.isPlaying) this.currentWinSfx.stop();
+		} catch {}
+		this.currentWinSfx = null;
+
+		try {
+			const bgmKeys = new Set(Object.values(this.musicKeyByType));
+			const sounds: Phaser.Sound.BaseSound[] = (this.scene.sound as any).sounds || [];
+			for (const s of sounds) {
+				const key = (s as any).key;
+				if (bgmKeys.has(key)) continue;
+				if (key === 'ambience_hh') continue;
+				if (this.ambientInstance && s === this.ambientInstance) continue;
+				try {
+					if (s && s.isPlaying) s.stop();
+				} catch {}
+			}
+		} catch {}
 	}
 
 	/** Returns true if any background music instance is currently playing. */
