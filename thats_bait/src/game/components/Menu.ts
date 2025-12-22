@@ -1460,7 +1460,6 @@ export class Menu {
                 'All symbols pay left to right on \nselected paylines.',
                 'Free Spins wins are added to \npayline wins.',
                 'All wins are multiplied by the bet \nper line.',
-                'All values shown are actual wins \nin coins.',
                 'Only the highest win is paid per \nline.',
                 'Wins on multiple paylines are \nadded together.'
             ].join('\n');

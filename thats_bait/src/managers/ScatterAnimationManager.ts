@@ -23,7 +23,6 @@ export class ScatterAnimationManager {
   private spinnerContainer: Phaser.GameObjects.Container | null = null;
   private spinnerComponent: any = null; // Reference to the Spinner component
   private dialogsComponent: any = null; // Reference to the Dialogs component
-  private overlayComponent: any = null; // No longer used (WinCardOverlay removed)
   private scatterWinOverlay: any = null; // Reference to the ScatterWinOverlay component
   private isAnimating: boolean = false;
   public delayedScatterData: any = null;
@@ -31,10 +30,6 @@ export class ScatterAnimationManager {
   private useSpinner: boolean = false; // TEMP: disable spinner, use overlay
 
   private bonusEntryFreeSpinsOverride: number | null = null;
-
-  // Event listener references for cleanup
-  private wheelSpinStartListener: ((data?: any) => void) | null = null;
-  private wheelSpinDoneListener: ((data?: any) => void) | null = null;
 
   private config: ScatterAnimationConfig = {
     scatterRevealDelay: 500,
@@ -77,33 +72,6 @@ export class ScatterAnimationManager {
 
   public setConfig(config: Partial<ScatterAnimationConfig>): void {
     this.config = { ...this.config, ...config };
-  }
-
-  /**
-   * Set up event listeners for wheel events
-   */
-  private setupWheelEventListeners(): void {
-    // Listen for wheel spin start
-    this.wheelSpinStartListener = (data: any) => {
-      if (data) {
-        console.log(`[ScatterAnimationManager] Wheel spin started for scatter index ${data.scatterIndex} with multiplier ${data.multiplier}`);
-        // Update game state to reflect wheel spinning
-        gameStateManager.isWheelSpinning = true;
-      }
-    };
-    gameEventManager.on(GameEventType.WHEEL_SPIN_START, this.wheelSpinStartListener);
-
-    // Listen for wheel spin completion
-    this.wheelSpinDoneListener = (data: any) => {
-      if (data) {
-        console.log(`[ScatterAnimationManager] Wheel spin completed for scatter index ${data.scatterIndex} with multiplier ${data.multiplier}`);
-        // Update game state to reflect wheel stopped
-        gameStateManager.isWheelSpinning = false;
-        // Update the final scatter index from the wheel result
-        gameStateManager.scatterIndex = data.scatterIndex;
-      }
-    };
-    gameEventManager.on(GameEventType.WHEEL_SPIN_DONE, this.wheelSpinDoneListener);
   }
 
   public async playScatterAnimation(): Promise<void> {
@@ -859,21 +827,12 @@ export class ScatterAnimationManager {
   }
 
   public destroy(): void {
-    // Clean up event listeners
-    if (this.wheelSpinStartListener) {
-      gameEventManager.off(GameEventType.WHEEL_SPIN_START, this.wheelSpinStartListener);
-    }
-    if (this.wheelSpinDoneListener) {
-      gameEventManager.off(GameEventType.WHEEL_SPIN_DONE, this.wheelSpinDoneListener);
-    }
     
     this.scene = null;
     this.symbolsContainer = null;
     this.spinnerContainer = null;
     this.spinnerComponent = null;
     this.isAnimating = false;
-    this.wheelSpinStartListener = null;
-    this.wheelSpinDoneListener = null;
     console.log('[ScatterAnimationManager] Destroyed');
   }
 } 

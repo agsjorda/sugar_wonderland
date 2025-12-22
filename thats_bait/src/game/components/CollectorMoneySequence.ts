@@ -107,6 +107,39 @@ function getMoneyCells(area: any[][], spinData: any): Array<{ col: number; row: 
 	return out;
 }
 
+function addDeltaToSpinTotals(spinData: any, delta: number): number {
+	let next = 0;
+	try {
+		if (!spinData || !(delta > 0)) return 0;
+		const slot: any = spinData?.slot;
+		if (!slot) return 0;
+		const fs: any = slot?.freespin || slot?.freeSpin;
+
+		let base = 0;
+		try {
+			const v = Number(fs?.totalWin);
+			if (isFinite(v) && v >= 0) base = Math.max(base, v);
+		} catch {}
+		try {
+			const v = Number(slot?.totalWin);
+			if (isFinite(v) && v >= 0) base = Math.max(base, v);
+		} catch {}
+
+		next = base + delta;
+		try {
+			const items: any[] | undefined = fs?.items;
+			const cap = Array.isArray(items) && items.length > 0 ? Number(items[0]?.runningWin) : NaN;
+			if (isFinite(cap) && cap > 0 && next > cap) {
+				next = cap;
+			}
+		} catch {}
+		try { slot.totalWin = next; } catch {}
+		try { if (slot.freespin) slot.freespin.totalWin = next; } catch {}
+		try { if (slot.freeSpin) slot.freeSpin.totalWin = next; } catch {}
+	} catch {}
+	return next;
+}
+
 function waitForSceneEvent(scene: any, eventName: string, timeoutMs: number): Promise<void> {
 	return new Promise((resolve) => {
 		let done = false;
@@ -297,12 +330,18 @@ function tweenTo(scene: any, targets: any, props: any): Promise<void> {
  }
 
 export async function runCollectorMoneySequence(host: any, spinData: any): Promise<void> {
+	try { (gameStateManager as any).acquireCriticalSequenceLock?.(); } catch {}
 	try {
 		const scene: any = host?.scene;
 		const area: any[][] = spinData?.slot?.area;
 		if (!scene || !Array.isArray(area)) {
 			return;
 		}
+
+		let canAffectTotals = true;
+		try {
+			canAffectTotals = !((spinData as any)?.__collectorMoneyApplied);
+		} catch { canAffectTotals = true; }
 
 		try {
 			const sp: any = scene?.scene;
@@ -356,7 +395,9 @@ export async function runCollectorMoneySequence(host: any, spinData: any): Promi
 			turboParallelPerCollector = !!(gameStateManager.isBonus && gameStateManager.isTurbo);
 		} catch {}
 
-		for (const collectorCell of collectors) {
+		for (let collectorIndex = 0; collectorIndex < collectors.length; collectorIndex++) {
+			const collectorCell = collectors[collectorIndex];
+			const affectTotalsThisCollector = canAffectTotals && collectorIndex === 0;
 			let totalValue = 0;
 			let collectorPos: WorldPoint | null = null;
 			let collectorObj: any = null;
@@ -619,23 +660,46 @@ export async function runCollectorMoneySequence(host: any, spinData: any): Promi
 					}
 					if (mult > 1) {
 						try {
+							const before = totalValue;
 							totalValue = totalValue * mult;
 							try { totalDisplay.displayValue(totalValue); } catch {}
 							await playCollectorValueHighlight(scene, totalCont);
 						} catch {}
 					}
 				} catch {}
-				let waitPromise: Promise<void> | null = null;
+			const pendingAwardDelta = totalValue;
+			let didApplyAward = false;
+			const applyAwardOnce = () => {
+				if (didApplyAward) return;
+				didApplyAward = true;
 				try {
-					waitPromise = waitForSceneEvent(scene, 'hook-collector-complete', 6000);
+					if (gameStateManager.isBonus && affectTotalsThisCollector) {
+						const nextTotal = addDeltaToSpinTotals(spinData, pendingAwardDelta);
+						try { scene?.events?.emit?.('bonus-win-delta', pendingAwardDelta); } catch {}
+						try { scene?.events?.emit?.('bonus-total-win-updated', nextTotal); } catch {}
+						try { (spinData as any).__collectorMoneyApplied = true; } catch {}
+					}
 				} catch {}
-				try {
-					scene?.events?.emit?.('hook-collector', cPos.x, cPos.y, collectorCell.col, collectorCell.row);
-				} catch {}
-				if (waitPromise) {
-					await waitPromise;
-				}
+			};
+
+			try {
+				scene?.events?.once?.('hook-collector-disintegrate-start', applyAwardOnce);
+				scene?.events?.once?.('hook-collector-complete', applyAwardOnce);
+			} catch {
+				applyAwardOnce();
+			}
+
+			let waitPromise: Promise<void> | null = null;
+			try {
+				waitPromise = waitForSceneEvent(scene, 'hook-collector-complete', 6000);
 			} catch {}
+			try {
+				scene?.events?.emit?.('hook-collector', cPos.x, cPos.y, collectorCell.col, collectorCell.row);
+			} catch {}
+			if (waitPromise) {
+				await waitPromise;
+			}
+		} catch {}
 
 			try {
 				if (collectorObj) {
@@ -650,6 +714,9 @@ export async function runCollectorMoneySequence(host: any, spinData: any): Promi
 				}
 			} catch {}
 			try { totalDisplay.destroy(); } catch {}
+			// __collectorMoneyApplied is set when the award is actually applied.
 		}
-	} catch {}
+	} catch {} finally {
+		try { (gameStateManager as any).releaseCriticalSequenceLock?.(); } catch {}
+	}
 }

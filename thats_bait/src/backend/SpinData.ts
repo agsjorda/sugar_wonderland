@@ -64,6 +64,8 @@ export interface FreespinItem {
   
   subTotalWin: number;
 
+  runningWin?: number;
+
   collectorCount?: number;
   
   area: number[][];

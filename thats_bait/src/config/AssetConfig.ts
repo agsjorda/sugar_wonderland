@@ -87,7 +87,6 @@ export class AssetConfig {
 				'3x_Multiplier_TB': `${forcedPortraitHighPrefix}/gauge-meter/3x_Multiplier_TB.webp`,
 				'10x_Multiplier_TB': `${forcedPortraitHighPrefix}/gauge-meter/10x_Multiplier_TB.webp`
 			},
-			// Bonus dragon & fireworks spine assets were removed for this game
 			spine: {
 				'ReelBottom_Bonus_TB': {
 					atlas: `${forcedPortraitHighPrefix}/bonus_background/ReelBottom_Bonus_TB.atlas`,
@@ -329,7 +328,6 @@ export class AssetConfig {
             'scatterGame': `${prefix}/help_screen/scatterGame.png`,
             'scatterWin': `${prefix}/help_screen/scatterWin.png`,
             'ScatterLabel': `${prefix}/help_screen/ScatterSymbol.png`,
-            'wheelSpin_helper': `${prefix}/help_screen/wheelSpin_helper.png`,
             'freeSpin_round': `${prefix}/help_screen/freeSpin_round.png`,
             'tumbleWin': `${prefix}/help_screen/tumbleWin.png`,
             'multiplierGame': `${prefix}/help_screen/multiplierGame.png`
@@ -388,17 +386,6 @@ export class AssetConfig {
 		};
 	}
 
-	getFreeSpinCardAssets(): AssetGroup {
-		console.log('[AssetConfig] Loading free spin card (spine) assets');
-		return {
-			images: {
-				'free_spin_card': `assets/coin.png`,
-				'free_spin_card_front': `assets/coin.png`,
-				'free_spin_text': `assets/coin.png`
-			}
-		};
-	}
-
 	getScatterAnticipationAssets(): AssetGroup {
 		const forcedPortraitHighPrefix = `assets/portrait/high`;
 		console.log('[AssetConfig] Loading Scatter Anticipation assets (forced portrait/high)');
@@ -436,18 +423,6 @@ export class AssetConfig {
 		};
 	}
 
-	getCoinAssets(): AssetGroup {
-		const prefix = this.getAssetPrefix();
-		
-		console.log(`[AssetConfig] Loading coin assets with prefix: ${prefix}`);
-		
-		return {
-			images: {
-				'coin': `${prefix}/coin/coin.png`
-			}
-		};
-	}
-
 	getBuyFeatureAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix();
 		const portraitHighPrefix = `assets/portrait/high`;
@@ -456,21 +431,8 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				'scatter_logo_background': `${portraitHighPrefix}/buy_feature/scatter_logo_background.png`,
-				'buy_feature_bg': `${prefix}/buy_feature/buy_feature_bg.png`
-			}
-		};
-	}
-
-	getScatterWinOverlayAssets(): AssetGroup {
-		const prefix = this.getAssetPrefix();
-		console.log(`[AssetConfig] Loading scatter win overlay assets`);
-		
-		return {
-			images: {
-				'PickACard': `assets/portrait/low/scatter_win/PickACard.png`,
-				'congrats': `assets/portrait/low/scatter_win/congrats.png`,
-				'fireanimation01_HTBH_img': `assets/portrait/low/scatter_win/Winfontfire.png`
+				'scatter_logo_background': `${portraitHighPrefix}/buy_feature/scatter_logo_background.webp`,
+				'buy_feature_bg': `${prefix}/buy_feature/buy_feature_bg.webp`
 			}
 		};
 	}
@@ -490,49 +452,28 @@ export class AssetConfig {
 				// Menu/UI clicks
 				'click_sw': 'assets/sounds/click_sw.ogg',
 				'button_fx': 'assets/sounds/SFX/button_fx.ogg',
-				'mainbg_hh': 'assets/sounds/BG/mainbg_hh.ogg',
-				'bonusbg_hh': 'assets/sounds/BG/bonusbg_hh.ogg',
-				'freespinbg_ka': 'assets/sounds/Wins/freespin_ka.ogg',
-				// Pick-a-card overlay background music
-				'bgpickacard_hh': 'assets/sounds/BG/bgpickacard_hh.ogg',
-				'rumble_hh': 'assets/sounds/SFX/rumble_hh.ogg',
-				'roar_hh': 'assets/sounds/SFX/roar_hh.ogg',
-				'ambience_hh': 'assets/sounds/SFX/ambience_hh.ogg',
-				'spin_hh': 'assets/sounds/SFX/spin_hh.ogg',
-				'reeldrop_hh': 'assets/sounds/SFX/reeldrop_hh.ogg',
-				'turbodrop_hh': 'assets/sounds/SFX/turbodrop_hh.ogg',
-				'wheelspin_ka': 'assets/sounds/SFX/wheelspin_ka.ogg',
-				'coin_drop_ka': 'assets/sounds/SFX/coin_drop_ka.ogg',
-				// Fire SFX
-				'fire_hh': 'assets/sounds/SFX/fire_hh.ogg',
-				'blaze_hh': 'assets/sounds/SFX/blaze_hh.ogg',
-				'fireworks_hh': 'assets/sounds/SFX/fireworks_hh.ogg',
-				'cardflip_hh': 'assets/sounds/SFX/cardflip_hh.ogg',
+				'mainbg_TB': 'assets/sounds/BG/mainbg_TB.ogg',
+				'bonusbg_TB': 'assets/sounds/BG/bonusbg_TB.ogg',
+				'ambience_TB': 'assets/sounds/SFX/ambience_TB.ogg',
+				'spin_button_TB': 'assets/sounds/SFX/spin_button_TB.ogg',
+				'reel_drop_TB': 'assets/sounds/SFX/reel_drop_TB.ogg',
+				'turbo_drop_TB': 'assets/sounds/SFX/turbo_drop_TB.ogg',
+
 				// Hit win SFX
-				'hitwin_hh': 'assets/sounds/SFX/hitwin_hh.ogg',
+				'hit_win_TB': 'assets/sounds/SFX/hit_win_TB.ogg',
 				// Wild multi SFX
-				'scatter_hh': 'assets/sounds/SFX/scatter_hh.ogg',
+				'scatter_TB': 'assets/sounds/SFX/scatter_TB.ogg',
 				'anticipation_hh': 'assets/sounds/SFX/anticipation_hh.ogg',
 				// Winline SFX
 				'winline_1_ka': 'assets/sounds/SFX/winline_1_ka.ogg',
 				'winline_2_ka': 'assets/sounds/SFX/winline_2_ka.ogg',
-				// Card deal SFX for ScatterWinOverlay card slide
-				'carddeal_hh': 'assets/sounds/SFX/carddeal_hh.ogg',
-				// Card pick SFX when user selects a card in ScatterWinOverlay
-				'cardpick_hh': 'assets/sounds/SFX/cardpick_hh.ogg',
 				// Win dialog SFX
-				'bigw_hh': 'assets/sounds/Wins/bigw_hh.ogg',
-				'megaw_ka': 'assets/sounds/Wins/megaw_ka.ogg',
-				'superw_ka': 'assets/sounds/Wins/superw_ka.ogg',
-				'epicw_ka': 'assets/sounds/Wins/epicw_ka.ogg',
-				'freespin_ka': 'assets/sounds/Wins/freespin_ka.ogg',
-				'congrats_ka': 'assets/sounds/Wins/congrats_ka.ogg',
+				'bigw_TB': 'assets/sounds/Wins/bigw_TB.ogg',
+				'megaw_TB': 'assets/sounds/Wins/megaw_TB.ogg',
+				'superw_TB': 'assets/sounds/Wins/superw_TB.ogg',
+				'epicw_TB': 'assets/sounds/Wins/epicw_TB.ogg',
+				'congrats_TB': 'assets/sounds/Wins/congrats_TB.ogg',
 				
-				// Win dialog SFX
-				'bigwskip_ka': 'assets/sounds/Wins/bigwskip_ka.ogg',
-				'megawskip_ka': 'assets/sounds/Wins/megawskip_ka.ogg',
-				'superwskip_ka': 'assets/sounds/Wins/superwskip_ka.ogg',
-				'epicwskip_ka': 'assets/sounds/Wins/epicwskip_ka.ogg'
 			}
 		};
 	}
@@ -572,9 +513,7 @@ export class AssetConfig {
 			fonts: this.getFontAssets(),
 			dialogs: this.getDialogAssets(),
 			numbers: this.getNumberAssets(),
-			coin: this.getCoinAssets(),
 			buyFeature: this.getBuyFeatureAssets(),
-			scatterWin: this.getScatterWinOverlayAssets(),
 			freeSpinOverlay: this.getFreeSpinOverlayAssets(),
 			audio: this.getAudioAssets(),
 		};

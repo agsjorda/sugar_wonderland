@@ -72,11 +72,22 @@ export function getSymbol5VariantForCell(
     }
 
     const area = spinData.slot.area;
-    if (!Array.isArray(area[column]) || area[column][row] !== 5) {
+    const id = area?.[column]?.[row];
+    if (!Array.isArray(area[column]) || (id !== 5 && id !== 12 && id !== 13 && id !== 14)) {
       return null;
     }
 
-    const rawMoney = spinData.slot.money;
+    let rawMoney: any = spinData.slot.money;
+    if (!Array.isArray(rawMoney)) {
+      try {
+        const fs: any = (spinData as any)?.slot?.freespin || (spinData as any)?.slot?.freeSpin;
+        const items: any[] | undefined = fs?.items;
+        const it0: any = Array.isArray(items) && items.length > 0 ? items[0] : null;
+        rawMoney = it0?.money;
+      } catch {
+        rawMoney = null;
+      }
+    }
     if (!Array.isArray(rawMoney)) {
       return null;
     }
@@ -140,7 +151,17 @@ export function getMoneyValueForCell(
 			return null;
 		}
 
-		const rawMoney = spinData.slot.money;
+		let rawMoney: any = spinData.slot.money;
+		if (!Array.isArray(rawMoney)) {
+			try {
+				const fs: any = (spinData as any)?.slot?.freespin || (spinData as any)?.slot?.freeSpin;
+				const items: any[] | undefined = fs?.items;
+				const it0: any = Array.isArray(items) && items.length > 0 ? items[0] : null;
+				rawMoney = it0?.money;
+			} catch {
+				rawMoney = null;
+			}
+		}
 		if (!Array.isArray(rawMoney)) {
 			return null;
 		}

@@ -529,7 +529,6 @@ export class StudioLoadingScreen {
 }
 
 export function queueGameAssetLoading(scene: Scene, assetLoader: AssetLoader): void {
-    assetLoader.loadCoinAssets(scene);
     assetLoader.loadBuyFeatureAssets(scene);
     assetLoader.loadBackgroundAssets(scene);
     assetLoader.loadBonusBackgroundAssets(scene);
@@ -547,6 +546,5 @@ export function queueGameAssetLoading(scene: Scene, assetLoader: AssetLoader): v
     assetLoader.loadDialogAssets(scene);
     try { (assetLoader as any).loadTransitionAssets?.(scene); } catch {}
     assetLoader.loadAudioAssets(scene);
-    assetLoader.loadSpinCardAssets(scene);
     console.log('[StudioLoadingScreen] Queued game asset loading (optimized)');
 }

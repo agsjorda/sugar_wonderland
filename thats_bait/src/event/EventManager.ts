@@ -72,10 +72,6 @@ export interface BonusEventData {
   bonusType: string;
 }
 
-export interface WheelSpinEventData {
-  scatterIndex: number;
-  multiplier: number;
-}
 
 export interface BackendStatusEventData {
   status: 'READY' | 'BUSY' | 'PROCESSING' | 'ERROR';
@@ -95,7 +91,6 @@ export type GameEventData =
   | BalanceUpdateEventData
   | BonusEventData
   | AutoStartEventData
-  | WheelSpinEventData
   | BackendStatusEventData
   | undefined;
 

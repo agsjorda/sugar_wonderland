@@ -300,8 +300,17 @@ export class Game extends Phaser.Scene {
 			(window as any).audioManager = this.audioManager;
 			this.audioManager.createMusicInstances();
 			try {
-				this.input.once('pointerdown', () => {
-					try { this.audioManager?.playBackgroundMusic(MusicType.MAIN); } catch {}
+				this.audioManager.playBackgroundMusic(MusicType.MAIN);
+			} catch {}
+			try {
+				this.time.delayedCall(250, () => {
+					try {
+						if (!this.audioManager) return;
+						if (this.audioManager.isAnyMusicPlaying()) return;
+						this.input.once('pointerdown', () => {
+							try { this.audioManager?.playBackgroundMusic(MusicType.MAIN); } catch {}
+						});
+					} catch {}
 				});
 			} catch {}
 		} catch {}
@@ -342,9 +351,22 @@ export class Game extends Phaser.Scene {
 			try { this.events.emit('hideBonusBackground'); } catch {}
 			try { this.events.emit('hideBonusHeader'); } catch {}
 		});
+
+		// Bonus activation is driven by a global event in some flows (e.g. scatter transitions).
+		// Bridge it to the scene-local bonus-mode UI pipeline so BonusHeader becomes visible.
+		try {
+			gameEventManager.on(GameEventType.IS_BONUS, () => {
+				try {
+					if (!gameStateManager.isBonus) {
+						gameStateManager.isBonus = true;
+					}
+				} catch {}
+				try { this.events.emit('activateBonusMode'); } catch {}
+			});
+		} catch {}
 	}
 
-	private enqueueBonusOverlay(fn: () => Promise<void>): void {
+	public enqueueBonusOverlay(fn: () => Promise<void>): void {
 		try {
 			this.bonusOverlayQueue.push(fn);
 		} catch {
@@ -353,6 +375,28 @@ export class Game extends Phaser.Scene {
 		if (this.bonusOverlayQueueRunning) return;
 		this.bonusOverlayQueueRunning = true;
 		void this.runBonusOverlayQueue();
+	}
+
+	public waitForBonusOverlayQueueIdle(timeoutMs: number = 15000): Promise<void> {
+		return new Promise<void>((resolve) => {
+			try {
+				if (!this.bonusOverlayQueueRunning && this.bonusOverlayQueue.length <= 0) {
+					resolve();
+					return;
+				}
+			} catch {}
+
+			let done = false;
+			const finish = () => {
+				if (done) return;
+				done = true;
+				try { this.events.off('bonusOverlayQueueIdle', finish as any); } catch {}
+				resolve();
+			};
+
+			try { this.events.once('bonusOverlayQueueIdle', finish as any); } catch {}
+			try { this.time.delayedCall(Math.max(0, Number(timeoutMs) || 0), () => finish()); } catch { try { setTimeout(() => finish(), Math.max(0, Number(timeoutMs) || 0)); } catch { finish(); } }
+		});
 	}
 
 	private runWithTimeout(p: Promise<void>, timeoutMs: number): Promise<void> {
@@ -389,6 +433,7 @@ export class Game extends Phaser.Scene {
 			}
 		} finally {
 			this.bonusOverlayQueueRunning = false;
+			try { this.events.emit('bonusOverlayQueueIdle'); } catch {}
 		}
 	}
 
@@ -424,7 +469,7 @@ export class Game extends Phaser.Scene {
 		// This prevents the "symbols still spinning behind overlay" effect.
 		try {
 			if (gameStateManager.isReelSpinning) {
-				try { (this as any)?.symbols?.requestSkipReelDrops?.(); } catch {}
+				try { if (!(gameStateManager as any).isCriticalSequenceLocked) (this as any)?.symbols?.requestSkipReelDrops?.(); } catch {}
 				await new Promise<void>((resolve) => {
 					let done = false;
 					const finish = () => {
@@ -572,17 +617,20 @@ export class Game extends Phaser.Scene {
 
 	private handleHookScatter(worldX: number, worldY: number, col?: number, row?: number): void {
 		if (!this.rope || !this.hookImage) {
+			try { this.events.emit('hook-scatter-complete'); } catch {}
 			return;
 		}
 		if (this.isHookScatterEventActive) {
 			return;
 		}
 		if (typeof col !== 'number' || typeof row !== 'number') {
+			try { this.events.emit('hook-scatter-complete'); } catch {}
 			return;
 		}
 		this.hookScatterCol = col;
 		this.hookScatterRow = row;
 	
+		try { (gameStateManager as any).acquireCriticalSequenceLock?.(); } catch {}
 		this.isHookScatterEventActive = true;
 		gameStateManager.isHookScatterActive = true;
 		this.wasInputEnabledBeforeHookScatter = this.input.enabled;
@@ -632,6 +680,7 @@ export class Game extends Phaser.Scene {
 		this.hookScatterCol = col;
 		this.hookScatterRow = row;
 
+		try { (gameStateManager as any).acquireCriticalSequenceLock?.(); } catch {}
 		this.isHookScatterEventActive = true;
 		gameStateManager.isHookScatterActive = true;
 		this.wasInputEnabledBeforeHookScatter = this.input.enabled;
@@ -1091,6 +1140,10 @@ export class Game extends Phaser.Scene {
 				return;
 			}
 
+			// Signal the start of the collector disintegration so bonus win increments can be
+			// synchronized exactly to this visual moment.
+			try { this.events.emit('hook-collector-disintegrate-start'); } catch {}
+
 			let finished = false;
 			let incremented = false;
 			const complete = () => {
@@ -1488,6 +1541,8 @@ export class Game extends Phaser.Scene {
 		try {
 			this.slotController?.setExternalControlLock(false);
 		} catch {}
+		try { (gameStateManager as any).releaseCriticalSequenceLock?.(); } catch {}
+		try { this.events.emit('hook-scatter-complete'); } catch {}
 	}
 
 	private startHookReturnSequence(pointerX: number, pointerY: number): void {

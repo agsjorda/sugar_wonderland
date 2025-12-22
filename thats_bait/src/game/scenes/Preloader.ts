@@ -357,113 +357,120 @@ export class Preloader extends Scene
 
 		// Create fullscreen toggle now that assets are loaded (using shared manager)
 		const assetScale = this.networkManager.getAssetScale();
-        this.fullscreenBtn = FullScreenManager.addToggle(this, {
-            margin: 16 * assetScale,
-            iconScale: 1.5 * assetScale,
-            depth: 10000,
-            maximizeKey: 'maximize',
-            minimizeKey: 'minimize'
-        });
+		this.fullscreenBtn = FullScreenManager.addToggle(this, {
+			margin: 16 * assetScale,
+			iconScale: 1.5 * assetScale,
+			depth: 10000,
+			maximizeKey: 'maximize',
+			minimizeKey: 'minimize'
+		});
 
-        // Enable the spin button for user to continue
-        if (this.buttonSpin) {
-            this.buttonSpin.clearTint();
-            this.buttonSpin.setAlpha(1);
-            this.buttonSpin.setInteractive({ useHandCursor: true });
-        }
-        if (this.buttonBg) {
-            this.buttonBg.clearTint();
-            this.buttonBg.setAlpha(1);
-        }
+		// Enable the spin button for user to continue
+		if (this.buttonSpin) {
+			this.buttonSpin.clearTint();
+			this.buttonSpin.setAlpha(1);
+			this.buttonSpin.setInteractive({ useHandCursor: true });
+		}
+		if (this.buttonBg) {
+			this.buttonBg.clearTint();
+			this.buttonBg.setAlpha(1);
+		}
 
-        // Simple hover and click animations for the loading spin button
-        if (this.buttonSpin) {
-            const spin = this.buttonSpin;
-            const baseScaleX = spin.scaleX;
-            const baseScaleY = spin.scaleY;
-            const bg = this.buttonBg;
-            const baseBgScaleX = bg ? bg.scaleX : 1;
-            const baseBgScaleY = bg ? bg.scaleY : 1;
-            spin.on('pointerover', () => {
-                this.tweens.add({
-                    targets: spin,
-                    scaleX: baseScaleX * 1.05,
-                    scaleY: baseScaleY * 1.05,
-                    duration: 120,
-                    ease: 'Power2'
-                });
-            });
-            spin.on('pointerout', () => {
-                this.tweens.add({
-                    targets: [spin, bg].filter(Boolean) as any,
-                    scaleX: (t: any) => (t === spin ? baseScaleX : baseBgScaleX),
-                    scaleY: (t: any) => (t === spin ? baseScaleY : baseBgScaleY),
-                    duration: 120,
-                    ease: 'Power2'
-                });
-            });
-            spin.on('pointerdown', () => {
-                // Clear any ongoing tweens on press
-                this.tweens.killTweensOf(spin);
-                if (bg) this.tweens.killTweensOf(bg);
-                // Press-in: scale both foreground and background for a clear feedback
-                this.tweens.add({
-                    targets: [spin, bg].filter(Boolean) as any,
-                    scaleX: (t: any) => (t === spin ? baseScaleX * 0.9 : baseBgScaleX * 0.96),
-                    scaleY: (t: any) => (t === spin ? baseScaleY * 0.9 : baseBgScaleY * 0.96),
-                    duration: 80,
-                    ease: 'Power2'
-                });
-                // Optional quick background flash for emphasis
-                if (bg) {
-                    const startAlpha = bg.alpha;
-                    this.tweens.add({ targets: bg, alpha: Math.min(0.5, startAlpha + 0.2), duration: 80, yoyo: true, ease: 'Linear' });
-                }
-            });
-            const bounceBack = () => {
-                // Release: bounce a bit larger then settle to base
-                this.tweens.add({
-                    targets: spin,
-                    scaleX: baseScaleX * 1.06,
-                    scaleY: baseScaleY * 1.06,
-                    duration: 90,
-                    ease: 'Power2',
-                    yoyo: true,
-                    onYoyo: () => {
-                        this.tweens.add({
-                            targets: spin,
-                            scaleX: baseScaleX,
-                            scaleY: baseScaleY,
-                            duration: 90,
-                            ease: 'Power2'
-                        });
-                    }
-                });
-                if (bg) {
-                    this.tweens.add({
-                        targets: bg,
-                        scaleX: baseBgScaleX,
-                        scaleY: baseBgScaleY,
-                        duration: 150,
-                        ease: 'Power2'
-                    });
-                }
-            };
-            spin.on('pointerup', bounceBack);
-            spin.on('pointerupoutside', bounceBack);
-        }
+		// Simple hover and click animations for the loading spin button
+		if (this.buttonSpin) {
+			const spin = this.buttonSpin;
+			const baseScaleX = spin.scaleX;
+			const baseScaleY = spin.scaleY;
+			const bg = this.buttonBg;
+			const baseBgScaleX = bg ? bg.scaleX : 1;
+			const baseBgScaleY = bg ? bg.scaleY : 1;
+			spin.on('pointerover', () => {
+				this.tweens.add({
+					targets: spin,
+					scaleX: baseScaleX * 1.05,
+					scaleY: baseScaleY * 1.05,
+					duration: 120,
+					ease: 'Power2'
+				});
+			});
+			spin.on('pointerout', () => {
+				this.tweens.add({
+					targets: [spin, bg].filter(Boolean) as any,
+					scaleX: (t: any) => (t === spin ? baseScaleX : baseBgScaleX),
+					scaleY: (t: any) => (t === spin ? baseScaleY : baseBgScaleY),
+					duration: 120,
+					ease: 'Power2'
+				});
+			});
+			spin.on('pointerdown', () => {
+				try {
+					const sm: any = this.sound as any;
+					try { sm.unlock?.(); } catch {}
+					try { sm.context?.resume?.(); } catch {}
+					try { sm.webaudio?.context?.resume?.(); } catch {}
+					try { (this.game as any)?.sound?.context?.resume?.(); } catch {}
+				} catch {}
+				// Clear any ongoing tweens on press
+				this.tweens.killTweensOf(spin);
+				if (bg) this.tweens.killTweensOf(bg);
+				// Press-in: scale both foreground and background for a clear feedback
+				this.tweens.add({
+					targets: [spin, bg].filter(Boolean) as any,
+					scaleX: (t: any) => (t === spin ? baseScaleX * 0.9 : baseBgScaleX * 0.96),
+					scaleY: (t: any) => (t === spin ? baseScaleY * 0.9 : baseBgScaleY * 0.96),
+					duration: 80,
+					ease: 'Power2'
+				});
+				// Optional quick background flash for emphasis
+				if (bg) {
+					const startAlpha = bg.alpha;
+					this.tweens.add({ targets: bg, alpha: Math.min(0.5, startAlpha + 0.2), duration: 80, yoyo: true, ease: 'Linear' });
+				}
+			});
+			const bounceBack = () => {
+				// Release: bounce a bit larger then settle to base
+				this.tweens.add({
+					targets: spin,
+					scaleX: baseScaleX * 1.06,
+					scaleY: baseScaleY * 1.06,
+					duration: 90,
+					ease: 'Power2',
+					yoyo: true,
+					onYoyo: () => {
+						this.tweens.add({
+							targets: spin,
+							scaleX: baseScaleX,
+							scaleY: baseScaleY,
+							duration: 90,
+							ease: 'Power2'
+						});
+					}
+				});
+				if (bg) {
+					this.tweens.add({
+						targets: bg,
+						scaleX: baseBgScaleX,
+						scaleY: baseBgScaleY,
+						duration: 150,
+						ease: 'Power2'
+					});
+				}
+			};
+			spin.on('pointerup', bounceBack);
+			spin.on('pointerupoutside', bounceBack);
+		}
 
-        // Show call-to-action text
-        if (this.pressToPlayText) {
-            this.pressToPlayText.setAlpha(1);
-            this.tweens.add({
-                targets: this.pressToPlayText,
-                alpha: 0.3,
-                duration: 800,
-                yoyo: true,
-                repeat: -1
-            });
-        }
+		// Show call-to-action text
+		if (this.pressToPlayText) {
+			this.pressToPlayText.setAlpha(1);
+			this.tweens.add({
+				targets: this.pressToPlayText,
+				alpha: 0.3,
+				duration: 800,
+				yoyo: true,
+				repeat: -1
+			});
+		}
 
 		// Start game on click release (allow user to hold the button)
 		this.buttonSpin?.once('pointerup', () => {
@@ -496,5 +503,5 @@ export class Preloader extends Scene
 			this.progressText?.setFontFamily('Poppins-Regular, Arial, sans-serif');
 			this.pressToPlayText?.setFontFamily('Poppins-Regular, Arial, sans-serif');
 		}
-    }
+	}
 }

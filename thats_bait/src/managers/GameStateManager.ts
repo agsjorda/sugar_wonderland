@@ -12,7 +12,6 @@ export class GameStateManager {
   private _isScatter: boolean = false;
   private _isBonus: boolean = false;
   private _isReelSpinning: boolean = false;
-  private _isWheelSpinning: boolean = false;
   private _isNormalSpin: boolean = false;
   private _isAutoPlaying: boolean = false;
   private _isTurbo: boolean = false;
@@ -23,6 +22,7 @@ export class GameStateManager {
   private _isBonusFinished: boolean = false;
   private _isHookScatterActive: boolean = false;
   private _isBuyFeatureSpin: boolean = false;
+	private _criticalSequenceLockCount: number = 0;
 
   private constructor() {
     this.initializeEventListeners();
@@ -84,7 +84,6 @@ export class GameStateManager {
   public get isScatter(): boolean { return this._isScatter; }
   public get isBonus(): boolean { return this._isBonus; }
   public get isReelSpinning(): boolean { return this._isReelSpinning; }
-  public get isWheelSpinning(): boolean { return this._isWheelSpinning; }
   public get isNormalSpin(): boolean { return this._isNormalSpin; }
   public get isAutoPlaying(): boolean { return this._isAutoPlaying; }
   public get isTurbo(): boolean { return this._isTurbo; }
@@ -95,6 +94,16 @@ export class GameStateManager {
   public get isBonusFinished(): boolean { return this._isBonusFinished; }
   public get isHookScatterActive(): boolean { return this._isHookScatterActive; }
   public get isBuyFeatureSpin(): boolean { return this._isBuyFeatureSpin; }
+	public get isCriticalSequenceLocked(): boolean { return (Number(this._criticalSequenceLockCount) || 0) > 0; }
+
+	public acquireCriticalSequenceLock(): void {
+		this._criticalSequenceLockCount = (Number(this._criticalSequenceLockCount) || 0) + 1;
+	}
+
+	public releaseCriticalSequenceLock(): void {
+		const next = (Number(this._criticalSequenceLockCount) || 0) - 1;
+		this._criticalSequenceLockCount = next > 0 ? next : 0;
+	}
 
   // Setters for state properties (with event emission where appropriate)
   public set timeScale(value: number) {
@@ -119,10 +128,6 @@ export class GameStateManager {
     } else {
       gameEventManager.emit(GameEventType.REELS_STOP);
     }
-  }
-
-  public set isWheelSpinning(value: boolean) {
-    this._isWheelSpinning = value;
   }
 
   public set isNormalSpin(value: boolean) {

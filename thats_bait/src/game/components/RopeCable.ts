@@ -135,6 +135,16 @@ export class RopeCable {
 		this.render();
 	}
 
+	setVisible(visible: boolean): void
+	{
+		try { this.ropeGraphics?.setVisible?.(!!visible); } catch {}
+	}
+
+	isVisible(): boolean
+	{
+		try { return !!this.ropeGraphics?.visible; } catch { return true; }
+	}
+
 	setPinnedEnds(pinStart: boolean, pinEnd: boolean): void
 	{
 		this.pinStartAnchor = !!pinStart;

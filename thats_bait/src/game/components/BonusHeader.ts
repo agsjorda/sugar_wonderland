@@ -19,6 +19,9 @@ export class BonusHeader {
 	private cumulativeBonusWin: number = 0;
 	private hasStartedBonusTracking: boolean = false;
 	private lastBackendTotalWin: number = -1;
+	private spinBaseTotalWin: number = 0;
+	private spinSeenPaylineKeys: Set<string> = new Set();
+	private spinIncrementalActive: boolean = false;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -46,9 +49,90 @@ export class BonusHeader {
 		
 		console.log(`[BonusHeader] Creating bonus header with scale: ${assetScale}x`);
 		this.createPortraitBonusHeader(scene, assetScale, headerCenterX, headerCenterY);
+		try { this.youWonText?.setText('TOTAL WIN'); } catch {}
 		
 		// Set up event listeners for winnings updates (like regular header)
 		this.setupWinningsEventListener();
+		try {
+			const sceneAny: any = this.bonusHeaderContainer?.scene as any;
+			sceneAny?.events?.on?.('bonus-total-win-updated', (totalWin: number) => {
+				try {
+					if (!gameStateManager.isBonus) return;
+					const v = Number(totalWin);
+					if (!isFinite(v) || v < 0) return;
+					this.lastBackendTotalWin = v;
+				} catch {}
+			});
+			try {
+				sceneAny?.events?.on?.('activateBonusMode', () => {
+					try {
+						this.spinIncrementalActive = false;
+						this.spinSeenPaylineKeys.clear();
+						this.lastBackendTotalWin = -1;
+						this.cumulativeBonusWin = 0;
+						this.currentWinnings = 0;
+						this.hasStartedBonusTracking = true;
+						try { this.youWonText?.setText('TOTAL WIN'); } catch {}
+						try { this.showWinningsDisplay(0); } catch {}
+					} catch {}
+				});
+			} catch {}
+			sceneAny?.events?.on?.('bonus-win-delta', (delta: number) => {
+				try {
+					if (!gameStateManager.isBonus) return;
+					const d = Number(delta);
+					if (!isFinite(d) || d <= 0) return;
+
+					let cap: number | null = null;
+					try {
+						const symbolsComponent = sceneAny?.symbols;
+						const spinData = symbolsComponent?.currentSpinData;
+						const items: any[] | undefined = spinData?.slot?.freespin?.items || spinData?.slot?.freeSpin?.items;
+						if (Array.isArray(items) && items.length > 0) {
+							const v = Number(items[0]?.runningWin);
+							if (isFinite(v) && v >= 0) cap = v;
+						}
+					} catch {}
+
+					const from = Number(this.currentWinnings ?? 0) || 0;
+					let target = from + d;
+					if (cap != null && cap > from && target > cap) target = cap;
+					if (target > from) {
+						this.animateTotalWinTo(target);
+					}
+				} catch {}
+			});
+			const onWinlineShown = (payline: any) => {
+				try {
+					if (!gameStateManager.isBonus) return;
+					if (!this.spinIncrementalActive) return;
+					const w = Number(payline?.win);
+					if (!isFinite(w) || w <= 0) return;
+					const k = `${Number(payline?.lineKey)}_${Number(payline?.symbol)}_${Number(payline?.count)}_${w}`;
+					if (this.spinSeenPaylineKeys.has(k)) return;
+					this.spinSeenPaylineKeys.add(k);
+
+					let cap: number | null = null;
+					try {
+						const symbolsComponent = sceneAny?.symbols;
+						const spinData = symbolsComponent?.currentSpinData;
+						const items: any[] | undefined = spinData?.slot?.freespin?.items || spinData?.slot?.freeSpin?.items;
+						if (Array.isArray(items) && items.length > 0) {
+							const v = Number(items[0]?.runningWin);
+							if (isFinite(v) && v >= 0) cap = v;
+						}
+					} catch {}
+
+					const from = Number(this.currentWinnings ?? 0) || 0;
+					let target = from + w;
+					if (cap != null && cap > from && target > cap) target = cap;
+					if (target > from) {
+						this.animateTotalWinTo(target);
+					}
+				} catch {}
+			};
+			sceneAny?.events?.on?.('winline-shown', onWinlineShown);
+		} catch {}
 		this.initializeWinnings();
 	}
 
@@ -70,8 +154,8 @@ export class BonusHeader {
 		const headerAmountOffset = 14 * fontScale;
 		const shadowOffsetY = 2 * fontScale;
 		const shadowBlur = 4 * fontScale;
-		// Line 1: "YOU WON"
-		this.youWonText = scene.add.text(x + HEADER_YOUWIN_OFFSET_X, y + headerTopOffset + HEADER_YOUWIN_OFFSET_Y, 'YOU WIN', {
+		// Line 1: "TOTAL WIN"
+		this.youWonText = scene.add.text(x + HEADER_YOUWIN_OFFSET_X, y + headerTopOffset + HEADER_YOUWIN_OFFSET_Y, 'TOTAL WIN', {
 			fontSize: `${16 * fontScale}px`,
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
@@ -99,6 +183,7 @@ export class BonusHeader {
 			this.amountText.setText(formattedWinnings);
 			
 			// Show both texts when updating winnings
+			try { this.youWonText.setText('TOTAL WIN'); } catch {}
 			this.youWonText.setVisible(true);
 			this.amountText.setVisible(true);
 			
@@ -107,18 +192,64 @@ export class BonusHeader {
 	}
 
 	private getBackendTotalWin(spinData: any): number | null {
+		const currentTotal = Number(this.cumulativeBonusWin ?? 0) || 0;
+		const isBonus = !!gameStateManager.isBonus;
+
+		let fsTotal: number | null = null;
+		let slotTotal: number | null = null;
+		let running: number | null = null;
+
 		try {
-			const v1 = Number(spinData?.slot?.totalWin);
-			if (isFinite(v1) && v1 >= 0) return v1;
+			const items: any[] | undefined = spinData?.slot?.freespin?.items || spinData?.slot?.freeSpin?.items;
+			if (Array.isArray(items) && items.length > 0) {
+				const v = Number(items[0]?.runningWin);
+				if (isFinite(v) && v >= 0) running = v;
+			}
+		} catch {}
+
+		try {
+			const v = Number(spinData?.slot?.freespin?.totalWin);
+			if (isFinite(v) && v >= 0) fsTotal = v;
 		} catch {}
 		try {
-			const v2 = Number(spinData?.slot?.freeSpin?.win);
-			if (isFinite(v2) && v2 >= 0) return v2;
+			const v = Number(spinData?.slot?.freeSpin?.totalWin);
+			if (isFinite(v) && v >= 0) fsTotal = fsTotal == null ? v : Math.max(fsTotal, v);
 		} catch {}
 		try {
-			const v3 = Number(spinData?.slot?.freespin?.win);
-			if (isFinite(v3) && v3 >= 0) return v3;
+			const v = Number(spinData?.slot?.totalWin);
+			if (isFinite(v) && v >= 0) slotTotal = v;
 		} catch {}
+
+		// Prefer slot/freespin totals for incremental UI updates; use runningWin as a fallback/cap.
+		const preferred = isBonus
+			? (fsTotal != null ? fsTotal : (slotTotal != null ? slotTotal : running))
+			: (slotTotal != null ? slotTotal : (fsTotal != null ? fsTotal : running));
+		if (typeof preferred === 'number' && isFinite(preferred) && preferred >= 0) {
+			// During bonus, never allow the displayed total to regress (common backend transient where totalWin arrives as 0).
+			if (isBonus && currentTotal > 0 && preferred < currentTotal) {
+				return currentTotal;
+			}
+			return preferred;
+		}
+
+		// Legacy fallbacks
+		try {
+			const v4 = Number(spinData?.slot?.freeSpin?.win);
+			if (isFinite(v4) && v4 >= 0) return (isBonus && currentTotal > 0 && v4 < currentTotal) ? currentTotal : v4;
+		} catch {}
+		try {
+			const v5 = Number(spinData?.slot?.freespin?.win);
+			if (isFinite(v5) && v5 >= 0) return (isBonus && currentTotal > 0 && v5 < currentTotal) ? currentTotal : v5;
+		} catch {}
+		try {
+			const v6 = Number(spinData?.slot?.freeSpin?.subTotalWin);
+			if (isFinite(v6) && v6 >= 0) return (isBonus && currentTotal > 0 && v6 < currentTotal) ? currentTotal : v6;
+		} catch {}
+		try {
+			const v7 = Number(spinData?.slot?.freespin?.subTotalWin);
+			if (isFinite(v7) && v7 >= 0) return (isBonus && currentTotal > 0 && v7 < currentTotal) ? currentTotal : v7;
+		} catch {}
+
 		return null;
 	}
 
@@ -129,6 +260,16 @@ export class BonusHeader {
 			if (!scene) return;
 			const to = Number(totalWin);
 			if (!isFinite(to) || to < 0) return;
+
+			// In bonus mode, avoid snapping the display back to 0/regressing if backend sends a transient lower value.
+			try {
+				if (gameStateManager.isBonus) {
+					const current = Number(this.cumulativeBonusWin ?? 0) || 0;
+					if (current > 0 && to < current) {
+						return;
+					}
+				}
+			} catch {}
 
 			if (!this.hasStartedBonusTracking) {
 				this.cumulativeBonusWin = 0;
@@ -251,6 +392,7 @@ export class BonusHeader {
 			const formattedWinnings = this.formatCurrency(winnings);
 			
 			// Show both texts
+			try { this.youWonText.setText('TOTAL WIN'); } catch {}
 			this.youWonText.setVisible(true);
 			this.amountText.setVisible(true);
 			
@@ -305,7 +447,12 @@ export class BonusHeader {
 	public initializeWinnings(): void {
 		console.log('[BonusHeader] Initializing winnings display - starting hidden');
 		this.currentWinnings = 0;
-		this.hideWinningsDisplay();
+		try {
+			if (this.youWonText) {
+				this.youWonText.setText('TOTAL WIN');
+			}
+		} catch {}
+		try { this.showWinningsDisplay(0); } catch { this.hideWinningsDisplay(); }
 	}
 
 	/**
@@ -323,12 +470,20 @@ export class BonusHeader {
 		// Listen for spin events to hide winnings display at start of manual spin
 		gameEventManager.on(GameEventType.SPIN, () => {
 			console.log('[BonusHeader] Manual spin started - hiding winnings display');
+			if (gameStateManager.isBonus) {
+				try { this.showWinningsDisplay(this.cumulativeBonusWin); } catch {}
+				return;
+			}
 			this.hideWinningsDisplay();
 		});
 
 		// Listen for autoplay start to hide winnings display
 		gameEventManager.on(GameEventType.AUTO_START, () => {
 			console.log('[BonusHeader] Auto play started - hiding winnings display');
+			if (gameStateManager.isBonus) {
+				try { this.showWinningsDisplay(this.cumulativeBonusWin); } catch {}
+				return;
+			}
 			this.hideWinningsDisplay();
 		});
 
@@ -345,10 +500,12 @@ export class BonusHeader {
 				const totalWinSoFar = this.cumulativeBonusWin;
 				console.log(`[BonusHeader] REELS_START (bonus): showing TOTAL WIN so far = $${totalWinSoFar}`);
 				
-				if (this.youWonText) {
-					this.youWonText.setText('TOTAL WIN');
-				}
-				this.showWinningsDisplay(totalWinSoFar);
+				try {
+					if (this.youWonText) {
+						this.youWonText.setText('TOTAL WIN');
+					}
+				} catch {}
+				try { this.showWinningsDisplay(totalWinSoFar); } catch {}
 			} else {
 				// Normal mode behavior: hide winnings at the start of the spin
 				this.hasStartedBonusTracking = false;
@@ -393,15 +550,15 @@ export class BonusHeader {
 			}
 		});
 
-		// On WIN_START during bonus, show per-spin win with "YOU WON"
 		gameEventManager.on(GameEventType.WIN_START, () => {
 			if (!gameStateManager.isBonus) return;
 			try {
-				if (this.youWonText) {
-					this.youWonText.setText('TOTAL WIN');
-				}
+				this.spinIncrementalActive = true;
+				this.spinSeenPaylineKeys.clear();
+				this.spinBaseTotalWin = Number(this.cumulativeBonusWin ?? 0) || 0;
+				try { this.youWonText?.setText('TOTAL WIN'); } catch {}
+				try { this.showWinningsDisplay(this.spinBaseTotalWin); } catch {}
 			} catch {}
-			try { this.showWinningsDisplay(this.cumulativeBonusWin); } catch {}
 		});
 
 		// On WIN_STOP during bonus, only accumulate subtotal for next REELS_START display
@@ -409,18 +566,7 @@ export class BonusHeader {
 			if (!gameStateManager.isBonus) {
 				return;
 			}
-			const sceneAny: any = this.bonusHeaderContainer?.scene as any;
-			const symbolsComponent = sceneAny?.symbols;
-			const spinData = symbolsComponent?.currentSpinData;
-			const totalWin = this.getBackendTotalWin(spinData);
-			const hasPendingCollector = !!(symbolsComponent && (symbolsComponent as any).hasPendingCollectorSequence);
-			const hasPendingDynamite = !!(symbolsComponent && (symbolsComponent as any).hasPendingDynamite);
-			if (hasPendingCollector || hasPendingDynamite) {
-				return;
-			}
-			if (typeof totalWin === 'number') {
-				this.animateTotalWinTo(totalWin);
-			}
+			try { this.spinIncrementalActive = false; } catch {}
 		});
 
 		try {
@@ -428,12 +574,17 @@ export class BonusHeader {
 			sceneAny?.events?.on?.('hook-collector-complete', () => {
 				try {
 					if (!gameStateManager.isBonus) return;
-					const symbolsComponent = sceneAny?.symbols;
-					const spinData = symbolsComponent?.currentSpinData;
-					const totalWin = this.getBackendTotalWin(spinData);
-					if (typeof totalWin === 'number') {
-						this.animateTotalWinTo(totalWin);
-					}
+					return;
+				} catch {}
+			});
+		} catch {}
+
+		try {
+			const sceneAny: any = this.bonusHeaderContainer?.scene as any;
+			sceneAny?.events?.on?.('dynamite-complete', () => {
+				try {
+					if (!gameStateManager.isBonus) return;
+					return;
 				} catch {}
 			});
 		} catch {}
@@ -447,6 +598,12 @@ export class BonusHeader {
 		if (!spinData) {
 			console.warn('[BonusHeader] No spin data provided for winnings update');
 			this.hideWinningsDisplay();
+			return;
+		}
+
+		if (gameStateManager.isBonus) {
+			// Bonus TOTAL WIN is driven by per-event deltas (winline-shown / bonus-win-delta).
+			// Do not snap the display to backend-provided totals/subtotals.
 			return;
 		}
 

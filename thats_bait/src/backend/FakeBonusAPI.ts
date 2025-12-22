@@ -157,6 +157,33 @@ export class FakeBonusAPI {
             }
         } catch {}
 
+        let cumulativeTotal = 0;
+        try {
+            const rw = Number((currentItem as any)?.runningWin);
+            if (isFinite(rw) && rw >= 0) {
+                cumulativeTotal = rw;
+            }
+        } catch {}
+        if (!(cumulativeTotal >= 0)) {
+            cumulativeTotal = 0;
+        }
+        if (cumulativeTotal === 0) {
+            try {
+                const prevItem: any = this.currentFreeSpinIndex > 0 ? items[this.currentFreeSpinIndex - 1] : null;
+                const prevRw = Number(prevItem?.runningWin);
+                const prevBase = (isFinite(prevRw) && prevRw >= 0) ? prevRw : 0;
+                cumulativeTotal = prevBase + (Number(currentItem?.subTotalWin) || 0);
+            } catch {}
+        }
+
+        let preAwardTotal = cumulativeTotal;
+        try {
+            const st = Number((currentItem as any)?.subTotalWin);
+            if (isFinite(st) && st > 0) {
+                preAwardTotal = Math.max(0, cumulativeTotal - st);
+            }
+        } catch {}
+
         const freeSpinData: SpinData = {
             playerId: this.fakeSpinData.playerId,
             bet: this.fakeSpinData.bet,
@@ -166,14 +193,15 @@ export class FakeBonusAPI {
                 paylines: Array.isArray(currentItem.payline) ? currentItem.payline : [],
                 money: normalizedMoney,
                 special: slotSpecial,
+                totalWin: preAwardTotal,
                 freespin: {
                     count: currentItem.spinsLeft,
-                    totalWin: currentItem.subTotalWin,
+                    totalWin: preAwardTotal,
                     items: items.slice(this.currentFreeSpinIndex)
                 },
                 freeSpin: {
                     count: currentItem.spinsLeft,
-                    totalWin: currentItem.subTotalWin,
+                    totalWin: preAwardTotal,
                     items: items.slice(this.currentFreeSpinIndex)
                 }
             }

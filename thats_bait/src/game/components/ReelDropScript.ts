@@ -244,21 +244,9 @@ function dropFillers(self: any, fillerCount: number, index: number, extendDurati
     }
 
     try {
-      const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
-      if (isAnticipation && index === (SLOT_COLUMNS - 1)) {
-        try { (self as any).ensureScatterForegroundContainer?.(); } catch {}
-        const fg: Phaser.GameObjects.Container | undefined = (self as any).scatterForegroundContainer;
-        if (fg && typeof fg.add === "function") {
-          fg.add(symbol);
-          try { (fg as any).sendToBack?.(symbol as any); } catch {}
-          try { (self.scene as any)?.children?.bringToTop?.(fg); } catch {}
-        } else {
-          self.container.add(symbol);
-        }
-      } else {
-        self.container.add(symbol);
-      }
-    } catch { self.container.add(symbol); }
+      self.container.add(symbol);
+      try { (self.container as any).sendToBack?.(symbol as any); } catch {}
+    } catch {}
 
     fillerSymbols.push(symbol);
   }

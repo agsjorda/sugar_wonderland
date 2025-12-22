@@ -135,6 +135,8 @@ export class SlotController {
 
 	// Feature button enable guard: only allow enabling after explicit setBonusMode(false)
 	private canEnableFeatureButton: boolean = true;
+	private bonusUiLock: boolean = false;
+	private externalControlLock: boolean = false;
 	
 	// Store the base bet amount (without amplify bet increase) for API calls
 	private baseBetAmount: number = 0;
@@ -209,7 +211,6 @@ export class SlotController {
 		
 		// Create main container for all controller elements
 		this.controllerContainer = scene.add.container(0, 0);
-		// Ensure controller UI renders above coin animations (800) but below dialogs (1000)
 		this.controllerContainer.setDepth(900);
 		// Apply container-level global offset so all buttons and labels move together
 		this.controllerContainer.setPosition(
@@ -530,6 +531,11 @@ export class SlotController {
 	 * Enable bet buttons (restore opacity and enable interaction)
 	 */
 	private enableBetButtons(): void {
+		// Guard: do not allow bet interaction while bonus is active or while an external lock is active
+		if (gameStateManager.isBonus || this.bonusUiLock || this.externalControlLock || gameStateManager.isReelSpinning || this.isSpinLocked) {
+			console.log('[SlotController] Skipping bet enable (bonus active or locked)');
+			return;
+		}
 		const decreaseBetButton = this.buttons.get('decrease_bet');
 		const increaseBetButton = this.buttons.get('increase_bet');
 		
@@ -584,7 +590,7 @@ export class SlotController {
 			}
 			const gameData = this.getGameData();
 			// Guard: do not re-enable during bonus or before explicit allow
-			if (gameStateManager.isBonus || !this.canEnableFeatureButton || (gameData && gameData.isEnhancedBet)) {
+			if (this.externalControlLock || this.bonusUiLock || gameStateManager.isBonus || !this.canEnableFeatureButton || (gameData && gameData.isEnhancedBet)) {
 				console.log('[SlotController] Skipping feature enable (bonus active or not allowed yet)');
 				return;
 			}
@@ -947,6 +953,7 @@ export class SlotController {
 				console.log('[SlotController] Spin click ignored - spin is locked');
 				return;
 			}
+			try { if ((gameStateManager as any).isCriticalSequenceLocked) return; } catch {}
 			console.log('[SlotController] Spin button clicked');
 			// Ensure symbols container is restored for the new spin
 			try { this.symbols?.restoreSymbolsAboveReelBg?.(); } catch {}
@@ -1828,6 +1835,7 @@ export class SlotController {
 			if ((window as any).audioManager) {
 				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
 			}
+			try { if ((gameStateManager as any).isCriticalSequenceLocked) return; } catch {}
 			// Block spin during scatter anticipation/transition to overlay
 			if (gameStateManager.isScatter) {
 				console.log('[SlotController] Spin blocked - scatter transition/animation in progress');
@@ -2886,6 +2894,13 @@ setBuyFeatureBetAmount(amount: number): void {
 			return;
 		}
 
+		try {
+			if ((gameStateManager as any).isCriticalSequenceLocked) {
+				this.scheduleNextAutoplaySpin(100);
+				return;
+			}
+		} catch {}
+
 		// Guard: wait until win visuals (winlines/dim/bg darken) are finished
 		// before starting the next autoplay spin. Manual spins never call this
 		// method, so this only affects autoplay.
@@ -3752,10 +3767,13 @@ public updateAutoplayButtonState(): void {
 	 */
 	private async handleSpin(): Promise<void> {
 		try { gameStateManager.isBuyFeatureSpin = false; } catch {}
+		try { if ((gameStateManager as any).isCriticalSequenceLocked) return; } catch {}
 		// Pre-spin cleanup: stop any active winline animations and reset symbols
 		try {
-			const scene: any = this.scene as any;
-			const symbolsComponent: any = this.symbols || scene?.symbols;
+			const symbolsComponent = (this.scene as any)?.symbols as any;
+			if (symbolsComponent && symbolsComponent.winLineDrawer) {
+				symbolsComponent.winLineDrawer.stopLooping();
+			}
 			if (symbolsComponent) {
 				try { symbolsComponent.pruneOrphanSymbolsInContainer?.(); } catch {}
 				try { symbolsComponent.beginSpinPhase?.(); } catch {}
@@ -4101,12 +4119,15 @@ public updateAutoplayButtonState(): void {
 		this.scene.events.on('setBonusMode', (isBonus: boolean) => {
 			if (isBonus) {
 				console.log('[SlotController] Bonus mode activated - hiding primary controller');
+				this.bonusUiLock = true;
 				this.hidePrimaryController();
 				// Always keep the buy feature disabled during bonus mode
 				this.canEnableFeatureButton = false;
+				this.disableBetButtons();
 				this.disableFeatureButton();
 			} else {
 				console.log('[SlotController] Bonus mode deactivated - showing primary controller');
+				this.bonusUiLock = false;
 				this.showPrimaryController();
 				// Force clear scatter/bonus blockers to ensure spin is allowed
 				try {
@@ -4120,27 +4141,33 @@ public updateAutoplayButtonState(): void {
 				}
 				// Allow feature button to be enabled again (now that bonus is off)
 				this.canEnableFeatureButton = true;
-				// Re-enable buy feature only after bonus is fully deactivated
-				this.enableFeatureButton();
-				// Ensure all primary controls are interactive again when returning to base game
-				try {
-					this.enableSpinButton();
-					this.enableAutoplayButton();
-					this.enableBetButtons();
-					this.enableAmplifyButton();
-					this.enableTurboButton();
-					// Restore turbo visual state to current setting
-					const gd = this.getGameData();
-					if (gd) {
-						this.setTurboButtonState(!!gd.isTurbo);
-						// Re-apply turbo to symbols/winlines and scene GameData after mode transitions
-						this.forceApplyTurboToSceneGameData();
-						this.applyTurboToWinlineAnimations();
+				// Restore controls on the next tick so Game.ts has a chance to clear gameStateManager.isBonus
+				const restoreControls = () => {
+					try {
+						this.enableSpinButton();
+						this.enableAutoplayButton();
+						this.enableBetButtons();
+						this.enableAmplifyButton();
+						this.enableTurboButton();
+						this.enableFeatureButton();
+						// Restore turbo visual state to current setting
+						const gd = this.getGameData();
+						if (gd) {
+							this.setTurboButtonState(!!gd.isTurbo);
+							// Re-apply turbo to symbols/winlines and scene GameData after mode transitions
+							this.forceApplyTurboToSceneGameData();
+							this.applyTurboToWinlineAnimations();
+						}
+						this.updateAutoplayButtonState && this.updateAutoplayButtonState();
+						console.log('[SlotController] Restored interactivity for spin, autoplay, bet, and amplify buttons after bonus');
+					} catch (e) {
+						console.warn('[SlotController] Failed to restore controller interactivity after bonus:', e);
 					}
-					this.updateAutoplayButtonState && this.updateAutoplayButtonState();
-					console.log('[SlotController] Restored interactivity for spin, autoplay, bet, and amplify buttons after bonus');
-				} catch (e) {
-					console.warn('[SlotController] Failed to restore controller interactivity after bonus:', e);
+				};
+				try {
+					this.scene?.time?.delayedCall?.(0, restoreControls);
+				} catch {
+					restoreControls();
 				}
 			}
 		});
@@ -4171,6 +4198,8 @@ public updateAutoplayButtonState(): void {
 			this.disableSpinButton();
 			this.disableAutoplayButton();
 			this.disableAmplifyButton();
+			this.disableBetButtons();
+			this.disableFeatureButton();
 			
 			console.log(`[SlotController] Scatter bonus activated with index ${data.scatterIndex} and ${data.actualFreeSpins} free spins - hiding primary controller, free spin display will appear after dialog closes`);
 			this.hidePrimaryControllerWithScatter(data.scatterIndex);
@@ -4452,6 +4481,7 @@ public updateAutoplayButtonState(): void {
 	}
 
 	public setExternalControlLock(isLocked: boolean): void {
+		this.externalControlLock = isLocked;
 		if (isLocked) {
 			try { this.disableSpinButton(); } catch {}
 			try { this.disableAutoplayButton(); } catch {}

@@ -700,6 +700,7 @@ export class Symbols {
 
   public requestSkipReelDrops(): void {
     try {
+      try { if ((gameStateManager as any).isCriticalSequenceLocked) return; } catch {}
       if (this.skipReelDropsActive) return;
       this.skipReelDropsActive = true;
       // Speed up only symbol-related tweens (avoid global tween timeScale to not affect logo breathing)
@@ -1035,6 +1036,7 @@ export class Symbols {
       // Click to skip while spinning (disabled when turbo is ON)
       zone.on('pointerdown', () => {
         try {
+          try { if ((gameStateManager as any).isCriticalSequenceLocked) return; } catch {}
           if (gameStateManager.isReelSpinning && !gameStateManager.isTurbo) {
             this.requestSkipReelDrops();
           }
@@ -1219,6 +1221,8 @@ export class Symbols {
       console.log('[Symbols] freeSpinAutoplayWaitingForReelsStop:', this.freeSpinAutoplayWaitingForReelsStop);
       console.log('[Symbols] freeSpinAutoplayActive:', this.freeSpinAutoplayActive);
 
+			const gameSceneAny: any = this.scene as any;
+
       try {
         const spinData = this.currentSpinData;
         if (this.hasPendingCollectorSequence) {
@@ -1261,11 +1265,20 @@ export class Symbols {
             const sp: any = (this.scene as any)?.scene;
             hasRetriggerOverlay = !!(sp?.isActive?.('FreeSpinRetriggerOverlay') || sp?.isSleeping?.('FreeSpinRetriggerOverlay'));
           } catch {}
-          if (hasRetriggerOverlay) {
-            try { this.scene.events.once('freeSpinRetriggerOverlayClosed', () => { void runSeq(); }); } catch { void runSeq(); }
-          } else {
-            await runSeq();
-          }
+				const enqueueOrRun = async () => {
+					if (gameStateManager.isBonus && gameSceneAny && typeof gameSceneAny.enqueueBonusOverlay === 'function') {
+						gameSceneAny.enqueueBonusOverlay(async () => {
+							try { await runSeq(); } catch {}
+						});
+					} else {
+						await runSeq();
+					}
+				};
+				if (hasRetriggerOverlay) {
+					try { this.scene.events.once('freeSpinRetriggerOverlayClosed', () => { void enqueueOrRun(); }); } catch { void enqueueOrRun(); }
+				} else {
+					await enqueueOrRun();
+				}
         }
       } catch {}
 
@@ -1328,7 +1341,34 @@ export class Symbols {
 							} catch {}
 							const handled = !!(spinData as any)?.__dynamiteHandled;
 							try {
-								this.updateMoneyValueOverlays(spinData);
+								if (spinData) {
+									try {
+										const fs: any = spinData?.slot?.freespin || spinData?.slot?.freeSpin;
+										const items: any[] | undefined = fs?.items;
+										const it0: any = Array.isArray(items) && items.length > 0 ? items[0] : null;
+										const running = Number(it0?.runningWin);
+										const sub = Number(it0?.subTotalWin);
+										if (isFinite(running) && running >= 0 && isFinite(sub) && sub >= 0) {
+											let preAward = Math.max(0, running - sub);
+											let paylineWin = 0;
+											try {
+												const pls: any[] = spinData?.slot?.paylines;
+												if (Array.isArray(pls)) {
+													for (const pl of pls) {
+														const w = Number((pl as any)?.win);
+														if (isFinite(w) && w > 0) paylineWin += w;
+													}
+												}
+											} catch {}
+											const seeded = preAward + paylineWin;
+											try { spinData.slot.totalWin = seeded; } catch {}
+											try { if (spinData.slot.freespin) spinData.slot.freespin.totalWin = seeded; } catch {}
+											try { if (spinData.slot.freeSpin) spinData.slot.freeSpin.totalWin = seeded; } catch {}
+											try { (spinData as any).__collectorMoneyApplied = false; } catch {}
+										}
+									} catch {}
+									this.updateMoneyValueOverlays(spinData);
+								}
 								try { this.container?.setVisible(true); this.container?.setAlpha(1); } catch {}
 							} catch {}
 							try {
@@ -1372,57 +1412,112 @@ export class Symbols {
 						const sp: any = (this.scene as any)?.scene;
 						hasRetriggerOverlay = !!(sp?.isActive?.('FreeSpinRetriggerOverlay') || sp?.isSleeping?.('FreeSpinRetriggerOverlay'));
 					} catch {}
+					const enqueueOrRunDynamite = async () => {
+						if (gameStateManager.isBonus && gameSceneAny && typeof gameSceneAny.enqueueBonusOverlay === 'function') {
+							gameSceneAny.enqueueBonusOverlay(async () => {
+								try { await runDynamite(); } catch {}
+							});
+						} else {
+							await runDynamite();
+						}
+					};
 					if (hasRetriggerOverlay) {
 						await new Promise<void>((resolve) => {
-							try { this.scene.events.once('freeSpinRetriggerOverlayClosed', () => resolve()); } catch { resolve(); }
+							try {
+								this.scene.events.once('freeSpinRetriggerOverlayClosed', () => {
+									void enqueueOrRunDynamite();
+									resolve();
+								});
+							} catch {
+								void enqueueOrRunDynamite();
+								resolve();
+							}
 						});
+					} else {
+						await enqueueOrRunDynamite();
 					}
-					await runDynamite();
 				}
 			} catch {}
       
       // If this spin has a hook-scatter special pending, run it now after winlines
       // and disable/clear any remaining winline visuals to avoid overlap.
-      try {
-        const spinData = this.currentSpinData;
-        let hasHookScatter = false;
-        try {
-          const special = spinData && spinData.slot && spinData.slot.special ? spinData.slot.special : null;
-          if (special && special.action === 'hook-scatter' && special.position) {
-            hasHookScatter = true;
-          }
-        } catch {}
-
-        if (this.hasPendingHookScatter && hasHookScatter) {
-				this.hasPendingHookScatter = false;
-				const runHookScatter = () => {
-					try {
-						if (this.winLineDrawer) {
-							this.winLineDrawer.stopLooping();
-							this.winLineDrawer.clearLines();
-						}
-					} catch {}
-					try {
-						// Trigger hook-scatter highlight AFTER winlines complete
-						handleHookScatterHighlight(this as any, spinData);
-					} catch {}
-				};
-
-				let hasRetriggerOverlay = false;
+			try {
+				const spinData = this.currentSpinData;
+				let hasHookScatter = false;
 				try {
-					const sp: any = (this.scene as any)?.scene;
-					hasRetriggerOverlay = !!(sp?.isActive?.('FreeSpinRetriggerOverlay') || sp?.isSleeping?.('FreeSpinRetriggerOverlay'));
+					const special = spinData && spinData.slot && spinData.slot.special ? spinData.slot.special : null;
+					if (special && special.action === 'hook-scatter' && special.position) {
+						hasHookScatter = true;
+					}
 				} catch {}
-				if (hasRetriggerOverlay) {
-					try { this.scene.events.once('freeSpinRetriggerOverlayClosed', () => runHookScatter()); } catch { runHookScatter(); }
-				} else {
-					runHookScatter();
+
+				if (this.hasPendingHookScatter && hasHookScatter) {
+					this.hasPendingHookScatter = false;
+					const runHookScatter = async () => {
+						try {
+							if (this.winLineDrawer) {
+								this.winLineDrawer.stopLooping();
+								this.winLineDrawer.clearLines();
+							}
+						} catch {}
+						await new Promise<void>((resolve) => {
+							let done = false;
+							const finish = () => {
+								if (done) return;
+								done = true;
+								try { this.scene.events.off('hook-scatter-complete', onComplete as any); } catch {}
+								resolve();
+							};
+							const onComplete = () => finish();
+							try { this.scene.events.once('hook-scatter-complete', onComplete as any); } catch {}
+							try {
+								// Trigger hook-scatter highlight AFTER winlines complete
+								handleHookScatterHighlight(this as any, spinData);
+							} catch {
+								finish();
+								return;
+							}
+							try { this.scene.time.delayedCall(6000, () => finish()); } catch { try { setTimeout(() => finish(), 6000); } catch { finish(); } }
+						});
+					};
+
+					let hasRetriggerOverlay = false;
+					try {
+						const sp: any = (this.scene as any)?.scene;
+						hasRetriggerOverlay = !!(sp?.isActive?.('FreeSpinRetriggerOverlay') || sp?.isSleeping?.('FreeSpinRetriggerOverlay'));
+					} catch {}
+					const enqueueOrRunHookScatter = async () => {
+						if (gameStateManager.isBonus && gameSceneAny && typeof gameSceneAny.enqueueBonusOverlay === 'function') {
+							gameSceneAny.enqueueBonusOverlay(async () => {
+								try { await runHookScatter(); } catch {}
+							});
+						} else {
+							await runHookScatter();
+						}
+					};
+					if (hasRetriggerOverlay) {
+						await new Promise<void>((resolve) => {
+							try {
+								this.scene.events.once('freeSpinRetriggerOverlayClosed', () => {
+									void enqueueOrRunHookScatter();
+									resolve();
+								});
+							} catch {
+								void enqueueOrRunHookScatter();
+								resolve();
+							}
+						});
+					} else {
+						await enqueueOrRunHookScatter();
+					}
 				}
-        }
-      } catch {}
-      
-      // Handle free spin autoplay waiting for winlines
-      this.handleFreeSpinAutoplayWinStop();
+			} catch {}
+			try {
+				if (gameStateManager.isBonus && gameSceneAny && typeof gameSceneAny.waitForBonusOverlayQueueIdle === 'function') {
+					await gameSceneAny.waitForBonusOverlayQueueIdle(15000);
+				}
+			} catch {}
+			this.handleFreeSpinAutoplayWinStop();
       const slotController = (this.scene as any)?.slotController;
       const isLastNormalAutoplaySpin = !!(slotController && slotController.autoplaySpinsRemaining === 0 && !this.freeSpinAutoplayActive);
       if (gameStateManager.isAutoPlaying && !isLastNormalAutoplaySpin) {
@@ -1584,6 +1679,7 @@ export class Symbols {
   }
 
 	private async handleDynamiteSpecial(spinData: any): Promise<void> {
+		try { (gameStateManager as any).acquireCriticalSequenceLock?.(); } catch {}
 		try {
 			try {
 				if ((spinData as any)?.__dynamiteHandled) {
@@ -1758,10 +1854,10 @@ export class Symbols {
 			};
 
 			const speed = gameStateManager.isTurbo ? 0.65 : 1.0;
-			const placeDurationMs = Math.max(120, Math.floor(200 * speed));
-			const despawnDurationMs = Math.max(90, Math.floor(160 * speed));
-			const explodeIntervalMs = Math.max(100, Math.floor(100 * speed));
-			const replaceDelayMs = Math.max(80, Math.floor(140 * speed));
+			const placeDurationMs = Math.max(80, Math.floor(140 * speed));
+			const despawnDurationMs = Math.max(70, Math.floor(120 * speed));
+			const explodeIntervalMs = Math.max(45, Math.floor(65 * speed));
+			const replaceDelayMs = Math.max(55, Math.floor(95 * speed));
 
 			type DynEntry = {
 				t: { col: number; row: number; value: number };
@@ -1971,7 +2067,10 @@ export class Symbols {
 				this.updateMoneyValueOverlays(spinData);
 				try { this.container?.setVisible(true); this.container?.setAlpha(1); } catch {}
 			} catch {}
-		} catch {}
+			try { (this.scene as any)?.events?.emit?.('dynamite-complete'); } catch {}
+		} catch {} finally {
+			try { (gameStateManager as any).releaseCriticalSequenceLock?.(); } catch {}
+		}
 	}
 
   private onSpinDone(scene: Game) {
@@ -3708,22 +3807,54 @@ export class Symbols {
     // Reset win dialog state
     gameStateManager.isShowingWinDialog = false;
     
-    // Calculate total win from freespinItems
-    let totalWin = 0;
-    if (this.currentSpinData && this.currentSpinData.slot) {
-      const freespinData = this.currentSpinData.slot.freespin || this.currentSpinData.slot.freeSpin;
-      if (freespinData && freespinData.items && Array.isArray(freespinData.items)) {
-        totalWin = freespinData.items.reduce((sum: number, item: any) => {
-          return sum + (item.subTotalWin || 0);
-        }, 0);
-        console.log(`[Symbols] Calculated total win from freespinItems: ${totalWin}`);
-      }
-    }
+    // Calculate total win for congrats using normalized backend totals
+		let totalWin = 0;
+		try {
+			const sd: any = this.currentSpinData;
+			const v1 = Number(sd?.slot?.totalWin);
+			if (isFinite(v1) && v1 >= 0) {
+				totalWin = v1;
+			}
+		} catch {}
+		if (!(totalWin > 0)) {
+			try {
+				const sd: any = this.currentSpinData;
+				const fs: any = sd?.slot?.freespin || sd?.slot?.freeSpin;
+				const v2 = Number(fs?.totalWin);
+				if (isFinite(v2) && v2 >= 0) {
+					totalWin = v2;
+				}
+			} catch {}
+		}
+		if (!(totalWin > 0)) {
+			// Fallback: sum subTotalWin across items if totals are not present
+			try {
+				const sd: any = this.currentSpinData;
+				const fs: any = sd?.slot?.freespin || sd?.slot?.freeSpin;
+				if (fs && Array.isArray(fs.items)) {
+					totalWin = fs.items.reduce((sum: number, item: any) => sum + (Number(item?.subTotalWin) || 0), 0);
+				}
+			} catch {}
+		}
+		try { console.log(`[Symbols] Congrats total win resolved as: ${totalWin}`); } catch {}
     
     // Show congrats dialog with total win amount
     if (gameScene.dialogs && typeof gameScene.dialogs.showCongrats === 'function') {
-      gameScene.dialogs.showCongrats(this.scene, { winAmount: totalWin });
-      console.log(`[Symbols] Congrats dialog shown with total win: ${totalWin}`);
+			let queued = false;
+			try {
+				if (gameStateManager.isBonus && typeof gameScene.enqueueBonusOverlay === 'function' && typeof gameScene.dialogs.showCongratsQueued === 'function') {
+					queued = true;
+					gameScene.enqueueBonusOverlay(async () => {
+						try {
+							await gameScene.dialogs.showCongratsQueued(this.scene, { winAmount: totalWin });
+						} catch {}
+					});
+				}
+			} catch {}
+			if (!queued) {
+				gameScene.dialogs.showCongrats(this.scene, { winAmount: totalWin });
+			}
+			console.log(`[Symbols] Congrats dialog ${queued ? 'queued' : 'shown'} with total win: ${totalWin}`);
     } else {
       console.warn('[Symbols] Dialogs component not available for congrats dialog');
       let shouldShowTotal = false;

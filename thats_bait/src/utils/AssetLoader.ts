@@ -157,44 +157,15 @@ export class AssetLoader {
         console.log('[AssetLoader] Number assets loaded');
     }
 
-    loadCoinAssets(scene: Scene): void {
-        console.log('[AssetLoader] Loading coin assets...');
-        
-        // Load coin as a sprite sheet with frame configuration
-        const coinAssets = this.assetConfig.getCoinAssets();
-
-        if (coinAssets.images && coinAssets.images.coin) {
-            const coinPath = resolveAssetUrl(coinAssets.images.coin);
-            console.log(`[AssetLoader] Loading coin sprite sheet: ${coinPath}`);
-            
-            // Load as sprite sheet with frame configuration
-            // 10 frames, each 85x85 pixels
-            scene.load.spritesheet('coin', coinPath, {
-                frameWidth: 85,
-                frameHeight: 85,
-                startFrame: 0,
-                endFrame: 9
-            });
-        }
-        
-        console.log('[AssetLoader] Coin assets loaded');
-    }
-
     loadBuyFeatureAssets(scene: Scene): void {
         console.log('[AssetLoader] Loading buy feature assets...');
         this.loadAssetGroup(scene, this.assetConfig.getBuyFeatureAssets());
         console.log('[AssetLoader] Buy feature assets loaded');
     }
-    
-    loadSpinCardAssets(scene: Scene): void {
-        console.log('[AssetLoader] Loading spin card assets...');
-        this.loadAssetGroup(scene, this.assetConfig.getFreeSpinCardAssets());
-        console.log('[AssetLoader] Spin card assets loaded');
-    }
+
 
     loadScatterWinOverlayAssets(scene: Scene): void {
         console.log('[AssetLoader] Loading scatter win overlay assets...');
-        this.loadAssetGroup(scene, this.assetConfig.getScatterWinOverlayAssets());
         console.log('[AssetLoader] Scatter win overlay assets loaded');
     }
 

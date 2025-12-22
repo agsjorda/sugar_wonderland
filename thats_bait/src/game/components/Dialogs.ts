@@ -62,7 +62,16 @@ export class Dialogs {
 		this.freeSpinOverlay = new FreeSpinOverlay(scene, this.networkManager, this.screenModeManager);
 
 		const onWinStop = () => {
-			try { this.tryShowWinDialogFromSpinData(); } catch {}
+			try {
+				const gs: any = scene as any;
+				if (gameStateManager.isBonus && gs && typeof gs.enqueueBonusOverlay === 'function') {
+					gs.enqueueBonusOverlay(async () => {
+						await this.tryShowWinDialogFromSpinDataQueued();
+					});
+				} else {
+					this.tryShowWinDialogFromSpinData();
+				}
+			} catch {}
 		};
 		gameEventManager.on(GameEventType.WIN_STOP, onWinStop);
 		scene.events.once('shutdown', () => {
@@ -143,7 +152,17 @@ export class Dialogs {
 	}
 
 	showCongrats(scene: Scene, config?: { winAmount?: number }): void {
-		const winAmount = Number(config?.winAmount) || 0;
+		let winAmount = Number(config?.winAmount) || 0;
+		try {
+			const sceneAny: any = scene as any;
+			const bh: any = sceneAny?.bonusHeader;
+			if (gameStateManager.isBonus && bh && typeof bh.getCurrentWinnings === 'function') {
+				const v = Number(bh.getCurrentWinnings());
+				if (isFinite(v) && v >= 0) {
+					winAmount = v;
+				}
+			}
+		} catch {}
 		const sceneAny: any = scene as any;
 		const mgr: any = sceneAny?.scene;
 		const canLaunch = !!(mgr && typeof mgr.launch === 'function');
@@ -153,6 +172,52 @@ export class Dialogs {
 			return;
 		}
 		this.launchTotalWinIntroTransition(scene, winAmount);
+	}
+
+	async showCongratsQueued(scene: Scene, config?: { winAmount?: number }): Promise<void> {
+		const winAmount = Number(config?.winAmount) || 0;
+		try {
+			await new Promise<void>((resolve) => {
+				let done = false;
+				let finishOnDialogClose: (() => void) | null = null;
+				const finish = () => {
+					if (done) return;
+					done = true;
+					try { scene.events.off('finalizeBonusExit', finish as any); } catch {}
+					try {
+						if (finishOnDialogClose) {
+							gameEventManager.off(GameEventType.WIN_DIALOG_CLOSED, finishOnDialogClose as any);
+						}
+					} catch {}
+					resolve();
+				};
+
+				const sceneAny: any = scene as any;
+				const mgr: any = sceneAny?.scene;
+				const canLaunch = !!(mgr && typeof mgr.launch === 'function');
+				const isBonus = !!gameStateManager.isBonus;
+				const willUseBubble = !!(isBonus && canLaunch);
+				try { scene.events.once('finalizeBonusExit', finish as any); } catch {}
+
+				// If we're not in bonus, we don't necessarily get bonus-exit events.
+				// In that case (or if Bubble transition can't run), resolve on dialog close as a fallback.
+				if (!willUseBubble) {
+					finishOnDialogClose = () => finish();
+					try { gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, finishOnDialogClose as any); } catch {}
+				}
+				try {
+					scene.time.delayedCall(15000, () => finish());
+				} catch {
+					try { setTimeout(() => finish(), 15000); } catch { finish(); }
+				}
+
+				try {
+					this.showCongrats(scene, { winAmount });
+				} catch {
+					finish();
+				}
+			});
+		} catch {}
 	}
 
 	private launchTotalWinIntroTransition(scene: Scene, winAmount: number): void {
@@ -168,8 +233,19 @@ export class Dialogs {
 			if (shown) return;
 			shown = true;
 			try { scene.events.off('showTotalWinOverlay', showNow as any); } catch {}
-			const amount = Number(data?.winAmount);
-			this.showDialog(scene, 'TotalW_TB', { winAmount: isFinite(amount) ? amount : winAmount });
+			let resolved = winAmount;
+			try {
+				const bh: any = (scene as any)?.bonusHeader;
+				if (gameStateManager.isBonus && bh && typeof bh.getCurrentWinnings === 'function') {
+					const v = Number(bh.getCurrentWinnings());
+					if (isFinite(v) && v >= 0) resolved = v;
+				}
+			} catch {}
+			if (!(resolved >= 0)) {
+				const amount = Number(data?.winAmount);
+				resolved = isFinite(amount) ? amount : winAmount;
+			}
+			this.showDialog(scene, 'TotalW_TB', { winAmount: resolved });
 		};
 
 		try { scene.events.off('showTotalWinOverlay', showNow as any); } catch {}
@@ -367,6 +443,45 @@ export class Dialogs {
 		else if (m >= 30) final = 'EpicW_TB';
 
 		this.showDialog(scene, final, { winAmount: totalWin, betAmount: bet });
+	}
+
+	private async tryShowWinDialogFromSpinDataQueued(): Promise<void> {
+		const scene = this.scene;
+		if (!scene) return;
+		if (this.isDialogActive) return;
+		if (gameStateManager.isScatter) return;
+
+		const spinData: any = (scene as any)?.symbols?.currentSpinData;
+		const paylines = spinData?.slot?.paylines;
+		if (!Array.isArray(paylines) || paylines.length <= 0) return;
+
+		let totalWin = 0;
+		for (const pl of paylines) totalWin += Number(pl?.win) || 0;
+
+		const bet = Number.parseFloat(String(spinData?.bet ?? '0')) || 0;
+		if (!(bet > 0) || !(totalWin > 0)) return;
+
+		const m = totalWin / bet;
+		if (!(m >= 20)) return;
+
+		let final: WinTier = 'BigW_TB';
+		if (m >= 60) final = 'SuperW_TB';
+		else if (m >= 45) final = 'MegaW_TB';
+		else if (m >= 30) final = 'EpicW_TB';
+
+		await new Promise<void>((resolve) => {
+			let done = false;
+			const finish = () => {
+				if (done) return;
+				done = true;
+				try { gameEventManager.off(GameEventType.WIN_DIALOG_CLOSED, onClosed); } catch {}
+				resolve();
+			};
+			const onClosed = () => finish();
+			try { gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, onClosed); } catch {}
+			try { scene.time.delayedCall(9000, () => finish()); } catch { try { setTimeout(() => finish(), 9000); } catch { finish(); } }
+			try { this.showDialog(scene, final, { winAmount: totalWin, betAmount: bet }); } catch { finish(); }
+		});
 	}
 
 	private setupStagesIfNeeded(finalType: WinTier, winAmount: number, betAmount: number): void {

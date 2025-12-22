@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import { resolveAssetUrl } from '../../utils/AssetLoader';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { SlotController } from './SlotController';
 import { SoundEffectType } from '../../managers/AudioManager';
 import { BET_OPTIONS } from '../../config/BetConfig';
@@ -39,12 +40,13 @@ export class BuyFeature {
 	private featureLogo?: Phaser.GameObjects.Image;
 	private featureLogoBackground?: Phaser.GameObjects.Image;
 	private featureLogoSpine?: any;
-	private featureLogoScale: number = 0.15; // Manual scale for scatter logo (spine or image)
+	private featureLogoScale: number = 0.35; // Manual scale for scatter logo (spine or image)
 	private featureLogoBackgroundScale: number = 0.89; // Manual scale for background PNG logo
 	private backgroundImage: Phaser.GameObjects.Image;
 	private onCloseCallback?: () => void;
 	private onConfirmCallback?: () => void;
 	private sceneRef?: Scene;
+	private featureLogoSpineRetryTimer: Phaser.Time.TimerEvent | null = null;
 
 	constructor() {
 		// Constructor for BuyFeature component
@@ -186,7 +188,7 @@ export class BuyFeature {
         if (!hasBg) {
 			// Fallback: load it dynamically at runtime from the known path and render after load completes
             const runtimeKey = 'scatter_logo_background_runtime';
-            const runtimePath = resolveAssetUrl('/assets/portrait/high/buy_feature/scatter_logo_background.png');
+            const runtimePath = resolveAssetUrl('/assets/portrait/high/buy_feature/scatter_logo_background.webp');
 			console.warn('[BuyFeature] Background not preloaded. Loading at runtime from', runtimePath);
 			try {
 				// Avoid duplicate loads
@@ -220,53 +222,90 @@ export class BuyFeature {
             console.log(`[BuyFeature] Background logo CREATED key=${bgKey} w=${this.featureLogoBackground.width} h=${this.featureLogoBackground.height} scale=${this.featureLogoBackgroundScale}`);
 		}
 
-		// No separate foreground PNG anymore (asset removed). We will try Spine; if not available, background alone is shown.
-
-		// Try to replace the image with the scatter Spine running the _win animation
 		try {
-			const spineKey = 'symbol_0_spine';
-			const spineAtlasKey = spineKey + '-atlas';
-			const symbolName = 'Symbol0_HTBH';
-			let winAnim = `${symbolName}_win`;
-			let fallbackAnim = `${symbolName}_hit`;
+			this.ensureScatterSpine(scene, centerX, centerY);
+		} catch {}
+	}
 
-			// Ensure spine JSON is available
-			const hasSpine = (scene.cache.json as any)?.has?.(spineKey);
-			if (!hasSpine) {
-				// Spine not ready; use background only
-				console.warn('[BuyFeature] Spine json for scatter logo not loaded; showing background only');
+	private scheduleScatterSpineRetry(scene: Scene, x: number, y: number, delayMs: number): void {
+		try {
+			if (this.featureLogoSpineRetryTimer) {
+				try { this.featureLogoSpineRetryTimer.destroy(); } catch {}
+				this.featureLogoSpineRetryTimer = null;
+			}
+		} catch {}
+		try {
+			this.featureLogoSpineRetryTimer = scene.time.delayedCall(Math.max(0, delayMs | 0), () => {
+				try {
+					if (!this.container || !this.container.active) return;
+					if (!this.sceneRef || this.sceneRef !== scene) return;
+					this.ensureScatterSpine(scene, x, y);
+				} catch {}
+			});
+		} catch {}
+	}
+
+	private ensureScatterSpine(scene: Scene, centerX: number, centerY: number): void {
+		if (!this.container) return;
+		try {
+			if (this.featureLogoSpine && this.featureLogoSpine.active) {
+				try { this.featureLogoSpine.setPosition(centerX, centerY); } catch {}
+				try { this.featureLogoSpine.setScale(this.featureLogoScale); } catch {}
 				return;
 			}
+		} catch {}
 
-			// Create Spine instance at the same position as the image
-			const s = (scene.add as any).spine(centerX, centerY, spineKey, spineAtlasKey);
-			s.setOrigin(0.5, 0.5);
-			// Put it inside our container
-			this.container.add(s);
-			// Ensure spine renders above the PNG background
-            try { s.setDepth(120); this.container.bringToTop(s); } catch {}
-			this.featureLogoSpine = s;
-
-			// Choose animation name safely
-			try {
-				const cachedJson: any = (scene.cache.json as any).get(spineKey);
-				const anims = cachedJson?.animations ? Object.keys(cachedJson.animations) : [];
-				if (!anims.includes(winAnim)) {
-					winAnim = anims.includes(fallbackAnim) ? fallbackAnim : winAnim;
-				}
-			} catch {}
-
-			// Apply manual scale
-			try { s.skeleton.setToSetupPose(); s.update(0); } catch {}
-			s.setScale(this.featureLogoScale);
-
-			// Play the animation in a loop
-			try { s.animationState.setAnimation(0, winAnim, true); } catch {}
-
-			// Keep the PNG visible as a background behind the spine logo
-		} catch (e) {
-			// Any error: keep PNG image
+		if (!ensureSpineFactory(scene, '[BuyFeature] ensureScatterSpine')) {
+			this.scheduleScatterSpineRetry(scene, centerX, centerY, 300);
+			return;
 		}
+
+		const spineKey = 'symbol_0_spine';
+		const spineAtlasKey = spineKey + '-atlas';
+		if (!(scene.cache.json as any)?.has?.(spineKey)) {
+			this.scheduleScatterSpineRetry(scene, centerX, centerY, 600);
+			return;
+		}
+
+		let s: any = null;
+		try {
+			s = (scene.add as any).spine(centerX, centerY, spineKey, spineAtlasKey);
+		} catch {
+			s = null;
+		}
+		if (!s) {
+			this.scheduleScatterSpineRetry(scene, centerX, centerY, 600);
+			return;
+		}
+
+		try { s.setOrigin(0.5, 0.5); } catch {}
+		try { s.skeleton?.setToSetupPose?.(); s.update?.(0); } catch {}
+		try { s.setScale(this.featureLogoScale); } catch {}
+		try {
+			// Keep ordering: background -> logo background -> logo spine -> rest of UI
+			const idx = this.featureLogoBackground ? this.container.getIndex(this.featureLogoBackground) : -1;
+			if (idx >= 0) {
+				this.container.addAt(s, idx + 1);
+			} else {
+				this.container.add(s);
+			}
+		} catch {
+			try { this.container.add(s); } catch {}
+		}
+		this.featureLogoSpine = s;
+
+		try {
+			const symbolName = 'Symbol0_HTBH';
+			const anims = s.skeleton?.data?.animations?.map((a: any) => a?.name).filter(Boolean) || [];
+			const preferred = `${symbolName}_win`;
+			const fallback = `${symbolName}_hit`;
+			const chosen = anims.includes(preferred)
+				? preferred
+				: (anims.includes(fallback) ? fallback : (anims[0] || null));
+			if (chosen) {
+				s.animationState?.setAnimation?.(0, chosen, true);
+			}
+		} catch {}
 	}
 
 	private updateFeatureLogoScale(): void {
@@ -718,6 +757,7 @@ export class BuyFeature {
 			scale: this.featureLogoBackgroundScale,
 			texture: this.featureLogoBackground.texture?.key
 		});
+		try { this.ensureScatterSpine(scene, centerX, centerY); } catch {}
 	}
 
 	private hideImmediately(): void {
@@ -762,6 +802,12 @@ export class BuyFeature {
 		// Stop any continuous button presses
 		this.stopContinuousDecrement();
 		this.stopContinuousIncrement();
+		try {
+			if (this.featureLogoSpineRetryTimer) {
+				this.featureLogoSpineRetryTimer.destroy();
+				this.featureLogoSpineRetryTimer = null;
+			}
+		} catch {}
 		
 		if (this.container) {
 			this.container.destroy();

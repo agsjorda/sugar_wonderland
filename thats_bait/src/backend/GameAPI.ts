@@ -169,6 +169,7 @@ export function normalizeSpinResponse(raw: any, bet: number): SpinData {
     const freeSpinItems = rawFreeSpinItems.map((item: any) => ({
         spinsLeft: Number(item.spinsLeft) || 0,
         subTotalWin: Number(item.subTotalWin) || 0,
+        runningWin: typeof item.runningWin === 'number' ? item.runningWin : undefined,
         collectorCount: typeof item.collectorCount === 'number' ? item.collectorCount : undefined,
         area: normalizeArea(item.area),
         money: normalizeMoney(item.money),

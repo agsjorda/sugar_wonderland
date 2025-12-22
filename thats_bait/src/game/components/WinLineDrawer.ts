@@ -162,6 +162,11 @@ export class WinLineDrawer {
       if (tracker && typeof tracker.showForPayline === 'function') {
         tracker.showForPayline(payline);
       }
+      try {
+        if (payline) {
+          (this.scene as any)?.events?.emit?.('winline-shown', payline);
+        }
+      } catch {}
     } catch {}
 
     const completeWinlineGrids = this.getCompleteWinlineGrids(winlineIndex);
@@ -213,6 +218,11 @@ export class WinLineDrawer {
       if (tracker && typeof tracker.showForPayline === 'function') {
         tracker.showForPayline(payline);
       }
+      try {
+        if (!this.hasEmittedFirstLoopWinStop && payline) {
+          (this.scene as any)?.events?.emit?.('winline-shown', payline);
+        }
+      } catch {}
     } catch {}
 
     const completeWinlineGrids = this.getCompleteWinlineGrids(winlineIndex);
