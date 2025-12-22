@@ -538,6 +538,7 @@ export function queueGameAssetLoading(scene: Scene, assetLoader: AssetLoader): v
     assetLoader.loadButtonAssets(scene);
     assetLoader.loadMenuAssets(scene);
     assetLoader.loadHelpScreenAssets(scene);
+    try { (assetLoader as any).loadDynamiteAssets?.(scene); } catch {}
     assetLoader.loadSymbolAssets(scene);
     assetLoader.loadNumberAssets(scene);
     assetLoader.loadScatterWinOverlayAssets(scene);

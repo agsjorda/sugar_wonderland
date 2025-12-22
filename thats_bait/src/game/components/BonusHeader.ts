@@ -18,6 +18,7 @@ export class BonusHeader {
 	// Tracks cumulative total during bonus mode by incrementing each spin's subtotal
 	private cumulativeBonusWin: number = 0;
 	private hasStartedBonusTracking: boolean = false;
+	private lastBackendTotalWin: number = -1;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -103,6 +104,124 @@ export class BonusHeader {
 			
 			console.log(`[BonusHeader] Winnings updated to: ${formattedWinnings} (raw: ${winnings})`);
 		}
+	}
+
+	private getBackendTotalWin(spinData: any): number | null {
+		try {
+			const v1 = Number(spinData?.slot?.totalWin);
+			if (isFinite(v1) && v1 >= 0) return v1;
+		} catch {}
+		try {
+			const v2 = Number(spinData?.slot?.freeSpin?.win);
+			if (isFinite(v2) && v2 >= 0) return v2;
+		} catch {}
+		try {
+			const v3 = Number(spinData?.slot?.freespin?.win);
+			if (isFinite(v3) && v3 >= 0) return v3;
+		} catch {}
+		return null;
+	}
+
+	public animateTotalWinTo(totalWin: number): void {
+		try {
+			if (!this.amountText || !this.youWonText || !this.bonusHeaderContainer) return;
+			const scene: any = this.bonusHeaderContainer.scene;
+			if (!scene) return;
+			const to = Number(totalWin);
+			if (!isFinite(to) || to < 0) return;
+
+			if (!this.hasStartedBonusTracking) {
+				this.cumulativeBonusWin = 0;
+				this.hasStartedBonusTracking = true;
+			}
+
+			this.cumulativeBonusWin = to;
+
+			try {
+				if (this.youWonText) {
+					this.youWonText.setText('TOTAL WIN');
+				}
+			} catch {}
+			try { this.youWonText.setVisible(true); } catch {}
+			try { this.amountText.setVisible(true); } catch {}
+
+			const from = Number(this.currentWinnings ?? 0) || 0;
+			if (Math.abs(to - from) < 0.0001) {
+				this.updateWinningsDisplay(to);
+				this.lastBackendTotalWin = to;
+				return;
+			}
+
+			let speed = 1.0;
+			try { speed = gameStateManager.isTurbo ? 0.65 : 1.0; } catch {}
+			const duration = Math.max(220, Math.floor(520 * speed));
+
+			const proxy: any = { value: from };
+			try { (this as any).__totalWinProxy = proxy; } catch {}
+			try { scene.tweens.killTweensOf(proxy); } catch {}
+			try {
+				scene.tweens.add({
+					targets: proxy,
+					value: to,
+					duration,
+					ease: 'Sine.easeOut',
+					onUpdate: () => {
+						try { this.updateWinningsDisplay(Number(proxy.value) || 0); } catch {}
+					},
+					onComplete: () => {
+						try { this.updateWinningsDisplay(to); } catch {}
+					}
+				});
+			} catch {
+				this.updateWinningsDisplay(to);
+			}
+
+			try {
+				try { scene.tweens.killTweensOf([this.amountText, this.youWonText]); } catch {}
+				const ax = (this.amountText.scaleX ?? 1) as number;
+				const ay = (this.amountText.scaleY ?? 1) as number;
+				const yx = (this.youWonText.scaleX ?? 1) as number;
+				const yy = (this.youWonText.scaleY ?? 1) as number;
+				scene.tweens.add({
+					targets: this.amountText,
+					scaleX: ax * 1.08,
+					scaleY: ay * 1.08,
+					duration: Math.max(90, Math.floor(140 * speed)),
+					ease: 'Sine.easeOut',
+					yoyo: true,
+					repeat: 1
+				});
+				scene.tweens.add({
+					targets: this.youWonText,
+					scaleX: yx * 1.08,
+					scaleY: yy * 1.08,
+					duration: Math.max(90, Math.floor(140 * speed)),
+					ease: 'Sine.easeOut',
+					yoyo: true,
+					repeat: 1
+				});
+			} catch {}
+
+			try {
+				try { this.amountText.setColor('#ffd166'); } catch {}
+				try { this.youWonText.setColor('#ffd166'); } catch {}
+				try {
+					scene.time.delayedCall(Math.max(140, Math.floor(220 * speed)), () => {
+						try { this.amountText.setColor('#ffffff'); } catch {}
+						try { this.youWonText.setColor('#ffffff'); } catch {}
+					});
+				} catch {
+					try {
+						setTimeout(() => {
+							try { this.amountText.setColor('#ffffff'); } catch {}
+							try { this.youWonText.setColor('#ffffff'); } catch {}
+						}, Math.max(140, Math.floor(220 * speed)));
+					} catch {}
+				}
+			} catch {}
+
+			this.lastBackendTotalWin = to;
+		} catch {}
 	}
 
 	/**
@@ -276,23 +395,13 @@ export class BonusHeader {
 
 		// On WIN_START during bonus, show per-spin win with "YOU WON"
 		gameEventManager.on(GameEventType.WIN_START, () => {
-			if (!gameStateManager.isBonus) {
-				return;
-			}
-			const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
-			const spinData = symbolsComponent?.currentSpinData;
-			let spinWin = 0;
-			if (spinData?.slot?.paylines && spinData.slot.paylines.length > 0) {
-				spinWin = this.calculateTotalWinFromPaylines(spinData.slot.paylines);
-			}
-			if (this.youWonText) {
-				this.youWonText.setText('YOU WIN');
-			}
-			if (spinWin > 0) {
-				this.showWinningsDisplay(spinWin);
-			} else {
-				this.hideWinningsDisplay();
-			}
+			if (!gameStateManager.isBonus) return;
+			try {
+				if (this.youWonText) {
+					this.youWonText.setText('TOTAL WIN');
+				}
+			} catch {}
+			try { this.showWinningsDisplay(this.cumulativeBonusWin); } catch {}
 		});
 
 		// On WIN_STOP during bonus, only accumulate subtotal for next REELS_START display
@@ -300,19 +409,34 @@ export class BonusHeader {
 			if (!gameStateManager.isBonus) {
 				return;
 			}
-			const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
+			const sceneAny: any = this.bonusHeaderContainer?.scene as any;
+			const symbolsComponent = sceneAny?.symbols;
 			const spinData = symbolsComponent?.currentSpinData;
-			let spinWin = 0;
-			if (spinData?.slot?.paylines && spinData.slot.paylines.length > 0) {
-				spinWin = this.calculateTotalWinFromPaylines(spinData.slot.paylines);
+			const totalWin = this.getBackendTotalWin(spinData);
+			const hasPendingCollector = !!(symbolsComponent && (symbolsComponent as any).hasPendingCollectorSequence);
+			const hasPendingDynamite = !!(symbolsComponent && (symbolsComponent as any).hasPendingDynamite);
+			if (hasPendingCollector || hasPendingDynamite) {
+				return;
 			}
-			if (!this.hasStartedBonusTracking) {
-				this.cumulativeBonusWin = 0;
-				this.hasStartedBonusTracking = true;
+			if (typeof totalWin === 'number') {
+				this.animateTotalWinTo(totalWin);
 			}
-			this.cumulativeBonusWin += (spinWin || 0);
-			console.log(`[BonusHeader] WIN_STOP (bonus): accumulated spinWin=$${spinWin}, cumulativeBonusWin=$${this.cumulativeBonusWin}`);
 		});
+
+		try {
+			const sceneAny: any = this.bonusHeaderContainer?.scene as any;
+			sceneAny?.events?.on?.('hook-collector-complete', () => {
+				try {
+					if (!gameStateManager.isBonus) return;
+					const symbolsComponent = sceneAny?.symbols;
+					const spinData = symbolsComponent?.currentSpinData;
+					const totalWin = this.getBackendTotalWin(spinData);
+					if (typeof totalWin === 'number') {
+						this.animateTotalWinTo(totalWin);
+					}
+				} catch {}
+			});
+		} catch {}
 	}
 
 	/**

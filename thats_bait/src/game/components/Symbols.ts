@@ -19,6 +19,7 @@ import { WaterWaveVerticalPipeline } from '../pipelines/WaterWavePipeline';
 import { getSymbol5VariantForCell, getSymbol5SpineKeyForVariant, getDefaultSymbol5Variant, getSymbol5ImageKeyForVariant, getSymbol5ImageKeyForCell, getMoneyValueForCell } from './Symbol5VariantHelper';
 import { MoneyValueOverlayManager } from './MoneyValueOverlayManager';
 import { fakeBonusAPI } from '../../backend/FakeBonusAPI';
+import { despawnDynamiteImage, playBoom, playDynamiteOverlay, spawnDynamiteImage } from './DynamiteSequence';
 
 function resolveBonusCollectorVisualSymbolValue(symbolValue: number, bonusLevelsCompleted: number): number {
   try {
@@ -1298,43 +1299,72 @@ export class Symbols {
 					const alreadyHandled = !!(spinData as any)?.__dynamiteHandled;
 
 					const runDynamite = async () => {
+						const slotController = (this.scene as any)?.slotController;
+						let locked = false;
+						try { slotController?.setExternalControlLock?.(true); locked = true; } catch {}
 						try {
-							if (this.winLineDrawer) {
-								this.winLineDrawer.stopLooping();
-								this.winLineDrawer.clearLines();
-							}
-						} catch {}
-						try { this.clearWinLines(); } catch {}
-						try {
-							const grid: any[][] = this.symbols;
-							if (Array.isArray(grid)) {
-								for (const col of grid) {
-									if (!Array.isArray(col)) continue;
-									for (const sym of col) {
-										if (!sym) continue;
-										try { this.scene.tweens.killTweensOf(sym); } catch {}
-										try { clearNonWinningSymbolDim(this.scene as any, sym); } catch {}
+							try {
+								if (this.winLineDrawer) {
+									this.winLineDrawer.stopLooping();
+									this.winLineDrawer.clearLines();
+								}
+							} catch {}
+							try { this.clearWinLines(); } catch {}
+							try {
+								const grid: any[][] = this.symbols;
+								if (Array.isArray(grid)) {
+									for (const col of grid) {
+										if (!Array.isArray(col)) continue;
+										for (const sym of col) {
+											if (!sym) continue;
+											try { this.scene.tweens.killTweensOf(sym); } catch {}
+											try { clearNonWinningSymbolDim(this.scene as any, sym); } catch {}
+										}
 									}
 								}
-							}
-						} catch {}
-						try {
-							const bg: any = (this.scene as any).background;
-							bg?.restoreDepthAfterWinSequence?.();
-						} catch {}
-						try {
-							await this.handleDynamiteSpecial(spinData);
-						} catch {}
-						const handled = !!(spinData as any)?.__dynamiteHandled;
-						try {
-							this.updateMoneyValueOverlays(spinData);
-							try { this.container?.setVisible(true); this.container?.setAlpha(1); } catch {}
-						} catch {}
-						try {
-							if (!alreadyHandled && handled) {
-								await runCollectorMoneySequence(this as any, spinData);
-							}
-						} catch {}
+							} catch {}
+							try {
+								await this.handleDynamiteSpecial(spinData);
+							} catch {}
+							const handled = !!(spinData as any)?.__dynamiteHandled;
+							try {
+								this.updateMoneyValueOverlays(spinData);
+								try { this.container?.setVisible(true); this.container?.setAlpha(1); } catch {}
+							} catch {}
+							try {
+								if (!alreadyHandled && handled) {
+									await runCollectorMoneySequence(this as any, spinData);
+								}
+							} catch {}
+						} finally {
+							try {
+								const grid: any[][] = this.symbols;
+								if (Array.isArray(grid)) {
+									for (const col of grid) {
+										if (!Array.isArray(col)) continue;
+										for (const sym of col) {
+											if (!sym) continue;
+											try { this.scene.tweens.killTweensOf(sym); } catch {}
+											try { clearNonWinningSymbolDim(this.scene as any, sym); } catch {}
+										}
+									}
+								}
+							} catch {}
+							try {
+								const scAny: any = (this.scene as any);
+								let bg: any = scAny?.background;
+								try {
+									const bb: any = scAny?.bonusBackground;
+									const bbVisible = !!bb?.getContainer?.()?.visible;
+									if (bbVisible) {
+										bg = bb;
+									}
+								} catch {}
+								bg?.restoreDepthAfterWinSequence?.();
+							} catch {}
+							try { if (locked) slotController?.setExternalControlLock?.(false); } catch {}
+						}
+						
 					};
 
 					let hasRetriggerOverlay = false;
@@ -1343,10 +1373,11 @@ export class Symbols {
 						hasRetriggerOverlay = !!(sp?.isActive?.('FreeSpinRetriggerOverlay') || sp?.isSleeping?.('FreeSpinRetriggerOverlay'));
 					} catch {}
 					if (hasRetriggerOverlay) {
-						try { this.scene.events.once('freeSpinRetriggerOverlayClosed', () => { void runDynamite(); }); } catch { void runDynamite(); }
-					} else {
-						await runDynamite();
+						await new Promise<void>((resolve) => {
+							try { this.scene.events.once('freeSpinRetriggerOverlayClosed', () => resolve()); } catch { resolve(); }
+						});
 					}
+					await runDynamite();
 				}
 			} catch {}
       
@@ -1559,9 +1590,6 @@ export class Symbols {
 					return;
 				}
 			} catch {}
-			if (!gameStateManager.isBonus) {
-				return;
-			}
 			const special: any = spinData?.slot?.special;
 			if (!special || special.action !== 'dynamite') {
 				return;
@@ -1666,6 +1694,49 @@ export class Symbols {
 				}
 			} catch {}
 
+			try {
+				(this.scene as any).currentSymbolData = area;
+				this.currentSymbolData = area;
+			} catch {}
+
+			try {
+				const scAny: any = (this.scene as any);
+				let bg: any = scAny?.background;
+				try {
+					const bb: any = scAny?.bonusBackground;
+					const bbVisible = !!bb?.getContainer?.()?.visible;
+					if (bbVisible) {
+						bg = bb;
+					}
+				} catch {}
+				bg?.darkenDepthForWinSequence?.();
+			} catch {}
+			try {
+				const keepBright = new Set<string>();
+				try {
+					for (const t of targets) {
+						keepBright.add(`${t.col}_${t.row}`);
+					}
+				} catch {}
+				try {
+					for (let c = 0; c < area.length; c++) {
+						const colArr = area[c];
+						if (!Array.isArray(colArr)) continue;
+						for (let r = 0; r < colArr.length; r++) {
+							if (colArr[r] === 11) {
+								keepBright.add(`${c}_${r}`);
+							}
+						}
+					}
+				} catch {}
+				try { applyNonWinningSymbolDim(this.scene as any, this.symbols, keepBright, area as any); } catch {}
+			} catch {}
+			try {
+				const x = typeof this.slotX === 'number' ? this.slotX : (this.scene?.scale?.width ?? 0) * 0.5;
+				const y = typeof this.slotY === 'number' ? this.slotY : (this.scene?.scale?.height ?? 0) * 0.5;
+				await playDynamiteOverlay(this.scene, x, y, 20012);
+			} catch {}
+
 			const container: any = this.container;
 			const toLocal = (wx: number, wy: number): { x: number; y: number } => {
 				try {
@@ -1680,206 +1751,222 @@ export class Symbols {
 				return { x: wx, y: wy };
 			};
 
-			const playOne = (t: { col: number; row: number; value: number }): Promise<void> => {
-				return new Promise((resolve) => {
-					const done = () => {
-						try { resolve(); } catch {}
-					};
+			const delay = (ms: number): Promise<void> => {
+				return new Promise<void>((resolve) => {
+					try { this.scene?.time?.delayedCall?.(ms, () => resolve()); } catch { resolve(); }
+				});
+			};
+
+			const speed = gameStateManager.isTurbo ? 0.65 : 1.0;
+			const placeDurationMs = Math.max(120, Math.floor(200 * speed));
+			const despawnDurationMs = Math.max(90, Math.floor(160 * speed));
+			const explodeIntervalMs = Math.max(100, Math.floor(100 * speed));
+			const replaceDelayMs = Math.max(80, Math.floor(140 * speed));
+
+			type DynEntry = {
+				t: { col: number; row: number; value: number };
+				wx: number;
+				wy: number;
+				lx: number;
+				ly: number;
+				bWidth: number;
+				bHeight: number;
+				dyn: any;
+			};
+
+			const entries: DynEntry[] = [];
+			try {
+				for (const t of targets) {
 					let wx = 0;
 					let wy = 0;
 					let lx = 0;
 					let ly = 0;
-					let oldSym: any = null;
+					let bWidth = 0;
+					let bHeight = 0;
 					try {
-						oldSym = this.symbols?.[t.col]?.[t.row];
-						if (oldSym && typeof oldSym.getBounds === 'function') {
-							const b = oldSym.getBounds();
+						const sym: any = this.symbols?.[t.col]?.[t.row];
+						if (sym && typeof sym.getBounds === 'function') {
+							const b = sym.getBounds();
 							wx = b.centerX;
 							wy = b.centerY;
-						} else if (oldSym) {
-							wx = oldSym.x;
-							wy = oldSym.y;
-							try {
-								const p: any = oldSym.parentContainer;
-								if (p) {
-									wx = (p.x ?? 0) + wx;
-									wy = (p.y ?? 0) + wy;
-								}
-							} catch {}
+							bWidth = b.width ?? 0;
+							bHeight = b.height ?? 0;
+						} else if (sym) {
+							wx = sym.x;
+							wy = sym.y;
+							try { bWidth = sym.displayWidth ?? sym.width ?? 0; } catch {}
+							try { bHeight = sym.displayHeight ?? sym.height ?? 0; } catch {}
 						}
 						const loc = toLocal(wx, wy);
 						lx = loc.x;
 						ly = loc.y;
 					} catch {}
 
+					let dyn: any = null;
 					try {
-						this.scene?.cameras?.main?.shake?.(80, 0.002);
-					} catch {}
-
-					let ring: any = null;
-					try {
-						ring = this.scene.add.circle(wx, wy, Math.max(10, this.displayWidth * 0.25), 0xffcc00, 0.9);
-						ring.setDepth(891);
-					} catch {}
-					try {
-						if (ring) {
-							this.scene.tweens.add({
-								targets: ring,
-								scale: { from: 0.15, to: 1.6 },
-								alpha: { from: 0.95, to: 0 },
-								duration: 240,
-								ease: 'Sine.easeOut',
-								onComplete: () => {
-								try { ring?.destroy?.(); } catch {}
-							}
-							});
+						if (this.scene?.textures?.exists?.('dynamite')) {
+							dyn = this.scene.add.image(lx, ly, 'dynamite').setOrigin(0.5, 0.5);
+							try { dyn.setDepth?.(20013); } catch {}
+							try { this.container.add(dyn); } catch {}
+							try {
+								const baseW = dyn.width ?? 1;
+								const baseH = dyn.height ?? 1;
+								const targetW = (bWidth && bWidth > 0) ? bWidth : this.displayWidth;
+								const targetH = (bHeight && bHeight > 0) ? bHeight : this.displayHeight;
+								const s = Math.max(0.01, Math.min(targetW / baseW, targetH / baseH));
+								try { dyn.setScale(s); } catch {}
+							} catch {}
 						}
 					} catch {
-						try { ring?.destroy?.(); } catch {}
+						dyn = null;
 					}
 
-					try {
-						const count = 7;
-						for (let i = 0; i < count; i++) {
-							let p: any = null;
-							try {
-								p = this.scene.add.circle(wx, wy, 2 + Math.random() * 3, 0xffffff, 1);
-								p.setDepth(891);
-							} catch {}
-							if (!p) continue;
-							const dx = (Math.random() - 0.5) * 90;
-							const dy = (Math.random() - 0.5) * 90;
-							try {
-								this.scene.tweens.add({
-									targets: p,
-									x: wx + dx,
-									y: wy + dy,
-									alpha: 0,
-									scale: 0.1,
-									duration: 260 + Math.floor(Math.random() * 120),
-									ease: 'Sine.easeOut',
-									onComplete: () => {
-									try { p?.destroy?.(); } catch {}
-								}
-								});
-							} catch {
-								try { p?.destroy?.(); } catch {}
-							}
-						}
-					} catch {}
+					entries.push({ t, wx, wy, lx, ly, bWidth, bHeight, dyn });
+				}
+			} catch {}
 
-					try {
-						if (oldSym) {
-							try { this.scene.tweens.killTweensOf(oldSym); } catch {}
-							try {
-								this.scene.tweens.add({
-									targets: oldSym,
-									alpha: 0.0,
-									scaleX: (oldSym.scaleX || 1) * 0.85,
-									scaleY: (oldSym.scaleY || 1) * 0.85,
-									duration: 180,
-									ease: 'Sine.easeIn'
-								});
-							} catch {}
-						}
-					} catch {}
+			// First: spawn ALL dynamites together.
+			try {
+				await Promise.all(entries.map(e => spawnDynamiteImage(this.scene, e.dyn, placeDurationMs)));
+			} catch {}
 
+			// Then: explode in random order, with a shorter fixed interval.
+			try {
+				for (let i = entries.length - 1; i > 0; i--) {
+					const j = Math.floor(Math.random() * (i + 1));
+					const tmp = entries[i];
+					entries[i] = entries[j];
+					entries[j] = tmp;
+				}
+			} catch {}
+
+			const explodeOne = async (e: DynEntry): Promise<void> => {
+				try {
+					if (e.dyn) {
+						try { await despawnDynamiteImage(this.scene, e.dyn, despawnDurationMs); } catch {}
+						try { e.dyn.destroy?.(); } catch {}
+						e.dyn = null;
+					}
+				} catch {}
+
+				try {
+					const tw = (e.bWidth && e.bWidth > 0) ? e.bWidth : this.displayWidth;
+					const th = (e.bHeight && e.bHeight > 0) ? e.bHeight : this.displayHeight;
+					await playBoom(this.scene, e.wx, e.wy, 20014, tw, th);
+				} catch {}
+
+				let oldSym: any = null;
+				try { oldSym = this.symbols?.[e.t.col]?.[e.t.row]; } catch {}
+				try {
+					if (oldSym) {
+						try { this.scene.tweens.killTweensOf(oldSym); } catch {}
+						try {
+							this.scene.tweens.add({
+								targets: oldSym,
+								alpha: 0.0,
+								scaleX: (oldSym.scaleX || 1) * 0.9,
+								scaleY: (oldSym.scaleY || 1) * 0.9,
+								duration: replaceDelayMs,
+								ease: 'Sine.easeIn'
+							});
+						} catch {}
+					}
+				} catch {}
+
+				await delay(replaceDelayMs);
+
+				try {
+					const old: any = this.symbols?.[e.t.col]?.[e.t.row];
+					if (old) {
+						try { (old.parentContainer as any)?.remove?.(old); } catch {}
+						try { old.destroy?.(); } catch {}
+					}
+					let created: any = null;
 					try {
-						this.scene.time.delayedCall(220, () => {
-							try {
-								const old: any = this.symbols?.[t.col]?.[t.row];
-								if (old) {
-									try { (old.parentContainer as any)?.remove?.(old); } catch {}
-									try { old.destroy?.(); } catch {}
-								}
-								let created: any = null;
+						let variant = getSymbol5VariantForCell(spinData, e.t.col, e.t.row) || getDefaultSymbol5Variant();
+						let variantInfo = getSymbol5SpineKeyForVariant(variant);
+						let spineKey = variantInfo.spineKey;
+						let spineAtlasKey = variantInfo.atlasKey;
+						const cacheJson: any = (this.scene.cache.json as any);
+						let hasSpine = cacheJson?.has?.(spineKey);
+						if (!hasSpine) {
+							const fallbackVariants = ['Symbol5_TB', 'Symbol12_TB', 'Symbol13_TB', 'Symbol14_TB'];
+							for (const v of fallbackVariants) {
 								try {
-									let variant = getSymbol5VariantForCell(spinData, t.col, t.row) || getDefaultSymbol5Variant();
-									let variantInfo = getSymbol5SpineKeyForVariant(variant);
-									let spineKey = variantInfo.spineKey;
-									let spineAtlasKey = variantInfo.atlasKey;
-									const cacheJson: any = (this.scene.cache.json as any);
-									let hasSpine = cacheJson?.has?.(spineKey);
-									if (!hasSpine) {
-										const fallbackVariants = ['Symbol5_TB', 'Symbol12_TB', 'Symbol13_TB', 'Symbol14_TB'];
-										for (const v of fallbackVariants) {
-											try {
-												const info = getSymbol5SpineKeyForVariant(v as any);
-												if (cacheJson?.has?.(info.spineKey)) {
-													spineKey = info.spineKey;
-													spineAtlasKey = info.atlasKey;
-													hasSpine = true;
-													break;
-												}
-											} catch {}
-										}
-									}
-									const canCreateSpine = hasSpine && (this.scene.add as any)?.spine;
-									if (canCreateSpine) {
-										try {
-											const spineSymbol = (this.scene.add as any).spine(lx, ly, spineKey, spineAtlasKey);
-											spineSymbol.setOrigin(0.5, 0.5);
-											try { spineSymbol.skeleton.setToSetupPose(); spineSymbol.update(0); } catch {}
-											const baseScale = (this as any).getIdleSpineSymbolScale?.(5) ?? 1;
-											try {
-												(this as any).centerAndFitSpine?.(
-													spineSymbol,
-													lx,
-													ly,
-													this.displayWidth,
-													this.displayHeight,
-													baseScale,
-													(this as any).getIdleSymbolNudge?.(5)
-												);
-											} catch {}
-											try { this.container.add(spineSymbol); } catch {}
-											created = spineSymbol;
-										} catch {}
-									}
-									if (!created) {
-										let imageKey: string | null = null;
-										try {
-											imageKey = getSymbol5ImageKeyForVariant(variant);
-											if (!this.scene.textures.exists(imageKey)) {
-												variant = getDefaultSymbol5Variant();
-												imageKey = getSymbol5ImageKeyForVariant(variant);
-											}
-										} catch {}
-										if (!imageKey || !this.scene.textures.exists(imageKey)) {
-											const candidates = ['symbol_5', 'symbol_12', 'symbol_13', 'symbol_14'];
-											const found = candidates.find(k => this.scene.textures.exists(k));
-											if (found) {
-												imageKey = found;
-											}
-										}
-										if (imageKey && this.scene.textures.exists(imageKey)) {
-											const sprite = this.scene.add.sprite(lx, ly, imageKey);
-											const imageScale = (this as any).getImageSymbolScaleMultiplier?.(5) ?? 1;
-											sprite.displayWidth = this.displayWidth * imageScale;
-											sprite.displayHeight = this.displayHeight * imageScale;
-											try { (this as any).applyIdleWaveShaderIfSymbolImage?.(sprite, 5); } catch {}
-											try { this.container.add(sprite); } catch {}
-											created = sprite;
-										}
+									const info = getSymbol5SpineKeyForVariant(v as any);
+									if (cacheJson?.has?.(info.spineKey)) {
+										spineKey = info.spineKey;
+										spineAtlasKey = info.atlasKey;
+										hasSpine = true;
+										break;
 									}
 								} catch {}
-								if (created) {
-									try {
-										this.symbols[t.col][t.row] = created;
-									} catch {}
+							}
+						}
+						const canCreateSpine = hasSpine && (this.scene.add as any)?.spine;
+						if (canCreateSpine) {
+							try {
+								const spineSymbol = (this.scene.add as any).spine(e.lx, e.ly, spineKey, spineAtlasKey);
+								spineSymbol.setOrigin(0.5, 0.5);
+								try { spineSymbol.skeleton.setToSetupPose(); spineSymbol.update(0); } catch {}
+								const baseScale = (this as any).getIdleSpineSymbolScale?.(5) ?? 1;
+								try {
+									(this as any).centerAndFitSpine?.(
+										spineSymbol,
+										e.lx,
+										e.ly,
+										this.displayWidth,
+										this.displayHeight,
+										baseScale,
+										(this as any).getIdleSymbolNudge?.(5)
+									);
+								} catch {}
+								try { this.container.add(spineSymbol); } catch {}
+								created = spineSymbol;
+							} catch {}
+						}
+						if (!created) {
+							let imageKey: string | null = null;
+							try {
+								imageKey = getSymbol5ImageKeyForVariant(variant);
+								if (!this.scene.textures.exists(imageKey)) {
+									variant = getDefaultSymbol5Variant();
+									imageKey = getSymbol5ImageKeyForVariant(variant);
 								}
 							} catch {}
-							done();
-						});
-					} catch {
-						done();
+							if (!imageKey || !this.scene.textures.exists(imageKey)) {
+								const candidates = ['symbol_5', 'symbol_12', 'symbol_13', 'symbol_14'];
+								const found = candidates.find(k => this.scene.textures.exists(k));
+								if (found) {
+									imageKey = found;
+								}
+							}
+							if (imageKey && this.scene.textures.exists(imageKey)) {
+								const sprite = this.scene.add.sprite(e.lx, e.ly, imageKey);
+								const imageScale = (this as any).getImageSymbolScaleMultiplier?.(5) ?? 1;
+								sprite.displayWidth = this.displayWidth * imageScale;
+								sprite.displayHeight = this.displayHeight * imageScale;
+								try { (this as any).applyIdleWaveShaderIfSymbolImage?.(sprite, 5); } catch {}
+								try { this.container.add(sprite); } catch {}
+								created = sprite;
+							}
+						}
+					} catch {}
+					if (created) {
+						try { this.symbols[e.t.col][e.t.row] = created; } catch {}
 					}
-				});
+				} catch {}
 			};
 
 			try {
-				await Promise.all(targets.map(t => playOne(t)));
+				for (let i = 0; i < entries.length; i++) {
+					try { await explodeOne(entries[i]); } catch {}
+					if (i < entries.length - 1) {
+						await delay(explodeIntervalMs);
+					}
+				}
 			} catch {}
+
 			try {
 				this.updateMoneyValueOverlays(spinData);
 				try { this.container?.setVisible(true); this.container?.setAlpha(1); } catch {}
@@ -2064,6 +2151,11 @@ export class Symbols {
 			if (!symbol || !(symbolValue === 8 || symbolValue === 9 || symbolValue === 10)) {
 				return;
 			}
+			try {
+				if ((symbol as any).__nonWinDimApplied || (symbol as any).__suppressWaveShader) {
+					return;
+				}
+			} catch {}
 			if (this.waveShadersSuppressedDuringSpin || gameStateManager.isReelSpinning) {
 				return;
 			}
@@ -4158,15 +4250,45 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
         self.updateMoneyValueOverlays(spinData);
         try { self.container?.setVisible(true); self.container?.setAlpha(1); } catch {}
       } catch {}
+		let didDynamite = false;
 		try {
-			await (self as any).handleDynamiteSpecial?.(spinData);
+			const special = spinData && spinData.slot && spinData.slot.special ? spinData.slot.special : null;
+			didDynamite = !!(special && special.action === 'dynamite');
 		} catch {}
-		try { (self as any).hasPendingDynamite = false; } catch {}
-		await runCollectorMoneySequence(self as any, spinData);
-    }
-  } catch {
-    (self as any).hasPendingCollectorSequence = false;
-  }
+		const slotController = (self.scene as any)?.slotController;
+		let locked = false;
+		try {
+			if (didDynamite) {
+				try { pauseAutoplayForWinlines(self.scene.gameData); } catch {}
+				try { slotController?.setExternalControlLock?.(true); locked = true; } catch {}
+			}
+			try {
+				await (self as any).handleDynamiteSpecial?.(spinData);
+			} catch {}
+			try { (self as any).hasPendingDynamite = false; } catch {}
+			await runCollectorMoneySequence(self as any, spinData);
+		} finally {
+			if (didDynamite) {
+				try {
+					const scAny: any = (self.scene as any);
+					let bg: any = scAny?.background;
+					try {
+						const bb: any = scAny?.bonusBackground;
+						const bbVisible = !!bb?.getContainer?.()?.visible;
+						if (bbVisible) {
+							bg = bb;
+						}
+					} catch {}
+					bg?.restoreDepthAfterWinSequence?.();
+				} catch {}
+				try { if (locked) slotController?.setExternalControlLock?.(false); } catch {}
+				try { resumeAutoplayAfterWinlines(self.scene.gameData); } catch {}
+			}
+		}
+	    }
+  	  } catch {
+  	    (self as any).hasPendingCollectorSequence = false;
+  	  }
 
   // Replace with spine animations: winners + idle non-winners if there are wins
   // Note: Idle animations for non-winning symbols are now triggered per-reel in dropNewSymbols

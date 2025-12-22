@@ -146,6 +146,17 @@ export class FakeBonusAPI {
         const normalizedArea = normalizeArea(currentItem.area);
         const normalizedMoney = normalizeMoney(currentItem.money);
 
+        let slotSpecial: any = undefined;
+        try {
+            if ((currentItem as any)?.special && (currentItem as any).special.action) {
+                slotSpecial = {
+                    action: String((currentItem as any).special.action),
+                    position: (currentItem as any).special.position,
+                    items: normalizeMoney((currentItem as any).special.items) || (currentItem as any).special.items
+                };
+            }
+        } catch {}
+
         const freeSpinData: SpinData = {
             playerId: this.fakeSpinData.playerId,
             bet: this.fakeSpinData.bet,
@@ -154,6 +165,7 @@ export class FakeBonusAPI {
                 area: normalizedArea,
                 paylines: Array.isArray(currentItem.payline) ? currentItem.payline : [],
                 money: normalizedMoney,
+                special: slotSpecial,
                 freespin: {
                     count: currentItem.spinsLeft,
                     totalWin: currentItem.subTotalWin,

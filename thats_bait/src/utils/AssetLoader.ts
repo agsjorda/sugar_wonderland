@@ -92,6 +92,17 @@ export class AssetLoader {
         this.loadAssetGroup(scene, (this.assetConfig as any).getTransitionAssets());
     }
 
+    loadDynamiteAssets(scene: Scene): void {
+        console.log('[AssetLoader] Loading dynamite assets...');
+        const anyConfig: any = this.assetConfig as any;
+        if (typeof anyConfig.getDynamiteAssets === 'function') {
+            this.loadAssetGroup(scene, anyConfig.getDynamiteAssets());
+        } else {
+            console.warn('[AssetLoader] getDynamiteAssets not available on AssetConfig');
+        }
+        console.log('[AssetLoader] Dynamite assets loaded');
+    }
+
     loadLoadingAssets(scene: Scene): void {
         console.log('[AssetLoader] Loading loading assets...');
         this.loadAssetGroup(scene, this.assetConfig.getLoadingAssets());

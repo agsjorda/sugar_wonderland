@@ -409,6 +409,109 @@ export class BonusBackground {
 		return this.bgContainer;
 	}
 
+	public darkenDepthForWinSequence(): void {
+		try {
+			if (!this.bgDepth || !this.sceneRef) {
+				return;
+			}
+			const scene: any = this.sceneRef;
+			const depth: any = this.bgDepth as any;
+			try {
+				if (typeof depth.__winOriginalAlpha !== 'number') {
+					depth.__winOriginalAlpha = typeof depth.alpha === 'number' ? depth.alpha : 1;
+				}
+				if (typeof depth.__winOriginalTint !== 'number') {
+					const currentTint: number = (depth.tintTopLeft as number) ?? 0xffffff;
+					depth.__winOriginalTint = currentTint;
+				}
+			} catch {}
+			try { scene.tweens?.killTweensOf?.(depth); } catch {}
+			try {
+				const pipelineAny: any = (depth as any).pipeline;
+				if (pipelineAny) {
+					try { scene.tweens?.killTweensOf?.(pipelineAny); } catch {}
+					try {
+						scene.tweens.add({
+							targets: pipelineAny,
+							darkenFactor: 0.6,
+							duration: 800,
+							ease: 'Sine.easeOut',
+						});
+					} catch {}
+				}
+			} catch {}
+			const baseAlpha = typeof depth.alpha === 'number' ? depth.alpha : 1;
+			const targetAlpha = Math.max(0, Math.min(1, baseAlpha * 0.7));
+			try {
+				if (typeof depth.setTint === 'function') {
+					depth.setTint(0x202020);
+				}
+			} catch {}
+			try {
+				scene.tweens.add({
+					targets: depth,
+					alpha: targetAlpha,
+					duration: 800,
+					ease: 'Sine.easeOut',
+				});
+			} catch {}
+		} catch {}
+	}
+
+	public restoreDepthAfterWinSequence(): void {
+		try {
+			if (!this.bgDepth || !this.sceneRef) {
+				return;
+			}
+			const scene: any = this.sceneRef;
+			const depth: any = this.bgDepth as any;
+			const origAlpha =
+				typeof depth.__winOriginalAlpha === 'number'
+					? depth.__winOriginalAlpha
+					: (typeof depth.alpha === 'number' ? depth.alpha : 1);
+			const origTint: number | undefined =
+				typeof depth.__winOriginalTint === 'number'
+					? depth.__winOriginalTint
+					: undefined;
+			try { scene.tweens?.killTweensOf?.(depth); } catch {}
+			try {
+				const pipelineAny: any = (depth as any).pipeline;
+				if (pipelineAny) {
+					try { scene.tweens?.killTweensOf?.(pipelineAny); } catch {}
+					try {
+						scene.tweens.add({
+							targets: pipelineAny,
+							darkenFactor: 0.0,
+							duration: 600,
+							ease: 'Sine.easeOut',
+						});
+					} catch {}
+				}
+			} catch {}
+			try {
+				scene.tweens.add({
+					targets: depth,
+					alpha: origAlpha,
+					duration: 600,
+					ease: 'Sine.easeOut',
+					onComplete: () => {
+						try {
+							if (typeof depth.setTint === 'function') {
+								if (typeof origTint === 'number') {
+									depth.setTint(origTint);
+								} else if (typeof depth.clearTint === 'function') {
+									depth.clearTint();
+								}
+							}
+						} catch {}
+						try { delete depth.__winOriginalAlpha; } catch {}
+						try { delete depth.__winOriginalTint; } catch {}
+					},
+				});
+			} catch {}
+		} catch {}
+	}
+
 	getCharacterSpine(): any | undefined {
 		return this.characterSpine;
 	}

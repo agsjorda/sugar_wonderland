@@ -549,6 +549,16 @@ export class AssetConfig {
 		};
 	}
 
+	getDynamiteAssets(): AssetGroup {
+		const forcedPortraitHighPrefix = `assets/portrait/high`;
+		return {
+			images: {
+				'dynamite': `${forcedPortraitHighPrefix}/dynamite/dynamite.png`,
+				'boom': `${forcedPortraitHighPrefix}/dynamite/boom.png`,
+			}
+		};
+	}
+
 	// Helper method to get all assets for a scene
 	getAllAssets(): { [key: string]: AssetGroup } {
 		return {
@@ -556,6 +566,7 @@ export class AssetConfig {
 			bonusHeader: this.getBonusHeaderAssets(),
 			loading: this.getLoadingAssets(),
 			transitions: this.getTransitionAssets(),
+			dynamite: this.getDynamiteAssets(),
 			symbols: this.getSymbolAssets(),
 			buttons: this.getButtonAssets(),
 			fonts: this.getFontAssets(),

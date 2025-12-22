@@ -111,14 +111,20 @@ export function applyNonWinningSymbolDim(
           if (typeof anySymbol.__nonWinOriginalPipeline === 'undefined') {
             (anySymbol as any).__nonWinOriginalPipeline = (anySymbol as any).pipeline ?? null;
           }
+							try { (anySymbol as any).__suppressWaveShader = true; } catch {}
           const currentPipeline = (anySymbol as any).pipeline;
-          if (currentPipeline) {
-            try {
-              if (typeof (anySymbol as any).resetPipeline === 'function') {
-                (anySymbol as any).resetPipeline();
-              }
-            } catch {}
-          }
+							try {
+								if (typeof (anySymbol as any).setPipeline === 'function') {
+									(anySymbol as any).setPipeline('TextureTintPipeline');
+								}
+							} catch {}
+							if (currentPipeline) {
+								try {
+									if (typeof (anySymbol as any).resetPipeline === 'function') {
+										(anySymbol as any).resetPipeline();
+									}
+								} catch {}
+							}
         } catch {}
 
         anySymbol.__nonWinDimApplied = true;
@@ -185,6 +191,8 @@ export function clearNonWinningSymbolDim(scene: Phaser.Scene, symbol: any): void
         anySymbol.setPipeline(originalPipeline);
       }
     } catch {}
+
+		try { delete (anySymbol as any).__suppressWaveShader; } catch {}
 
     try { delete anySymbol.__nonWinDimApplied; } catch {}
     try { delete anySymbol.__nonWinOriginalScaleX; } catch {}

@@ -81,6 +81,7 @@ export class WaterWaveVerticalPipeline extends Phaser.Renderer.WebGL.Pipelines.S
     private amplitude: number;
     private frequency: number;
     private speed: number;
+    private darkenFactor: number;
 
     constructor(game: Phaser.Game, options: WaterWaveOptions = {}) {
         const fragShader = `
@@ -90,13 +91,18 @@ export class WaterWaveVerticalPipeline extends Phaser.Renderer.WebGL.Pipelines.S
         uniform float uAmplitude;
         uniform float uFrequency;
         uniform float uSpeed;
+        uniform float uDarkenFactor;
         varying vec2 outTexCoord;
+        varying vec4 outTint;
 
         void main() {
             vec2 uv = outTexCoord;
             float wave = sin((uv.x * uFrequency) + (uTime * uSpeed)) * uAmplitude;
             uv.y += wave;
-            gl_FragColor = texture2D(uMainSampler, uv);
+            vec4 color = texture2D(uMainSampler, uv) * outTint;
+            float f = clamp(uDarkenFactor, 0.0, 1.0);
+            color.rgb *= (1.0 - f);
+            gl_FragColor = color;
         }
         `;
 
@@ -111,6 +117,7 @@ export class WaterWaveVerticalPipeline extends Phaser.Renderer.WebGL.Pipelines.S
         this.amplitude = options.amplitude ?? 0.02;
         this.frequency = options.frequency ?? 10.0;
         this.speed = options.speed ?? 2.0;
+        this.darkenFactor = options.darkenFactor ?? 0.0;
     }
 
     onPreRender() {
@@ -119,6 +126,7 @@ export class WaterWaveVerticalPipeline extends Phaser.Renderer.WebGL.Pipelines.S
         this.set1f('uAmplitude', this.amplitude);
         this.set1f('uFrequency', this.frequency);
         this.set1f('uSpeed', this.speed);
+        this.set1f('uDarkenFactor', this.darkenFactor);
     }
 
     setAmplitude(value: number) {
