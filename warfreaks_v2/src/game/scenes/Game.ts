@@ -1511,27 +1511,8 @@ export class Game extends Scene
 	}
 
 	update(time: number, delta: number) {
-		// this.emberParticleSystem.update(this, time, delta);
 		// Game state manager handles its own updates through event listeners
-
-		// Track and record average frame rate every 2 seconds for debugging
-		this.frameRateAccumulatorMs += delta;
-		this.frameCountAccumulator++;
-
-		if (this.frameRateAccumulatorMs >= 2000) {
-			const seconds = this.frameRateAccumulatorMs / 1000;
-			const averageFps = seconds > 0 ? this.frameCountAccumulator / seconds : 0;
-
-			// Update global game state manager
-			this.gameStateManager.lastRecordedFrameRate = averageFps;
-			console.log(
-				`[Game] lastRecordedFrameRate updated: ${averageFps.toFixed(2)} FPS`
-			);
-
-			// Reset accumulators for next window
-			this.frameRateAccumulatorMs = 0;
-			this.frameCountAccumulator = 0;
-		}
+		// this.emberParticleSystem.update(this, time, delta);
 	}
 
 	shutdown() {

@@ -81,6 +81,8 @@ export class Game extends Scene
 	public gameData: GameData;
 	private symbols: Symbols;
 	private clockDisplay: ClockDisplay;
+	private preloaderSnapshotKey?: string;
+	private preloaderSnapshotImage?: Phaser.GameObjects.Image;
 
 	constructor ()
 	{
@@ -97,6 +99,7 @@ export class Game extends Scene
 		// Receive managers from Preloader scene
 		this.networkManager = data.networkManager;
 		this.screenModeManager = data.screenModeManager;
+		this.preloaderSnapshotKey = data?.preloaderSnapshotKey;
 		
 		// Initialize game state manager
 		this.gameStateManager = gameStateManager;
@@ -157,6 +160,8 @@ export class Game extends Scene
 	create ()
 	{
 		console.log(`[Game] Creating game scene`);
+
+		this.showPreloaderSnapshotOverlay();
 
 		const startStartupFadeIn = () => {
 			const fallbackFade = () => {
@@ -1416,6 +1421,44 @@ export class Game extends Scene
 		console.log('- testSpin() - Perform an offline spin using test data');
 	}
 
+	private showPreloaderSnapshotOverlay()
+	{
+		if (!this.preloaderSnapshotKey || !this.textures.exists(this.preloaderSnapshotKey)) {
+			return;
+		}
+
+		try {
+			const overlay = this.add.image(0, 0, this.preloaderSnapshotKey)
+				.setOrigin(0, 0)
+				.setScrollFactor(0)
+				.setDepth(29000); // Below rainbow transition (30000) and sparkle (30001)
+
+			overlay.displayWidth = this.scale.width;
+			overlay.displayHeight = this.scale.height;
+
+			const handleResize = (gameSize: Phaser.Structs.Size) => {
+				if (!overlay.active) return;
+				overlay.displayWidth = gameSize.width;
+				overlay.displayHeight = gameSize.height;
+			};
+
+			this.scale.on('resize', handleResize);
+
+			this.time.delayedCall(1000, () => {
+				this.scale.off('resize', handleResize);
+				overlay.destroy();
+
+				if (this.preloaderSnapshotKey && this.textures.exists(this.preloaderSnapshotKey)) {
+					this.textures.remove(this.preloaderSnapshotKey);
+				}
+			});
+
+			this.preloaderSnapshotImage = overlay;
+		} catch (error) {
+			console.warn('[Game] Failed to show preloader snapshot overlay', error);
+		}
+	}
+
 	private playReverseRainbowTransition(onComplete: () => void, onFallback: () => void)
 	{
 		if (this.startupTransitionPlayed) {
@@ -1427,7 +1470,6 @@ export class Game extends Scene
 		let completed = false;
 		let spine: SpineGameObject | undefined;
 		let listener: any;
-		let monitorEvent: Phaser.Time.TimerEvent | undefined;
 		let sparkleSpine: SpineGameObject | undefined;
 		let sparkleTriggered = false;
 		let sparkleListener: any;
@@ -1464,7 +1506,6 @@ export class Game extends Scene
 			this.startupTransitionPlayed = true;
 			hideSpine();
 			cleanupSparkle();
-			try { monitorEvent?.remove?.(); } catch {}
 			try { ((spine as any)?.animationState)?.removeListener?.(listener as any); } catch {}
 			try { spine?.destroy(); } catch {}
 			onComplete();
@@ -1475,7 +1516,6 @@ export class Game extends Scene
 			completed = true;
 			hideSpine();
 			cleanupSparkle();
-			try { monitorEvent?.remove?.(); } catch {}
 			try { spine?.destroy(); } catch {}
 			onFallback();
 		};
@@ -1558,6 +1598,7 @@ export class Game extends Scene
 			spine.setOrigin(0.5, 0.5);
 			spine.setScrollFactor(0);
 			spine.setDepth(30000);
+			spine.setAlpha(0); // Avoid a flash on creation before the first frame renders
 			spine.setScale(scale.x * 1.1, scale.y * 1.1);
 
 			const firstAnimation = spine?.skeleton?.data?.animations?.[0];
@@ -1573,44 +1614,33 @@ export class Game extends Scene
 				return;
 			}
 
-			// Play backwards from the end at half speed
-			state.timeScale = -1.25;
-			try {
-				entry.trackTime = firstAnimation.duration;
-				entry.trackEnd = firstAnimation.duration;
-			} catch {}
+			// Let the first frame render before revealing to avoid a visible flash
+			this.time.delayedCall(30, () => {
+				try { spine?.setAlpha(1); } catch {}
+			});
 
-			// Poll normalized time instead of relying on complete event; stop once near start
-			const duration = Math.max(0.0001, firstAnimation.duration || entry.trackEnd || 1);
-			monitorEvent = this.time.addEvent({
-				delay: 30,
-				loop: true,
-				callback: () => {
-					try {
-						const currentTime = entry?.trackTime ?? state?.tracks?.[0]?.trackTime ?? 0;
-						const normalized = currentTime / duration; // decreasing toward 0 while playing backwards
-						
-						// Trigger sparkle animation at normalized time 0.3
-						if (!sparkleTriggered && normalized <= 0.5) {
-							playSparkleAnimation();
-						}
-						
-						if (normalized <= 0.1) {
-							hideSpine();
-							finish();
-						}
-					} catch (_e) {
-						hideSpine();
-						finish();
-					}
+			// Play forward at normal speed
+			state.timeScale = 1;
+
+			// Trigger sparkle shortly after start to mirror prior timing
+			this.time.delayedCall(250, () => {
+				if (!sparkleTriggered) {
+					playSparkleAnimation();
 				}
 			});
 
-			// Safety timer to avoid indefinite polling
-			const durationMs = firstAnimation.duration > 0
-				? (firstAnimation.duration * 1000) / Math.max(0.0001, Math.abs(state.timeScale) || 1)
-				: 800;
-			this.time.delayedCall(durationMs + 200, () => {
+			// Clean up when the animation completes
+			listener = {
+				complete: () => {
+					hideSpine();
+					finish();
+				}
+			};
+			state?.addListener?.(listener);
+
+			// Safety timeout in case the complete event never fires
+			const durationMs = firstAnimation.duration > 0 ? firstAnimation.duration * 1000 : 1200;
+			this.time.delayedCall(durationMs + 500, () => {
 				hideSpine();
 				finish();
 			});

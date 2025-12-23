@@ -30,7 +30,7 @@ export const BONUS_WIN_DIALOG_DELAY_MS: number = 1500;
  *
  * Flip this to `false` to restore normal token-required API behavior.
  */
-export const DEMO_ALLOW_NO_TOKEN: boolean = false;
+export const DEMO_ALLOW_NO_TOKEN: boolean = true;
 
 /**
  * API-driven popups (token expired, out-of-balance, etc).

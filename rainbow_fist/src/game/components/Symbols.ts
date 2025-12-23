@@ -209,12 +209,8 @@ export class Symbols {
     this.scene = scene;
     initVariables(this);
     createContainer(this);
-    // Stagger prewarming to avoid large upfront cost during scene creation.
-    const prewarmDelayMs = 500;
-    prewarmSparkSpinePool(this, 1);
-    this.scene.time.delayedCall(prewarmDelayMs, () => {
-      prewarmSymbolSpinePools(this, 4);
-    });
+    // Start staggered prewarm asynchronously so scene setup is not blocked.
+    void schedulePrewarmAsync(this);
     onStart(this);
     onSpinDataReceived(this);
     this.onSpinDone(this.scene);
@@ -2477,7 +2473,35 @@ function onStart(self: Symbols) {
   });
 }
 
-function prewarmSymbolSpinePools(self: Symbols, countPerSymbol: number = 8) {
+async function schedulePrewarmAsync(self: Symbols) {
+  const prewarmDelayMs = 500;
+
+  // Let create() finish before kicking off heavier work.
+  await yieldToScene(self);
+
+  await prewarmSymbolSpinePools(self, 1);
+  await waitForSceneDelay(self, prewarmDelayMs);
+  await prewarmSymbolSpinePools(self, 2);
+  await waitForSceneDelay(self, prewarmDelayMs);
+  await prewarmSymbolSpinePools(self, 2);
+}
+
+function waitForSceneDelay(self: Symbols, delayMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    if (!self.scene?.time) {
+      setTimeout(resolve, delayMs);
+      return;
+    }
+    self.scene.time.delayedCall(delayMs, () => resolve());
+  });
+}
+
+// Yield to the next tick/frame to keep prewarm work non-blocking.
+function yieldToScene(self: Symbols): Promise<void> {
+  return waitForSceneDelay(self, 0);
+}
+
+async function prewarmSymbolSpinePools(self: Symbols, countPerSymbol: number = 8) {
   // Pre-warm Spine instances for symbols 1-9 to avoid first-use hitches.
   const symbolValues = [1, 2, 3, 4, 5, 6, 7, 8, 9];
   for (const value of symbolValues) {
@@ -2485,7 +2509,9 @@ function prewarmSymbolSpinePools(self: Symbols, countPerSymbol: number = 8) {
     const atlasKey = `${spineKey}-atlas`;
 
     let failedForValue = false; // stop noisy retries if the asset is missing
+    await yieldToScene(self);
     for (let i = 0; i < countPerSymbol; i++) {
+      await yieldToScene(self);
       try {
         const spine = acquireSpineFromPool(self, spineKey, atlasKey);
         if (!spine) {
@@ -2501,24 +2527,6 @@ function prewarmSymbolSpinePools(self: Symbols, countPerSymbol: number = 8) {
     }
     if (failedForValue) {
       continue;
-    }
-  }
-}
-
-function prewarmSparkSpinePool(self: Symbols, count: number = 6) {
-  const spineKey = 'spark_vfx';
-  const atlasKey = `${spineKey}-atlas`;
-  for (let i = 0; i < count; i++) {
-    try {
-      const spine = acquireSpineFromPool(self, spineKey, atlasKey);
-      if (!spine) {
-        console.warn('[Symbols] Spark VFX spine not available during prewarm, skipping further attempts');
-        break;
-      }
-      releaseSpineToPool(self, spine);
-    } catch (e) {
-      console.warn('[Symbols] Failed to prewarm spark Spine pool', e);
-      break;
     }
   }
 }

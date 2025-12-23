@@ -11,7 +11,7 @@ import { ensureSpineLoader, ensureSpineFactory } from '../../utils/SpineGuard';
 import { StudioLoadingScreen } from '../components/StudioLoadingScreen';
 import { ClockDisplay } from '../components/ClockDisplay';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
-import { getFullScreenSpineScale, hideSpineAttachmentsByKeywords, playSpineAnimationSequence, playSpineAnimationSequenceWithConfig } from '../components/SpineBehaviorHelper';
+import { hideSpineAttachmentsByKeywords, playSpineAnimationSequenceWithConfig } from '../components/SpineBehaviorHelper';
 import { playUtilityButtonSfx } from '../../utils/audioHelpers';
 
 export class Preloader extends Scene
@@ -310,37 +310,10 @@ export class Preloader extends Scene
             });
         }
 
-        // Prepare fade overlay
-		const fadeOverlay = this.add.rectangle(
-			this.scale.width * 0.5,
-			this.scale.height * 0.5,
-			this.scale.width,
-			this.scale.height,
-			0x000000
-		)
-			.setOrigin(0.5, 0.5)
-			.setScrollFactor(0)
-			.setAlpha(0)
-			// Must render above the StudioLoadingScreen container (depth 999) and fullscreen toggle (depth 10000)
-			.setDepth(20000);
-
         // Start game on click
         this.buttonSpin?.once('pointerdown', () => {
             playUtilityButtonSfx(this);
-			const fadeFallback = () => {
-				this.tweens.add({
-					targets: fadeOverlay,
-					alpha: 1,
-					duration: 500,
-					ease: 'Power2',
-					onComplete: () => this.startGameScene()
-				});
-			};
-
-			this.playRainbowTransition(() => this.startGameScene(), fadeFallback);
-
-			// Cleanly fade out any remaining studio loading UI so it never overlaps gameplay.
-			// this.studioLoadingScreen?.fadeOutRemainingElements(500);
+			this.captureSnapshotAndStart();
         });
 
 		// Ensure web fonts are applied after they are ready
@@ -440,7 +413,47 @@ export class Preloader extends Scene
 		}
 	}
 
-	private startGameScene()
+	private captureSnapshotAndStart()
+	{
+		// Prevent multiple attempts
+		if (this.gameTransitionStarted) {
+			return;
+		}
+
+		const snapshotKey = 'preloader_snapshot';
+
+		const startWithoutSnapshot = () => {
+			this.startGameScene();
+		};
+
+		try {
+			// Remove any previous snapshot texture to avoid cache conflicts
+			if (this.textures.exists(snapshotKey)) {
+				this.textures.remove(snapshotKey);
+			}
+
+			// Capture the current canvas and store it as a texture before starting the game
+			this.game.renderer.snapshot((snapshot: any) => {
+				try {
+					if (!(snapshot instanceof HTMLImageElement)) {
+						startWithoutSnapshot();
+						return;
+					}
+
+					this.textures.addImage(snapshotKey, snapshot as HTMLImageElement);
+					this.startGameScene(snapshotKey);
+				} catch (error) {
+					console.warn('[Preloader] Failed to store preloader snapshot texture; starting without overlay.', error);
+					startWithoutSnapshot();
+				}
+			});
+		} catch (error) {
+			console.warn('[Preloader] Snapshot capture failed; starting without overlay.', error);
+			startWithoutSnapshot();
+		}
+	}
+
+	private startGameScene(preloaderSnapshotKey?: string)
 	{
 		if (this.gameTransitionStarted) {
 			return;
@@ -451,58 +464,9 @@ export class Preloader extends Scene
 		console.log('[Preloader] Starting Game scene after click');
 		this.scene.start('Game', { 
 			networkManager: this.networkManager, 
-			screenModeManager: this.screenModeManager 
+			screenModeManager: this.screenModeManager,
+			preloaderSnapshotKey,
 		});
-	}
-
-	private playRainbowTransition(onComplete: () => void, onFallback: () => void)
-	{
-		const context = 'rainbow_transition';
-		let completed = false;
-		let listener: any;
-
-		const finish = () => {
-			if (completed) return;
-			completed = true;
-			onComplete();
-		};
-
-		const fail = () => {
-			if (completed) return;
-			completed = true;
-			onFallback();
-		};
-
-		try {
-			const spine = (this.add as any).spine(0, 0, context, `${context}-atlas`) as SpineGameObject;
-
-			const scale = getFullScreenSpineScale(this, spine, true);
-			spine.setPosition(this.scale.width * 0.165, this.scale.height * 0.735);
-			spine.setOrigin(0.5, 0.5);
-			spine.setScrollFactor(0);
-			spine.setDepth(20000);
-			spine.setScale(scale.x * 1.1, scale.y * 1.1);
-
-			const firstAnimationName = spine?.skeleton?.data?.animations?.[0]?.name;
-
-			if (!firstAnimationName) {
-				fail();
-				return;
-			}
-			
-			spine.animationState.setAnimation(0, firstAnimationName, false);
-			spine.animationState.timeScale = 1.25;
-
-			// add listener to the animation state
-			spine.animationState.addListener({
-				complete: () => {
-					finish();
-				}
-			});
-		} catch (error) {
-			console.warn(`${context} transition failed, using fade fallback`, error);
-			fail();
-		}
 	}
 
 	private createBackground()

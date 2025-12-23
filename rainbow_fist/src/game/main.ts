@@ -223,51 +223,6 @@ const StartGame = (parent: string) => {
         } catch (_e) { /* no-op */ }
     });
 
-    // Add universal resize handler for all devices (not just mobile)
-    // This ensures the canvas scales properly on initial load and window resize
-    const handleResize = () => {
-        try {
-            const container = document.getElementById(parent);
-            const appElement = document.getElementById('root');
-            
-            // Ensure container and root are properly sized
-            if (container) {
-                container.style.width = '100vw';
-                container.style.height = '100vh';
-            }
-            if (appElement) {
-                const vv = (window as any).visualViewport;
-                const height = vv && vv.height ? Math.round(vv.height) : window.innerHeight;
-                (appElement as HTMLElement).style.height = `${height}px`;
-            }
-            
-            // Refresh Phaser scale to recalculate canvas size
-            game.scale.refresh();
-        } catch (_e) { /* no-op */ }
-    };
-
-    // Add resize listener for all devices
-    window.addEventListener('resize', handleResize);
-    
-    // Trigger initial scale calculation after DOM is ready
-    // Use multiple strategies to ensure it happens
-    if (document.readyState === 'complete' || document.readyState === 'interactive') {
-        // DOM is already ready, trigger immediately
-        setTimeout(() => handleResize(), 0);
-    } else {
-        // Wait for DOM to be ready
-        window.addEventListener('DOMContentLoaded', () => {
-            setTimeout(() => handleResize(), 0);
-        });
-    }
-    
-    // Also trigger after a short delay to catch any late layout changes
-    setTimeout(() => handleResize(), 100);
-    requestAnimationFrame(() => {
-        handleResize();
-    });
-
-
     return game;
 
 }

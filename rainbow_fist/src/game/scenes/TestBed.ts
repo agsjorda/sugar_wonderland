@@ -63,7 +63,7 @@ export class TestBed extends Scene {
 	create() {
 		// this.addWhiteBackground();
 
-		const scale = 0.05
+		const scale = 0.1
 
 		// this.displayBigWinSpine({ x: 0.5, y: 0.47 });
 		// this.displayMegaWinSpine({ x: 0.4925, y: 0.5 });
@@ -71,12 +71,12 @@ export class TestBed extends Scene {
 		// this.displaySuperWinSpine({ x: 0.5, y: 0.5 });
 
 		this.displaySymbolSpine(0, scale, { x: 0.2, y: 0.75 }, 0, false);
-		this.displaySymbolSpine(1, 0.5, { x: 0.5, y: 0.5 }, 0);
-		this.displaySymbolSpine(2, scale, { x: 0.5, y: 0.5 }, 0);
-		this.displaySymbolSpine(3, scale, { x: 0.5, y: 0.5 }, 0);
-		this.displaySymbolSpine(4, scale, { x: 0.5, y: 0.5 }, 0);
+		// this.displaySymbolSpine(1, 1, { x: 0.5, y: 0.5 }, 1);
+		// this.displaySymbolSpine(2, scale, { x: 0.5, y: 0.5 }, 1);
+		// this.displaySymbolSpine(3, scale, { x: 0.5, y: 0.5 }, 1);
+		this.displaySymbolSpine(4, scale, { x: 0.5, y: 0.5 }, 1);
 		this.displaySymbolSpine(5, scale, { x: 0.8, y: 0.85 }, 0, false);
-		this.displaySymbolSpine(5, scale, { x: 0.2, y: 0.95 }, 1);
+		// this.displaySymbolSpine(10, scale, { x: 0.2, y: 0.95 }, 1);
 		this.displaySymbolSpine(5, scale, { x: 0.5, y: 0.95 }, 2);
 		this.displaySymbolSpine(5, scale, { x: 0.8, y: 0.95 }, 3);
 

@@ -1730,9 +1730,15 @@ export class HelpScreen {
 
     private getResolvedBetAmount(): number {
         try {
-            const bet = this.getBetAmount();
-            if (Number.isFinite(bet) && bet > 0) {
-                return bet;
+            // Help/payout tables should always use BASE bet (non-amplified / non-enhanced).
+            // Prefer SlotController base bet when available; fall back to injected getter.
+            const baseBetFromSlotController = (this.scene as any)?.slotController?.getBaseBetAmount?.();
+            if (Number.isFinite(baseBetFromSlotController) && baseBetFromSlotController > 0) {
+                return baseBetFromSlotController;
+            }
+            const betFromMenu = this.getBetAmount();
+            if (Number.isFinite(betFromMenu) && betFromMenu > 0) {
+                return betFromMenu;
             }
         } catch (error) {
             console.warn('[HelpScreen] Failed to resolve bet amount, falling back to 1:', error);

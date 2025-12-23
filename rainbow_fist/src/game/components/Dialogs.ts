@@ -165,7 +165,7 @@ export class Dialogs {
 		// Prepare white flash transition overlay for special dialog exits (e.g., congrats)
 		this.flashTransition = new FlashTransition(scene);
 		this.flashTransition.hide();
-			this.prewarmDialogSpines(scene);
+		// this.prewarmDialogSpines(scene);
 		
 		console.log('[Dialogs] Dialog system created');
 	}

@@ -1,14 +1,15 @@
 Symbol1_RF.webp
-size:1820,1820
+size:632,632
 filter:Linear,Linear
-pma:true
+pma:false
+scale:0.3413333
 Boxing Gloves_00000
-bounds:1357,1574,247,243
-offsets:128,126,500,500
+bounds:342,196,85,83
+offsets:44,43,171,171
 Comic Star
-bounds:989,344,481,448
+bounds:466,477,164,153
 freepik_assistant_1759132742978
-bounds:2,2,985,790
-offsets:16,136,1024,1024
+bounds:2,8,338,271
+offsets:5,46,350,350
 gloves
-bounds:2,794,1353,1023
+bounds:2,281,462,349
