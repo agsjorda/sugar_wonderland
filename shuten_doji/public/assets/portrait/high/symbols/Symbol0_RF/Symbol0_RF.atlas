@@ -1,0 +1,65 @@
+Symbol0_RF.webp
+size:256,256
+filter:Linear,Linear
+pma:true
+scale:0.0907
+Scratch/Scratch_00000
+bounds:119,168,1,1
+Scratch/Scratch_00001
+bounds:119,92,56,43
+offsets:94,47,174,98
+Scratch/Scratch_00002
+bounds:2,92,115,77
+offsets:36,14,174,98
+Scratch/Scratch_00003
+bounds:2,171,127,83
+offsets:24,8,174,98
+Scratch/Scratch_00004
+bounds:2,171,127,83
+offsets:24,8,174,98
+Scratch/Scratch_00005
+bounds:2,171,127,83
+offsets:24,8,174,98
+Scratch/Scratch_00006
+bounds:2,171,127,83
+offsets:24,8,174,98
+Scratch/Scratch_00007
+bounds:2,171,127,83
+offsets:24,8,174,98
+Scratch/Scratch_00008
+bounds:2,171,127,83
+offsets:24,8,174,98
+Scratch/Scratch_00009
+bounds:2,171,127,83
+offsets:24,8,174,98
+Scratch/Scratch_00010
+bounds:2,171,127,83
+offsets:24,8,174,98
+Scratch/Scratch_00011
+bounds:2,171,127,83
+offsets:24,8,174,98
+Scratch/Scratch_00012
+bounds:2,171,127,83
+offsets:24,8,174,98
+Scratch/Scratch_00013
+bounds:2,171,127,83
+offsets:24,8,174,98
+Scratch/Scratch_00014
+bounds:2,171,127,83
+offsets:24,8,174,98
+arm
+bounds:131,137,82,45
+center
+bounds:2,14,86,76
+finger 1
+bounds:177,90,41,45
+finger 2
+bounds:90,42,43,48
+finger 3
+bounds:215,138,30,44
+finger 4
+bounds:220,93,29,43
+finger 5
+bounds:90,2,26,38
+scatter
+bounds:131,184,121,70
