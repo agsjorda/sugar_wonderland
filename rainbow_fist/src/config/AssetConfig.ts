@@ -11,6 +11,7 @@ export interface AssetGroup {
 export class AssetConfig {
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
+	private readonly GAME_INITIALS = 'RF';
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -41,6 +42,10 @@ export class AssetConfig {
 					atlas: `${prefix}/background/default_background_spine/Main game Background RIG.atlas`,
 					json: `${prefix}/background/default_background_spine/Main game Background RIG.json`
 				},
+				'rainbow_transition': {
+					atlas: `${prefix}/transitions/Rainbow_Transition_RF/Rainbow_Transition_RF.atlas`,
+					json: `${prefix}/transitions/Rainbow_Transition_RF/Rainbow_Transition_RF.json`
+				},
 			}
 		};
 	}
@@ -57,6 +62,10 @@ export class AssetConfig {
 				'bonus_background_spine': {
 					atlas: `${prefix}/bonus_background/bonus_background_spine/Bonus Background RIG.atlas`,
 					json: `${prefix}/bonus_background/bonus_background_spine/Bonus Background RIG.json`
+				},
+				'sparkle_background': {
+					atlas: `${prefix}/bonus_background/Particle_VFX/Particle_VFX.atlas`,
+					json: `${prefix}/bonus_background/Particle_VFX/Particle_VFX.json`
 				},
 			}
 		};
@@ -133,7 +142,7 @@ export class AssetConfig {
 			if(hasSpine) {
 				// Spine animations for hit effects
 				const spineKey = `symbol${i}_spine`;
-				const symbolName = `Symbol${i}_RF`;
+				const symbolName = `Symbol${i}_${this.GAME_INITIALS}`;
 				const atlasPath = `${prefix}/symbols/${symbolName}/${symbolName}.atlas`;
 				const jsonPath = `${prefix}/symbols/${symbolName}/${symbolName}.json`;
 

@@ -1,5 +1,4 @@
 import { Scene } from "phaser";
-import { ensureSpineFactory } from "../../utils/SpineGuard";
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { getFullScreenSpineScale, playSpineAnimationSequence } from "./SpineBehaviorHelper";
@@ -8,6 +7,7 @@ import { SpineGameObject } from "@esotericsoftware/spine-phaser-v3";
 export class BonusBackground {
 	private bonusContainer: Phaser.GameObjects.Container;
 	private bonusBackgroundVisual?: Phaser.GameObjects.Image | SpineGameObject;
+	private sparkleBackground?: SpineGameObject;
 	private arch: Phaser.GameObjects.Image;
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
@@ -59,9 +59,6 @@ export class BonusBackground {
 		this.bonusContainer.add(backgroundVisual);
 		this.fitBackgroundToScreen(scene);
 
-		// Arch – fit to width and anchor to bottom
-		// this.createArchImage(scene, assetScale);
-
 		// Add reel frame
 		this.reelFrame = scene.add.image(
 			scene.scale.width * this.reelFramePosition.x,
@@ -69,11 +66,36 @@ export class BonusBackground {
 			'reel_frame'
 		).setOrigin(0.5, 0.5)
 		.setDepth(this.reelFrameDepth);
+		
+		// Create sparkle background first (behind everything except bonus_background_spine)
+		const sparkleBackground = this.createSparkleBackground(scene);
+		if (sparkleBackground) {
+			console.log(`[BonusBackground] Adding sparkle background to container`);
+			this.sparkleBackground = sparkleBackground;
+			sparkleBackground.setDepth(1);
+			sparkleBackground.setVisible(true);
+			this.bonusContainer.add(sparkleBackground);
+			// this.fitSparkleBackgroundToScreen(scene);
+			console.log(`[BonusBackground] Sparkle background added and fitted to screen`);
+		} else {
+			console.warn(`[BonusBackground] Sparkle background was not created, skipping addition to container`);
+		}
 
 		// Fit reel frame to screen width while preserving aspect ratio
 		this.fitReelFrameToScreenWidth(scene);
 
 		this.bonusContainer.add(this.reelFrame);
+	}
+
+	private fitSparkleBackgroundToScreen(scene: Scene): void {
+		if (!this.sparkleBackground) return;
+
+		const screenWidth = scene.scale.width;
+		const screenHeight = scene.scale.height;
+
+		const scale = getFullScreenSpineScale(scene, this.sparkleBackground, true);
+		this.sparkleBackground.setScale(scale.x, scale.y);
+		this.sparkleBackground.setPosition(screenWidth * 0.5, screenHeight * 0.5);
 	}
 
 	private fitBackgroundToScreen(scene: Scene): void {
@@ -100,33 +122,50 @@ export class BonusBackground {
 		this.bonusBackgroundVisual.setPosition(screenWidth * 0.5, screenHeight * 0.5);
 	}
 
+	private createSparkleBackground(scene: Scene): SpineGameObject | undefined {
+		const centerX = scene.scale.width * 0.5;
+		const centerY = scene.scale.height * 0.5;
+		const spineKey = 'sparkle_background';
+		const atlasKey = `${spineKey}-atlas`;
+
+		console.log(`[BonusBackground] Attempting to create sparkle background: ${spineKey} with atlas: ${atlasKey}`);
+
+		try {
+			const spine = scene.add.spine(centerX, centerY, spineKey, atlasKey) as SpineGameObject;
+			console.log(`[BonusBackground] Sparkle background spine created successfully`);
+			spine.setOrigin(0.5, 0.5);
+			spine.setVisible(true);
+			// Play animation at index 0 in a continuous loop
+			playSpineAnimationSequence(spine, [0], true);
+			console.log(`[BonusBackground] Sparkle background animation started`);
+			return spine;
+		} catch (error) {
+			console.error(`[BonusBackground] Failed to create sparkle background spine '${spineKey}':`, error);
+			return undefined;
+		}
+	}
+
 	private createBonusBackgroundVisual(scene: Scene, imageKey: string, spineKey: string): Phaser.GameObjects.Image | SpineGameObject {
 		const centerX = scene.scale.width * 0.5;
 		const centerY = scene.scale.height * 0.5;
-		const context = `[BonusBackground] ${spineKey}`;
 
-		if (ensureSpineFactory(scene, context)) {
-			try {
-				const addAny: any = scene.add;
-				const spine = addAny.spine?.(centerX, centerY, spineKey, `${spineKey}-atlas`) as SpineGameObject;
-				if (spine) {
-					spine.setOrigin(0.5075, 0.5);
-					playSpineAnimationSequence(spine, [0], true);
-					return spine;
-				}
-			} catch (error) {
-				console.warn(`[BonusBackground] Failed to create spine '${spineKey}':`, error);
-			}
+		try {
+			const spine = scene.add.spine(centerX, centerY, spineKey, `${spineKey}-atlas`) as SpineGameObject;
+			spine.setOrigin(0.5075, 0.5);
+			playSpineAnimationSequence(spine, [0], true);
+			return spine;
+		} catch (error) {
+			console.warn(`[BonusBackground] Failed to create spine '${spineKey}':`, error);
+			console.warn(`[BonusBackground] Spine '${spineKey}' unavailable. Falling back to image '${imageKey}'`);
+			return scene.add.image(centerX, centerY, imageKey).setOrigin(0.5, 0.5);
 		}
-
-		console.warn(`[BonusBackground] Spine '${spineKey}' unavailable. Falling back to image '${imageKey}'`);
-		return scene.add.image(centerX, centerY, imageKey).setOrigin(0.5, 0.5);
 	}
 
 	resize(scene: Scene): void {
 		if (this.bonusContainer) {
 			this.bonusContainer.setSize(scene.scale.width, scene.scale.height);
 		}
+		this.fitSparkleBackgroundToScreen(scene);
 		this.fitBackgroundToScreen(scene);
 		this.fitArchToBottom(scene);
 		this.fitReelFrameToScreenWidth(scene);

@@ -58,6 +58,7 @@ export class Symbols {
   public scatterDataBuffer: Data | null = null;
   private overlayRect?: Phaser.GameObjects.Graphics;
   public currentSpinData: any = null; // Store current spin data for access by other components
+  public cachedTotalWin: number = 0;
   public cachedPreBonusWins: number = 0;
   private dialogs: Dialogs;
   public dropSparkPlayedColumns: Set<number> = new Set();
@@ -208,8 +209,12 @@ export class Symbols {
     this.scene = scene;
     initVariables(this);
     createContainer(this);
-    prewarmSymbolSpinePools(this);
-    prewarmSparkSpinePool(this);
+    // Stagger prewarming to avoid large upfront cost during scene creation.
+    const prewarmDelayMs = 500;
+    prewarmSparkSpinePool(this, 1);
+    this.scene.time.delayedCall(prewarmDelayMs, () => {
+      prewarmSymbolSpinePools(this, 4);
+    });
     onStart(this);
     onSpinDataReceived(this);
     this.onSpinDone(this.scene);
@@ -2018,21 +2023,7 @@ export class Symbols {
       }
     }
 
-    // Calculate total win from freespinItems
-    let totalWin = 0;
-    if (this.currentSpinData && this.currentSpinData.slot) {
-      totalWin = this.currentSpinData.slot.totalWin ?? 0;
-
-      if (totalWin <= 0) {
-        const freespinData = this.currentSpinData.slot.freespin || this.currentSpinData.slot.freeSpin;
-        if (freespinData && freespinData.items && Array.isArray(freespinData.items)) {
-          totalWin = freespinData.items.reduce((sum: number, item: any) => {
-            return sum + (item.totalWin || 0);
-          }, 0);
-          console.log(`[Symbols] Calculated total win from freespinItems: ${totalWin}`);
-        }
-      }
-    }
+    const totalWin = this.cachedTotalWin;
 
     // Show congrats dialog with total win amount
     if (gameScene.dialogs && typeof gameScene.dialogs.showCongratulations === 'function') {
@@ -2089,6 +2080,24 @@ export class Symbols {
    */
   public isFreeSpinAutoplayActive(): boolean {
     return this.freeSpinAutoplayActive;
+  }
+
+  public calculateAndCacheTotalWin(spinData: any) {
+    const totalWin = spinData.slot.totalWin;
+    if (totalWin) {
+      this.cachedTotalWin = totalWin;
+    }
+    else {
+      const freespinData = spinData.slot.freespin || spinData.slot.freeSpin;
+      if (freespinData && freespinData.items && Array.isArray(freespinData.items)) {
+        this.cachedTotalWin = freespinData.items.reduce((sum: number, item: any) => {
+          return sum + (item.totalWin || 0);
+        }, 0);
+      }
+      else {
+        this.cachedTotalWin = 0;
+      }
+    }
   }
 
   public calculateAndCachePreBonusWins(spinData: any) {
@@ -2486,7 +2495,6 @@ function prewarmSymbolSpinePools(self: Symbols, countPerSymbol: number = 8) {
         }
         releaseSpineToPool(self, spine);
       } catch (e) {
-        console.warn('[Symbols] Failed to prewarm Spine pool for', spineKey, e);
         failedForValue = true;
         break;
       }
@@ -2821,6 +2829,61 @@ function createInitialSymbols(self: Symbols) {
 async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinData: any) {
   console.log('[Symbols] Processing SpinData symbols:', symbols);
 
+  const waitForWinDialogToClose = async (reason: string) => {
+    if (!gameStateManager.isShowingWinDialog) {
+      return;
+    }
+
+    console.log(`[Symbols] Win dialog is open (${reason}) - pausing spin processing until it closes`);
+
+    let resolved = false;
+    const pollIntervalMs = 50;
+    // Give the dialog auto-close timer ample time plus buffer before timing out.
+    const maxWaitMs = AUTO_SPIN_WIN_DIALOG_TIMEOUT + 4000;
+
+    await new Promise<void>((resolve) => {
+      const cleanup = () => {
+        if (resolved) {
+          return;
+        }
+        resolved = true;
+        try { gameEventManager.off(GameEventType.WIN_DIALOG_CLOSED, onClosed); } catch { }
+        resolve();
+      };
+
+      const onClosed = () => {
+        console.log('[Symbols] WIN_DIALOG_CLOSED received while waiting to start spin processing');
+        cleanup();
+      };
+
+      try { gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, onClosed); } catch { }
+
+      const poll = async () => {
+        let waitedMs = 0;
+        while (!resolved && gameStateManager.isShowingWinDialog && waitedMs < maxWaitMs) {
+          await delay(pollIntervalMs);
+          waitedMs += pollIntervalMs;
+        }
+
+        if (resolved) {
+          return;
+        }
+
+        if (!gameStateManager.isShowingWinDialog) {
+          cleanup();
+          return;
+        }
+
+        console.warn('[Symbols] Timed out waiting for win dialog to close - continuing spin processing');
+        cleanup();
+      };
+
+      poll();
+    });
+  };
+
+  await waitForWinDialogToClose('processSpinDataSymbols start');
+
   // Clear all scatter symbols from previous spin
   if (self.scatterAnimationManager) {
     self.scatterAnimationManager.clearScatterSymbols();
@@ -3017,6 +3080,7 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   if (scatterGrids.length >= targetScatterSymbolCount) {
     console.log(`[Symbols] Scatter detected! Found ${scatterGrids.length} scatter symbols`);
     try {
+      self.calculateAndCacheTotalWin(spinData);
       self.calculateAndCachePreBonusWins(spinData);
     } catch { }
     gameStateManager.isScatter = true;
@@ -4049,12 +4113,10 @@ async function animateMultiplierValueToPosition(self: Symbols, value: number, x:
       }
 
       // Hardcoded win bar position (matches HUD ratios)
-      const targetX = scene.scale.width * 0.5;
+      const targetX = scene.scale.width * 0.75;
       // Positive Y goes downward in Phaser, so a positive offset lands slightly LOWER than the win bar.
       // Scaled to screen height so it remains subtle but consistent across resolutions.
-      const WIN_BAR_TARGET_Y_OFFSET_PX = 18;
-      const winBarTargetYOffset = WIN_BAR_TARGET_Y_OFFSET_PX * (scene.scale.height / 720);
-      const targetY = scene.scale.height * 0.2125 + winBarTargetYOffset;
+      const targetY = scene.scale.height * 0.1575;
 
       // Reuse the multiplier bar texture so we know the asset is available
       const baseScale = self.getSpineSymbolScale(value);

@@ -40,6 +40,8 @@ import { ScatterAnticipation } from '../components/ScatterAnticipation';
 import { ClockDisplay } from '../components/ClockDisplay';
 import { WinTracker } from '../components/WinTracker';
 import { GameEventData, SpinDataEventData } from '../../event/EventManager';
+import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
+import { getFullScreenSpineScale } from '../components/SpineBehaviorHelper';
 
 export class Game extends Scene
 {
@@ -66,6 +68,7 @@ export class Game extends Scene
 	private scatterAnticipation: ScatterAnticipation;
 		private winTrackerRow?: Phaser.GameObjects.Container;
 	private modeToggleKeys?: { base: Input.Keyboard.Key; bonus: Input.Keyboard.Key };
+	private startupTransitionPlayed: boolean = false;
 	
 	// Note: Payout data now calculated directly from paylines in WIN_STOP handler
 	// Track whether this spin has winlines to animate
@@ -155,48 +158,46 @@ export class Game extends Scene
 	{
 		console.log(`[Game] Creating game scene`);
 
-		// Create fade overlay FIRST (and above everything) so all first-frame init is hidden.
-		// Note: Many UI elements use depths in the 100-3000 range, and some transitions use 10000,
-		// so we pick a very high value to guarantee coverage.
-		const fadeOverlay = this.add.rectangle(
-			this.scale.width * 0.5,
-			this.scale.height * 0.5,
-			this.scale.width,
-			this.scale.height,
-			0x000000
-		)
-			.setOrigin(0.5, 0.5)
-			.setScrollFactor(0)
-			.setAlpha(1)
-			.setDepth(30000);
-
-		// Keep overlay sized correctly if the game resizes before the fade completes.
-		const onResize = (gameSize: Phaser.Structs.Size) => {
-			if (!fadeOverlay || !fadeOverlay.active) return;
-			fadeOverlay.setPosition(gameSize.width * 0.5, gameSize.height * 0.5);
-			fadeOverlay.setSize(gameSize.width, gameSize.height);
-		};
-		this.scale.on('resize', onResize);
-
 		const startStartupFadeIn = () => {
-			// Small buffer so any first-tick UI toggles (mode/visibility/state) happen while still fully black.
-			// Keep this short so the player gets control quickly.
-			const holdMs = 60;
-			const fadeMs = 200;
+			const fallbackFade = () => {
+				// Minimal black fade fallback if spine fails
+				const fadeOverlay = this.add.rectangle(
+					this.scale.width * 0.5,
+					this.scale.height * 0.5,
+					this.scale.width,
+					this.scale.height,
+					0x000000
+				)
+					.setOrigin(0.5, 0.5)
+					.setScrollFactor(0)
+					.setAlpha(1)
+					.setDepth(30000);
 
-			this.time.delayedCall(holdMs, () => {
-				this.tweens.add({
-					targets: fadeOverlay,
-					alpha: 0,
-					duration: fadeMs,
-					ease: 'Power2',
-					onComplete: () => {
-						console.log('[Game] Fade in from black complete');
-						this.scale.off('resize', onResize);
-						fadeOverlay.destroy();
-					}
+				const onResize = (gameSize: Phaser.Structs.Size) => {
+					if (!fadeOverlay || !fadeOverlay.active) return;
+					fadeOverlay.setPosition(gameSize.width * 0.5, gameSize.height * 0.5);
+					fadeOverlay.setSize(gameSize.width, gameSize.height);
+				};
+				this.scale.on('resize', onResize);
+
+				this.time.delayedCall(60, () => {
+					this.tweens.add({
+						targets: fadeOverlay,
+						alpha: 0,
+						duration: 200,
+						ease: 'Power2',
+						onComplete: () => {
+							this.scale.off('resize', onResize);
+							fadeOverlay.destroy();
+							console.log('[Game] Fade fallback complete');
+						}
+					});
 				});
-			});
+			};
+
+			this.playReverseRainbowTransition(() => {
+				console.log('[Game] Rainbow intro transition complete');
+			}, fallbackFade);
 		};
 
 		this.clockDisplay = new ClockDisplay(this, {
@@ -1413,6 +1414,210 @@ export class Game extends Scene
 		console.log('- clearCoins() - Remove all coins');
 		console.log('- getCoinCount() - Check active coin count');
 		console.log('- testSpin() - Perform an offline spin using test data');
+	}
+
+	private playReverseRainbowTransition(onComplete: () => void, onFallback: () => void)
+	{
+		if (this.startupTransitionPlayed) {
+			onComplete();
+			return;
+		}
+
+		const context = 'rainbow_transition';
+		let completed = false;
+		let spine: SpineGameObject | undefined;
+		let listener: any;
+		let monitorEvent: Phaser.Time.TimerEvent | undefined;
+		let sparkleSpine: SpineGameObject | undefined;
+		let sparkleTriggered = false;
+		let sparkleListener: any;
+
+		const hideSpine = () => {
+			try { spine?.setAlpha(0); } catch {}
+			try { spine?.setVisible(false); } catch {}
+			try { (spine as any)?.disableInteractive?.(); } catch {}
+			try { spine && (spine as any).active !== undefined ? (spine as any).active = false : null; } catch {}
+		};
+
+		const cleanupSparkle = () => {
+			if (sparkleSpine) {
+				try {
+					if (sparkleListener && (sparkleSpine as any)?.animationState) {
+						((sparkleSpine as any).animationState as any)?.removeListener?.(sparkleListener);
+					}
+				} catch {}
+				try {
+					sparkleSpine.setVisible(false);
+					sparkleSpine.setAlpha(0);
+				} catch {}
+				try {
+					sparkleSpine.destroy();
+				} catch {}
+				sparkleSpine = undefined;
+				sparkleListener = undefined;
+			}
+		};
+
+		const finish = () => {
+			if (completed) return;
+			completed = true;
+			this.startupTransitionPlayed = true;
+			hideSpine();
+			cleanupSparkle();
+			try { monitorEvent?.remove?.(); } catch {}
+			try { ((spine as any)?.animationState)?.removeListener?.(listener as any); } catch {}
+			try { spine?.destroy(); } catch {}
+			onComplete();
+		};
+
+		const fail = () => {
+			if (completed) return;
+			completed = true;
+			hideSpine();
+			cleanupSparkle();
+			try { monitorEvent?.remove?.(); } catch {}
+			try { spine?.destroy(); } catch {}
+			onFallback();
+		};
+
+		const playSparkleAnimation = () => {
+			if (sparkleTriggered || sparkleSpine) return;
+			sparkleTriggered = true;
+
+			const sparkleKey = 'sparkle_background';
+			const sparkleContext = `[Game] ${sparkleKey}`;
+
+			try {
+				const centerX = this.scale.width * 0.5;
+				const centerY = this.scale.height * 0.5;
+				const addAny: any = this.add;
+				sparkleSpine = addAny.spine?.(centerX, centerY, sparkleKey, `${sparkleKey}-atlas`) as SpineGameObject;
+
+				if (!sparkleSpine) {
+					console.warn(`${sparkleContext} Failed to create spine`);
+					return;
+				}
+
+				sparkleSpine.setOrigin(0.5, 0.5);
+				sparkleSpine.setScrollFactor(0);
+				sparkleSpine.setDepth(30001); // Above rainbow transition
+				sparkleSpine.setVisible(true);
+
+				// Get the first animation
+				const animations = (sparkleSpine as any)?.skeleton?.data?.animations as Array<{ name: string }> | undefined;
+				if (!animations || animations.length === 0) {
+					console.warn(`${sparkleContext} No animations found`);
+					cleanupSparkle();
+					return;
+				}
+
+				const firstAnimationName = animations[0].name;
+				const state: any = (sparkleSpine as any).animationState;
+
+				// Play animation once (not looping)
+				const entry = state?.setAnimation?.(0, firstAnimationName, false);
+				if (!entry) {
+					console.warn(`${sparkleContext} Failed to set animation`);
+					cleanupSparkle();
+					return;
+				}
+
+				// Set up listener to clean up when animation completes
+				sparkleListener = {
+					complete: (trackEntry: any) => {
+						try {
+							if (trackEntry?.trackIndex === 0 && trackEntry?.animation?.name === firstAnimationName && !trackEntry?.loop) {
+								state?.removeListener?.(sparkleListener);
+								cleanupSparkle();
+								console.log(`${sparkleContext} Animation completed and cleaned up`);
+							}
+						} catch (e) {
+							console.warn(`${sparkleContext} Error in completion listener:`, e);
+							cleanupSparkle();
+						}
+					}
+				};
+
+				state?.addListener?.(sparkleListener);
+				console.log(`${sparkleContext} Sparkle animation started at normalized time 0.3`);
+			} catch (error) {
+				console.warn(`${sparkleContext} Failed to create sparkle animation:`, error);
+				cleanupSparkle();
+			}
+		};
+
+		try {
+			spine = (this.add as any).spine(0, 0, context, `${context}-atlas`) as SpineGameObject;
+			if (!spine) {
+				fail();
+				return;
+			}
+
+			const scale = getFullScreenSpineScale(this, spine, true);
+			spine.setPosition(this.scale.width * 0.165, this.scale.height * 0.735);
+			spine.setOrigin(0.5, 0.5);
+			spine.setScrollFactor(0);
+			spine.setDepth(30000);
+			spine.setScale(scale.x * 1.1, scale.y * 1.1);
+
+			const firstAnimation = spine?.skeleton?.data?.animations?.[0];
+			if (!firstAnimation?.name) {
+				fail();
+				return;
+			}
+
+			const state: any = (spine as any).animationState;
+			const entry = state?.setAnimation?.(0, firstAnimation.name, false);
+			if (!entry) {
+				fail();
+				return;
+			}
+
+			// Play backwards from the end at half speed
+			state.timeScale = -1.25;
+			try {
+				entry.trackTime = firstAnimation.duration;
+				entry.trackEnd = firstAnimation.duration;
+			} catch {}
+
+			// Poll normalized time instead of relying on complete event; stop once near start
+			const duration = Math.max(0.0001, firstAnimation.duration || entry.trackEnd || 1);
+			monitorEvent = this.time.addEvent({
+				delay: 30,
+				loop: true,
+				callback: () => {
+					try {
+						const currentTime = entry?.trackTime ?? state?.tracks?.[0]?.trackTime ?? 0;
+						const normalized = currentTime / duration; // decreasing toward 0 while playing backwards
+						
+						// Trigger sparkle animation at normalized time 0.3
+						if (!sparkleTriggered && normalized <= 0.5) {
+							playSparkleAnimation();
+						}
+						
+						if (normalized <= 0.1) {
+							hideSpine();
+							finish();
+						}
+					} catch (_e) {
+						hideSpine();
+						finish();
+					}
+				}
+			});
+
+			// Safety timer to avoid indefinite polling
+			const durationMs = firstAnimation.duration > 0
+				? (firstAnimation.duration * 1000) / Math.max(0.0001, Math.abs(state.timeScale) || 1)
+				: 800;
+			this.time.delayedCall(durationMs + 200, () => {
+				hideSpine();
+				finish();
+			});
+		} catch (error) {
+			console.warn(`${context} intro failed, using fallback`, error);
+			fail();
+		}
 	}
 
 	switchBetweenModes(isBonus: boolean): void {

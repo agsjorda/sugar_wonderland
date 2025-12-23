@@ -63,8 +63,8 @@ export class AudioManager {
 	private scene: Phaser.Scene;
 	private currentMusic: MusicType | null = null;
 	private musicVolume: number = 1;
-	private sfxVolume: number = 0.55;
-	private ambientVolume: number = 0.3; // Volume for ambient audio layer
+	private sfxVolume: number = 1;
+	private ambientVolume: number = 0.5; // Volume for ambient audio layer
 	private isMuted: boolean = false;
 	private musicInstances: Map<MusicType, Phaser.Sound.BaseSound> = new Map();
 	private sfxInstances: Map<SoundEffectType, Phaser.Sound.BaseSound> = new Map();

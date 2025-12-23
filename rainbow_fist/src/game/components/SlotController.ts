@@ -31,6 +31,9 @@ export class SlotController {
 	private featureAmountText: Phaser.GameObjects.Text;
 	private featureDollarText: Phaser.GameObjects.Text;
 	private featureLabelText: Phaser.GameObjects.Text;
+	private featureImage: Phaser.GameObjects.Image | null = null;
+	private featureButtonHitbox: Phaser.GameObjects.Rectangle | null = null;
+	private featureButtonWireframe: Phaser.GameObjects.Graphics | null = null;
 	private primaryControllers: Phaser.GameObjects.Container;
 	private controllerTexts: Phaser.GameObjects.Text[] = [];
 	private amplifyDescriptionContainer: Phaser.GameObjects.Container;
@@ -570,14 +573,18 @@ export class SlotController {
 	 * Disable feature button (grey out and disable interaction)
 	 */
 	private disableFeatureButton(): void {
-		const featureButton = this.buttons.get('feature');
-
 		const desiredAlpha = 0.3;
 
-		if (featureButton) {
-			featureButton.setAlpha(desiredAlpha); // Make it semi-transparent/greyed out
-			featureButton.disableInteractive(); // Disable clicking
+		if (this.featureButtonHitbox) {
+			this.featureButtonHitbox.disableInteractive(); // Disable clicking
 			console.log('[SlotController] Feature button disabled');
+		}
+
+		if (this.featureImage) {
+			this.featureImage.setAlpha(desiredAlpha);
+		}
+		if (this.featureButtonWireframe) {
+			this.featureButtonWireframe.setAlpha(desiredAlpha);
 		}
 
 		this.featureLabelText?.setAlpha(desiredAlpha);
@@ -595,19 +602,24 @@ export class SlotController {
 		this.inProcessOfReenablingFeatureButton = true;
 
 		const reenable = () => {
-			const featureButton = this.buttons.get('feature');
 			const desiredAlpha = 1.0;
 
-			if (featureButton) {
+			if (this.featureButtonHitbox) {
 				// Guard: do not re-enable during bonus or before explicit allow
 				if (gameStateManager.isBonus || !this.canEnableFeatureButton) {
 					console.log('[SlotController] Skipping feature enable (bonus active or not allowed yet)');
 					this.inProcessOfReenablingFeatureButton = false;
 					return;
 				}
-				featureButton.setAlpha(desiredAlpha); // Restore full opacity
-				featureButton.setInteractive(); // Re-enable clicking
+				this.featureButtonHitbox.setInteractive(); // Re-enable clicking
 				console.log('[SlotController] Feature button enabled');
+			}
+
+			if (this.featureImage) {
+				this.featureImage.setAlpha(desiredAlpha);
+			}
+			if (this.featureButtonWireframe) {
+				this.featureButtonWireframe.setAlpha(desiredAlpha);
 			}
 
 			this.featureLabelText?.setAlpha(desiredAlpha);
@@ -1483,20 +1495,35 @@ export class SlotController {
 		const featureX = scene.scale.width * 0.5; // Center between balance and bet
 		const featureY = scene.scale.height * 0.724; // Same Y as balance and bet containers
 
-		// Feature button image (serves as background)
-		const featureButton = scene.add.image(
+		// Visual image for the feature button
+		this.featureImage = scene.add.image(
 			featureX,
 			featureY,
 			'feature'
 		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(10);
+		this.controllerContainer.add(this.featureImage);
+
+		// Interactable area (slightly smaller than the visual) as an invisible rectangle
+		const baseWidth = this.featureImage ? this.featureImage.displayWidth : 200;
+		const baseHeight = this.featureImage ? this.featureImage.displayHeight : 80;
+		const featureButton = scene.add.rectangle(
+			featureX,
+			featureY,
+			baseWidth * 0.74,
+			baseHeight * 0.55,
+			0xffffff,
+			0 // fully transparent
+		).setOrigin(0.5, 0.5).setDepth(11);
 		featureButton.setInteractive();
 		featureButton.on('pointerdown', () => {
 			console.log('[SlotController] Feature button clicked');
 			this.playButtonSfx();
 			this.showBuyFeatureDrawer();
 		});
-		this.buttons.set('feature', featureButton);
+		this.featureButtonHitbox = featureButton;
 		this.controllerContainer.add(featureButton);
+
+		// this.createFeatureButtonWireframe(scene, featureButton, featureX, featureY);
 
 		// "BUY FEATURE" label (1st line)
 		this.featureLabelText = scene.add.text(
@@ -1539,6 +1566,31 @@ export class SlotController {
 
 		// Initialize amount from current bet
 		this.updateFeatureAmountFromCurrentBet();
+	}
+
+	private createFeatureButtonWireframe(
+		scene: Scene,
+		hitbox: Phaser.GameObjects.Rectangle,
+		x: number,
+		y: number
+	): void {
+		if (this.featureButtonWireframe) {
+			this.featureButtonWireframe.destroy();
+			this.featureButtonWireframe = null;
+		}
+
+		const wireframe = scene.add.graphics();
+		wireframe.lineStyle(2, 0x00ff00, 0.6);
+		wireframe.strokeRect(
+			-hitbox.width * 0.5,
+			-hitbox.height * 0.5,
+			hitbox.width,
+			hitbox.height
+		);
+		wireframe.setPosition(x, y);
+		wireframe.setDepth(12);
+		this.controllerContainer.add(wireframe);
+		this.featureButtonWireframe = wireframe;
 	}
 
 	private createLandscapeController(scene: Scene, assetScale: number): void {
@@ -1723,9 +1775,9 @@ export class SlotController {
 
 	updateButtonState(buttonName: string, isActive: boolean): void {
 		const button = this.buttons.get(buttonName);
-		if (button) {
+		if (button && (button as any).setTexture) {
 			const newTexture = isActive ? `${buttonName}_on` : `${buttonName}_off`;
-			button.setTexture(newTexture);
+			(button as any).setTexture(newTexture);
 		}
 	}
 
@@ -3238,11 +3290,15 @@ export class SlotController {
 		}
 
 		// Grey out the feature button
-		const featureButton = this.buttons.get('feature');
-		if (featureButton) {
-			featureButton.setAlpha(0.3); // Make it semi-transparent/greyed out
-			featureButton.disableInteractive(); // Disable clicking
+		if (this.featureButtonHitbox) {
+			this.featureButtonHitbox.disableInteractive(); // Disable clicking
 			console.log('[SlotController] Feature button greyed out and disabled');
+		}
+		if (this.featureImage) {
+			this.featureImage.setAlpha(0.3);
+		}
+		if (this.featureButtonWireframe) {
+			this.featureButtonWireframe.setAlpha(0.3);
 		}
 
 		// Grey out the bet buttons
@@ -3298,11 +3354,15 @@ export class SlotController {
 		}
 
 		// Restore the feature button
-		const featureButton = this.buttons.get('feature');
-		if (featureButton) {
-			featureButton.setAlpha(1.0); // Restore full opacity
-			featureButton.setInteractive(); // Re-enable clicking
+		if (this.featureButtonHitbox) {
+			this.featureButtonHitbox.setInteractive(); // Re-enable clicking
 			console.log('[SlotController] Feature button restored and enabled');
+		}
+		if (this.featureImage) {
+			this.featureImage.setAlpha(1.0);
+		}
+		if (this.featureButtonWireframe) {
+			this.featureButtonWireframe.setAlpha(1.0);
 		}
 
 		// Restore the bet buttons
