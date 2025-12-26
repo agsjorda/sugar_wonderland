@@ -104,7 +104,6 @@ export class WinLineDrawer {
       }
       this.scene.time.delayedCall(50, () => {
         console.log('[WinLineDrawer] Emitting WIN_STOP for no-wins scenario');
-        gameEventManager.emit(GameEventType.REELS_STOP);
         gameEventManager.emit(GameEventType.WIN_STOP);
       });
       return;
@@ -131,7 +130,6 @@ export class WinLineDrawer {
 
     if (this.currentWinPatterns.length === 0) {
       console.log('[WinLineDrawer] No win patterns stored, emitting WIN_STOP immediately');
-      gameEventManager.emit(GameEventType.REELS_STOP);
       gameEventManager.emit(GameEventType.WIN_STOP);
       return;
     }
@@ -145,7 +143,6 @@ export class WinLineDrawer {
   private drawWinLinesSequentiallyOnce(currentIndex: number): void {
     if (this.currentWinPatterns.length === 0) {
       console.log('[WinLineDrawer] No win patterns to draw, emitting WIN_STOP immediately');
-      gameEventManager.emit(GameEventType.REELS_STOP);
       gameEventManager.emit(GameEventType.WIN_STOP);
       return;
     }
@@ -196,7 +193,6 @@ export class WinLineDrawer {
           } else {
             console.log('[WinLineDrawer] Preserving win lines and overlay (manual spin)');
           }
-          gameEventManager.emit(GameEventType.REELS_STOP);
           gameEventManager.emit(GameEventType.WIN_STOP);
         });
       }
@@ -238,9 +234,8 @@ export class WinLineDrawer {
 
       this.loopTimer = this.scene.time.delayedCall(displayTime, () => {
         if (isEndOfCycle && !this.hasEmittedFirstLoopWinStop) {
-          console.log('[WinLineDrawer] First loop completed - emitting REELS_STOP and WIN_STOP before continuing to loop');
+          console.log('[WinLineDrawer] First loop completed - emitting WIN_STOP before continuing to loop');
           this.hasEmittedFirstLoopWinStop = true;
-          gameEventManager.emit(GameEventType.REELS_STOP);
           gameEventManager.emit(GameEventType.WIN_STOP);
         }
         if (this.isLooping) {
@@ -839,7 +834,7 @@ export class WinLineDrawer {
         this.originalLineDisplayTime = this.lineDisplayTime;
         this.originalCycleEndPause = this.cycleEndPause;
         this.originalAnimationSpeed = this.animationSpeed;
-        
+
         this.setTimingIntervals({
           lineDisplayTime: Math.max(this.minLineDisplayTime, this.lineDisplayTime * TurboConfig.TURBO_DURATION_MULTIPLIER),
           cycleEndPause: Math.max(this.minCycleEndPause, this.cycleEndPause * TurboConfig.TURBO_DURATION_MULTIPLIER),
@@ -858,7 +853,6 @@ export class WinLineDrawer {
         this.originalCycleEndPause = undefined;
         this.originalAnimationSpeed = undefined;
         this.turboApplied = false;
-      } else {
       }
     }
   }
@@ -867,7 +861,7 @@ export class WinLineDrawer {
     this.lineDisplayTime = 1200;
     this.cycleEndPause = 1000;
     this.animationSpeed = 1.5;
-    
+
     this.originalLineDisplayTime = undefined;
     this.originalCycleEndPause = undefined;
     this.originalAnimationSpeed = undefined;
@@ -891,16 +885,14 @@ export class WinLineDrawer {
       console.log('[WinLineDrawer] First loop not completed - forcing WIN_STOP emission');
       this.hasEmittedFirstLoopWinStop = true;
       this.wasInterruptedByManualSpin = true;
-      
+
       this.stopLooping();
-      
       this.clearLines();
-      
+
       if (this.symbolsReference && this.symbolsReference.hideWinningOverlay) {
         this.symbolsReference.hideWinningOverlay();
       }
-      
-      gameEventManager.emit(GameEventType.REELS_STOP);
+
       gameEventManager.emit(GameEventType.WIN_STOP);
     }
   }

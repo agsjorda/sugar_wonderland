@@ -4137,6 +4137,17 @@ public updateAutoplayButtonState(): void {
 					const symbols = gameScene?.symbols;
 					symbols?.restoreSymbolsAboveReelBg?.();
 				} catch {}
+				try {
+					const s: any = this.scene as any;
+					const emitFlash = () => {
+						try { this.scene?.events.emit('flashAllSymbolsOverlayOnlyByRow', 60); } catch {}
+					};
+					if (s?.time?.delayedCall) {
+						s.time.delayedCall(260, emitFlash);
+					} else {
+						setTimeout(emitFlash, 260);
+					}
+				} catch {}
 				// Immediately disable interactions to prevent other actions
 				this.disableSpinButton();
 				this.disableAutoplayButton();

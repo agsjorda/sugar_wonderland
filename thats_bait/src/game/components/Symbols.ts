@@ -12,7 +12,7 @@ import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { runDropReels, applySkipReelTweaks } from './ReelDropScript';
 import { handleHookScatterHighlight } from './HookScatterHighlighter';
 import { runCollectorMoneySequence } from './CollectorMoneySequence';
-import { flashAllSymbolsOverlay } from './SymbolFlash';
+import { flashAllSymbolsOverlay, flashRowSymbolsOverlay } from './SymbolFlash';
 import { applyImageSymbolWinRipple, clearImageSymbolWinRipple } from '../effects/SymbolImageWinRipple';
 import { applyNonWinningSymbolDim, clearNonWinningSymbolDim } from '../effects/NonWinningSymbolDimmer';
 import { WaterWaveVerticalPipeline } from '../pipelines/WaterWavePipeline';
@@ -1001,6 +1001,41 @@ export class Symbols {
       } catch {}
     });
 
+    this.scene.events.on('flashAllSymbolsOverlayOnly', () => {
+      try {
+        if (this.container) {
+          this.container.setVisible(true);
+          this.container.setAlpha(1);
+        }
+        flashAllSymbolsOverlay(this as any);
+      } catch {}
+    });
+
+    this.scene.events.on('flashAllSymbolsOverlayOnlyByRow', (rowDelayMs?: number) => {
+      try {
+        const sceneAny: any = this.scene as any;
+        const delay = Math.max(0, Math.floor((typeof rowDelayMs === 'number' ? rowDelayMs : 60)));
+
+        if (this.container) {
+          this.container.setVisible(true);
+          this.container.setAlpha(1);
+        }
+
+        const rowCount = Math.max(0, (Array.isArray(this.symbols?.[0]) ? this.symbols[0].length : 0));
+        for (let row = 0; row < rowCount; row++) {
+          const doRow = () => {
+            try { flashRowSymbolsOverlay(this as any, row); } catch {}
+          };
+
+          if (sceneAny?.time?.delayedCall) {
+            sceneAny.time.delayedCall(row * delay, doRow);
+          } else {
+            setTimeout(doRow, row * delay);
+          }
+        }
+      } catch {}
+    });
+
     // Create a persistent light grey, semi-transparent background behind the symbol grid
     this.createBaseOverlayRect();
 
@@ -1480,6 +1515,20 @@ export class Symbols {
 					}
 				} catch {}
 
+				let skipHookScatter = false;
+				try {
+					if (gameStateManager.isScatter || gameStateManager.isBonus) {
+						skipHookScatter = true;
+					}
+					if (!skipHookScatter && this.scatterAnimationManager && typeof this.scatterAnimationManager.isAnimationInProgress === 'function') {
+						skipHookScatter = !!this.scatterAnimationManager.isAnimationInProgress();
+					}
+				} catch {}
+				if (skipHookScatter) {
+					try { this.hasPendingHookScatter = false; } catch {}
+					hasHookScatter = false;
+				}
+
 				if (this.hasPendingHookScatter && hasHookScatter) {
 					this.hasPendingHookScatter = false;
 					const runHookScatter = async () => {
@@ -1587,10 +1636,12 @@ export class Symbols {
 
   }
 
-  public ensureCleanSymbolState(): void {
+  public ensureCleanSymbolState(options?: { skipSpineToImageConversion?: boolean }): void {
     if (!this.symbols || this.symbols.length === 0) {
       return;
     }
+
+    const skipSpineToImageConversion = !!options?.skipSpineToImageConversion || !!gameStateManager.isBuyFeatureSpin;
     
     console.log('[Symbols] Ensuring clean symbol state for spin (converting Spine symbols to WEBP/PNG when possible)');
     try {
@@ -1617,6 +1668,11 @@ export class Symbols {
           if ((symbol as any).animationState) {
             const valueFromData = (this.currentSymbolData as any)?.[col]?.[row];
             if (typeof valueFromData === 'number') {
+              if (skipSpineToImageConversion) {
+                try { (symbol as any).animationState.clearTracks(); } catch {}
+                try { this.restoreIdleScaleForSymbol(symbol, valueFromData); } catch {}
+                continue;
+              }
               // For money/multiplier symbols (5, 12, 13, 14), avoid destroying/replacing
               // the existing display object here. Just reset the Spine animation/scale
               // so they remain visible and stable across spins.
@@ -2954,6 +3010,34 @@ export class Symbols {
             const y = currentSymbol.y;
             const displayWidth = currentSymbol.displayWidth;
             const displayHeight = currentSymbol.displayHeight;
+            
+            if ((currentSymbol as any)?.animationState) {
+              const spineSymbol: any = currentSymbol;
+              try { spineSymbol.setDepth(990); } catch {}
+              try {
+                spineSymbol.animationState.setAnimation(0, hitAnimationName, true);
+              } catch {}
+              try {
+                if (!gameStateManager.isBonus && !this.hasEmittedScatterWinStart) {
+                  this.hasEmittedScatterWinStart = true;
+                  this.scene.events.emit('symbol0-win-start');
+                  this.fadeBaseOverlayForScatterStart(250, 0);
+                }
+              } catch {}
+              try {
+                const base = this.getWinSpineSymbolScale(symbolValue);
+                const enlargedScale = base * 1.5;
+                this.scene.tweens.add({
+                  targets: spineSymbol,
+                  scaleX: enlargedScale,
+                  scaleY: enlargedScale,
+                  duration: 500,
+                  ease: 'Power2.easeOut'
+                });
+              } catch {}
+              setTimeout(() => resolve(), 100);
+              return;
+            }
             
             console.log(`[Symbols] Replacing scatter sprite with Spine animation: ${spineKey} at column ${col}, row ${row}`);
             
@@ -4526,8 +4610,36 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   console.log('[Symbols] SCATTER_SYMBOL from GameConfig:', SCATTER_SYMBOL);
   
   const scatterGrids = getScatterGridsFromSymbols(symbols);
-  console.log('[Symbols] ScatterGrids found:', scatterGrids);
-  console.log('[Symbols] ScatterGrids length:', scatterGrids.length);
+  let hookScatterGrid: { x: number; y: number; symbol: number } | null = null;
+  let effectiveScatterGrids = scatterGrids;
+  try {
+    const special = spinData && spinData.slot && spinData.slot.special ? spinData.slot.special : null;
+    if (special && special.action === 'hook-scatter' && special.position) {
+      const hx = Number((special as any).position?.x);
+      const hy = Number((special as any).position?.y);
+      if (isFinite(hx) && isFinite(hy)) {
+        const col = hx;
+        const row = hy;
+        if (col >= 0 && row >= 0 && col < symbols.length && Array.isArray(symbols[col]) && row < symbols[col].length) {
+          hookScatterGrid = { x: col, y: row, symbol: SCATTER_SYMBOL[0] };
+          const alreadyCounted = scatterGrids.some((g) => g.x === col && g.y === row);
+          if (!alreadyCounted) {
+            effectiveScatterGrids = scatterGrids.concat([hookScatterGrid]);
+          }
+        }
+      }
+    }
+  } catch {}
+
+  console.log('[Symbols] ScatterGrids found:', effectiveScatterGrids);
+  console.log('[Symbols] ScatterGrids length:', effectiveScatterGrids.length);
+
+  const willTriggerScatter = effectiveScatterGrids.length >= 3;
+
+	if (willTriggerScatter) {
+		try { gameStateManager.isScatter = true; } catch {}
+		try { (self.scene as any)?.events?.emit('scatterTransitionStart'); } catch {}
+	}
   
   // Check if this win meets the dialog threshold and pause autoplay if so
   if (spinData.slot.paylines && spinData.slot.paylines.length > 0) {
@@ -4543,6 +4655,7 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   }
 
   // Draw win lines using the new SpinData method
+  let waitForWinStopBeforeScatter: Promise<void> | null = null;
   if (self.winLineDrawer) {
     if (spinData.slot.paylines && spinData.slot.paylines.length > 0) {
       // Determine win line animation type based on autoplay state and counter
@@ -4556,7 +4669,31 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
       const isSkipActive = typeof (self as any).isSkipReelDropsActive === 'function' ? (self as any).isSkipReelDropsActive() : false;
       
       // Check free spin autoplay FIRST to prevent it from being treated as "last autoplay spin"
-      if (isFreeSpinAutoplay) {
+      if (willTriggerScatter) {
+        console.log('[Symbols] Drawing win lines from SpinData (single-pass for scatter transition)');
+        if (slotController && typeof slotController.applyTurboToWinlineAnimations === 'function') {
+          console.log('[Symbols] Applying turbo mode to winlines via SlotController (same as normal autoplay)');
+          slotController.applyTurboToWinlineAnimations();
+        }
+
+				waitForWinStopBeforeScatter = new Promise<void>((resolve) => {
+					let done = false;
+					const finish = () => {
+						if (done) return;
+						done = true;
+						resolve();
+					};
+					try {
+						gameEventManager.once(GameEventType.WIN_STOP, () => finish());
+					} catch {
+						finish();
+						return;
+					}
+					try { (self.scene as any)?.time?.delayedCall?.(15000, () => finish()); } catch { try { setTimeout(() => finish(), 15000); } catch { finish(); } }
+				});
+
+				self.winLineDrawer.drawWinLinesOnceFromSpinData(spinData);
+      } else if (isFreeSpinAutoplay) {
         console.log('[Symbols] Drawing win lines from SpinData (single-pass for free spin autoplay)');
         // Apply turbo mode exactly like normal autoplay does
         if (slotController && typeof slotController.applyTurboToWinlineAnimations === 'function') {
@@ -4588,11 +4725,9 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   }
 
   // NOW handle scatter symbols AFTER winlines are drawn
-  if (scatterGrids.length >= 3) {
-    console.log(`[Symbols] Scatter detected! Found ${scatterGrids.length} scatter symbols`);
-    gameStateManager.isScatter = true;
-    // Disable spin/controls immediately during scatter anticipation/transition
-    try { (self.scene as any)?.events?.emit('scatterTransitionStart'); } catch {}
+  if (effectiveScatterGrids.length >= 3) {
+    console.log(`[Symbols] Scatter detected! Found ${effectiveScatterGrids.length} scatter symbols`);
+		try { if (waitForWinStopBeforeScatter) await waitForWinStopBeforeScatter; } catch {}
 
     // If there are no normal wins (no paylines), play scatter SFX now
     try {
@@ -4625,7 +4760,29 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
     // Animate the individual scatter symbols with their hit animations
     console.log('[Symbols] Starting scatter symbol hit animations...');
     try {
-      await self.animateScatterSymbols(scatterGrids);
+      if (hookScatterGrid) {
+        try { (self as any).hasPendingHookScatter = false; } catch {}
+        await new Promise<void>((resolve) => {
+          let done = false;
+          const finish = () => {
+            if (done) return;
+            done = true;
+            try { (self.scene as any)?.events?.off?.('hook-scatter-complete', onComplete as any); } catch {}
+            resolve();
+          };
+          const onComplete = () => finish();
+          try { (self.scene as any)?.events?.once?.('hook-scatter-complete', onComplete as any); } catch {}
+          try {
+            handleHookScatterHighlight(self as any, spinData);
+          } catch {
+            finish();
+            return;
+          }
+          try { (self.scene as any)?.time?.delayedCall?.(8000, () => finish()); } catch { try { setTimeout(() => finish(), 8000); } catch { finish(); } }
+        });
+      }
+
+      await self.animateScatterSymbols(effectiveScatterGrids);
       console.log('[Symbols] Scatter symbol hit animations completed');
     } catch (error) {
       console.error('[Symbols] Error animating scatter symbols:', error);
@@ -4652,7 +4809,7 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
       self.startScatterAnimationSequence();
     }
   } else {
-    console.log(`[Symbols] No scatter detected (found ${scatterGrids.length} scatter symbols, need 3+)`);
+    console.log(`[Symbols] No scatter detected (found ${effectiveScatterGrids.length} scatter symbols, need 3+)`);
     try { gameStateManager.isBuyFeatureSpin = false; } catch {}
   }
   

@@ -3,6 +3,7 @@ import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { ensureSpineFactory } from "../../utils/SpineGuard";
 import { WaterWavePipeline, WaterWaveVerticalPipeline, WaterRipplePipeline } from "../pipelines/WaterWavePipeline";
+import { BubbleStreamSystem } from "./BubbleStreamSystem";
 
 export class BonusBackground {
 	private bgContainer!: Phaser.GameObjects.Container;
@@ -10,6 +11,15 @@ export class BonusBackground {
 	private screenModeManager: ScreenModeManager;
 	private sceneRef: Scene | null = null;
 	private seaEdgeWidthMultiplier: number = 1.1;
+	private bubbleStreamSystems: BubbleStreamSystem[] = [];
+	private readonly bubbleStreamModifiers = [
+		{ offsetX: -195, offsetY: 90 },
+		{ offsetX: -110, offsetY: 90 },
+		{ offsetX: -35, offsetY: 90 },
+		{ offsetX: 45, offsetY: 90 },
+		{ offsetX: 120, offsetY: 90 },
+		{ offsetX: 200, offsetY: 90 },
+	];
 	private bgDepth?: Phaser.GameObjects.Image;
 	private bgFog?: Phaser.GameObjects.Image;
 	private bgSurface?: Phaser.GameObjects.Image;
@@ -18,12 +28,14 @@ export class BonusBackground {
 	private reelBottomSpine?: any;
 	private characterSpine?: any;
 	private rippleVfxSpine?: any;
+	private enableBubbleEffects: boolean = true;
+	private bubbleStreamImageScale: number = 0.005;
 	private lastHookSurfaceContact: boolean = false;
 	private readonly hookSplashTextureKey: string = 'splash';
 	private readonly hookSplashModifiers = {
 		offsetX: 0,
 		offsetY: 0,
-		scale: 0.75,
+		scale: 0.8,
 	};
 	private readonly reelBottomModifiers = {
 		offsetX: 0,
@@ -85,6 +97,54 @@ export class BonusBackground {
 		this.bgContainer.setDepth(-10);
 		const assetScale = this.networkManager.getAssetScale();
 		this.createBackgroundLayers(scene, assetScale);
+		if (this.enableBubbleEffects) {
+			const baseStreamCenterX = scene.scale.width * 0.5;
+			const baseStreamCenterY = scene.scale.height * 0.5;
+			this.bubbleStreamSystems = [];
+			for (let i = 0; i < this.bubbleStreamModifiers.length; i++) {
+				const mods = this.bubbleStreamModifiers[i];
+				const streamCenterX = baseStreamCenterX + mods.offsetX;
+				const streamCenterY = baseStreamCenterY + mods.offsetY;
+				const stream = new BubbleStreamSystem(scene, {
+					x: streamCenterX,
+					y: streamCenterY,
+					depth: 878,
+					count: 100,
+					spawnPerSecond: 1.2,
+					speedMin: 10,
+					speedMax: 10,
+					opacityMin: 0.2,
+					opacityMax: 0.4,
+					maskLeft: 0,
+					maskRight: 0,
+					maskTop: 280,
+					radiusMin: 0.5,
+					radiusMax: 3,
+					maskBottom: 250,
+					showMaskDebug: false,
+					textureKey: 'bubble',
+					imageScale: this.bubbleStreamImageScale,
+				});
+				this.bubbleStreamSystems.push(stream);
+			}
+			scene.events.on('update', this.handleUpdate, this);
+			scene.events.once('shutdown', () => {
+				try { scene.events.off('update', this.handleUpdate, this); } catch {}
+				try {
+					for (const stream of this.bubbleStreamSystems) {
+						try { stream.destroy(); } catch {}
+					}
+					this.bubbleStreamSystems = [];
+				} catch {}
+			});
+		}
+	}
+
+	private handleUpdate(_time: number, delta: number): void {
+		if (!this.sceneRef) return;
+		for (const stream of this.bubbleStreamSystems) {
+			stream.update(delta);
+		}
 	}
 
 	public updateHookSurfaceInteraction(hookX: number, hookY: number): void {
@@ -581,6 +641,16 @@ export class BonusBackground {
 			this.bgContainer.setSize(scene.scale.width, scene.scale.height);
 		}
 		try { this.applyCharacterTransform(scene); } catch {}
+		if (this.bubbleStreamSystems.length > 0) {
+			const baseStreamCenterX = scene.scale.width * 0.5;
+			const baseStreamCenterY = scene.scale.height * 0.5;
+			for (let i = 0; i < this.bubbleStreamSystems.length; i++) {
+				const mods = this.bubbleStreamModifiers[i] ?? { offsetX: 0, offsetY: 0 };
+				const streamCenterX = baseStreamCenterX + mods.offsetX;
+				const streamCenterY = baseStreamCenterY + mods.offsetY;
+				this.bubbleStreamSystems[i].setOrigin(streamCenterX, streamCenterY);
+			}
+		}
 	}
 
 	getContainer(): Phaser.GameObjects.Container {
@@ -701,9 +771,27 @@ export class BonusBackground {
 		try { this.reelBottomSpine?.setVisible(visible); } catch {}
 		try { this.characterSpine?.setVisible(visible); } catch {}
 		try { this.rippleVfxSpine?.setVisible(visible); } catch {}
+		try {
+			if (Array.isArray(this.bubbleStreamSystems)) {
+				for (const stream of this.bubbleStreamSystems) {
+					try { stream?.getContainer?.()?.setVisible(visible); } catch {}
+				}
+			}
+		} catch {}
 	}
 
 	destroy(): void {
+		try {
+			if (this.sceneRef) {
+				try { this.sceneRef.events.off('update', this.handleUpdate, this); } catch {}
+			}
+		} catch {}
+		try {
+			for (const stream of this.bubbleStreamSystems) {
+				try { stream.destroy(); } catch {}
+			}
+			this.bubbleStreamSystems = [];
+		} catch {}
 		try { this.bgContainer?.destroy(); } catch {}
 		try { this.seaEdge?.destroy(); } catch {}
 		try { this.reelBottomSpine?.destroy(); } catch {}

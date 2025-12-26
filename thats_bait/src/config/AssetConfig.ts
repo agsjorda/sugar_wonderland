@@ -40,6 +40,7 @@ export class AssetConfig {
 				'Sea-Edge': `${prefix}/background/Sea-Edge.webp`,
 				'BG-Fog': `${forcedPortraitHighPrefix}/background/BG-Fog.webp`,
 				'bubble': `${forcedPortraitHighPrefix}/background/bubble.webp`,
+				'anticipation-bubble': `${forcedPortraitHighPrefix}/background/anticipation-bubble.webp`,
 				'winline-bubble-1': `${forcedPortraitHighPrefix}/bubbles/winline-bubble-1.webp`,
 				'winline-bubble-2': `${forcedPortraitHighPrefix}/bubbles/winline-bubble-2.webp`,
 				'hook': `${forcedPortraitHighPrefix}/characters/hook.webp`,
@@ -437,10 +438,6 @@ export class AssetConfig {
 				'hit_win_TB': 'assets/sounds/SFX/hit_win_TB.ogg',
 				// Wild multi SFX
 				'scatter_TB': 'assets/sounds/SFX/scatter_TB.ogg',
-				'anticipation_hh': 'assets/sounds/SFX/anticipation_hh.ogg',
-				// Winline SFX
-				'winline_1_ka': 'assets/sounds/SFX/winline_1_ka.ogg',
-				'winline_2_ka': 'assets/sounds/SFX/winline_2_ka.ogg',
 				// Win dialog SFX
 				'bigw_TB': 'assets/sounds/Wins/bigw_TB.ogg',
 				'megaw_TB': 'assets/sounds/Wins/megaw_TB.ogg',
@@ -468,8 +465,7 @@ export class AssetConfig {
 		const forcedPortraitHighPrefix = `assets/portrait/high`;
 		return {
 			images: {
-				'dynamite': `${forcedPortraitHighPrefix}/dynamite/dynamite.png`,
-				'boom': `${forcedPortraitHighPrefix}/dynamite/boom.png`,
+				'dynamite': `${forcedPortraitHighPrefix}/dynamite/dynamite.png`
 			},
 			spine: {
 				'Water_Bomb_VFX': {
