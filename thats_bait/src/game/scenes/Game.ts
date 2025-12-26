@@ -9,7 +9,7 @@ import { EventBus } from '../EventBus';
 import { GameAPI } from '../../backend/GameAPI';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
-import { AudioManager, MusicType } from '../../managers/AudioManager';
+import { AudioManager, MusicType, SoundEffectType } from '../../managers/AudioManager';
 import { RopeCable } from '../components/RopeCable';
 import { Background } from '../components/Background';
 import { BonusBackground } from '../components/BonusBackground';
@@ -22,6 +22,8 @@ import { Dialogs } from '../components/Dialogs';
 import { ScatterAnimationManager } from '../../managers/ScatterAnimationManager';
 import { BonusHeader } from '../components/BonusHeader';
 import { GaugeMeter } from '../components/GaugeMeter';
+import { Menu } from '../components/Menu';
+import { ClockDisplay } from '../components/ClockDisplay';
 import {
   WINTRACKER_BASE_OFFSET_X,
   WINTRACKER_BASE_OFFSET_Y,
@@ -84,6 +86,8 @@ export class Game extends Phaser.Scene {
 	private hookScatterStartTimingMultiplier: number = 0.5;
 	private hookScatterEndTimingMultiplier: number = 0.35;
 	private enableRope: boolean = true;
+	private hookCharacterEndPromise: Promise<void> | null = null;
+	private hookFinalizePending: boolean = false;
 	private reelsStopListener?: (data?: any) => void;
 	private winStopListener?: (data?: any) => void;
 	private winTrackerHideListener?: () => void;
@@ -98,6 +102,7 @@ export class Game extends Phaser.Scene {
 	private bonusBackground!: BonusBackground;
 	private slotBackground?: Phaser.GameObjects.Image;
 	private fullscreenBtn?: Phaser.GameObjects.Image;
+	private clockDisplay?: ClockDisplay;
 	private symbols!: Symbols;
 	private header!: Header;
 	private bonusHeader!: BonusHeader;
@@ -106,6 +111,7 @@ export class Game extends Phaser.Scene {
 	private dialogs?: Dialogs;
 	private freeSpinOverlay?: FreeSpinOverlay;
 	private audioManager?: AudioManager;
+	private menu?: Menu;
 	private readonly freeSpinRetriggerMultiplierDisplayOptions: Record<string, { offsetX?: number; offsetY?: number; scale?: number }> = {
 		'2x_multiplier': { offsetX: 0, offsetY: 0, scale: 1 },
 		'3x_Multiplier_TB': { offsetX: 0, offsetY: 0, scale: 1 },
@@ -150,6 +156,29 @@ export class Game extends Phaser.Scene {
 			margin: 16 * assetScale,
 			iconScale: 1.5 * assetScale,
 			depth: Number.MAX_SAFE_INTEGER
+		});
+
+		const clockY = this.scale.height * 0.009;
+		this.clockDisplay = new ClockDisplay(this, {
+			offsetX: -150,
+			offsetY: clockY,
+			fontSize: 16,
+			color: '#FFFFFF',
+			alpha: 0.5,
+			depth: 30000,
+			scale: 0.7,
+			suffixText: ' | That\'s Bait',
+			additionalText: 'DiJoker',
+			additionalTextOffsetX: 185,
+			additionalTextOffsetY: 0,
+			additionalTextScale: 0.7,
+			additionalTextColor: '#FFFFFF',
+			additionalTextFontSize: 16
+		});
+		this.clockDisplay.create();
+		this.events.once('shutdown', () => {
+			try { this.clockDisplay?.destroy(); } catch {}
+			this.clockDisplay = undefined;
 		});
 
 		// Expose data so SlotController can latch on (mirrors the legacy scene behaviour).
@@ -295,9 +324,15 @@ export class Game extends Phaser.Scene {
 		this.events.on('hook-collector', this.handleHookCollector, this);
 		this.registerBonusUiEventListeners();
 		try {
-			this.audioManager = new AudioManager(this);
+			const existing = (window as any)?.audioManager as AudioManager | undefined;
+			if (existing && typeof (existing as any).setScene === 'function') {
+				this.audioManager = existing;
+				try { (this.audioManager as any).setScene(this); } catch {}
+			} else {
+				this.audioManager = new AudioManager(this);
+				(window as any).audioManager = this.audioManager;
+			}
 			(this as any).audioManager = this.audioManager;
-			(window as any).audioManager = this.audioManager;
 			this.audioManager.createMusicInstances();
 			try {
 				this.audioManager.playBackgroundMusic(MusicType.MAIN);
@@ -345,11 +380,30 @@ export class Game extends Phaser.Scene {
 			try { this.events.emit('enableSymbols'); } catch {}
 			try { this.freeSpinRetriggerOverlaySeq = 0; } catch {}
 			try { this.shownBonusRetriggerStages.clear(); } catch {}
+			try {
+				const sc: any = this as any;
+				if (!sc.__helloTbPlayedOnBonusEntry) {
+					sc.__helloTbPlayedOnBonusEntry = true;
+					const base = Number(this.audioManager?.getSfxVolume?.() ?? 0.4);
+					const scaled = isFinite(base) ? base * 0.2 : 0.08;
+					const vol = Phaser.Math.Clamp(scaled, 0.02, 0.15);
+					try { this.audioManager?.playSoundEffect?.(SoundEffectType.HELLO, { volume: vol }); } catch {}
+				}
+			} catch {}
+			try {
+				(this.audioManager as any)?.createMusicInstances?.();
+				(this.audioManager as any)?.crossfadeTo?.(MusicType.BONUS, 320);
+			} catch {}
 		});
 		this.events.on('deactivateBonusMode', () => {
 			try { this.events.emit('setBonusMode', false); } catch {}
 			try { this.events.emit('hideBonusBackground'); } catch {}
 			try { this.events.emit('hideBonusHeader'); } catch {}
+			try { delete (this as any).__helloTbPlayedOnBonusEntry; } catch {}
+			try {
+				(this.audioManager as any)?.createMusicInstances?.();
+				(this.audioManager as any)?.crossfadeTo?.(MusicType.MAIN, 320);
+			} catch {}
 		});
 
 		// Bonus activation is driven by a global event in some flows (e.g. scatter transitions).
@@ -422,6 +476,9 @@ export class Game extends Phaser.Scene {
 	private async runBonusOverlayQueue(): Promise<void> {
 		try {
 			while (this.bonusOverlayQueue.length > 0) {
+				try {
+					await gameStateManager.waitUntilOverlaysClosed(15000);
+				} catch {}
 				const fn = this.bonusOverlayQueue.shift();
 				if (!fn) continue;
 				try {
@@ -608,9 +665,13 @@ export class Game extends Phaser.Scene {
 				}
 			}
 		}
-		if (this.hookImage && (this.background as any)?.updateHookSurfaceInteraction) {
+		if (this.hookImage) {
 			try {
-				(this.background as any).updateHookSurfaceInteraction(this.hookImage.x, this.hookImage.y);
+				const isBonus = !!(gameStateManager as any)?.isBonus;
+				const target: any = isBonus ? (this.bonusBackground as any) : (this.background as any);
+				if (target?.updateHookSurfaceInteraction) {
+					target.updateHookSurfaceInteraction(this.hookImage.x, this.hookImage.y);
+				}
 			} catch {}
 		}
 	}
@@ -943,6 +1004,29 @@ export class Game extends Phaser.Scene {
 		return Math.max(0.25, m);
 	}
 
+	private getHookScatterSpeedMultiplier(): number {
+		try {
+			if ((gameStateManager as any)?.isBonus) {
+				return 1;
+			}
+		} catch {}
+		try {
+			if ((gameStateManager as any)?.isTurbo) {
+				return 1;
+			}
+		} catch {}
+		return 1.15;
+	}
+
+	private scaleHookScatterMs(baseMs: number, minMs: number): number {
+		try {
+			const m = this.getHookScatterSpeedMultiplier();
+			return Math.max(minMs, Math.round((Number(baseMs) || 0) * m));
+		} catch {
+			return Math.max(minMs, Number(baseMs) || minMs);
+		}
+	}
+
 	private scaleHookCollectorMs(baseMs: number, minMs: number): number {
 		try {
 			const m = this.getHookCollectorSpeedMultiplier();
@@ -958,6 +1042,10 @@ export class Game extends Phaser.Scene {
 				try { this.completeHookCollectorEvent(); } catch {}
 				return;
 			}
+			try {
+				const audio: any = this.audioManager ?? (window as any)?.audioManager;
+				audio?.playSoundEffect?.(SoundEffectType.CASTLINE);
+			} catch {}
 			try {
 				const points = this.rope.getPoints();
 				const count = points.length;
@@ -1010,6 +1098,10 @@ export class Game extends Phaser.Scene {
 				try { this.completeHookCollectorEvent(); } catch {}
 				return;
 			}
+			try {
+				const audio: any = this.audioManager ?? (window as any)?.audioManager;
+				audio?.playSoundEffect?.(SoundEffectType.FISHREEL);
+			} catch {}
 			this.startHookCollectorReturnSequence(homeX, homeY);
 		};
 		this.playCharacterEndThenIdle(pullHook);
@@ -1249,7 +1341,24 @@ export class Game extends Phaser.Scene {
 				}
 			} catch {}
 
-			const count = 14;
+			try {
+				const flash: any = this.add.circle(sx, sy, 18, 0xffffff, 0.65);
+				try { flash.setDepth(21020); } catch {}
+				try { flash.setAlpha(0.85); } catch {}
+				try { flash.setBlendMode(Phaser.BlendModes.ADD); } catch {}
+				this.tweens.add({
+					targets: flash,
+					scale: 3.6,
+					alpha: 0,
+					duration: 260,
+					ease: 'Cubic.easeOut',
+					onComplete: () => {
+						try { flash.destroy(); } catch {}
+					}
+				});
+			} catch {}
+
+			const count = 34;
 			let done = 0;
 			const finish = () => {
 				done += 1;
@@ -1261,12 +1370,14 @@ export class Game extends Phaser.Scene {
 			for (let i = 0; i < count; i++) {
 				let star: Phaser.GameObjects.Arc | undefined;
 				try {
-					const ox = (Math.random() - 0.5) * 40;
-					const oy = (Math.random() - 0.5) * 40;
-					const r = 2 + Math.random() * 2;
-					star = this.add.circle(sx + ox, sy + oy, r, 0xffffff, 1);
-					star.setDepth(960);
-					star.setAlpha(0.95);
+					const ox = (Math.random() - 0.5) * 110;
+					const oy = (Math.random() - 0.5) * 110;
+					const r = 3 + Math.random() * 4.5;
+					const color = (i % 3 === 0) ? 0xfff1a8 : ((i % 3 === 1) ? 0xffffff : 0xb8f7ff);
+					star = this.add.circle(sx + ox, sy + oy, r, color, 1);
+					star.setDepth(21010);
+					star.setAlpha(1);
+					try { (star as any).setBlendMode?.(Phaser.BlendModes.ADD); } catch {}
 				} catch {
 					finish();
 					continue;
@@ -1277,10 +1388,11 @@ export class Game extends Phaser.Scene {
 						targets: star,
 						x: target.x,
 						y: target.y,
-						scale: 0.2,
+						scale: 0.08,
 						alpha: 0,
-						duration: 420 + Math.floor(Math.random() * 160),
+						duration: 520 + Math.floor(Math.random() * 140),
 						ease: 'Sine.easeIn',
+						delay: Math.floor(Math.random() * 60),
 						onComplete: () => {
 							try { star?.destroy(); } catch {}
 							finish();
@@ -1301,15 +1413,37 @@ export class Game extends Phaser.Scene {
 	}
 
 	private completeHookCollectorEvent(): void {
+		let emitted = false;
+		const emitCollectorComplete = () => {
+			if (emitted) return;
+			emitted = true;
+			try { this.events.emit('hook-collector-complete'); } catch {}
+		};
+		try {
+			if (this.isHookScatterEventActive) {
+				try {
+					this.events.once('hook-scatter-complete', () => {
+						emitCollectorComplete();
+					});
+				} catch {
+					emitCollectorComplete();
+				}
+			} else {
+				emitCollectorComplete();
+			}
+		} catch {
+			emitCollectorComplete();
+		}
 		try {
 			this.completeHookScatterEvent();
 		} catch {
 			try {
 				this.isHookScatterEventActive = false;
 				gameStateManager.isHookScatterActive = false;
+				this.hookFinalizePending = false;
 			} catch {}
+			emitCollectorComplete();
 		}
-		try { this.events.emit('hook-collector-complete'); } catch {}
 	}
 
 	private startHookScatterWithCharacter(pointerX: number, pointerY: number, offscreenX: number, offscreenY: number): void {
@@ -1317,6 +1451,10 @@ export class Game extends Phaser.Scene {
 			if (!this.isHookScatterEventActive || !this.rope) {
 				return;
 			}
+			try {
+				const audio: any = this.audioManager ?? (window as any)?.audioManager;
+				audio?.playSoundEffect?.(SoundEffectType.CASTLINE);
+			} catch {}
 			try {
 				const points = this.rope.getPoints();
 				const count = points.length;
@@ -1337,7 +1475,7 @@ export class Game extends Phaser.Scene {
 				targets: this.hookScatterTarget,
 				x: offscreenX,
 				y: offscreenY,
-				duration: 420,
+				duration: this.scaleHookScatterMs(420, 420),
 				ease: 'Sine.easeIn',
 				onComplete: () => {
 					this.handleHookReturnWithCharacter(pointerX, pointerY);
@@ -1352,6 +1490,10 @@ export class Game extends Phaser.Scene {
 			if (!this.isHookScatterEventActive) {
 				return;
 			}
+			try {
+				const audio: any = this.audioManager ?? (window as any)?.audioManager;
+				audio?.playSoundEffect?.(SoundEffectType.FISHREEL);
+			} catch {}
 			this.startHookReturnSequence(pointerX, pointerY);
 		};
 		this.playCharacterEndThenIdle(pullHook);
@@ -1435,6 +1577,7 @@ export class Game extends Phaser.Scene {
 		try {
 			const spine: any = this.getActiveCharacterSpine();
 			if (!spine || !spine.skeleton || !spine.animationState) {
+				try { this.hookCharacterEndPromise = null; } catch {}
 				onReady();
 				return;
 			}
@@ -1463,6 +1606,7 @@ export class Game extends Phaser.Scene {
 			};
 			if (!endName) {
 				// No dedicated end animation: go directly to idle and start the hook return.
+				try { this.hookCharacterEndPromise = null; } catch {}
 				playIdle();
 				onReady();
 				return;
@@ -1472,9 +1616,27 @@ export class Game extends Phaser.Scene {
 				entry = state.setAnimation(0, endName, false);
 			} catch {
 				// If we cannot play _end, go straight to idle and complete the hook return.
+				try { this.hookCharacterEndPromise = null; } catch {}
 				playIdle();
 				onReady();
 				return;
+			}
+			try {
+				const stateAny: any = state;
+				const rawDurationSec = Math.max(0.05, entry?.animation?.duration || 0.8);
+				const timeScale = Math.max(0.0001, stateAny.timeScale || 1);
+				let totalMs = (rawDurationSec / timeScale) * 1000;
+				if (!isFinite(totalMs) || totalMs <= 0) totalMs = 800;
+				totalMs = Math.min(Math.max(Math.floor(totalMs + 50), 250), 5000);
+				this.hookCharacterEndPromise = new Promise<void>((resolve) => {
+					try {
+						this.time.delayedCall(totalMs, () => resolve());
+					} catch {
+						try { setTimeout(() => resolve(), totalMs); } catch { resolve(); }
+					}
+				});
+			} catch {
+				try { this.hookCharacterEndPromise = null; } catch {}
 			}
 			// Queue idle to play automatically after _end finishes.
 			try {
@@ -1511,38 +1673,72 @@ export class Game extends Phaser.Scene {
 		if (!this.isHookScatterEventActive) {
 			return;
 		}
-		this.isHookScatterEventActive = false;
-		gameStateManager.isHookScatterActive = false;
-
-		if (this.hookScatterTween) {
-			try { this.hookScatterTween.stop(); } catch {}
-			this.hookScatterTween = undefined;
+		if (this.hookFinalizePending) {
+			return;
 		}
+		this.hookFinalizePending = true;
 
-		try { this.hookScatterPointer?.destroy(); } catch {}
-		this.hookScatterPointer = undefined;
+		const finalize = () => {
+			this.isHookScatterEventActive = false;
+			gameStateManager.isHookScatterActive = false;
 
-		this.hookScatterTarget = undefined;
+			if (this.hookScatterTween) {
+				try { this.hookScatterTween.stop(); } catch {}
+				this.hookScatterTween = undefined;
+			}
 
-		if (this.rope) {
-			this.rope.setPinnedEnds(true, this.wasRopeEndInitiallyPinned);
-			this.rope.setCurveAmount(0);
+			try { this.hookScatterPointer?.destroy(); } catch {}
+			this.hookScatterPointer = undefined;
+
+			this.hookScatterTarget = undefined;
+
+			if (this.rope) {
+				this.rope.setPinnedEnds(true, this.wasRopeEndInitiallyPinned);
+				this.rope.setCurveAmount(0);
+			}
+
+			try {
+				this.restoreHookCollectorDepths();
+			} catch {}
+
+			if (this.hookImage && this.hookOriginalDepth) {
+				this.hookImage.setDepth(this.hookOriginalDepth);
+			}
+
+			this.input.enabled = this.wasInputEnabledBeforeHookScatter;
+			try {
+				this.slotController?.setExternalControlLock(false);
+			} catch {}
+			try { (gameStateManager as any).releaseCriticalSequenceLock?.(); } catch {}
+			try { this.events.emit('hook-scatter-complete'); } catch {}
+			this.hookCharacterEndPromise = null;
+			this.hookFinalizePending = false;
+		};
+
+		const waitMs = (ms: number): Promise<void> => {
+			return new Promise((resolve) => {
+				try {
+					this.time?.delayedCall?.(ms, () => resolve());
+				} catch {
+					try { setTimeout(() => resolve(), ms); } catch { resolve(); }
+				}
+			});
+		};
+
+		const p: any = this.hookCharacterEndPromise as any;
+		if (p && typeof p.then === 'function') {
+			void (async () => {
+				try {
+					await Promise.race([
+						Promise.resolve(p),
+						waitMs(8000)
+					]);
+				} catch {}
+				finalize();
+			})();
+			return;
 		}
-
-		try {
-			this.restoreHookCollectorDepths();
-		} catch {}
-
-		if (this.hookImage && this.hookOriginalDepth) {
-			this.hookImage.setDepth(this.hookOriginalDepth);
-		}
-
-		this.input.enabled = this.wasInputEnabledBeforeHookScatter;
-		try {
-			this.slotController?.setExternalControlLock(false);
-		} catch {}
-		try { (gameStateManager as any).releaseCriticalSequenceLock?.(); } catch {}
-		try { this.events.emit('hook-scatter-complete'); } catch {}
+		finalize();
 	}
 
 	private startHookReturnSequence(pointerX: number, pointerY: number): void {
@@ -1561,7 +1757,7 @@ export class Game extends Phaser.Scene {
 		this.tweens.add({
 			targets: curveProxy,
 			value: 0,
-			duration: 1000,
+			duration: this.scaleHookScatterMs(1000, 1000),
 			ease: 'Sine.easeInOut',
 			onUpdate: () => {
 				if (this.rope) {
@@ -1636,7 +1832,7 @@ export class Game extends Phaser.Scene {
 			targets,
 			x: cellX,
 			y: cellY,
-			duration: 420,
+			duration: this.scaleHookScatterMs(420, 420),
 			ease: 'Sine.easeOut',
 			onComplete: () => {
 				this.finishHookScatterWithSymbol(cellX, cellY);
@@ -1794,7 +1990,16 @@ export class Game extends Phaser.Scene {
 	}
 
 	private handleMenuRequest(): void {
-		this.updateInfoText('Menu button clicked – hook your menu panel here.');
+		try {
+			if (!this.menu) {
+				this.menu = new Menu(false);
+			}
+			(this.menu as any).toggleMenu?.(this as any);
+		} catch {
+			try {
+				(this.menu as any)?.showMenu?.(this as any);
+			} catch {}
+		}
 	}
 
 	private handleBetOptionsRequest(): void {

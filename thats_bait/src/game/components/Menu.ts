@@ -3,6 +3,92 @@ import { Geom } from 'phaser';
 import { GameData } from '../components/GameData';
 import { AudioManager, SoundEffectType } from '../../managers/AudioManager';
 import { GameAPI } from '../../backend/GameAPI';
+import { HelpScreen } from './MenuTabs/HelpScreen';
+
+// Adjustable configuration driving the entire menu layout and visuals
+interface MenuOptions {
+  padding: number;
+  contentSidePadding: number;
+  layoutUnit: number;          // base vertical unit independent from symbol scale
+  symbolScale: number;         // visual scale for payout icons only
+  fonts: {
+    title: string;
+    header: string;
+    body: string;
+  };
+  colors: {
+    accent: number;            // green
+    bgPanel: number;           // panel bg
+    bgFrame: number;           // frame bg
+    text: string;              // primary text
+  };
+  table: {
+    cellWidth1: number;
+    cellWidth2: number;
+    cellHeight: number;
+    cellPadding: number;
+    inset: number;             // horizontal inset inside grey frames
+  };
+  offsets: {
+    payoutLabelOffsetX: [number, number, number];
+    payoutLabelOffsetY: [number, number, number];
+    payoutLabelPerSymbolOffsetX: { [key: number]: [number, number, number] };
+    payoutLabelPerSymbolOffsetY: { [key: number]: [number, number, number] };
+    scatterInfoOffset: { x: number; y: number };
+    // New: row-specific Y offsets for the 3 value labels (5/4/3), global and per-symbol
+    payoutValueRowOffsetY: [number, number, number];
+    payoutValueRowOffsetYPerSymbol: { [key: number]: [number, number, number] };
+  };
+}
+
+const defaultMenuOptions: MenuOptions = {
+  padding: 10,
+  contentSidePadding: 20,
+  layoutUnit: 153,
+  symbolScale: 1,
+  fonts: {
+    title: 'Poppins-Regular',
+    header: 'Poppins-Bold',
+    body: 'Poppins-Regular',
+  },
+  colors: {
+    accent: 0x379557,
+    bgPanel: 0x181818,
+    bgFrame: 0x333333,
+    text: '#FFFFFF',
+  },
+  table: {
+    cellWidth1: 60,
+    cellWidth2: 100,
+    cellHeight: 22.5,
+    cellPadding: 5,
+    inset: 20,
+  },
+  offsets: {
+    payoutLabelOffsetX: [20, 0, 0],
+    payoutLabelOffsetY: [0, 0, 0],
+    payoutLabelPerSymbolOffsetX: {},
+    payoutLabelPerSymbolOffsetY: {},
+    scatterInfoOffset: { x: 0, y: 0 },
+    payoutValueRowOffsetY: [0, 0, 0],
+    payoutValueRowOffsetYPerSymbol: {},
+  },
+};
+
+type PayoutMap = { [key: number]: [number, number, number] };
+const defaultPayoutMap: PayoutMap = {
+  1: [37.5, 7.5, 2.5],
+  2: [25.0, 5.0, 1.75],
+  3: [15.0, 3.0, 1.25],
+  4: [10.0, 2.0, 1.25],
+  5: [7.5, 1.25, 0.6],
+  6: [5.0, 1.0, 0.4],
+  7: [2.5, 0.5, 0.25],
+  8: [2.5, 0.5, 0.25],
+  9: [1.25, 0.25, 0.1],
+  10: [1.25, 0.25, 0.1],
+  11: [1.25, 0.25, 0.1],
+};
 
 interface ButtonBase {
     isButton: boolean;
@@ -16,36 +102,60 @@ interface GameScene extends Scene {
     gameData: GameData;
     audioManager: AudioManager;
     gameAPI: GameAPI;
+    getCurrentBetAmount?: () => number;
+    fullscreenBtn?: Phaser.GameObjects.Image;
 }
 
 export class Menu {
     private menuContainer?: ButtonContainer;
-    private contentArea: GameObjects.Container;
+    private contentArea!: GameObjects.Container;
     private isMobile: boolean = true;
     private width: number = 0;
     private height: number = 0;
     private menuEventHandlers: Function[] = [];
     private isDraggingMusic: boolean = false;
     private isDraggingSFX: boolean = false;
-    private scene: GameScene;
+    private scene!: GameScene;
     public settingsOnly: boolean = false;
 
+    private fullscreenBtnPrevVisible?: boolean;
+    private fullscreenBtnPrevInputEnabled?: boolean;
+
+    private prevSceneInputEnabled?: boolean;
+    private menuInputGuard?: () => void;
+
+    private debugInputOffs?: Array<() => void>;
+
+    private menuCloseTween?: Phaser.Tweens.Tween;
+    private isClosingMenu: boolean = false;
+
     private padding = 20;
+    // Top padding for the whole menu panel so the in‑game clock remains visible
+    private menuTopPadding: number = 20;
     private contentWidth = 1200;
     private viewWidth = 1329;
     private yPosition = 0;
-    private scrollView: GameObjects.Container;
-    private contentContainer: GameObjects.Container;
-    private mask: Phaser.Display.Masks.GeometryMask;
+    private scrollView!: GameObjects.Container;
+    private contentContainer!: GameObjects.Container;
+    private mask!: Phaser.Display.Masks.GeometryMask;
     private isVisible: boolean = false;
-    private panel: GameObjects.Container;
+    private panel!: GameObjects.Container;
     private textHorizontalPadding?: number;
+    private payoutLabelOffsetX: [number, number, number] = [20, 0, 0];
+    private payoutLabelOffsetY: [number, number, number] = [0, 0, 0];
+    private payoutLabelPerSymbolOffsetX: { [key: number]: [number, number, number] } = {};
+    private payoutLabelPerSymbolOffsetY: { [key: number]: [number, number, number] } = {};
+    private scatterInfoOffset: { x: number, y: number } = { x: 0, y: 0 };
+    private options: MenuOptions = { ...defaultMenuOptions };
     
     // Tab content containers for proper tab switching
-    private rulesContent: GameObjects.Container;
-    private historyContent: GameObjects.Container;
-    private settingsContent: GameObjects.Container;
+    private rulesContent!: GameObjects.Container;
+    private historyContent!: GameObjects.Container;
+    private settingsContent!: GameObjects.Container;
     private activeTabIndex: number = 0;
+
+    // Help screen
+    private helpScreen?: HelpScreen;
 
     // History pagination state
     private historyCurrentPage: number = 1;
@@ -93,7 +203,7 @@ export class Menu {
 
     protected textStyle = {
         fontSize: '20px',
-        color: '#FFFFFF',
+        color: '#ffffffff',
         fontFamily: 'Poppins-Regular',
         align: 'left',
         wordWrap: { width: this.contentWidth }
@@ -132,6 +242,9 @@ export class Menu {
         bg.fillRect(0, 0, this.width, this.height);
         // Make overlay interactive to block pointer events from reaching the game underneath
         bg.setInteractive(new Geom.Rectangle(0, 0, this.width, this.height), Geom.Rectangle.Contains);
+        // Keep the overlay above the game, but below the menu UI.
+        // (Menu UI elements get a higher priorityID so they still receive input.)
+        try { if ((bg as any).input) (bg as any).input.priorityID = 1; } catch {}
         bg.on('pointerdown', () => {});
         bg.on('pointerup', () => {});
         menuContainer.add(bg);
@@ -147,9 +260,8 @@ export class Menu {
 
         // Panel background - no border
         const panelBg = scene.add.graphics();
-        panelBg.fillStyle(0x181818, 0.95);
+        panelBg.fillStyle(this.options.colors.bgPanel, 0.95);
         panelBg.fillRect(0, 0, panelWidth, panelHeight);
-        // Make panel capture input too
         panelBg.setInteractive(new Geom.Rectangle(0, 0, panelWidth, panelHeight), Geom.Rectangle.Contains);
         panelBg.on('pointerdown', () => {});
         panelBg.on('pointerup', () => {});
@@ -189,7 +301,8 @@ export class Menu {
         const tabContainers: ButtonContainer[] = [];
 
         tabConfigs.forEach((tabConfig, index) => {
-            const tabContainer = scene.add.container(tabConfig.x, 0) as ButtonContainer;
+            // Position tabs lower on screen to leave room for the clock at the top
+            const tabContainer = scene.add.container(tabConfig.x, this.menuTopPadding) as ButtonContainer;
             
             // Tab background
             const tabBg = scene.add.graphics();
@@ -264,10 +377,11 @@ export class Menu {
                 new Geom.Rectangle(0, 0, tabConfig.width, tabHeight),
                 Geom.Rectangle.Contains
             ).isButton = true;
+            try { if ((tabContainer as any).input) (tabContainer as any).input.priorityID = 10; } catch {}
 
             // Tab click handler
             tabContainer.on('pointerup', () => {
-                scene.audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+                scene.audioManager.playSoundEffect(SoundEffectType.CLICK);
                 this.switchTab(scene, tabContainers, index, tabConfigs);
             });
 
@@ -279,13 +393,20 @@ export class Menu {
         this.switchTab(scene, tabContainers, 0, tabConfigs);
 
         // Create content area with mask to prevent overlap with tabs
-        const contentArea = scene.add.container(20, tabHeight + 20);
-        contentArea.setSize(panelWidth - 40, panelHeight - tabHeight - 40);
+        // Position is offset by menuTopPadding so tab content sits below the clock area
+        const contentArea = scene.add.container(20, this.menuTopPadding + tabHeight + 20);
+        contentArea.setSize(
+            panelWidth - 40,
+       panelHeight - this.menuTopPadding - tabHeight - 40
+        );
         
         // Create mask for content area to prevent overlap with tabs
         const contentMask = scene.add.graphics();
         contentMask.fillStyle(0xffffff);
-        contentMask.fillRect(0, 60, panelWidth, panelHeight);
+        // Mask starts just under the tabs, including the top menu padding
+        const maskTop = this.menuTopPadding + (tabHeight - 1);
+        const maskHeight = panelHeight - maskTop;
+        contentMask.fillRect(0, maskTop, panelWidth, maskHeight);
         const geometryMask = contentMask.createGeometryMask();
         contentArea.setMask(geometryMask);
         contentMask.setVisible(false); // Hide the mask graphics
@@ -319,7 +440,24 @@ export class Menu {
         this.contentArea.add(this.settingsContent);
         
         // Initialize content for each tab
-        this.setupScrollableRulesContent(scene);
+        // Help / Rules content is delegated to HelpScreen
+        const resolveBetAmount = scene.getCurrentBetAmount?.bind(scene) ?? (() => 1);
+        this.helpScreen = new HelpScreen(
+            scene,
+            this.contentArea,
+            this.rulesContent,
+            {
+                titleStyle: this.titleStyle,
+                header1Style: this.header1Style,
+                header2Style: this.header2Style,
+                content1Style: this.content1Style,
+                contentHeader1Style: this.contentHeader1Style,
+                textStyle: this.textStyle,
+            },
+            () => this.isVisible,
+            resolveBetAmount
+        );
+        this.helpScreen.build();
         this.historyCurrentPage = 1;
         this.historyPageLimit = 11;
         this.showHistoryContent(scene, this.historyCurrentPage, this.historyPageLimit);
@@ -334,31 +472,6 @@ export class Menu {
         this.rulesContent.setVisible(false);
         this.historyContent.setVisible(false);
         this.settingsContent.setVisible(false);
-    }
-
-    private setupScrollableRulesContent(scene: GameScene): void {
-        // Create scroll view container
-        this.scrollView = scene.add.container(0, 0);
-        this.contentContainer = scene.add.container(0, 0);
-        this.scrollView.add(this.contentContainer);
-        
-        // Create mask for scrolling
-        const maskGraphics = scene.add.graphics();
-        maskGraphics.fillStyle(0xffffff);
-        maskGraphics.fillRect(0, 0, this.contentArea.width, this.contentArea.height);
-        this.mask = maskGraphics.createGeometryMask();
-        this.scrollView.setMask(this.mask);
-        // Make the mask graphics invisible (it's only used for the mask, not for display)
-        maskGraphics.setVisible(false);
-        
-        // Create the rules content
-        this.createHelpScreenContent(scene, this.rulesContent);
-        
-        // Add scroll view to rules content
-        this.rulesContent.add(this.scrollView);
-        
-        // Enable scrolling
-        this.enableScrolling(scene);
     }
 
     private switchTab(scene: GameScene, tabContainers: ButtonContainer[], activeIndex: number, tabConfigs: any[]): void {
@@ -469,12 +582,18 @@ export class Menu {
             loader.destroy();
             this.historyIsLoading = false;
         }
-        console.log(result);
+        console.log('History API Response:', result);
 
-        // Update pagination state
-        this.historyCurrentPage = result?.meta?.page ?? page;
-        this.historyTotalPages = result?.meta?.pageCount ?? 1;
+        // Update pagination state - check multiple possible metadata formats
+        this.historyCurrentPage = result?.meta?.page ?? result?.page ?? result?.meta?.currentPage ?? page;
+        this.historyTotalPages = result?.meta?.pageCount ?? result?.totalPages ?? result?.meta?.totalPages ?? result?.meta?.total ?? 1;
         this.historyPageLimit = limit;
+        
+        console.log('Pagination State:', {
+            currentPage: this.historyCurrentPage,
+            totalPages: this.historyTotalPages,
+            limit: this.historyPageLimit
+        });
         
         // Display headers centered per column (only once)
         const columnCenters = this.getHistoryColumnCenters(scene);
@@ -502,10 +621,10 @@ export class Menu {
         let contentY = 100;
         const rowsContainer = this.historyRowsContainer as GameObjects.Container;
         result.data?.forEach((v?:any)=>{
-            spinDate = this.formatISOToDMYHM(v.created_at);
+            spinDate = this.formatISOToDMYHM(v.createdAt);
             currency = v.currency == ''?'usd':v.currency;
-            bet = v.total_bet;
-            win = v.total_win;
+            bet = v.bet;
+            win = v.win;
 
             contentY += 30;
             // Create row centered per column
@@ -627,14 +746,11 @@ export class Menu {
                 btn.setInteractive({ useHandCursor: true });
                 btn.on('pointerup', () => {
                     if (this.historyIsLoading) { return; }
-                    scene.audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+                    scene.audioManager.playSoundEffect(SoundEffectType.CLICK);
                     // Disable all pagination buttons during load
                     contentArea.iterate((child: Phaser.GameObjects.GameObject) => {
                         const img = child as Phaser.GameObjects.Image;
-                        if (img && (img as any).texture && icons.includes((img as any).texture.key)) {
-                            img.disableInteractive();
-                            img.setAlpha(0.5);
-                        }
+                        if (img.input) img.disableInteractive();
                     });
                     this.showHistoryContent(scene, targetPage, limit);
                 });
@@ -754,8 +870,9 @@ export class Menu {
         drawToggle(musicToggleBg, musicToggleCircle, toggleX, startY + 70, musicOn);
         const musicToggleArea = scene.add.zone(toggleX, startY + 70 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
         musicToggleArea.setInteractive();
+        try { if ((musicToggleArea as any).input) (musicToggleArea as any).input.priorityID = 10; } catch {}
         musicToggleArea.on('pointerdown', () => {
-            scene.audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+            scene.audioManager.playSoundEffect(SoundEffectType.CLICK);
             musicOn = !musicOn;
             scene.audioManager.setVolume(musicOn ? 1 : 0);
             drawToggle(musicToggleBg, musicToggleCircle, toggleX, startY + 70, musicOn);
@@ -780,8 +897,9 @@ export class Menu {
         drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 170, sfxOn);
         const sfxToggleArea = scene.add.zone(toggleX, startY + 170 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
         sfxToggleArea.setInteractive();
+        try { if ((sfxToggleArea as any).input) (sfxToggleArea as any).input.priorityID = 10; } catch {}
         sfxToggleArea.on('pointerdown', () => {
-            scene.audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+            scene.audioManager.playSoundEffect(SoundEffectType.CLICK);
             sfxOn = !sfxOn;
             scene.audioManager.setSfxVolume(sfxOn ? 1 : 0);
             drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 170, sfxOn);
@@ -801,8 +919,9 @@ export class Menu {
         drawToggle(skipToggleBg, skipToggleCircle, toggleX, skipLabelY + 2, skipOn);
         const skipToggleArea = scene.add.zone(toggleX, skipLabelY + 2 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
         skipToggleArea.setInteractive();
+        try { if ((skipToggleArea as any).input) (skipToggleArea as any).input.priorityID = 10; } catch {}
         skipToggleArea.on('pointerdown', () => {
-            scene.audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
+            scene.audioManager.playSoundEffect(SoundEffectType.CLICK);
             skipOn = !skipOn;
             drawToggle(skipToggleBg, skipToggleCircle, toggleX, skipLabelY + 2, skipOn);
         });
@@ -833,6 +952,7 @@ export class Menu {
             new Geom.Circle(0, 0, 22 * scaleFactor),
             Geom.Circle.Contains
         );
+        try { if ((musicSlider as any).input) (musicSlider as any).input.priorityID = 10; } catch {}
         contentArea.add(musicSlider);
 
         // Music value text
@@ -915,6 +1035,7 @@ export class Menu {
                 new Geom.Circle(0, 0, 22 * scaleFactor),  
                 Geom.Circle.Contains
             );
+            try { if ((musicSlider as any).input) (musicSlider as any).input.priorityID = 10; } catch {}
             // Keep SFX interactions disabled while hidden
             sfxSlider.disableInteractive();
         };
@@ -963,6 +1084,7 @@ export class Menu {
             new Geom.Rectangle(0, -10, widthSlider * scaleFactor, 28),
             Geom.Rectangle.Contains
         );
+        try { if ((musicSliderTrack as any).input) (musicSliderTrack as any).input.priorityID = 10; } catch {}
         contentArea.add(musicSliderTrack);
 
         const sfxSliderTrack = scene.add.graphics();
@@ -998,11 +1120,36 @@ export class Menu {
 
     public showMenu(scene: GameScene): void {        
         this.settingsOnly = false;
+
         // Ensure only one instance exists by destroying any previous menu
         if (this.menuContainer) {
             this.destroyMenu(scene);
         }
+
+        try {
+            if (this.prevSceneInputEnabled === undefined) {
+                this.prevSceneInputEnabled = !!scene.input.enabled;
+            }
+            scene.input.enabled = true;
+        } catch {}
+
+        if (!this.menuInputGuard) {
+            this.menuInputGuard = () => {
+                if (!this.isVisible) return;
+                try {
+                    if (!scene.input.enabled) {
+                        scene.input.enabled = true;
+                    }
+                } catch {}
+            };
+            try { scene.events.on('update', this.menuInputGuard); } catch {}
+        }
+
+        this.attachDebugInput(scene);
+
         const container = this.createMenu(scene);
+
+        this.setFullscreenButtonSuppressed(scene, true);
 
         container.setVisible(true);
         container.setAlpha(0);
@@ -1017,42 +1164,207 @@ export class Menu {
 
     }
 
-    public hideMenu(scene: GameScene): void {
+    public hideMenu(scene: GameScene, options: { instant?: boolean } = {}): void {
         if (!this.menuContainer) return;
-        
-        // Ensure menu container and all its children are hidden
-        this.menuContainer.setVisible(false);
-        this.menuContainer.setActive(false);
+
+        const container = this.menuContainer;
+        const instant = !!options.instant;
+
+        const cleanupAndRestore = () => {
+            // Ensure menu container and all its children are hidden
+            try { container.setVisible(false); } catch {}
+            try { container.setActive(false); } catch {}
+
+            this.detachDebugInput();
+
+            // Tear down Rules tab input handlers so they don't accumulate across opens.
+            try { this.helpScreen?.destroy(); } catch {}
+            this.helpScreen = undefined;
+
+            // Reset any help screen related state if present (guarded)
+            if ((scene.gameData as any).isHelpScreenVisible !== undefined) {
+                (scene.gameData as any).isHelpScreenVisible = false;
+            }
+
+            // Clean up event handlers
+            if (this.menuEventHandlers) {
+                this.menuEventHandlers.forEach(handler => {
+                    scene.input.off('pointermove', handler);
+                    scene.input.off('pointerup', handler);
+                });
+                this.menuEventHandlers = [];
+            }
+
+            // Reset dragging states
+            this.isDraggingMusic = false;
+            this.isDraggingSFX = false;
+
+            this.isClosingMenu = false;
+            this.menuCloseTween = undefined;
+            this.setFullscreenButtonSuppressed(scene, false);
+
+            if (this.menuInputGuard) {
+                try { scene.events.off('update', this.menuInputGuard); } catch {}
+                this.menuInputGuard = undefined;
+            }
+
+            if (this.prevSceneInputEnabled !== undefined) {
+                try { scene.input.enabled = this.prevSceneInputEnabled; } catch {}
+                this.prevSceneInputEnabled = undefined;
+            }
+        };
+
+        // Stop any previous close tween.
+        if (this.menuCloseTween) {
+            try { this.menuCloseTween.stop(); } catch {}
+            this.menuCloseTween = undefined;
+        }
+
+        // Mark as not visible immediately so scrolling / dragging handlers stop responding.
         this.isVisible = false;
-        
-        // Reset any help screen related state if present (guarded)
-        if ((scene.gameData as any).isHelpScreenVisible !== undefined) {
-            (scene.gameData as any).isHelpScreenVisible = false;
+
+        if (instant) {
+            try { container.setAlpha(0); } catch {}
+            cleanupAndRestore();
+            return;
         }
-        
-        // Clean up event handlers
-        if (this.menuEventHandlers) {
-            this.menuEventHandlers.forEach(handler => {
-                scene.input.off('pointermove', handler);
-                scene.input.off('pointerup', handler);
-            });
-            this.menuEventHandlers = [];
+
+        if (this.isClosingMenu) {
+            return;
         }
-        
-        // Reset dragging states
-        this.isDraggingMusic = false;
-        this.isDraggingSFX = false;
+        this.isClosingMenu = true;
+
+        this.menuCloseTween = scene.tweens.add({
+            targets: container,
+            alpha: 0,
+            duration: 250,
+            ease: 'Power2',
+            onComplete: () => {
+                cleanupAndRestore();
+            },
+        });
+    }
+
+    private setFullscreenButtonSuppressed(scene: GameScene, suppressed: boolean): void {
+        const btn: any = (scene as any).fullscreenBtn;
+        if (!btn) {
+            return;
+        }
+
+        if (suppressed) {
+            if (this.fullscreenBtnPrevVisible === undefined) {
+                try { this.fullscreenBtnPrevVisible = !!btn.visible; } catch { this.fullscreenBtnPrevVisible = true; }
+                try { this.fullscreenBtnPrevInputEnabled = !!btn.input?.enabled; } catch { this.fullscreenBtnPrevInputEnabled = true; }
+            }
+            try { btn.setVisible(false); } catch {}
+            try { if (btn.input) btn.input.enabled = false; } catch {}
+            return;
+        }
+
+        const restoreVisible = this.fullscreenBtnPrevVisible ?? true;
+        const restoreEnabled = this.fullscreenBtnPrevInputEnabled ?? true;
+        try { btn.setVisible(restoreVisible); } catch {}
+        try { if (btn.input) btn.input.enabled = restoreEnabled; } catch {}
+        this.fullscreenBtnPrevVisible = undefined;
+        this.fullscreenBtnPrevInputEnabled = undefined;
     }
 
     private destroyMenu(scene: GameScene): void {
         // Hide and cleanup listeners first
-        this.hideMenu(scene);
+        this.hideMenu(scene, { instant: true });
         // Destroy existing container to free resources
         if (this.menuContainer) {
             this.menuContainer.destroy(true);
             this.menuContainer = undefined;
         }
         this.panel = undefined as any;
+    }
+
+    private attachDebugInput(scene: GameScene): void {
+        if (this.debugInputOffs) return;
+        const offs: Array<() => void> = [];
+        const shouldLog = () => !!(globalThis as any)?.__DEBUG_INPUT;
+        const log = (tag: string, data?: any) => {
+            if (!shouldLog()) return;
+            try { console.log(tag, data ?? ''); } catch {}
+        };
+
+        try {
+            const canvas = (scene.game as any)?.canvas as HTMLCanvasElement | undefined;
+            if (canvas && typeof canvas.getBoundingClientRect === 'function') {
+                const rect = canvas.getBoundingClientRect();
+                const cx = rect.left + rect.width / 2;
+                const cy = rect.top + rect.height / 2;
+                const el = document.elementFromPoint(cx, cy) as any;
+                const chain: any[] = [];
+                let cur: any = el;
+                let hops = 0;
+                while (cur && hops++ < 12) {
+                    let pe: string | undefined;
+                    try { pe = window.getComputedStyle(cur).pointerEvents; } catch {}
+                    chain.push({
+                        tag: cur.tagName,
+                        id: cur.id,
+                        className: cur.className,
+                        pointerEvents: pe,
+                        zIndex: (() => { try { return window.getComputedStyle(cur).zIndex; } catch { return undefined; } })(),
+                    });
+                    if (cur === document.body) break;
+                    cur = cur.parentElement;
+                }
+                log('[Menu][DOM] canvas center hit-test', {
+                    canvas: { w: rect.width, h: rect.height, left: rect.left, top: rect.top },
+                    element: el ? { tag: el.tagName, id: el.id, className: el.className } : null,
+                    chain,
+                });
+            }
+        } catch {}
+
+        try {
+            const onDomDown = (e: any) => log('[Menu][DOM] pointerdown(capture)', {
+                type: e?.type,
+                x: e?.clientX,
+                y: e?.clientY,
+                target: (e?.target && (e.target as any).tagName) ? {
+                    tag: (e.target as any).tagName,
+                    id: (e.target as any).id,
+                    className: (e.target as any).className,
+                } : undefined,
+            });
+            const onDomMove = (e: any) => { if (e?.buttons) log('[Menu][DOM] pointermove(capture)', { x: e?.clientX, y: e?.clientY, buttons: e?.buttons }); };
+            const onDomWheel = (e: any) => log('[Menu][DOM] wheel(capture)', { x: e?.clientX, y: e?.clientY, dy: e?.deltaY, dx: e?.deltaX });
+            window.addEventListener('pointerdown', onDomDown as any, true as any);
+            window.addEventListener('pointermove', onDomMove as any, true as any);
+            window.addEventListener('wheel', onDomWheel as any, true as any);
+            offs.push(() => { try { window.removeEventListener('pointerdown', onDomDown as any, true as any); } catch {} });
+            offs.push(() => { try { window.removeEventListener('pointermove', onDomMove as any, true as any); } catch {} });
+            offs.push(() => { try { window.removeEventListener('wheel', onDomWheel as any, true as any); } catch {} });
+        } catch {}
+
+        try {
+            const onDown = (p: any) => log('[Menu][SceneInput] pointerdown', { x: p?.x, y: p?.y, enabled: (scene.input as any)?.enabled, managerEnabled: (scene.input as any)?.manager?.enabled });
+            const onUp = (p: any) => log('[Menu][SceneInput] pointerup', { x: p?.x, y: p?.y, enabled: (scene.input as any)?.enabled, managerEnabled: (scene.input as any)?.manager?.enabled });
+            const onMove = (p: any) => { if (p?.isDown) log('[Menu][SceneInput] pointermove(down)', { x: p?.x, y: p?.y }); };
+            const onWheel = (p: any, dx: number, dy: number, dz: number) => log('[Menu][SceneInput] wheel', { x: p?.x, y: p?.y, dx, dy, dz });
+            scene.input.on('pointerdown', onDown);
+            scene.input.on('pointerup', onUp);
+            scene.input.on('pointermove', onMove);
+            scene.input.on('wheel', onWheel);
+            offs.push(() => { try { scene.input.off('pointerdown', onDown); } catch {} });
+            offs.push(() => { try { scene.input.off('pointerup', onUp); } catch {} });
+            offs.push(() => { try { scene.input.off('pointermove', onMove); } catch {} });
+            offs.push(() => { try { scene.input.off('wheel', onWheel); } catch {} });
+        } catch {}
+
+        this.debugInputOffs = offs;
+    }
+
+    private detachDebugInput(): void {
+        if (!this.debugInputOffs) return;
+        for (const off of this.debugInputOffs) {
+            try { off(); } catch {}
+        }
+        this.debugInputOffs = undefined;
     }
 
 
@@ -1087,7 +1399,7 @@ export class Menu {
 
 
     private createHelpScreenContent(scene: GameScene, contentArea: GameObjects.Container): void {
-            this.padding = 10;
+            this.padding = this.options.padding;
             this.textHorizontalPadding = -2;
             this.contentWidth = scene.scale.width - this.padding * 6;
             this.yPosition = this.padding + 10;
@@ -1106,42 +1418,43 @@ export class Menu {
             this.yPosition += this.padding * 8;
     
             // Create 11 symbol grids with payouts (Symbols 1-11)
-            const symbolSize = 153;
-            const symbolScale = 0.5;
+            const symbolSize = this.options.layoutUnit;
+            const symbolScale = this.options.symbolScale;
+            const layoutUnit = this.options.layoutUnit;
             const scaledSymbolSize = symbolSize * symbolScale;
             for (let symbolIndex = 1; symbolIndex <= 11; symbolIndex++) {
                 const cellX = this.padding;
                 const cellY = this.yPosition;
-    
+
                 // Create symbol container with white border
                 const symbolContainer = scene.add.container(cellX, cellY);
-    
+
                 this.createBorder(scene, symbolContainer, 
                     -this.padding / 2, 
-                    -scaledSymbolSize, 
+                    -layoutUnit, 
                     this.contentWidth + this.padding * 3,
-                    scaledSymbolSize * 1.5
+                    layoutUnit * 1.5
                 );
-    
+
                 // Add symbol
                 const symbol = scene.add.image(0, 0, `symbol_${symbolIndex}`);
                 symbol.setScale(symbolScale);
                 symbol.setOrigin(-0.2, 0.7);
                 symbolContainer.add(symbol);
-    
+
                 // Add payout table next to symbol
                 this.createPayoutTable(scene,
-                    scaledSymbolSize + symbolSize/5,
+                    Math.max(layoutUnit, scaledSymbolSize) + symbolSize/5,
                     0,
                     symbolContainer,
                     symbolIndex
                 );
-    
+
                 this.contentContainer.add(symbolContainer);
                 symbolContainer.setPosition(0, symbolContainer.y);
-                this.yPosition += scaledSymbolSize + this.padding * 5;  // Move to next row
+                this.yPosition += layoutUnit + this.padding * 5;  // Move to next row
             }
-            this.yPosition -=  scaledSymbolSize;
+            this.yPosition -=  layoutUnit;
 
             // Increase top spacing before Scatter label
             this.yPosition += this.padding * 1.5;
@@ -1164,10 +1477,10 @@ export class Menu {
                 const extraScatterTopPad = this.padding / 1.5;
                 // Increase vertical size for Scatter payout only
                 const extraScatterBottomPad = this.padding * 16;
-                const scatterContainerHeight = scaledSymbolSize * 5.5 + extraScatterTopPad + extraScatterBottomPad;
+                const scatterContainerHeight = layoutUnit * 5.5 + extraScatterTopPad + extraScatterBottomPad;
                 this.createBorder(scene, symbolContainer, 
                     0, 
-                    -scaledSymbolSize - extraScatterTopPad, 
+                    -layoutUnit - extraScatterTopPad, 
                     this.contentWidth + this.padding * 3 ,
                     scatterContainerHeight
                 );
@@ -1204,7 +1517,7 @@ export class Menu {
                 this.padding,
                 0,
                 this.contentWidth + this.padding * 3,
-                scaledSymbolSize * 3.1
+                layoutUnit * 3.1
             );
             this.contentContainer.add(enhancedContainer);
 
@@ -1240,7 +1553,7 @@ export class Menu {
                 this.padding,
                 0,
                 this.contentWidth + this.padding * 3,
-                scaledSymbolSize * 2.8
+                layoutUnit * 2.8
             );
             this.contentContainer.add(buyFeatContainer);
 
@@ -1286,21 +1599,21 @@ export class Menu {
             // Removed Tumble Win section
             this.yPosition += this.padding * 7.5;
             this.addTextBlock(scene, 'header2', 'Free Spins Rules');
-            this.yPosition += scaledSymbolSize * 0.25;
+            this.yPosition += layoutUnit * 0.25;
             //this.yPosition -= scaledSymbolSize * 4.5;
-    
-            const freeSpinContainer = scene.add.container(-this.padding * 1.5, this.yPosition-scaledSymbolSize * 0.2);
+            
+            const freeSpinContainer = scene.add.container(-this.padding * 1.5, this.yPosition-layoutUnit * 0.2);
             this.yPosition += this.createBorder(scene, freeSpinContainer, 
                 this.padding, 
                 0, 
                 this.contentWidth + this.padding * 3, 
-                scaledSymbolSize * 43
+                layoutUnit * 43
                 
             );
             this.contentContainer.add(freeSpinContainer);
             this.contentContainer.sendToBack(freeSpinContainer);
-
-            this.yPosition -= scaledSymbolSize * 1.25;
+            
+            this.yPosition -= layoutUnit * 1.25;
 
             // Use a common template for Bonus Trigger and Free Spins Start
             const freeSpinsTitleOffset = this.padding * 15; // distance from image → title
@@ -1417,7 +1730,7 @@ export class Menu {
             scatterWinImage.setPosition(scatterSymbolImage.x - scatterSymbolImage.displayWidth/2 + this.padding * 9.1, scatterSymbolImage.y * 3/4 - scatterWinImage.height/ 4 + 20);
             freeSpinContainer.add(scatterWinImage);
             
-            this.yPosition -= scaledSymbolSize * 5.3;
+            this.yPosition -= layoutUnit * 5.3;
 
             
             // this.addDivider(scene, 0x379557);
@@ -1433,12 +1746,12 @@ export class Menu {
                 this.padding, 
                 0, 
                 this.contentWidth + this.padding * 3, 
-                scaledSymbolSize * 10.8
+                layoutUnit * 10.8
             );
             this.contentContainer.add(gamesettingsContainer);
-    
+
             //this.yPosition -= scaledSymbolSize * 9.75;
-            this.yPosition -= scaledSymbolSize * 10.3;
+            this.yPosition -= layoutUnit * 10.3;
             
     
             //this.yPosition += this.padding;
@@ -1449,10 +1762,10 @@ export class Menu {
 
             
             
-            this.createHowToPlayEntry(scene, 20, scaledSymbolSize * 1, gamesettingsContainer, '', 'Symbols can land anywhere on the screen.', true, this.contentWidth + this.padding * 3);
+            this.createHowToPlayEntry(scene, 20, layoutUnit * 1, gamesettingsContainer, '', 'Symbols can land anywhere on the screen.', true, this.contentWidth + this.padding * 3);
 
             // Place a 5x4 grid of winline thumbnails below the text
-            const gridTopY = scaledSymbolSize * 1 + this.padding * 4.8;
+            const gridTopY = layoutUnit * 1 + this.padding * 4.8;
             const gridBottom = this.drawWinlinesThumbnailsGrid(scene, gamesettingsContainer, gridTopY, 5, 4);
 
             // Add payline notes text below the grid (as shown in the reference)
@@ -1460,6 +1773,7 @@ export class Menu {
                 'All symbols pay left to right on \nselected paylines.',
                 'Free Spins wins are added to \npayline wins.',
                 'All wins are multiplied by the bet \nper line.',
+                'All values shown are actual wins \nin coins.',
                 'Only the highest win is paid per \nline.',
                 'Wins on multiple paylines are \nadded together.'
             ].join('\n');
@@ -1896,9 +2210,9 @@ export class Menu {
 
     private createBorder(scene: GameScene, _container: GameObjects.Container, _x: number, _y: number, _width: number, _height: number): number {
         const border = scene.add.graphics();
-        border.fillStyle(0x333333);
+        border.fillStyle(this.options.colors.bgFrame);
         border.fillRoundedRect(_x, _y, _width, _height, 8);
-        border.lineStyle(2, 0x333333);
+        border.lineStyle(2, this.options.colors.bgFrame);
         border.strokeRoundedRect(_x, _y, _width, _height, 8);
         border.setAlpha(0.7);
         _container.add(border);
@@ -1921,12 +2235,34 @@ export class Menu {
         return _height;
     }
 
+    public setOptions(opts: Partial<MenuOptions>): void {
+        const deepMerge = (t: any, s: any) => {
+            Object.keys(s).forEach(k => {
+                const sv = (s as any)[k];
+                const tv = (t as any)[k];
+                if (sv && typeof sv === 'object' && !Array.isArray(sv)) {
+                    (t as any)[k] = deepMerge(tv ? { ...tv } : {}, sv);
+                } else {
+                    (t as any)[k] = sv;
+                }
+            });
+            return t;
+        };
+        this.options = deepMerge({ ...this.options }, opts);
+        // keep legacy fields in sync for backward compatibility
+        this.payoutLabelOffsetX = this.options.offsets.payoutLabelOffsetX;
+        this.payoutLabelOffsetY = this.options.offsets.payoutLabelOffsetY;
+        this.payoutLabelPerSymbolOffsetX = this.options.offsets.payoutLabelPerSymbolOffsetX;
+        this.payoutLabelPerSymbolOffsetY = this.options.offsets.payoutLabelPerSymbolOffsetY;
+        this.scatterInfoOffset = this.options.offsets.scatterInfoOffset;
+    }
+
     private addDivider(scene: GameScene, _color: number = 0xFFFFFF): void {
         // Add centered divider across the visible content width
         const divider = scene.add.graphics();
         divider.lineStyle(1, _color);
-        const worldLeft = 20; // content area left padding
-        const worldRight = scene.scale.width - 20; // content area right padding
+        const worldLeft = this.options.contentSidePadding; // content area left padding
+        const worldRight = scene.scale.width - this.options.contentSidePadding; // content area right padding
         const parentOffsetX = this.contentArea ? this.contentArea.x : 0;
         const localLeft = worldLeft - parentOffsetX;
         const localRight = worldRight - parentOffsetX;
@@ -1936,10 +2272,23 @@ export class Menu {
     }
 
     private createPayoutTable(scene: GameScene, x: number, y: number, container: GameObjects.Container, symbolIndex: number): void {
-        const cellWidth1 = 60; 
-        const cellWidth2 = 100;
-        const cellHeight = 22.5;
-        const cellPadding = 5;
+        const cellWidth1 = this.options.table.cellWidth1; 
+        const cellWidth2 = this.options.table.cellWidth2;
+        const cellHeight = this.options.table.cellHeight;
+        const cellPadding = this.options.table.cellPadding;
+
+        // Frame metrics and clamped table left to prevent overflow
+        // @ts-ignore
+        const frameW = (container.getData && container.getData('frameW')) || (this.contentWidth + this.padding * 3);
+        // @ts-ignore
+        const frameX = (container.getData && container.getData('frameX')) || this.padding;
+        const inset = this.options.table.inset;
+        const tableWidth = cellWidth1 + cellPadding + cellWidth2 + cellPadding + (cellWidth2 * 2);
+        const xLeft = Math.min(Math.max(x, frameX + inset), frameX + frameW - inset - tableWidth);
+
+        const offX = this.payoutLabelPerSymbolOffsetX[symbolIndex] ?? this.payoutLabelOffsetX;
+        const offY = this.payoutLabelPerSymbolOffsetY[symbolIndex] ?? this.payoutLabelOffsetY;
+        const valueRowOffY = this.options.offsets.payoutValueRowOffsetYPerSymbol[symbolIndex] ?? this.options.offsets.payoutValueRowOffsetY;
 
         const tableHeight = (cellHeight + cellPadding) * 4;
         const matchNumRange : string[] = ['5', '4', '3'];
@@ -1970,7 +2319,7 @@ export class Menu {
                 } else {
                     cellWidth = cellWidth2 * 2;
                 }
-                const cellX = x + (col == 2 ? cellWidth1 + cellWidth2 + cellPadding * 2 : col * (cellWidth + cellPadding));
+                const cellX = xLeft + (col == 2 ? cellWidth1 + cellWidth2 + cellPadding * 2 : col * (cellWidth + cellPadding));
                 const cellY = tableY + row * (cellHeight + cellPadding);
 
                 // Draw cell border
@@ -1979,21 +2328,7 @@ export class Menu {
                 if(symbolIndex != 0) {
                     // For regular symbols
                     if(col < 2) {
-                        // Payout values per symbol (1-11) for rows ['12+', '10', '8']
-                        const payoutMap: { [key: number]: [number, number, number] } = {
-                            1: [37.50, 7.50, 2.50],
-                            2: [25.00, 5.00, 1.75],
-                            3: [15.00, 3.00, 1.25],
-                            4: [10.00, 2.00, 1.25],
-                            5: [7.50, 1.25, 0.60],
-                            6: [5.00, 1.00, 0.40],
-                            7: [2.50, 0.50, 0.25],
-                            8: [2.50, 0.50, 0.25],
-                            9: [1.25, 0.25, 0.10],
-                            10: [1.25, 0.25, 0.10],
-                            11: [1.25, 0.25, 0.10]
-                        };
-                        const payoutValue = (payoutMap[symbolIndex] && payoutMap[symbolIndex][row] !== undefined) ? payoutMap[symbolIndex][row] : 0;
+                        const payoutValue = (defaultPayoutMap[symbolIndex] && defaultPayoutMap[symbolIndex][row] !== undefined) ? defaultPayoutMap[symbolIndex][row] : 0;
                         const text2 = payoutValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         payoutAdjustments[row] = text2.length;
 
@@ -2011,22 +2346,28 @@ export class Menu {
 
                         let textElement : GameObjects.Text;
                         if(col == 0){
-                            textElement = scene.add.text(cellX + cellWidth + 25, cellY + cellHeight/2, text, {
+                            // Match count column (5/4/3) uses standard column Y offset
+                            textElement = scene.add.text(cellX + cellWidth - 4 + offX[0], cellY + cellHeight/2 + offY[0], text, {
                                 fontSize: '20px',
                                 color: '#FFFFFF',
                                 fontFamily: 'Poppins-Regular', 
                                 align: 'left',
                                 fontStyle: 'bold'
                             });
-                            textElement.setOrigin(0, 0.5);
+                            textElement.setOrigin(1, 0.5);
                         } else {
-                            // Right-align payout values to the cell's right edge (with 2px inset)
-                            textElement = scene.add.text(cellX + cellWidth + 50, cellY + cellHeight/2, text, {
+                            // Value column uses column Y offset plus row-specific value label Y offset
+                            textElement = scene.add.text(
+                                cellX + cellWidth - 2 + offX[1],
+                                cellY + cellHeight/2 + offY[1] + (valueRowOffY[row] ?? 0),
+                                text,
+                                {
                                 fontSize: '20px',
                                 color: '#FFFFFF',
                                 fontFamily: 'Poppins-Regular', 
                                 align: 'right'
-                            });
+                                }
+                            );
                             textElement.setOrigin(1, 0.5);
                         }
 
@@ -2050,21 +2391,26 @@ export class Menu {
                         }
 
                     if(col == 0) {
-                        const textElement = scene.add.text(cellX + cellWidth + this.padding, cellY + cellHeight/2, text, {
+                        const textElement = scene.add.text(cellX + cellWidth - 2 + offX[0], cellY + cellHeight/2 + offY[0], text, {
                             fontSize: '20px',
                             color: '#FFFFFF',
                             fontFamily: 'Poppins-Regular',
                             fontStyle: 'bold'
                         });
-                        textElement.setOrigin(col == 0 ? 0 : 0.5, 0.5);
+                        textElement.setOrigin(1, 0.5);
                         container.add(textElement);
                     } else if(col == 1) {
                         
-                        const textElement = scene.add.text(cellX + cellWidth , cellY + cellHeight/2, text, {
+                        const textElement = scene.add.text(
+                            cellX + cellWidth / 2 + offX[1],
+                            cellY + cellHeight/2 + offY[1] + (valueRowOffY[row] ?? 0),
+                            text,
+                            {
                             fontSize: '20px',
                             color: '#FFFFFF',
                             fontFamily: 'Poppins-Regular'
-                        });
+                            }
+                        );
                         textElement.setOrigin(0.5, 0.5);
                         container.add(textElement);
                     
@@ -2076,10 +2422,9 @@ export class Menu {
         }
         // For Scatter symbol, place the descriptive text as a centered block BELOW the table
         if (symbolIndex === 0) {
-            const tableWidth = cellWidth1 + cellPadding + cellWidth2 + cellPadding + (cellWidth2 * 2);
-            const tableLeft = x;
-            const tableCenterX = tableWidth / 2;
-            const tableBottomY = tableY + (3 * (cellHeight + cellPadding));
+            const tableLeft = xLeft;
+            const tableCenterX = tableLeft + tableWidth / 2 + this.scatterInfoOffset.x;
+            const tableBottomY = tableY + (3 * (cellHeight + cellPadding)) + this.scatterInfoOffset.y;
 
             const infoText = scatterText.join('\n');
             const scatterTextCell = scene.add.text(
@@ -2104,6 +2449,32 @@ export class Menu {
     public toggleMenu(scene: GameScene): void {
         
         this.showMenu(scene);
+    }
+
+    public setPayoutLabelOffsetsX(x0: number, x1: number, x2: number): void {
+        this.payoutLabelOffsetX = [x0, x1, x2];
+    }
+
+    public setPayoutLabelOffsetsY(y0: number, y1: number, y2: number): void {
+        this.payoutLabelOffsetY = [y0, y1, y2];
+    }
+
+    public setPayoutLabelOffsetsForSymbol(symbolIndex: number, offX: [number, number, number], offY: [number, number, number]): void {
+        this.payoutLabelPerSymbolOffsetX[symbolIndex] = offX;
+        this.payoutLabelPerSymbolOffsetY[symbolIndex] = offY;
+    }
+
+    public setScatterInfoOffset(x: number, y: number): void {
+        this.scatterInfoOffset = { x, y };
+    }
+
+    // New setters: row-specific Y offsets for the three value labels (rows 5/4/3)
+    public setPayoutValueRowOffsetY(y5: number, y4: number, y3: number): void {
+        this.options.offsets.payoutValueRowOffsetY = [y5, y4, y3];
+    }
+
+    public setPayoutValueRowOffsetYForSymbol(symbolIndex: number, offsets: [number, number, number]): void {
+        this.options.offsets.payoutValueRowOffsetYPerSymbol[symbolIndex] = offsets;
     }
 
     // addHeader1/addHeader2/addContent1 removed in favor of addTextBlock

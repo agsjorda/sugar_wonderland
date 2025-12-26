@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
+import { gameStateManager } from '../../managers/GameStateManager';
 
 interface BubbleTransitionData {
 	fromSceneKey?: string;
@@ -14,6 +15,7 @@ interface BubbleTransitionData {
 	overlayFadeInDurationMs?: number;
 	overlayFadeInDelayMs?: number;
 	spineFadeInDurationMs?: number;
+	sceneSwitchProgress?: number;
 }
 
 export class BubbleOverlayTransitionScene extends Scene {
@@ -23,9 +25,11 @@ export class BubbleOverlayTransitionScene extends Scene {
 	private bubbles: Phaser.GameObjects.Arc[] = [];
 	private hasStarted: boolean = false;
 	private hasFinished: boolean = false;
+	private hasPlayedTransitionSfx: boolean = false;
 	private hardStopTimer?: Phaser.Time.TimerEvent;
 	private toSceneKey?: string;
 	private ensureOnTopTimer?: Phaser.Time.TimerEvent;
+	private startGameStarted: boolean = false;
 
 	constructor() {
 		super('BubbleOverlayTransition');
@@ -36,6 +40,7 @@ export class BubbleOverlayTransitionScene extends Scene {
 		try { this.hasStarted = false; } catch {}
 		try { this.hasFinished = false; } catch {}
 		try { this.toSceneKey = undefined; } catch {}
+		try { this.hasPlayedTransitionSfx = false; } catch {}
 	}
 
 	create(): void {
@@ -43,6 +48,8 @@ export class BubbleOverlayTransitionScene extends Scene {
 		try { this.hasStarted = false; } catch {}
 		try { this.hasFinished = false; } catch {}
 		try { this.toSceneKey = undefined; } catch {}
+		try { this.startGameStarted = false; } catch {}
+		try { this.hasPlayedTransitionSfx = false; } catch {}
 		try { this.scene.bringToTop('BubbleOverlayTransition'); } catch {}
 		this.cameras.main.setBackgroundColor(0x000000);
 		try { (this.cameras.main.backgroundColor as any).alpha = 0; } catch {}
@@ -53,6 +60,7 @@ export class BubbleOverlayTransitionScene extends Scene {
 				try { this.ensureOnTopTimer = undefined; } catch {}
 				try { this.hardStopTimer?.destroy(); } catch {}
 				try { this.hardStopTimer = undefined; } catch {}
+				try { (this.overlayRect as any)?.disableInteractive?.(); } catch {}
 				try { this.overlayRect?.destroy(); } catch {}
 				try { this.transitionSpine?.destroy(); } catch {}
 				for (const b of this.bubbles) {
@@ -82,6 +90,7 @@ export class BubbleOverlayTransitionScene extends Scene {
 		).setOrigin(0.5, 0.5);
 		this.overlayRect.setDepth(0);
 		this.overlayRect.setAlpha(0);
+		try { (this.overlayRect as any)?.disableInteractive?.(); } catch {}
 		try {
 			try { this.ensureOnTopTimer?.destroy(); } catch {}
 			this.ensureOnTopTimer = this.time.addEvent({
@@ -96,7 +105,21 @@ export class BubbleOverlayTransitionScene extends Scene {
 		this.playBubbleAnimation();
 	}
 
+	private playTransitionSfxOnce(): void {
+		if (this.hasPlayedTransitionSfx) return;
+		this.hasPlayedTransitionSfx = true;
+		try {
+			const audio = (this as any)?.audioManager ?? ((window as any)?.audioManager ?? null);
+			if (audio && typeof audio.playSoundEffect === 'function') {
+				audio.playSoundEffect('bubble_transition_TB');
+				return;
+			}
+		} catch {}
+		try { this.sound.play('bubble_transition_TB'); } catch {}
+	}
+
 	private playBubbleAnimation(): void {
+		this.playTransitionSfxOnce();
 		const hasFactory = ensureSpineFactory(this as any, '[BubbleOverlayTransitionScene] playBubbleAnimation');
 		if (!hasFactory) {
 			this.playFallbackOverlay();
@@ -188,7 +211,23 @@ export class BubbleOverlayTransitionScene extends Scene {
 			}
 		} catch {}
 
-		this.time.delayedCall(650, () => {
+		let totalMsForTiming = 2000;
+		try {
+			const rawTimeScale = state?.timeScale;
+			const timeScale = (typeof rawTimeScale === 'number' && isFinite(rawTimeScale) && rawTimeScale > 0.05)
+				? rawTimeScale
+				: 1;
+			let totalMs = (durationSec / timeScale) * 1000;
+			if (!isFinite(totalMs) || totalMs <= 0) totalMs = 2000;
+			totalMsForTiming = Math.min(Math.max(totalMs, 1200), 4200);
+		} catch {
+			totalMsForTiming = 2000;
+		}
+
+		const switchProgressRaw = Number(this.transitionData?.sceneSwitchProgress);
+		const switchProgress = (isFinite(switchProgressRaw) ? Math.max(0, Math.min(1, switchProgressRaw)) : 0.5);
+		const midMs = Math.max(0, Math.round(totalMsForTiming * switchProgress));
+		this.time.delayedCall(midMs, () => {
 			this.startGameIfNeeded();
 			this.fadeOverlayOutEarly();
 		});
@@ -201,14 +240,7 @@ export class BubbleOverlayTransitionScene extends Scene {
 		};
 
 		try {
-			const rawTimeScale = state?.timeScale;
-			const timeScale = (typeof rawTimeScale === 'number' && isFinite(rawTimeScale) && rawTimeScale > 0.05)
-				? rawTimeScale
-				: 1;
-			let totalMs = (durationSec / timeScale) * 1000;
-			if (!isFinite(totalMs) || totalMs <= 0) totalMs = 2000;
-			totalMs = Math.min(Math.max(totalMs, 1200), 4200);
-			this.time.delayedCall(totalMs + 50, () => safeFinish());
+			this.time.delayedCall(totalMsForTiming + 50, () => safeFinish());
 		} catch {
 			this.time.delayedCall(2000, () => safeFinish());
 		}
@@ -250,7 +282,10 @@ export class BubbleOverlayTransitionScene extends Scene {
 
 		this.spawnBubbles();
 
-		this.time.delayedCall(650, () => {
+		const switchProgressRaw = Number(this.transitionData?.sceneSwitchProgress);
+		const switchProgress = (isFinite(switchProgressRaw) ? Math.max(0, Math.min(1, switchProgressRaw)) : 0.5);
+		const midMs = Math.max(0, Math.round(2200 * switchProgress));
+		this.time.delayedCall(midMs, () => {
 			this.startGameIfNeeded();
 			this.fadeOverlayOutEarly();
 		});
@@ -334,6 +369,19 @@ export class BubbleOverlayTransitionScene extends Scene {
 	private startGameIfNeeded(): void {
 		if (this.hasStarted) return;
 		this.hasStarted = true;
+		if (this.startGameStarted) return;
+		this.startGameStarted = true;
+
+		void (async () => {
+			try {
+				await gameStateManager.waitForOverlaySafeState({ timeoutMs: 15000 });
+			} catch {}
+			this.startGameIfNeededInternal();
+		})();
+	}
+
+	private startGameIfNeededInternal(): void {
+		if (this.hasFinished) return;
 
 		const toKey = this.transitionData?.toSceneKey || 'Game';
 		const fromKey = this.transitionData?.fromSceneKey || 'Preloader';
@@ -377,7 +425,15 @@ export class BubbleOverlayTransitionScene extends Scene {
 	private finishTransition(): void {
 		if (this.hasFinished) return;
 		this.hasFinished = true;
+		void (async () => {
+			try {
+				await gameStateManager.waitForOverlaySafeState({ timeoutMs: 15000 });
+			} catch {}
+			this.finishTransitionInternal();
+		})();
+	}
 
+	private finishTransitionInternal(): void {
 		const targets: any[] = [];
 		if (this.transitionSpine) targets.push(this.transitionSpine);
 		if (this.overlayRect) targets.push(this.overlayRect);
@@ -416,6 +472,7 @@ export class BubbleOverlayTransitionScene extends Scene {
 			}
 		} catch {}
 
+		try { (this.overlayRect as any)?.disableInteractive?.(); } catch {}
 		try { this.overlayRect?.destroy(); } catch {}
 		try { this.transitionSpine?.destroy(); } catch {}
 		for (const b of this.bubbles) {

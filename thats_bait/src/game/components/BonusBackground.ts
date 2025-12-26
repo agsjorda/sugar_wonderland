@@ -17,10 +17,23 @@ export class BonusBackground {
 	private seaEdge?: Phaser.GameObjects.Image;
 	private reelBottomSpine?: any;
 	private characterSpine?: any;
+	private rippleVfxSpine?: any;
+	private lastHookSurfaceContact: boolean = false;
+	private readonly hookSplashTextureKey: string = 'splash';
+	private readonly hookSplashModifiers = {
+		offsetX: 0,
+		offsetY: 0,
+		scale: 0.75,
+	};
 	private readonly reelBottomModifiers = {
 		offsetX: 0,
 		offsetY: -112,
 		scale: 4,
+	};
+	private readonly rippleVfxModifiers = {
+		offsetX: 0,
+		offsetY: 7,
+		scale: 1,
 	};
 	private characterModifiers = {
 		offsetX: -50,
@@ -72,6 +85,89 @@ export class BonusBackground {
 		this.bgContainer.setDepth(-10);
 		const assetScale = this.networkManager.getAssetScale();
 		this.createBackgroundLayers(scene, assetScale);
+	}
+
+	public updateHookSurfaceInteraction(hookX: number, hookY: number): void {
+		if (!this.bgSurface || !this.sceneRef) {
+			this.lastHookSurfaceContact = false;
+			return;
+		}
+
+		const w = this.bgSurface.displayWidth;
+		const h = this.bgSurface.displayHeight;
+		if (w <= 0 || h <= 0) {
+			this.lastHookSurfaceContact = false;
+			return;
+		}
+
+		const left = this.bgSurface.x - w * 0.5;
+		const top = this.bgSurface.y - h * 0.5;
+		const right = left + w;
+		const bottom = top + h;
+
+		const insideX = hookX >= left && hookX <= right;
+		const contactBand = 10;
+		const inContact = insideX && hookY >= bottom && hookY <= bottom + contactBand;
+
+		if (inContact && !this.lastHookSurfaceContact) {
+			this.playHookSplash(hookX, hookY);
+		}
+
+		this.lastHookSurfaceContact = inContact;
+	}
+
+	private playHookSplash(hookX: number, hookY: number): void {
+		const scene = this.sceneRef as any;
+		if (!scene) return;
+		try {
+			const textures: any = scene.textures;
+			if (!textures || typeof textures.exists !== 'function' || !textures.exists(this.hookSplashTextureKey)) {
+				return;
+			}
+		} catch {
+			return;
+		}
+		const x = hookX + this.hookSplashModifiers.offsetX;
+		const y = hookY + this.hookSplashModifiers.offsetY;
+		let img: Phaser.GameObjects.Image | undefined;
+		try {
+			img = scene.add.image(x, y, this.hookSplashTextureKey).setOrigin(0.5, 1);
+			if (!img) {
+				return;
+			}
+			img.setScrollFactor(0);
+			img.setAlpha(0);
+			const baseScale = (scene.scale.width / 1920) * this.hookSplashModifiers.scale;
+			img.setScale(baseScale * 1.05, baseScale * 0.2);
+			const seaDepth = (this.seaEdge && typeof (this.seaEdge as any).depth === 'number') ? (this.seaEdge as any).depth : 892;
+			img.setDepth(seaDepth - 1);
+			const y0 = y;
+			scene.tweens.chain({
+				targets: img,
+				tweens: [
+					{
+						alpha: 1,
+						scaleY: baseScale * 1.55,
+						y: y0 - 8,
+						duration: 140,
+						ease: 'Sine.Out',
+					},
+					{
+						alpha: 0,
+						scaleX: baseScale * 1.25,
+						scaleY: baseScale * 1.05,
+						y: y0 - 14,
+						duration: 240,
+						ease: 'Sine.In',
+						onComplete: () => {
+							try { img?.destroy(); } catch {}
+						}
+					}
+				]
+			});
+		} catch {
+			try { img?.destroy(); } catch {}
+		}
 	}
 
 	setCharacterLayout(options: { offsetX?: number; offsetY?: number; scale?: number }): void {
@@ -178,6 +274,7 @@ export class BonusBackground {
 			baseSurfaceX + this.surfaceBackgroundModifiers.offsetX,
 			baseSurfaceY + this.surfaceBackgroundModifiers.offsetY
 		);
+		this.createRippleVfxSpine(scene, bgSurface);
 
 		const baseSkyX = scene.scale.width * 0.5;
 		const baseSkyY = scene.scale.height * 0.5;
@@ -201,6 +298,87 @@ export class BonusBackground {
 		this.createCharacterSpine(scene);
 		this.createReelBottomSpine(scene);
 		this.applyWaterPipelines(scene);
+	}
+
+	private createRippleVfxSpine(scene: Scene, bgSurface?: Phaser.GameObjects.Image): void {
+		const context = "[BonusBackground] createRippleVfxSpine";
+		try {
+			try { this.rippleVfxSpine?.destroy(); } catch {}
+			this.rippleVfxSpine = undefined;
+
+			const hasFactory = ensureSpineFactory(scene, context);
+			if (!hasFactory) {
+				console.warn(`${context}: Spine factory not available; skipping Ripple_VFX_TB.`);
+				return;
+			}
+			const jsonCache: any = (scene.cache as any).json;
+			const hasJson = typeof jsonCache?.has === "function" && jsonCache.has("Ripple_VFX_TB");
+			console.log(`${context}: hasJson=${hasJson}`);
+			if (!hasJson) {
+				console.warn(`${context}: Spine JSON not found in cache for key Ripple_VFX_TB; ensure background assets are preloaded.`);
+				return;
+			}
+
+			const baseX = bgSurface?.x ?? (scene.scale.width * 0.5);
+			const baseY = bgSurface?.y ?? (scene.scale.height * 0.9);
+			const x = baseX + this.rippleVfxModifiers.offsetX;
+			const y = baseY + this.rippleVfxModifiers.offsetY;
+
+			this.rippleVfxSpine = (scene.add as any).spine(
+				x,
+				y,
+				"Ripple_VFX_TB",
+				"Ripple_VFX_TB-atlas"
+			);
+			try {
+				if (this.bgContainer) {
+					const containerAny: any = this.bgContainer as any;
+					const hasAddAt = typeof containerAny.addAt === 'function';
+					const hasGetIndex = typeof containerAny.getIndex === 'function';
+					const surfaceIndex = (bgSurface && hasGetIndex) ? containerAny.getIndex(bgSurface) : -1;
+					if (bgSurface && hasAddAt && surfaceIndex >= 0) {
+						containerAny.addAt(this.rippleVfxSpine, surfaceIndex + 1);
+					} else {
+						this.bgContainer.add(this.rippleVfxSpine);
+					}
+				}
+			} catch {}
+			if (typeof this.rippleVfxSpine.setScrollFactor === "function") {
+				this.rippleVfxSpine.setScrollFactor(0);
+			}
+
+			let baseScale = (scene.scale.width / 1920) * this.rippleVfxModifiers.scale;
+			try {
+				const spineAny: any = this.rippleVfxSpine;
+				if (bgSurface && typeof spineAny.getBounds === "function") {
+					try { spineAny.update?.(0); } catch {}
+					const b = spineAny.getBounds();
+					const sizeX = (b?.size?.width ?? b?.size?.x ?? 0);
+					if (sizeX > 0 && typeof bgSurface.displayWidth === 'number' && bgSurface.displayWidth > 0) {
+						baseScale = (bgSurface.displayWidth / sizeX) * this.rippleVfxModifiers.scale;
+					}
+				}
+			} catch {}
+			this.rippleVfxSpine.setScale(baseScale);
+
+			try {
+				const spineAny: any = this.rippleVfxSpine;
+				const animations: any[] | undefined = spineAny?.skeleton?.data?.animations;
+				let animName: string = "Ripple_VFX_TB_idle";
+				if (Array.isArray(animations) && animations.length > 0) {
+					const preferred = ["Ripple_VFX_TB_idle", "idle", "Idle", "IDLE", "animation", "Animation"];
+					const found = preferred.find(name => animations.some(a => a && a.name === name));
+					animName = found ?? (animations[0].name ?? animName);
+				}
+				if (spineAny.animationState && typeof spineAny.animationState.setAnimation === "function") {
+					spineAny.animationState.setAnimation(0, animName, true);
+				}
+				console.log(`${context}: playing animation '${animName}' for Ripple_VFX_TB`);
+			} catch (_e) {}
+			console.log(`${context}: created Ripple_VFX_TB at (${x}, ${y}) scale=${baseScale}`);
+		} catch (e) {
+			console.error(`${context}: Failed to create Ripple_VFX_TB spine`, e);
+		}
 	}
 
 	private createReelBottomSpine(scene: Scene): void {
@@ -522,6 +700,7 @@ export class BonusBackground {
 		try { this.seaEdge?.setVisible(visible); } catch {}
 		try { this.reelBottomSpine?.setVisible(visible); } catch {}
 		try { this.characterSpine?.setVisible(visible); } catch {}
+		try { this.rippleVfxSpine?.setVisible(visible); } catch {}
 	}
 
 	destroy(): void {
@@ -529,6 +708,7 @@ export class BonusBackground {
 		try { this.seaEdge?.destroy(); } catch {}
 		try { this.reelBottomSpine?.destroy(); } catch {}
 		try { this.characterSpine?.destroy(); } catch {}
+		try { this.rippleVfxSpine?.destroy(); } catch {}
 		this.sceneRef = null;
 	}
 }

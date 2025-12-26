@@ -49,6 +49,10 @@ export class AssetConfig {
 					atlas: `${forcedPortraitHighPrefix}/background/ReelBottom_Normal_TB.atlas`,
 					json: `${forcedPortraitHighPrefix}/background/ReelBottom_Normal_TB.json`
 				},
+				'Ripple_VFX_TB': {
+					atlas: `${forcedPortraitHighPrefix}/background/Ripple_VFX_TB.atlas`,
+					json: `${forcedPortraitHighPrefix}/background/Ripple_VFX_TB.json`
+				},
 				'Character_TB': {
 					atlas: `${forcedPortraitHighPrefix}/characters/Character_TB.atlas`,
 					json: `${forcedPortraitHighPrefix}/characters/Character_TB.json`
@@ -66,6 +70,7 @@ export class AssetConfig {
 				'BG-Bonus-Sky': `${forcedPortraitHighPrefix}/bonus_background/BG-Bonus-Sky.webp`,
 				'BG-Bonus-Surface': `${forcedPortraitHighPrefix}/bonus_background/BG-Bonus-Surface.webp`,
 				'Sea-Edge-Bonus': `${forcedPortraitHighPrefix}/bonus_background/Sea-Edge-Bonus.webp`,
+				'splash': `${forcedPortraitHighPrefix}/bonus_background/splash.webp`,
 				'level1-meter': `${forcedPortraitHighPrefix}/gauge-meter/level1-meter.webp`,
 				'level2-meter': `${forcedPortraitHighPrefix}/gauge-meter/level2-meter.webp`,
 				'level3-meter': `${forcedPortraitHighPrefix}/gauge-meter/level3-meter.webp`,
@@ -296,46 +301,14 @@ export class AssetConfig {
 
 	getHelpScreenAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix();
+		const forcedPortraitHighPrefix = `assets/portrait/high`;
 		// Build images map
 		const images: { [key: string]: string } = {
-			// HowToPlay images
-			'howToPlay1': `${prefix}/help_screen/HowToPlay1.png`,
-			'howToPlay1Mobile': `${prefix}/help_screen/HowToPlay1Mobile.png`,
-			'howToPlay2': `${prefix}/help_screen/HowToPlay2.png`,
-			'howToPlay2Mobile': `${prefix}/help_screen/HowToPlay2Mobile.png`,
-			'howToPlay3': `${prefix}/help_screen/HowToPlay3.png`,
-			'howToPlay3Mobile': `${prefix}/help_screen/HowToPlay3Mobile.png`,
-			'howToPlay4': `${prefix}/help_screen/HowToPlay4.png`,
-			'howToPlay4Mobile': `${prefix}/help_screen/HowToPlay4Mobile.png`,
-			'howToPlay5': `${prefix}/help_screen/HowToPlay5.png`,
-			'howToPlay6': `${prefix}/help_screen/HowToPlay6.png`,
-			'howToPlay7': `${prefix}/help_screen/HowToPlay7.png`,
-			'howToPlay8': `${prefix}/help_screen/HowToPlay8.png`,
-			'howToPlay8Mobile': `${prefix}/help_screen/HowToPlay8Mobile.png`,
-			'howToPlay9': `${prefix}/help_screen/HowToPlay9.png`,
-			'howToPlay9Mobile': `${prefix}/help_screen/HowToPlay9Mobile.png`,
-			'howToPlay10': `${prefix}/help_screen/HowToPlay10.png`,
-			'howToPlay10Mobile': `${prefix}/help_screen/HowToPlay10Mobile.png`,
-			// Feature help
-			'BuyFeatHelp': `${prefix}/help_screen/BuyFeatHelp.png`,
-			'BuyFeatMobile': `${prefix}/help_screen/BuyFeatMobile.png`,
-			'DoubleHelp': `${prefix}/help_screen/DoubleHelp.png`,
-			'DoubleHelpMobile': `${prefix}/help_screen/DoubleHelpMobile.png`,
-			// Payline visuals
-			'paylineMobileWin': `${prefix}/help_screen/paylineMobileWin.png`,
-			'paylineMobileNoWin': `${prefix}/help_screen/paylineMobileNoWin.png`,
-            // Scatter / Tumble / Multiplier visuals (icons removed to avoid loading unused assets)
-            'scatterGame': `${prefix}/help_screen/scatterGame.png`,
-            'scatterWin': `${prefix}/help_screen/scatterWin.png`,
-            'ScatterLabel': `${prefix}/help_screen/ScatterSymbol.png`,
-            'freeSpin_round': `${prefix}/help_screen/freeSpin_round.png`,
-            'tumbleWin': `${prefix}/help_screen/tumbleWin.png`,
-            'multiplierGame': `${prefix}/help_screen/multiplierGame.png`
+			'ScatterLabel': `${forcedPortraitHighPrefix}/help_screen/ScatterSymbol.webp`
 		};
 
-		// Map winlines1..20 -> public/assets/winlines/winline1..20.png
-		for (let i = 1; i <= 20; i++) {
-			images[`winlines${i}`] = `assets/winlines/winline${i}.png`;
+		for (let i = 0; i <= 6; i++) {
+			images[`help_section${i}`] = `${forcedPortraitHighPrefix}/help_screen/help_section${i}.webp`;
 		}
 
 		return { images };
@@ -344,15 +317,10 @@ export class AssetConfig {
 	getDialogAssets(): AssetGroup {
 		const prefix = this.getAssetPrefix();
 		const forcedPortraitHighPrefix = `assets/portrait/high`;
-		const forcedPortraitLowPrefix = `assets/portrait/low`;
 		
 		console.log(`[AssetConfig] Loading dialog assets with prefix: ${prefix}`);
 		
 		return {
-			images: {
-				'congrats-bg': `${forcedPortraitLowPrefix}/dialogs/congrats-bg.png`,
-				'congratulations-you-won': `${forcedPortraitLowPrefix}/dialogs/congratulations-you-won.png`
-			},
 			spine: {
 				'BigW_TB': {
 					atlas: `${forcedPortraitHighPrefix}/dialogs/BigW_TB.atlas`,
@@ -452,12 +420,18 @@ export class AssetConfig {
 				// Menu/UI clicks
 				'click_sw': 'assets/sounds/click_sw.ogg',
 				'button_fx': 'assets/sounds/SFX/button_fx.ogg',
+				'bubble_transition_TB': 'assets/sounds/SFX/bubble_transition_TB.ogg',
 				'mainbg_TB': 'assets/sounds/BG/mainbg_TB.ogg',
 				'bonusbg_TB': 'assets/sounds/BG/bonusbg_TB.ogg',
+				'freespinbg_TB': 'assets/sounds/BG/freespinbg_TB.ogg',
 				'ambience_TB': 'assets/sounds/SFX/ambience_TB.ogg',
 				'spin_button_TB': 'assets/sounds/SFX/spin_button_TB.ogg',
 				'reel_drop_TB': 'assets/sounds/SFX/reel_drop_TB.ogg',
 				'turbo_drop_TB': 'assets/sounds/SFX/turbo_drop_TB.ogg',
+				'castline_TB': 'assets/sounds/SFX/castline_TB.ogg',
+				'fishreel_TB': 'assets/sounds/SFX/fishreel_TB.ogg',
+				'explosion_TB': 'assets/sounds/SFX/explosion_TB.ogg',
+				'hello_TB': 'assets/sounds/SFX/hello_TB.ogg',
 
 				// Hit win SFX
 				'hit_win_TB': 'assets/sounds/SFX/hit_win_TB.ogg',
@@ -496,6 +470,12 @@ export class AssetConfig {
 			images: {
 				'dynamite': `${forcedPortraitHighPrefix}/dynamite/dynamite.png`,
 				'boom': `${forcedPortraitHighPrefix}/dynamite/boom.png`,
+			},
+			spine: {
+				'Water_Bomb_VFX': {
+					atlas: `${forcedPortraitHighPrefix}/dynamite/Water_Bomb_VFX.atlas`,
+					json: `${forcedPortraitHighPrefix}/dynamite/Water_Bomb_VFX.json`
+				}
 			}
 		};
 	}

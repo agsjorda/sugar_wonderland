@@ -8,6 +8,8 @@ import { ensureSpineFactory } from '../../utils/SpineGuard';
 export interface AutoplayOptionsConfig {
 	position?: { x: number; y: number };
 	scale?: number;
+	amplifyBetScaleModifierX?: number;
+	amplifyBetScaleModifierY?: number;
 	onClose?: () => void;
 	onConfirm?: (autoplayCount: number) => void;
 	currentAutoplayCount?: number;
@@ -17,9 +19,9 @@ export interface AutoplayOptionsConfig {
 }
 
 export class AutoplayOptions {
-	private container: Phaser.GameObjects.Container;
-	private background: Phaser.GameObjects.Graphics;
-	private confirmButtonMask: Phaser.GameObjects.Graphics;
+	private container!: Phaser.GameObjects.Container;
+	private background!: Phaser.GameObjects.Graphics;
+	private confirmButtonMask?: Phaser.GameObjects.Graphics;
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
 	private currentAutoplayCount: number = 10;
@@ -33,15 +35,21 @@ export class AutoplayOptions {
 	private autoplayButtons: Phaser.GameObjects.Container[] = [];
 	private selectedButtonIndex: number = -1;
 	private selectedBetIndex: number = -1;
-	private closeButton: Phaser.GameObjects.Text;
-	private confirmButton: Phaser.GameObjects.Text;
-	private autoplayDisplay: Phaser.GameObjects.Text;
-	private minusButton: Phaser.GameObjects.Text;
-	private plusButton: Phaser.GameObjects.Text;
-	private balanceAmountText: Phaser.GameObjects.Text;
+	private closeButton!: Phaser.GameObjects.Text;
+	private confirmButton!: Phaser.GameObjects.Text;
+	private autoplayDisplay!: Phaser.GameObjects.Text;
+	private minusButton!: Phaser.GameObjects.Text;
+	private plusButton!: Phaser.GameObjects.Text;
+	private balanceAmountText!: Phaser.GameObjects.Text;
+
 	private onCloseCallback?: () => void;
 	private onConfirmCallback?: (autoplayCount: number) => void;
 	private amplifyBetAnimation: any;
+	private readonly betInputWidth: number = 364;
+	private readonly betInputHeight: number = 74;
+	private amplifyBetScaleModifierX: number = 1;
+	private amplifyBetScaleModifierY: number = 1;
+	private amplifyBetFitScale: number = 1;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -72,6 +80,15 @@ export class AutoplayOptions {
 		
 		// Initially hide the component
 		this.container.setVisible(false);
+		this.setInputEnabled(false);
+	}
+
+	public setAmplifyBetScaleModifier(scaleX: number, scaleY?: number): void {
+		const x = Number(scaleX);
+		const y = Number(scaleY ?? scaleX);
+		this.amplifyBetScaleModifierX = Number.isFinite(x) ? x : 1;
+		this.amplifyBetScaleModifierY = Number.isFinite(y) ? y : 1;
+		try { this.updateAmplifyBetLayout(); } catch {}
 	}
 
 	private createBackground(scene: Scene): void {
@@ -84,7 +101,7 @@ export class AutoplayOptions {
 		this.background = scene.add.graphics();
 		this.background.fillStyle(0x000000, 0.80); // Semi-transparent black overlay
 		this.background.fillRoundedRect(0, backgroundTop, screenWidth, backgroundHeight, 20);
-		this.background.setInteractive(new Phaser.Geom.Rectangle(0, backgroundTop, screenWidth, backgroundHeight), Phaser.Geom.Rectangle.Contains);
+		this.background.setInteractive(new Phaser.Geom.Rectangle(0, 0, screenWidth, screenHeight), Phaser.Geom.Rectangle.Contains);
 		this.container.add(this.background);
 	}
 
@@ -337,10 +354,49 @@ export class AutoplayOptions {
 			this.amplifyBetAnimation.setScale(1);
 			this.amplifyBetAnimation.setVisible(false);
 			this.container.add(this.amplifyBetAnimation);
+			try { this.updateAmplifyBetLayout(); } catch {}
 			console.log('[AutoplayOptions] Amplify bet spine animation created for autoplay bet UI');
 		} catch (error) {
 			console.error('[AutoplayOptions] Failed to create amplify bet animation:', error);
 		}
+	}
+
+	private updateAmplifyBetLayout(): void {
+		if (!this.amplifyBetAnimation || !this.container || !this.container.scene) {
+			return;
+		}
+		const scene: any = this.container.scene;
+		
+		try {
+			const screenWidth = scene.scale.width;
+			const screenHeight = scene.scale.height;
+			const backgroundHeight = 772;
+			const backgroundTop = screenHeight - backgroundHeight;
+			const x = screenWidth * 0.5;
+			const y = backgroundTop + 490;
+			try { this.amplifyBetAnimation.setPosition(x, y); } catch {}
+		} catch {}
+
+		try {
+			const prevScaleX = Number(this.amplifyBetAnimation.scaleX ?? 1);
+			const prevScaleY = Number(this.amplifyBetAnimation.scaleY ?? 1);
+			try { this.amplifyBetAnimation.setScale(1, 1); } catch {}
+			try { this.amplifyBetAnimation.skeleton?.setToSetupPose?.(); this.amplifyBetAnimation.update?.(0); } catch {}
+			let b: any = null;
+			try { b = this.amplifyBetAnimation.getBounds?.(); } catch { b = null; }
+			if (b && b.width > 0 && b.height > 0) {
+				const fit = Math.min(this.betInputWidth / b.width, this.betInputHeight / b.height);
+				this.amplifyBetFitScale = Math.max(0.01, fit * 1.05);
+			} else {
+				this.amplifyBetFitScale = Math.max(0.01, Number(this.amplifyBetFitScale || 1));
+			}
+
+			const finalScaleX = Math.max(0.01, this.amplifyBetFitScale * Number(this.amplifyBetScaleModifierX || 1));
+			const finalScaleY = Math.max(0.01, this.amplifyBetFitScale * Number(this.amplifyBetScaleModifierY || 1));
+			try { this.amplifyBetAnimation.setScale(finalScaleX, finalScaleY); } catch {
+				try { this.amplifyBetAnimation.setScale(prevScaleX || prevScaleY || 1, prevScaleY || prevScaleX || 1); } catch {}
+			}
+		} catch {}
 	}
 
 	private createConfirmButton(scene: Scene): void {
@@ -395,6 +451,7 @@ export class AutoplayOptions {
 			return;
 		}
 		try {
+			try { this.updateAmplifyBetLayout(); } catch {}
 			if (this.isEnhancedBet) {
 				this.amplifyBetAnimation.setVisible(true);
 				const data: any = this.amplifyBetAnimation.skeleton?.data;
@@ -506,6 +563,11 @@ export class AutoplayOptions {
 			if (config.isEnhancedBet !== undefined) {
 				this.isEnhancedBet = config.isEnhancedBet;
 			}
+			if (config.amplifyBetScaleModifierX !== undefined || config.amplifyBetScaleModifierY !== undefined) {
+				const x = (config.amplifyBetScaleModifierX !== undefined) ? config.amplifyBetScaleModifierX : 1;
+				const y = (config.amplifyBetScaleModifierY !== undefined) ? config.amplifyBetScaleModifierY : x;
+				this.setAmplifyBetScaleModifier(x, y);
+			}
 			this.onCloseCallback = config.onClose;
 			this.onConfirmCallback = config.onConfirm;
 		}
@@ -554,6 +616,7 @@ export class AutoplayOptions {
 		
 		// Start positioned below the screen for slide-up effect
 		this.container.setY(this.container.scene.scale.height);
+		this.setInputEnabled(true);
 		this.container.setVisible(true);
 		
 		// Show the mask when the panel is shown
@@ -575,11 +638,25 @@ export class AutoplayOptions {
 
 	hide(): void {
 		this.container.setVisible(false);
+		this.setInputEnabled(false);
 		
 		// Hide the mask when the panel is hidden
 		if (this.confirmButtonMask) {
 			this.confirmButtonMask.setVisible(false);
 			this.confirmButtonMask.setAlpha(0);
+		}
+	}
+
+	private setInputEnabled(enabled: boolean): void {
+		const list = (this.container as any)?.list as any[] | undefined;
+		if (!Array.isArray(list)) return;
+		for (const obj of list) {
+			const anyObj: any = obj as any;
+			if (anyObj?.input) {
+				try { anyObj.input.enabled = enabled; } catch {}
+			} else if (!enabled) {
+				try { anyObj?.disableInteractive?.(); } catch {}
+			}
 		}
 	}
 
@@ -612,7 +689,8 @@ export class AutoplayOptions {
 
 	destroy(): void {
 		if (this.container) {
+			this.setInputEnabled(false);
 			this.container.destroy();
 		}
 	}
-} 
+}

@@ -45,12 +45,14 @@ export class SessionTimeoutOverlay {
 		overlayRect.setOrigin(0, 0);
 		overlayRect.setScrollFactor(0);
 		overlayRect.setInteractive({ useHandCursor: false });
+		try { overlayRect.disableInteractive(); } catch {}
 		container.add(overlayRect);
 
 		const panel = this.scene.add.rectangle(width * 0.5, height * 0.5, panelWidth, panelHeight, 0x101010, 0.95);
 		panel.setStrokeStyle(2, 0x2bff7d, 0.9);
 		panel.setScrollFactor(0);
 		panel.setInteractive({ useHandCursor: false });
+		try { panel.disableInteractive(); } catch {}
 		container.add(panel);
 
 		const titleText = this.scene.add.text(panel.x, panel.y - panelHeight * 0.32, 'Session Time Out', {
@@ -87,6 +89,7 @@ export class SessionTimeoutOverlay {
 		refreshButton.setOrigin(0.5, 0.5);
 		refreshButton.setScrollFactor(0);
 		refreshButton.setInteractive({ useHandCursor: true });
+		try { refreshButton.disableInteractive(); } catch {}
 		container.add(refreshButton);
 
 		const refreshText = this.scene.add.text(refreshButton.x, refreshButton.y, 'REFRESH', {
@@ -105,6 +108,7 @@ export class SessionTimeoutOverlay {
 		}).setOrigin(0.5, 0.5).setScrollFactor(0);
 		closeIcon.setAlpha(0.8);
 		closeIcon.setInteractive({ useHandCursor: true });
+		try { (closeIcon as any).disableInteractive?.(); } catch {}
 		container.add(closeIcon);
 
 		refreshButton.on('pointerover', () => {
@@ -149,6 +153,26 @@ export class SessionTimeoutOverlay {
 		if (onRefresh) {
 			this.options.onRefresh = onRefresh;
 		}
+		try {
+			const anyOverlay: any = this.overlayRect as any;
+			if (anyOverlay?.input) anyOverlay.input.enabled = true;
+			else this.overlayRect?.setInteractive?.({ useHandCursor: false });
+		} catch {}
+		try {
+			const anyPanel: any = this.panel as any;
+			if (anyPanel?.input) anyPanel.input.enabled = true;
+			else this.panel?.setInteractive?.({ useHandCursor: false });
+		} catch {}
+		try {
+			const anyBtn: any = this.refreshButton as any;
+			if (anyBtn?.input) anyBtn.input.enabled = true;
+			else this.refreshButton?.setInteractive?.({ useHandCursor: true });
+		} catch {}
+		try {
+			const anyClose: any = this.closeIcon as any;
+			if (anyClose?.input) anyClose.input.enabled = true;
+			else this.closeIcon?.setInteractive?.({ useHandCursor: true });
+		} catch {}
 		this.container.setVisible(true);
 		this.container.setAlpha(0);
 		this.scene.tweens.add({
@@ -170,12 +194,20 @@ export class SessionTimeoutOverlay {
 			ease: 'Quad.easeIn',
 			onComplete: () => {
 				this.container?.setVisible(false);
+				try { this.overlayRect?.disableInteractive?.(); } catch {}
+				try { this.panel?.disableInteractive?.(); } catch {}
+				try { this.refreshButton?.disableInteractive?.(); } catch {}
+				try { (this.closeIcon as any)?.disableInteractive?.(); } catch {}
 			}
 		});
 	}
 
 	public destroy(): void {
 		this.scene.scale.off('resize', this.handleResize, this);
+		try { this.overlayRect?.disableInteractive?.(); } catch {}
+		try { this.panel?.disableInteractive?.(); } catch {}
+		try { this.refreshButton?.disableInteractive?.(); } catch {}
+		try { (this.closeIcon as any)?.disableInteractive?.(); } catch {}
 		try { this.container?.destroy(); } catch {}
 		this.container = undefined;
 		this.overlayRect = undefined;

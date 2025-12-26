@@ -17,6 +17,9 @@ export async function runDropReels(self: any, symbols: number[][], fillerCount: 
     }
   } catch {}
 
+  try { (self as any).__activeFillerSymbols = []; } catch {}
+  try { (self.scene as any).__isScatterAnticipationOverlayVisible = false; } catch {}
+
   const reelCompletionPromises: Promise<void>[] = [];
 
   // Anticipation: if upcoming SpinData shows a scatter on 1st or 3rd columns (x = 0 or 2),
@@ -37,17 +40,18 @@ export async function runDropReels(self: any, symbols: number[][], fillerCount: 
   // Persist anticipation state on scene for cross-function checks
   try { (self.scene as any).__isScatterAnticipationActive = extendLastReelDrop; } catch {}
 
+  const REEL_STOP_STAGGER_MS = 150;
+
   for (let col = 0; col < SLOT_COLUMNS; col++) {
     console.log(`[ReelDropScript] Processing reel ${col}`);
     const isLastReel = col === (SLOT_COLUMNS - 1);
-    dropPrevSymbols(self, fillerCount, col, isLastReel && extendLastReelDrop);
-    dropFillers(self, fillerCount, col, isLastReel && extendLastReelDrop);
-    const reelPromise = dropNewSymbols(self, fillerCount, col, isLastReel && extendLastReelDrop);
+
+    const stopStaggerMs = Math.max(0, col * REEL_STOP_STAGGER_MS);
+
+    dropPrevSymbols(self, fillerCount, col, isLastReel && extendLastReelDrop, stopStaggerMs);
+    dropFillers(self, fillerCount, col, isLastReel && extendLastReelDrop, stopStaggerMs);
+    const reelPromise = dropNewSymbols(self, fillerCount, col, isLastReel && extendLastReelDrop, stopStaggerMs);
     reelCompletionPromises.push(reelPromise);
-    const delayMs = self.scene.gameData?.dropReelsDelay ?? 0;
-    if (delayMs > 0) {
-      await delay(delayMs);
-    }
   }
 
   // Wait for all reel animations to complete
@@ -121,13 +125,14 @@ export function applySkipReelTweaks(self: any, gd: GameData, timeScale: number):
     // Reduce any further delays/durations used by drop logic
     gd.dropReelsDelay = 0;
     gd.dropDuration = Math.max(1, Math.floor(gd.dropDuration * 0.1));
+    gd.dropReelsDuration = Math.max(1, Math.floor(gd.dropReelsDuration * 0.1));
     gd.winUpDuration = Math.max(1, Math.floor(gd.winUpDuration * 0.1));
   } catch (e) {
     console.warn("[ReelDropScript] Failed to apply skip reel tweaks:", e);
   }
 }
 
-function dropPrevSymbols(self: any, fillerCount: number, index: number, extendDuration: boolean = false) {
+function dropPrevSymbols(self: any, fillerCount: number, index: number, extendDuration: boolean = false, stopStaggerMs: number = 0) {
   if (self.symbols === undefined || self.symbols === null) {
     return;
   }
@@ -142,7 +147,7 @@ function dropPrevSymbols(self: any, fillerCount: number, index: number, extendDu
   // because individual symbol displayHeight can change after win animations.
   const height = self.displayHeight + self.verticalSpacing;
   const baseDropDistance = fillerCount * height + self.scene.gameData.winUpHeight;
-  const extraMs = extendDuration ? 3000 : 0;
+  const extraMs = (extendDuration ? 3000 : 0) + Math.max(0, stopStaggerMs);
   const baseDropMs = self.scene.gameData.dropReelsDuration;
   const extraPixels = extraMs > 0 && baseDropMs > 0 ? (baseDropDistance * (extraMs / baseDropMs)) : 0;
   const extraRows = extraPixels > 0 ? Math.ceil(extraPixels / height) : 0;
@@ -172,31 +177,32 @@ function dropPrevSymbols(self: any, fillerCount: number, index: number, extendDu
         {
           y: `+= ${DROP_DISTANCE}`,
           duration: self.scene.gameData.dropReelsDuration + extraMs,
-          ease: (((self.scene as any)?.__isScatterAnticipationActive) && index === (SLOT_COLUMNS - 1))
-            ? (window as any).Phaser?.Math?.Easing?.Cubic?.Out
-            : (window as any).Phaser?.Math?.Easing?.Bounce?.Out,
+          ease: (window as any).Phaser?.Math?.Easing?.Bounce?.Out,
         },
       ],
     });
   }
 }
 
-function dropFillers(self: any, fillerCount: number, index: number, extendDuration: boolean = false) {
+function dropFillers(self: any, fillerCount: number, index: number, extendDuration: boolean = false, stopStaggerMs: number = 0) {
   // Check if symbols array has valid structure
   if (!Array.isArray(self.symbols) || self.symbols.length === 0 || !Array.isArray(self.symbols[0]) || self.symbols[0].length === 0) {
     console.warn("[ReelDropScript] dropFillers: symbols array structure is invalid, skipping");
     return;
   }
 
+  const isBuyFeatureSpin = !!gameStateManager.isBuyFeatureSpin;
+
   const height = self.displayHeight + self.verticalSpacing;
+  const maskBottomPad = Math.max(0, Number((self as any)?.gridMaskPaddingBottom) || 0);
   const baseTotal = fillerCount + SLOT_ROWS;
   const baseDropDistance = baseTotal * height + GameData.WIN_UP_HEIGHT;
-  const extraMs = extendDuration ? 3000 : 0;
-  const baseDropMs = self.scene.gameData.dropDuration * 0.9;
+  const extraMs = (extendDuration ? 3000 : 0) + Math.max(0, stopStaggerMs);
+  const baseDropMs = isBuyFeatureSpin ? self.scene.gameData.dropReelsDuration : (self.scene.gameData.dropDuration * 0.9);
   const extraPixels = extraMs > 0 && baseDropMs > 0 ? (baseDropDistance * (extraMs / baseDropMs)) : 0;
   const extraRows = extraPixels > 0 ? Math.ceil(extraPixels / height) : 0;
   const TOTAL_ITEMS = fillerCount + SLOT_ROWS + extraRows;
-  const EXTRA_VISUAL_ROWS = 4;
+  const EXTRA_VISUAL_ROWS = 0;
   const DROP_DISTANCE = (TOTAL_ITEMS + EXTRA_VISUAL_ROWS) * height + GameData.WIN_UP_HEIGHT;
   const fillerSymbols: any[] = [];
 
@@ -245,47 +251,78 @@ function dropFillers(self: any, fillerCount: number, index: number, extendDurati
 
     try {
       self.container.add(symbol);
-      try { (self.container as any).sendToBack?.(symbol as any); } catch {}
     } catch {}
+
+    try { (symbol as any).__fillerReelIndex = index; } catch {}
+    try { registerActiveFiller(self, symbol); } catch {}
 
     fillerSymbols.push(symbol);
   }
 
   for (let i = 0; i < fillerSymbols.length; i++) {
-    self.scene.tweens.chain({
-      targets: fillerSymbols[i],
-      tweens: [
-        {
-          y: `-= ${self.scene.gameData.winUpHeight}`,
-          duration: self.scene.gameData.winUpDuration,
-          ease: (window as any).Phaser?.Math?.Easing?.Circular?.Out,
-        },
-        {
-          y: `+= ${DROP_DISTANCE}`,
-          duration: (self.scene.gameData.dropDuration * 0.9) + extraMs,
-          ease: (((self.scene as any)?.__isScatterAnticipationActive) && index === (SLOT_ROWS - 1))
-            ? (window as any).Phaser?.Math?.Easing?.Cubic?.Out
-            : (window as any).Phaser?.Math?.Easing?.Linear,
-        },
-        {
-          y: `+= ${40}`,
-          duration: self.scene.gameData.dropDuration * 0.05,
-          ease: (window as any).Phaser?.Math?.Easing?.Linear,
-        },
-        {
-          y: `-= ${40}`,
-          duration: self.scene.gameData.dropDuration * 0.05,
-          ease: (window as any).Phaser?.Math?.Easing?.Linear,
-          onComplete: () => {
-            try { fillerSymbols[i].destroy(); } catch {}
+    if (isBuyFeatureSpin) {
+      self.scene.tweens.chain({
+        targets: fillerSymbols[i],
+        tweens: [
+          {
+            y: `-= ${self.scene.gameData.winUpHeight}`,
+            duration: self.scene.gameData.winUpDuration,
+            ease: (window as any).Phaser?.Math?.Easing?.Circular?.Out,
+          },
+          {
+            y: `+= ${DROP_DISTANCE}`,
+            duration: self.scene.gameData.dropReelsDuration + extraMs,
+            ease: (window as any).Phaser?.Math?.Easing?.Linear,
+          },
+          {
+            y: `+= ${40}`,
+            duration: self.scene.gameData.dropDuration * 0.05,
+            ease: (window as any).Phaser?.Math?.Easing?.Linear,
+          },
+          {
+            y: `-= ${40}`,
+            duration: self.scene.gameData.dropDuration * 0.05,
+            ease: (window as any).Phaser?.Math?.Easing?.Linear,
+            onComplete: () => {
+              try { (fillerSymbols[i] as any).__fillerDropDone = true; } catch {}
+            }
           }
-        }
-      ]
-    });
+        ]
+      });
+    } else {
+      self.scene.tweens.chain({
+        targets: fillerSymbols[i],
+        tweens: [
+          {
+            y: `-= ${self.scene.gameData.winUpHeight}`,
+            duration: self.scene.gameData.winUpDuration,
+            ease: (window as any).Phaser?.Math?.Easing?.Circular?.Out,
+          },
+          {
+            y: `+= ${DROP_DISTANCE}`,
+            duration: (self.scene.gameData.dropDuration * 0.9) + extraMs,
+            ease: (window as any).Phaser?.Math?.Easing?.Linear,
+          },
+          {
+            y: `+= ${40}`,
+            duration: self.scene.gameData.dropDuration * 0.05,
+            ease: (window as any).Phaser?.Math?.Easing?.Linear,
+          },
+          {
+            y: `-= ${40}`,
+            duration: self.scene.gameData.dropDuration * 0.05,
+            ease: (window as any).Phaser?.Math?.Easing?.Linear,
+            onComplete: () => {
+              try { (fillerSymbols[i] as any).__fillerDropDone = true; } catch {}
+            }
+          }
+        ]
+      });
+    }
   }
 }
 
-function dropNewSymbols(self: any, fillerCount: number, index: number, extendDuration: boolean = false): Promise<void> {
+function dropNewSymbols(self: any, fillerCount: number, index: number, extendDuration: boolean = false, stopStaggerMs: number = 0): Promise<void> {
   return new Promise<void>((resolve) => {
     // Check if symbols array has valid structure
     if (!Array.isArray(self.symbols) || self.symbols.length === 0 || !Array.isArray(self.symbols[0]) || self.symbols[0].length === 0) {
@@ -300,8 +337,8 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
     const height = self.displayHeight + self.verticalSpacing;
     const START_INDEX_BASE = fillerCount + SLOT_ROWS;
     const baseDropDistance = START_INDEX_BASE * height + self.scene.gameData.winUpHeight;
-    const extraMs = extendDuration ? 3000 : 0;
-    const baseDropMs = self.scene.gameData.dropDuration * 0.9;
+    const extraMs = (extendDuration ? 3000 : 0) + Math.max(0, stopStaggerMs);
+    const baseDropMs = (!!gameStateManager.isBuyFeatureSpin) ? self.scene.gameData.dropReelsDuration : (self.scene.gameData.dropDuration * 0.9);
     const extraPixels = extraMs > 0 && baseDropMs > 0 ? (baseDropDistance * (extraMs / baseDropMs)) : 0;
     const extraRows = extraPixels > 0 ? Math.ceil(extraPixels / height) : 0;
     const START_INDEX = START_INDEX_BASE + extraRows;
@@ -330,50 +367,92 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
       const startIndex = row + START_INDEX_Y;
       symbol.y = getYPos(self, startIndex);
 
-      self.scene.tweens.chain({
-        targets: symbol,
-        tweens: [
-          {
-            y: `-= ${self.scene.gameData.winUpHeight}`,
-            duration: self.scene.gameData.winUpDuration,
-            ease: (window as any).Phaser?.Math?.Easing?.Circular?.Out,
-          },
-          {
-            y: `+= ${DROP_DISTANCE}`,
-            duration: (self.scene.gameData.dropDuration * 0.9) + extraMs,
-            ease: (((self.scene as any)?.__isScatterAnticipationActive) && index === (SLOT_COLUMNS - 1))
-              ? (window as any).Phaser?.Math?.Easing?.Cubic?.Out
-              : (window as any).Phaser?.Math?.Easing?.Linear,
-          },
-          {
-            y: `+= ${40}`,
-            duration: self.scene.gameData.dropDuration * 0.05,
-            ease: (window as any).Phaser?.Math?.Easing?.Linear,
-          },
-          {
-            y: `-= ${40}`,
-            duration: self.scene.gameData.dropDuration * 0.05,
-            ease: (window as any).Phaser?.Math?.Easing?.Linear,
-            onComplete: () => {
-              // Play reel drop sound effect only when turbo mode is off
-              try {
-                if (!self.scene.gameData.isTurbo && (window as any).audioManager) {
-                  (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
-                  console.log(`[ReelDropScript] Playing reel drop sound effect for reel ${index} after drop completion`);
-                }
-              } catch {}
+      const isBuyFeatureSpin = !!gameStateManager.isBuyFeatureSpin;
+      if (isBuyFeatureSpin) {
+        self.scene.tweens.chain({
+          targets: symbol,
+          tweens: [
+            {
+              y: `-= ${self.scene.gameData.winUpHeight}`,
+              duration: self.scene.gameData.winUpDuration,
+              ease: (window as any).Phaser?.Math?.Easing?.Circular?.Out,
+            },
+            {
+              y: `+= ${DROP_DISTANCE}`,
+              duration: self.scene.gameData.dropReelsDuration + extraMs,
+              ease: (window as any).Phaser?.Math?.Easing?.Linear,
+            },
+            {
+              y: `+= ${40}`,
+              duration: self.scene.gameData.dropDuration * 0.05,
+              ease: (window as any).Phaser?.Math?.Easing?.Linear,
+            },
+            {
+              y: `-= ${40}`,
+              duration: self.scene.gameData.dropDuration * 0.05,
+              ease: (window as any).Phaser?.Math?.Easing?.Linear,
+              onComplete: () => {
+                // Play reel drop sound effect only when turbo mode is off
+                try {
+                  if ((window as any).audioManager) {
+                    (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
+                    console.log(`[ReelDropScript] Playing reel drop sound effect for reel ${index} after drop completion`);
+                  }
+                } catch {}
 
-              completedAnimations++;
-              if (completedAnimations === totalAnimations) {
-                finalize();
+                completedAnimations++;
+                if (completedAnimations === totalAnimations) {
+                  finalize();
+                }
               }
             }
-          }
-        ]
-      });
+          ]
+        });
+      } else {
+        self.scene.tweens.chain({
+          targets: symbol,
+          tweens: [
+            {
+              y: `-= ${self.scene.gameData.winUpHeight}`,
+              duration: self.scene.gameData.winUpDuration,
+              ease: (window as any).Phaser?.Math?.Easing?.Circular?.Out,
+            },
+            {
+              y: `+= ${DROP_DISTANCE}`,
+              duration: (self.scene.gameData.dropDuration * 0.9) + extraMs,
+              ease: (window as any).Phaser?.Math?.Easing?.Linear,
+            },
+            {
+              y: `+= ${40}`,
+              duration: self.scene.gameData.dropDuration * 0.05,
+              ease: (window as any).Phaser?.Math?.Easing?.Linear,
+            },
+            {
+              y: `-= ${40}`,
+              duration: self.scene.gameData.dropDuration * 0.05,
+              ease: (window as any).Phaser?.Math?.Easing?.Linear,
+              onComplete: () => {
+                // Play reel drop sound effect only when turbo mode is off
+                try {
+                  if ((window as any).audioManager) {
+                    (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
+                    console.log(`[ReelDropScript] Playing reel drop sound effect for reel ${index} after drop completion`);
+                  }
+                } catch {}
+
+                completedAnimations++;
+                if (completedAnimations === totalAnimations) {
+                  finalize();
+                }
+              }
+            }
+          ]
+        });
+      }
     }
 
     function finalize() {
+      try { detachFillersAfterReelStop(self, index); } catch {}
       // Trigger _idle animations for this reel's NEW symbols immediately after drop completion
       self.triggerIdleAnimationsForNewReel(index);
 
@@ -381,6 +460,8 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
       try {
         const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
         if (isAnticipation && index === 2) {
+          try { hideActiveFillers(self); } catch {}
+          try { (self.scene as any).__isScatterAnticipationOverlayVisible = true; } catch {}
           if (self.overlayRect) {
             if (self.baseOverlayRect) {
               self.scene.tweens.add({
@@ -400,9 +481,13 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
             });
           }
           const sa = (self.scene as any)?.scatterAnticipation;
+          try { if (sa && typeof sa.setDepth === 'function') sa.setDepth(30000); } catch {}
+          try { if (sa && typeof (self.scene as any)?.children?.bringToTop === 'function') (self.scene as any).children.bringToTop(sa); } catch {}
           if (sa && typeof sa.show === "function") { sa.show(); }
           const sa2 = (self.scene as any)?.scatterAnticipation2;
-          if (sa2 && typeof sa.show === "function") { sa2.show(); }
+          try { if (sa2 && typeof sa2.setDepth === 'function') sa2.setDepth(30000); } catch {}
+          try { if (sa2 && typeof (self.scene as any)?.children?.bringToTop === 'function') (self.scene as any).children.bringToTop(sa2); } catch {}
+          if (sa2 && typeof sa2.show === "function") { sa2.show(); }
           console.log("[ReelDropScript] Scatter anticipation shown after 3rd reel drop");
         }
       } catch {}
@@ -413,7 +498,7 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
           const sa = (self.scene as any)?.scatterAnticipation;
           if (sa && typeof sa.hide === "function") { sa.hide(); }
           const sa2 = (self.scene as any)?.scatterAnticipation2;
-          if (sa2 && typeof sa.hide === "function") { sa2.hide(); }
+          if (sa2 && typeof sa2.hide === "function") { sa2.hide(); }
           if (self.overlayRect) {
             self.scene.tweens.add({
               targets: self.overlayRect,
@@ -437,6 +522,17 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
           }
           console.log("[ReelDropScript] Scatter anticipation hidden after last reel drop");
           (self.scene as any).__isScatterAnticipationActive = false;
+          try { (self.scene as any).__isScatterAnticipationOverlayVisible = false; } catch {}
+          try {
+            const arr = (self as any).__activeFillerSymbols;
+            if (Array.isArray(arr) && arr.length > 0) {
+              for (const s of arr) {
+                if (!s || (s as any).destroyed) continue;
+                try { s.setAlpha?.(1); } catch {}
+              }
+              (self as any).__activeFillerSymbols = arr.filter((s: any) => s && !(s as any).destroyed);
+            }
+          } catch {}
         }
       } catch {}
 
@@ -445,10 +541,106 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
   });
 }
 
+function detachFillersAfterReelStop(self: any, reelIndex: number, attempt: number = 0): void {
+  try {
+    const arr = (self as any).__activeFillerSymbols;
+    if (!Array.isArray(arr) || arr.length === 0) return;
+
+    const height = self.displayHeight + self.verticalSpacing;
+    const maskBottomPad = Math.max(0, Number((self as any)?.gridMaskPaddingBottom) || 0);
+    const isBuyFeatureSpin = !!gameStateManager.isBuyFeatureSpin;
+    const maxWaitMs = isBuyFeatureSpin
+      ? (Number(self.scene?.gameData?.winUpDuration) || 0) + (Number(self.scene?.gameData?.dropReelsDuration) || 0) + 4200
+      : (Number(self.scene?.gameData?.winUpDuration) || 0) + (Number(self.scene?.gameData?.dropDuration) || 0) + 2200;
+
+    const candidates = arr.filter((s: any) => s && !(s as any).destroyed && (s as any).__fillerReelIndex === reelIndex);
+    if (!candidates || candidates.length === 0) return;
+
+    const notReady = candidates.some((s: any) => !(s as any).__fillerDropDone);
+    if (notReady && (attempt * 16) < maxWaitMs) {
+      try {
+        self.scene?.time?.delayedCall?.(16, () => {
+          try { detachFillersAfterReelStop(self, reelIndex, attempt + 1); } catch {}
+        });
+      } catch {}
+      return;
+    }
+
+    for (const s of candidates) {
+      if (!s || (s as any).destroyed) continue;
+      try { self.scene?.tweens?.killTweensOf?.(s); } catch {}
+      try {
+        self.scene?.tweens?.add?.({
+          targets: s,
+          y: (s.y as number) + (height * 1.75) + maskBottomPad,
+          alpha: 0,
+          duration: isBuyFeatureSpin ? 380 : 300,
+          ease: 'Cubic.easeIn',
+          onComplete: () => {
+            try { unregisterActiveFiller(self, s); } catch {}
+            try { s?.destroy?.(); } catch {}
+          }
+        });
+      } catch {
+        try { unregisterActiveFiller(self, s); } catch {}
+        try { s?.destroy?.(); } catch {}
+      }
+    }
+  } catch {}
+}
+
 function getYPos(self: any, index: number) {
   const symbolTotalHeight = self.displayHeight + self.verticalSpacing;
   const startY = self.slotY - self.totalGridHeight * 0.5;
   return startY + index * symbolTotalHeight + symbolTotalHeight * 0.5;
+}
+
+function registerActiveFiller(self: any, symbol: any): void {
+  try {
+    if (!symbol) return;
+    (symbol as any).__isReelFillerSymbol = true;
+    try {
+      // Only suppress filler visibility during the special Buy Feature anticipation window.
+      // In normal spins, fillers should remain visible to preserve classic slot feel.
+      if (
+        !!gameStateManager.isBuyFeatureSpin &&
+        !!(self.scene as any)?.__isScatterAnticipationOverlayVisible &&
+        (symbol as any).__fillerReelIndex !== (SLOT_COLUMNS - 1)
+      ) {
+        try { symbol.setAlpha?.(0.6); } catch {}
+      }
+    } catch {}
+    const arr = (self as any).__activeFillerSymbols;
+    if (Array.isArray(arr)) {
+      arr.push(symbol);
+    } else {
+      (self as any).__activeFillerSymbols = [symbol];
+    }
+  } catch {}
+}
+
+function unregisterActiveFiller(self: any, symbol: any): void {
+  try {
+    const arr = (self as any).__activeFillerSymbols;
+    if (!Array.isArray(arr) || !symbol) return;
+    const idx = arr.indexOf(symbol);
+    if (idx >= 0) arr.splice(idx, 1);
+  } catch {}
+}
+
+function hideActiveFillers(self: any): void {
+  try {
+    // Only hide fillers during Buy Feature anticipation. Regular spins should show fillers.
+    if (!gameStateManager.isBuyFeatureSpin) return;
+    const arr = (self as any).__activeFillerSymbols;
+    if (!Array.isArray(arr) || arr.length === 0) return;
+    for (const s of arr) {
+      if (!s || (s as any).destroyed) continue;
+      // Do not hide last-reel fillers mid-drop; last reel can be extended during anticipation.
+      if ((s as any).__fillerReelIndex === (SLOT_COLUMNS - 1)) continue;
+      try { s.setAlpha?.(0.6); } catch {}
+    }
+  } catch {}
 }
 
 async function delay(duration: number) {

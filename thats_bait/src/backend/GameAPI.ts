@@ -553,7 +553,6 @@ export class GameAPI {
         console.log(' Normalized SpinData:', normalizedData);
         console.log(' Grid symbols:', normalizedData.slot?.area);
         console.log(' Paylines:', normalizedData.slot?.paylines);
-        console.log(' ===== END SERVER RESPONSE =====');
 
         return this.currentSpinData as SpinData;
     }
@@ -568,13 +567,18 @@ export class GameAPI {
                 await fakeBonusAPI.initializeBonusData();
             }
             
-            // Use fake API if available
-            if (fakeBonusAPI.hasMoreFreeSpins()) {
-                const data = await fakeBonusAPI.simulateFreeSpin();
-                try {
-                    this.currentSpinData = data;
-                } catch {}
-                return data;
+            // initializeBonusData() can disable the fake API; if so, fall through to backend handling
+            if (fakeBonusAPI.isEnabled()) {
+                // Use fake API if available
+                if (fakeBonusAPI.hasMoreFreeSpins()) {
+                    const data = await fakeBonusAPI.simulateFreeSpin();
+                    try {
+                        this.currentSpinData = data;
+                    } catch {}
+                    return data;
+                }
+
+                throw new Error('No more free spins available');
             }
         }
 

@@ -12,6 +12,8 @@ import { NumberDisplay, NumberDisplayConfig } from './NumberDisplay';
 type WinTier = 'BigW_TB' | 'EpicW_TB' | 'MegaW_TB' | 'SuperW_TB';
 type DialogType = WinTier | 'TotalW_TB';
 
+ type DialogSpineTransform = { offsetX: number; offsetY: number; scaleX: number; scaleY: number };
+
 export class Dialogs {
 	public isDialogActive: boolean = false;
 	public currentDialog: any = null;
@@ -37,10 +39,21 @@ export class Dialogs {
 	private stageTimer: Phaser.Time.TimerEvent | null = null;
 	private totalWinScaleMultiplierX: number = 1.37;
 	private totalWinScaleMultiplierY: number = 1.4;
+	private lastNumberAutoFitAt: number = 0;
+	private dialogSpineTransformByType: Record<string, DialogSpineTransform> = {
+		BigW_TB: { offsetX: 0, offsetY: -690, scaleX: 1.7, scaleY: 1.7 },
+		EpicW_TB: { offsetX: 0, offsetY: -690, scaleX: 1.7, scaleY: 1.7 },
+		MegaW_TB: { offsetX: 0, offsetY: -690, scaleX: 1.7, scaleY: 1.7 },
+		SuperW_TB: { offsetX: 0, offsetY: -690, scaleX: 1.7, scaleY: 1.7 },
+		TotalW_TB: { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 }
+	};
 
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
 	private freeSpinOverlay: FreeSpinOverlay | null = null;
+	private overlayGateHeld: boolean = false;
+	private showRequestSeq: number = 0;
+	private pendingWinDialogRequestId: number | null = null;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -65,9 +78,18 @@ export class Dialogs {
 			try {
 				const gs: any = scene as any;
 				if (gameStateManager.isBonus && gs && typeof gs.enqueueBonusOverlay === 'function') {
-					gs.enqueueBonusOverlay(async () => {
-						await this.tryShowWinDialogFromSpinDataQueued();
-					});
+					const enqueueLater = () => {
+						try {
+							gs.enqueueBonusOverlay(async () => {
+								await this.tryShowWinDialogFromSpinDataQueued();
+							});
+						} catch {}
+					};
+					try {
+						scene.time.delayedCall(0, () => enqueueLater());
+					} catch {
+						try { setTimeout(() => enqueueLater(), 0); } catch { enqueueLater(); }
+					}
 				} else {
 					this.tryShowWinDialogFromSpinData();
 				}
@@ -78,6 +100,175 @@ export class Dialogs {
 			try { gameEventManager.off(GameEventType.WIN_STOP, onWinStop); } catch {}
 			try { this.hideDialog(true); } catch {}
 		});
+		try { this.installDebugConsoleHelpers(); } catch {}
+	}
+
+	public getDialogSpineTransform(type: DialogType): DialogSpineTransform {
+		const key = String(type);
+		const t = this.dialogSpineTransformByType[key];
+		if (!t) return { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 };
+		return { offsetX: Number(t.offsetX) || 0, offsetY: Number(t.offsetY) || 0, scaleX: Number(t.scaleX) || 1, scaleY: Number(t.scaleY) || 1 };
+	}
+
+	public setDialogSpineTransform(type: DialogType, next: Partial<DialogSpineTransform>): void {
+		const key = String(type);
+		const prev = this.getDialogSpineTransform(type);
+		const merged: DialogSpineTransform = {
+			offsetX: isFinite(Number((next as any)?.offsetX)) ? Number((next as any).offsetX) : prev.offsetX,
+			offsetY: isFinite(Number((next as any)?.offsetY)) ? Number((next as any).offsetY) : prev.offsetY,
+			scaleX: isFinite(Number((next as any)?.scaleX)) && Number((next as any).scaleX) > 0 ? Number((next as any).scaleX) : prev.scaleX,
+			scaleY: isFinite(Number((next as any)?.scaleY)) && Number((next as any).scaleY) > 0 ? Number((next as any).scaleY) : prev.scaleY
+		};
+		this.dialogSpineTransformByType[key] = merged;
+		try {
+			if (this.currentDialog && this.currentDialogType === key) {
+				this.applyDialogSpineTransformToCurrent();
+			}
+		} catch {}
+	}
+
+	private applyNumberDisplayAutoFit(force: boolean = false): void {
+		const scene = this.scene;
+		if (!scene || !this.numberDisplay) return;
+		const now = Number((scene as any)?.time?.now);
+		if (!force) {
+			if (isFinite(now) && (now - this.lastNumberAutoFitAt) < 80) return;
+		}
+		this.lastNumberAutoFitAt = isFinite(now) ? now : (Date.now ? Date.now() : this.lastNumberAutoFitAt);
+
+		const c: any = (this.numberDisplay as any)?.getContainer?.();
+		if (!c) return;
+
+		const baseX = Number((c as any).__dialogsNumberBaseScaleX);
+		const baseY = Number((c as any).__dialogsNumberBaseScaleY);
+		const resetX = (isFinite(baseX) && baseX > 0) ? baseX : (Number((c as any).scaleX) || 1);
+		const resetY = (isFinite(baseY) && baseY > 0) ? baseY : (Number((c as any).scaleY) || 1);
+		try { c.setScale(resetX, resetY); } catch {}
+
+		let b: any = null;
+		try { b = c.getBounds?.(); } catch {}
+		const bw = Number(b?.width ?? 0) || 0;
+		const bh = Number(b?.height ?? 0) || 0;
+		if (!(bw > 0) || !(bh > 0)) return;
+
+		const marginX = scene.scale.width * 0.06;
+		const marginY = scene.scale.height * 0.06;
+		const maxW = Math.max(1, scene.scale.width - marginX * 2);
+		const maxH = Math.max(1, scene.scale.height - marginY * 2);
+		const sFit = Math.min(1, maxW / bw, maxH / bh);
+		if (!isFinite(sFit) || !(sFit > 0) || sFit >= 1) return;
+		try { c.setScale(resetX * sFit, resetY * sFit); } catch {}
+	}
+
+	private getDebugGameScene(): Scene | null {
+		try {
+			if (this.scene) return this.scene;
+		} catch {}
+		try {
+			const s = (window as any)?.game?.scene?.getScene?.('Game') as Scene | undefined;
+			if (s) return s;
+		} catch {}
+		return null;
+	}
+
+	public debugShowDialog(type: DialogType, opts?: { winAmount?: number }): void {
+		const scene = this.getDebugGameScene();
+		if (!scene) return;
+		try { this.scene = scene; } catch {}
+		try {
+			if (!this.overlay || !this.blackOverlay) {
+				this.create(scene);
+			}
+		} catch {}
+		const winAmount = Number(opts?.winAmount);
+		const resolved = (isFinite(winAmount) && winAmount >= 0) ? winAmount : 1234.56;
+		try {
+			this.showDialogInternal(scene, type, { winAmount: resolved, betAmount: 0 });
+		} catch {}
+	}
+
+	private applyDialogSpineTransformToCurrent(): void {
+		const scene = this.scene;
+		if (!scene) return;
+		const type = this.currentDialogType as DialogType | null;
+		if (!type) return;
+		const spine: any = this.currentDialog;
+		if (!spine) return;
+		this.applyDialogSpineTransformToSpine(type, spine);
+	}
+
+	private applyDialogSpineTransformToSpine(type: DialogType, spine: any): void {
+		const scene = this.scene;
+		if (!scene || !spine) return;
+		const t = this.getDialogSpineTransform(type);
+		const baseScaleX = Number((spine as any).__dialogsBaseScaleX);
+		const baseScaleY = Number((spine as any).__dialogsBaseScaleY);
+		const sx = (isFinite(baseScaleX) && baseScaleX > 0) ? baseScaleX : (Number((spine as any).scaleX) || 1);
+		const sy = (isFinite(baseScaleY) && baseScaleY > 0) ? baseScaleY : (Number((spine as any).scaleY) || 1);
+		try { spine.setScale(sx * t.scaleX, sy * t.scaleY); } catch {}
+		try { this.recenterDialogSpineWithOffset(spine, type); } catch {}
+	}
+
+	private recenterDialogSpineWithOffset(spine: any, type: DialogType): void {
+		const scene = this.scene;
+		if (!scene || !spine) return;
+		const t = this.getDialogSpineTransform(type);
+		const baseX = scene.scale.width * 0.5;
+		const baseY = scene.scale.height * 0.5;
+		try {
+			spine.x = baseX;
+			spine.y = baseY;
+		} catch {}
+		try { spine.update?.(0); } catch {}
+		const b: any = spine.getBounds?.();
+		const w = Number(b?.width ?? b?.size?.width ?? b?.size?.x ?? 0) || 0;
+		const h = Number(b?.height ?? b?.size?.height ?? b?.size?.y ?? 0) || 0;
+		const offX = Number(b?.offset?.x ?? b?.x ?? 0) || 0;
+		const offY = Number(b?.offset?.y ?? b?.y ?? 0) || 0;
+		if (!(w > 0) || !(h > 0)) {
+			try {
+				spine.x = baseX + t.offsetX;
+				spine.y = baseY + t.offsetY;
+			} catch {}
+			return;
+		}
+		const cx = offX + w * 0.5;
+		const cy = offY + h * 0.5;
+		try {
+			spine.x += baseX - cx;
+			spine.y += baseY - cy;
+			spine.x += t.offsetX;
+			spine.y += t.offsetY;
+		} catch {}
+	}
+
+	private installDebugConsoleHelpers(): void {
+		try {
+			const w: any = window as any;
+			w.__dialogs = this;
+			w.__dialogsWinMods = {
+				get: () => {
+					try { return JSON.parse(JSON.stringify(this.dialogSpineTransformByType)); } catch { return { ...this.dialogSpineTransformByType }; }
+				},
+				set: (type: DialogType, mods: Partial<DialogSpineTransform>) => {
+					try { this.setDialogSpineTransform(type, mods); } catch {}
+					try { return this.getDialogSpineTransform(type); } catch { return null; }
+				},
+				apply: () => {
+					try { this.applyDialogSpineTransformToCurrent(); } catch {}
+					try { return this.currentDialogType ? this.getDialogSpineTransform(this.currentDialogType as any) : null; } catch { return null; }
+				},
+				show: (type: DialogType, winAmount?: number) => {
+					try { this.debugShowDialog(type, { winAmount }); } catch {}
+				},
+				big: (winAmount?: number) => { try { this.debugShowDialog('BigW_TB', { winAmount }); } catch {} },
+				epic: (winAmount?: number) => { try { this.debugShowDialog('EpicW_TB', { winAmount }); } catch {} },
+				mega: (winAmount?: number) => { try { this.debugShowDialog('MegaW_TB', { winAmount }); } catch {} },
+				super: (winAmount?: number) => { try { this.debugShowDialog('SuperW_TB', { winAmount }); } catch {} },
+				total: (winAmount?: number) => { try { this.debugShowDialog('TotalW_TB', { winAmount }); } catch {} },
+				hide: () => { try { this.hideDialog(true); } catch {} }
+			};
+		} catch {}
 	}
 
 	getFreeSpinOverlay(): FreeSpinOverlay | null {
@@ -133,11 +324,18 @@ export class Dialogs {
 			const nd = this.numberDisplay as any;
 			const c = nd?.getContainer?.();
 			if (this.currentDialogType === 'TotalW_TB' && c && typeof c.setScale === 'function') {
+				const storedBaseX = Number((c as any).__dialogsNumberBaseScaleX);
+				const storedBaseY = Number((c as any).__dialogsNumberBaseScaleY);
 				const sx = Number((c as any).scaleX);
 				const sy = Number((c as any).scaleY);
-				const baseX = (isFinite(sx) && sx > 0) ? sx : 1;
-				const baseY = (isFinite(sy) && sy > 0) ? sy : 1;
-				c.setScale(baseX * factorX, baseY * factorY);
+				const baseX = (isFinite(storedBaseX) && storedBaseX > 0) ? storedBaseX : ((isFinite(sx) && sx > 0) ? sx : 1);
+				const baseY = (isFinite(storedBaseY) && storedBaseY > 0) ? storedBaseY : ((isFinite(sy) && sy > 0) ? sy : 1);
+				const nextBaseX = baseX * factorX;
+				const nextBaseY = baseY * factorY;
+				(c as any).__dialogsNumberBaseScaleX = nextBaseX;
+				(c as any).__dialogsNumberBaseScaleY = nextBaseY;
+				c.setScale(nextBaseX, nextBaseY);
+				try { this.applyNumberDisplayAutoFit(true); } catch {}
 			}
 		} catch {}
 		try {
@@ -168,10 +366,18 @@ export class Dialogs {
 		const canLaunch = !!(mgr && typeof mgr.launch === 'function');
 		const shouldUseBubble = !!gameStateManager.isBonus;
 		if (!shouldUseBubble || !canLaunch) {
-			this.showDialog(scene, 'TotalW_TB', { winAmount });
+			void (async () => {
+				try { await gameStateManager.waitForOverlaySafeState({ timeoutMs: 15000 }); } catch {}
+				try { await gameStateManager.waitUntilOverlaysClosed(15000); } catch {}
+				this.showDialog(scene, 'TotalW_TB', { winAmount });
+			})();
 			return;
 		}
-		this.launchTotalWinIntroTransition(scene, winAmount);
+		void (async () => {
+			try { await gameStateManager.waitForOverlaySafeState({ timeoutMs: 15000 }); } catch {}
+			try { await gameStateManager.waitUntilOverlaysClosed(15000); } catch {}
+			this.launchTotalWinIntroTransition(scene, winAmount);
+		})();
 	}
 
 	async showCongratsQueued(scene: Scene, config?: { winAmount?: number }): Promise<void> {
@@ -224,7 +430,11 @@ export class Dialogs {
 		const sceneAny: any = scene as any;
 		const mgr: any = sceneAny?.scene;
 		if (!mgr || typeof mgr.launch !== 'function') {
-			this.showDialog(scene, 'TotalW_TB', { winAmount });
+			void (async () => {
+				try { await gameStateManager.waitForOverlaySafeState({ timeoutMs: 15000 }); } catch {}
+				try { await gameStateManager.waitUntilOverlaysClosed(15000); } catch {}
+				this.showDialog(scene, 'TotalW_TB', { winAmount });
+			})();
 			return;
 		}
 
@@ -270,54 +480,105 @@ export class Dialogs {
 			}
 		} catch {}
 
-		try {
-			mgr.launch('BubbleOverlayTransition', {
-				fromSceneKey: 'Game',
-				toSceneKey: 'Game',
-				stopFromScene: false,
-				toSceneEvent: 'showTotalWinOverlay',
-				toSceneEventData: { winAmount }
-			});
-			try { mgr.bringToTop?.('BubbleOverlayTransition'); } catch {}
-		} catch {
-			try { showNow({ winAmount }); } catch {}
-		}
+		void (async () => {
+			try { await gameStateManager.waitForOverlaySafeState({ timeoutMs: 15000 }); } catch {}
+			try { await gameStateManager.waitUntilOverlaysClosed(15000); } catch {}
+			try {
+				mgr.launch('BubbleOverlayTransition', {
+					fromSceneKey: 'Game',
+					toSceneKey: 'Game',
+					stopFromScene: false,
+					toSceneEvent: 'showTotalWinOverlay',
+					toSceneEventData: { winAmount }
+				});
+				try { mgr.bringToTop?.('BubbleOverlayTransition'); } catch {}
+			} catch {
+				try { showNow({ winAmount }); } catch {}
+			}
+		})();
 	}
 
 	async showFreeSpinRetriggerOverlay(opts: { overlayId?: number; spinsLeft: number; multiplierKey?: string | null; multiplierOptionsByKey?: Record<string, { offsetX?: number; offsetY?: number; scale?: number }> }): Promise<void> {
 		const scene = this.scene;
 		if (!scene || !this.freeSpinOverlay) return;
 		const overlayId = Number(opts.overlayId) || 0;
+		let overlayLockHeld = false;
 
-		try { gameStateManager.isShowingWinDialog = true; } catch {}
 		try {
-			const map = opts.multiplierOptionsByKey || {};
-			for (const k of Object.keys(map)) {
-				this.freeSpinOverlay.setMultiplierDisplayOptionsForKey(k, map[k]);
-			}
+			await gameStateManager.waitForOverlaySafeState({ timeoutMs: 8000 });
+		} catch {}
+		try {
+			await gameStateManager.waitUntilOverlaysClosed(10000);
 		} catch {}
 
-		await new Promise<void>((resolve) => {
+		try {
 			try {
-				this.freeSpinOverlay!.show(Number(opts.spinsLeft) || 0, () => resolve(), 'FreeSpinRetri_TB', opts.multiplierKey ?? null);
-			} catch {
-				resolve();
-			}
-		});
+				gameStateManager.acquireOverlayLock();
+				overlayLockHeld = true;
+			} catch {}
+			try { gameStateManager.isShowingWinDialog = true; } catch {}
+			try {
+				const map = opts.multiplierOptionsByKey || {};
+				for (const k of Object.keys(map)) {
+					this.freeSpinOverlay.setMultiplierDisplayOptionsForKey(k, map[k]);
+				}
+			} catch {}
 
-		try { await this.freeSpinOverlay.waitUntilDismissed(); } catch {}
+			await new Promise<void>((resolve) => {
+				try {
+					this.freeSpinOverlay!.show(Number(opts.spinsLeft) || 0, () => resolve(), 'FreeSpinRetri_TB', opts.multiplierKey ?? null);
+				} catch {
+					resolve();
+				}
+			});
 
-		await new Promise<void>((resolve) => {
-			try { this.freeSpinOverlay!.hide(250, () => resolve()); } catch { resolve(); }
-		});
+			try { await this.freeSpinOverlay.waitUntilDismissed(); } catch {}
 
-		try { gameStateManager.isShowingWinDialog = false; } catch {}
-		try { scene.events.emit('freeSpinRetriggerOverlayClosed', overlayId); } catch {}
+			await new Promise<void>((resolve) => {
+				try { this.freeSpinOverlay!.hide(250, () => resolve()); } catch { resolve(); }
+			});
+		} finally {
+			try { gameStateManager.isShowingWinDialog = false; } catch {}
+			try {
+				if (overlayLockHeld) {
+					gameStateManager.releaseOverlayLock();
+				}
+			} catch {}
+			try { scene.events.emit('freeSpinRetriggerOverlayClosed', overlayId); } catch {}
+		}
 	}
 
 	showDialog(scene: Scene, type: DialogType, cfg?: { winAmount?: number; betAmount?: number }): void {
 		this.scene = scene;
-		this.hideDialog(true);
+		this.hideDialog(true, false);
+		const requestId = ++this.showRequestSeq;
+		this.pendingWinDialogRequestId = requestId;
+		try { gameStateManager.isShowingWinDialog = true; } catch {}
+
+		void (async () => {
+			try {
+				await gameStateManager.waitForOverlaySafeState({ timeoutMs: 8000 });
+			} catch {}
+			try {
+				await gameStateManager.waitUntilOverlaysClosed(10000);
+			} catch {}
+			if (requestId !== this.showRequestSeq) {
+				try {
+					if (this.pendingWinDialogRequestId === requestId) {
+						this.pendingWinDialogRequestId = null;
+						try { gameStateManager.isShowingWinDialog = false; } catch {}
+					}
+				} catch {}
+				return;
+			}
+			this.pendingWinDialogRequestId = null;
+			this.showDialogInternal(scene, type, cfg);
+		})();
+	}
+
+	private showDialogInternal(scene: Scene, type: DialogType, cfg?: { winAmount?: number; betAmount?: number }): void {
+		this.scene = scene;
+		this.hideDialog(true, false);
 
 		if (!this.overlay || !this.blackOverlay) {
 			this.create(scene);
@@ -353,6 +614,13 @@ export class Dialogs {
 			symbols?.winLineDrawer?.clearLines?.();
 		} catch {}
 
+		try {
+			if (!this.overlayGateHeld) {
+				gameStateManager.acquireOverlayLock();
+				this.overlayGateHeld = true;
+			}
+		} catch {}
+
 		try { gameStateManager.isShowingWinDialog = true; } catch {}
 
 		if (this.staged && this.stages.length > 0) {
@@ -369,10 +637,29 @@ export class Dialogs {
 		this.setupAutoClose();
 	}
 
-	hideDialog(immediate: boolean = false): void {
+	hideDialog(immediate: boolean = false, cancelPending: boolean = true): void {
 		const scene = this.scene;
 		if (!scene) return;
-		if (!this.isDialogActive && !this.overlay?.visible) return;
+		this.setClickCatcherEnabled(false);
+		if (cancelPending) {
+			try { this.showRequestSeq++; } catch {}
+		}
+		if (!this.isDialogActive && !this.overlay?.visible) {
+			try {
+				if (cancelPending) {
+					this.pendingWinDialogRequestId = null;
+					try { gameStateManager.isShowingWinDialog = false; } catch {}
+				}
+				this.setClickCatcherEnabled(false);
+				try {
+					if (this.overlayGateHeld) {
+						gameStateManager.releaseOverlayLock();
+						this.overlayGateHeld = false;
+					}
+				} catch {}
+			} catch {}
+			return;
+		}
 		const closingType = this.currentDialogType;
 
 		this.isDialogActive = false;
@@ -395,6 +682,12 @@ export class Dialogs {
 				}
 			} catch {}
 			try { gameStateManager.isShowingWinDialog = false; } catch {}
+			try {
+				if (this.overlayGateHeld) {
+					gameStateManager.releaseOverlayLock();
+					this.overlayGateHeld = false;
+				}
+			} catch {}
 			try { gameEventManager.emit(GameEventType.DIALOG_STOP, { dialogType: closingType || '' }); } catch {}
 			try { gameEventManager.emit(GameEventType.WIN_DIALOG_CLOSED); } catch {}
 			try { scene.events.emit('dialogAnimationsComplete'); } catch {}
@@ -586,23 +879,33 @@ export class Dialogs {
 				try { setTimeout(() => { if (!hidden) hideNow(); }, 2500); } catch {}
 			}
 		}
-		try {
-			if (scene.scene.isActive('BubbleOverlayTransition') || scene.scene.isSleeping('BubbleOverlayTransition')) {
-				try { scene.scene.stop('BubbleOverlayTransition'); } catch {}
-			}
-			scene.scene.launch('BubbleOverlayTransition', {
-				fromSceneKey: 'Game',
-				toSceneKey: 'Game',
-				stopFromScene: false,
-				toSceneEvent: 'prepareBonusExit',
-				toSceneEventOnFinish: 'finalizeBonusExit',
-				overlayAlpha: 0.55,
-				overlayFadeInDurationMs: 520,
-				overlayFadeInDelayMs: 30,
-				spineFadeInDurationMs: 620
-			});
-			try { scene.scene.bringToTop?.('BubbleOverlayTransition'); } catch {}
-		} catch {}
+		void (async () => {
+			try { await gameStateManager.waitForOverlaySafeState({ timeoutMs: 15000 }); } catch {}
+			// If this dialog is holding the overlay lock, waiting for "overlays closed" will deadlock.
+			// In that case, proceed to launch the exit transition immediately.
+			try {
+				if (!this.overlayGateHeld) {
+					await gameStateManager.waitUntilOverlaysClosed(15000);
+				}
+			} catch {}
+			try {
+				if (scene.scene.isActive('BubbleOverlayTransition') || scene.scene.isSleeping('BubbleOverlayTransition')) {
+					try { scene.scene.stop('BubbleOverlayTransition'); } catch {}
+				}
+				scene.scene.launch('BubbleOverlayTransition', {
+					fromSceneKey: 'Game',
+					toSceneKey: 'Game',
+					stopFromScene: false,
+					toSceneEvent: 'prepareBonusExit',
+					toSceneEventOnFinish: 'finalizeBonusExit',
+					overlayAlpha: 0.55,
+					overlayFadeInDurationMs: 520,
+					overlayFadeInDelayMs: 30,
+					spineFadeInDurationMs: 620
+				});
+				try { scene.scene.bringToTop?.('BubbleOverlayTransition'); } catch {}
+			} catch {}
+		})();
 	}
 
 	private setupAutoClose(): void {
@@ -690,6 +993,11 @@ export class Dialogs {
 		} catch {}
 
 		try {
+			(spine as any).__dialogsBaseScaleX = Number((spine as any).scaleX) || 1;
+			(spine as any).__dialogsBaseScaleY = Number((spine as any).scaleY) || 1;
+		} catch {}
+
+		try {
 			const data: any = spine.skeleton?.data;
 			const anims: any[] = Array.isArray(data?.animations) ? data.animations : [];
 			const name = (anims[0] && anims[0].name) ? anims[0].name : 'animation';
@@ -698,17 +1006,7 @@ export class Dialogs {
 
 		try {
 			const recenter = () => {
-				try { spine.update?.(0); } catch {}
-				const b: any = spine.getBounds?.();
-				const w = Number(b?.width ?? b?.size?.width ?? b?.size?.x ?? 0) || 0;
-				const h = Number(b?.height ?? b?.size?.height ?? b?.size?.y ?? 0) || 0;
-				const offX = Number(b?.offset?.x ?? b?.x ?? 0) || 0;
-				const offY = Number(b?.offset?.y ?? b?.y ?? 0) || 0;
-				if (!(w > 0) || !(h > 0)) return;
-				const cx = offX + w * 0.5;
-				const cy = offY + h * 0.5;
-				spine.x += (scene.scale.width * 0.5) - cx;
-				spine.y += (scene.scale.height * 0.5) - cy;
+				try { this.applyDialogSpineTransformToSpine(type, spine); } catch {}
 			};
 			recenter();
 			try { scene.time.delayedCall(0, () => { try { recenter(); } catch {} }); } catch {}
@@ -762,6 +1060,13 @@ export class Dialogs {
 				}
 			}
 		} catch {}
+		try {
+			const c: any = (nd as any)?.getContainer?.();
+			if (c) {
+				(c as any).__dialogsNumberBaseScaleX = Number((c as any).scaleX) || 1;
+				(c as any).__dialogsNumberBaseScaleY = Number((c as any).scaleY) || 1;
+			}
+		} catch {}
 		this.lastRenderedNumber = Number.NaN;
 		this.numberAnimObj.value = initial;
 
@@ -769,6 +1074,12 @@ export class Dialogs {
 		this.numberContainer.setDepth(10002);
 		this.numberContainer.add(nd.getContainer());
 		this.overlay.add(this.numberContainer);
+		try { this.applyNumberDisplayAutoFit(true); } catch {}
+		try {
+			scene.time.delayedCall(0, () => {
+				try { this.applyNumberDisplayAutoFit(true); } catch {}
+			});
+		} catch {}
 	}
 
 	private animateNumber(from: number, to: number, durationMs: number, startFromCurrent: boolean): void {
@@ -793,6 +1104,7 @@ export class Dialogs {
 				if (rounded === this.lastRenderedNumber) return;
 				this.lastRenderedNumber = rounded;
 				try { this.numberDisplay!.displayValue(rounded); } catch {}
+				try { this.applyNumberDisplayAutoFit(false); } catch {}
 			}
 		});
 	}
@@ -861,6 +1173,7 @@ export class Dialogs {
 		const scene = this.scene;
 		if (!scene || !this.overlay) return;
 		try { this.clickCatcher?.removeAllListeners?.(); } catch {}
+		try { (this.clickCatcher as any)?.disableInteractive?.(); } catch {}
 		try { this.clickCatcher?.destroy(); } catch {}
 		this.clickCatcher = null;
 
@@ -869,9 +1182,22 @@ export class Dialogs {
 			r.setOrigin(0.5, 0.5);
 			r.setDepth(10001);
 			r.setInteractive();
+			try { (r as any).input.enabled = true; } catch {}
 			r.on('pointerdown', () => this.onClick(false));
 			this.clickCatcher = r;
 			this.overlay.add(r);
+		} catch {}
+	}
+
+	private setClickCatcherEnabled(enabled: boolean): void {
+		const r: any = this.clickCatcher as any;
+		if (!r) return;
+		try {
+			if (r.input) {
+				r.input.enabled = enabled;
+			} else if (!enabled) {
+				r.disableInteractive?.();
+			}
 		} catch {}
 	}
 

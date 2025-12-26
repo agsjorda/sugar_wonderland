@@ -155,7 +155,7 @@ export class BuyFeature {
 		this.background.fillRoundedRect(0, screenHeight - 736, screenWidth, 736, 20);
 		this.background.setDepth(-412412);
 		// Make the background interactive to block clicks behind it
-		this.background.setInteractive(new Phaser.Geom.Rectangle(0, screenHeight - 736, screenWidth, 736), Phaser.Geom.Rectangle.Contains);
+		this.background.setInteractive(new Phaser.Geom.Rectangle(0, 0, screenWidth, screenHeight), Phaser.Geom.Rectangle.Contains);
 		
 		this.container.add(this.background);
 		
@@ -474,6 +474,7 @@ export class BuyFeature {
 		// Start positioned below the screen for slide-up effect
 		this.container.setY(this.container.scene.scale.height);
 		this.container.setVisible(true);
+		this.setInputEnabled(true);
 		
 		// Create slide-up animation
 		this.container.scene.tweens.add({
@@ -500,6 +501,7 @@ export class BuyFeature {
 			ease: 'Power2.easeIn',
 			onComplete: () => {
 				this.container.setVisible(false);
+				this.setInputEnabled(false);
 				console.log("[BuyFeature] Drawer hidden");
 			}
 		});
@@ -726,6 +728,7 @@ export class BuyFeature {
 		}
 		this.updatePriceDisplay();
 		this.updateBetDisplay();
+		this.setInputEnabled(true);
 		this.animateIn();
 		
 		// Show the mask when the panel is shown (same as BetOptions)
@@ -767,9 +770,23 @@ export class BuyFeature {
 			this.container.setY(scene.scale.height);
 		}
 		this.container.setVisible(false);
+		this.setInputEnabled(false);
 		if (this.confirmButtonMask) {
 			this.confirmButtonMask.setVisible(false);
 			this.confirmButtonMask.setAlpha(0);
+		}
+	}
+
+	private setInputEnabled(enabled: boolean): void {
+		const list = (this.container as any)?.list as any[] | undefined;
+		if (!Array.isArray(list)) return;
+		for (const obj of list) {
+			const anyObj: any = obj as any;
+			if (anyObj?.input) {
+				try { anyObj.input.enabled = enabled; } catch {}
+			} else if (!enabled) {
+				try { anyObj?.disableInteractive?.(); } catch {}
+			}
 		}
 	}
 
@@ -810,6 +827,7 @@ export class BuyFeature {
 		} catch {}
 		
 		if (this.container) {
+			this.setInputEnabled(false);
 			this.container.destroy();
 		}
 	}

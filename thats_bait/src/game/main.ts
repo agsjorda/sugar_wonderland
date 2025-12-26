@@ -146,6 +146,42 @@ const StartGame = (parent: string) => {
     let game: Phaser.Game = new Game({ ...config, parent });
     (window as any).game = game;
 
+	// Global DOM-level audio unlock: ensures AudioContext.resume() runs inside a real user gesture
+	// (capture phase), preventing the "tab away and back" workaround.
+	try {
+		const w: any = window as any;
+		if (!w.__globalAudioUnlockInstalled) {
+			w.__globalAudioUnlockInstalled = true;
+			const unlock = () => {
+				try {
+					const sm: any = (game as any)?.sound;
+					try { sm?.unlock?.(); } catch {}
+					try { sm?.context?.resume?.(); } catch {}
+					try { sm?.webaudio?.context?.resume?.(); } catch {}
+					try { (game as any)?.sound?.context?.resume?.(); } catch {}
+					try { (game as any)?.sound?.webaudio?.context?.resume?.(); } catch {}
+					// Try a silent play to force-unlock on some browsers (ignore if not loaded yet)
+					try { (game as any)?.sound?.play?.('click_sw', { volume: 0, loop: false }); } catch {}
+					const locked = !!sm?.locked;
+					const state = sm?.context?.state || sm?.webaudio?.context?.state || null;
+					if (!locked && state !== 'suspended') {
+						try {
+							document.removeEventListener('pointerdown', unlock as any, true as any);
+							document.removeEventListener('touchstart', unlock as any, true as any);
+							document.removeEventListener('keydown', unlock as any, true as any);
+							document.removeEventListener('mousedown', unlock as any, true as any);
+						} catch {}
+					}
+				} catch {}
+			};
+			try { document.addEventListener('pointerdown', unlock as any, true as any); } catch {}
+			try { document.addEventListener('touchstart', unlock as any, true as any); } catch {}
+			try { document.addEventListener('keydown', unlock as any, true as any); } catch {}
+			try { document.addEventListener('mousedown', unlock as any, true as any); } catch {}
+			try { unlock(); } catch {}
+		}
+	} catch {}
+
     let isRestarting = false;
     let lastRestartAt = 0;
     let boundToCanvas: HTMLCanvasElement | null = null;

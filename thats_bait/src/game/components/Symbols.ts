@@ -19,7 +19,7 @@ import { WaterWaveVerticalPipeline } from '../pipelines/WaterWavePipeline';
 import { getSymbol5VariantForCell, getSymbol5SpineKeyForVariant, getDefaultSymbol5Variant, getSymbol5ImageKeyForVariant, getSymbol5ImageKeyForCell, getMoneyValueForCell } from './Symbol5VariantHelper';
 import { MoneyValueOverlayManager } from './MoneyValueOverlayManager';
 import { fakeBonusAPI } from '../../backend/FakeBonusAPI';
-import { despawnDynamiteImage, playBoom, playDynamiteOverlay, spawnDynamiteImage } from './DynamiteSequence';
+import { despawnDynamiteImage, playBoom, playDynamiteOverlay, playMissileStrike, spawnDynamiteImage, waitForCharacterBonusComplete } from './DynamiteSequence';
 
 function resolveBonusCollectorVisualSymbolValue(symbolValue: number, bonusLevelsCompleted: number): number {
   try {
@@ -88,6 +88,7 @@ export class Symbols {
   
   // Skip-drop state
   private skipReelDropsActive: boolean = false;
+  private skipReelDropsPending: boolean = false;
 
   private waveShadersSuppressedDuringSpin: boolean = false;
 
@@ -329,6 +330,19 @@ export class Symbols {
 		}
 	}
 
+	private hasPendingBonusProgressionAtZero(): boolean {
+		try {
+			if (!gameStateManager.isBonus) return false;
+			if (!this.freeSpinAutoplayActive) return false;
+			const current = Number(this.freeSpinAutoplaySpinsRemaining) || 0;
+			if (current > 0) return false;
+			if (this.hasPendingDynamite || this.hasPendingCollectorSequence || this.hasPendingHookScatter) return true;
+			if (gameStateManager.isCriticalSequenceLocked) return true;
+			if (gameStateManager.isHookScatterActive) return true;
+		} catch {}
+		return false;
+	}
+
 	private scheduleFreeSpinAutoplayResumeAfterRetriggerOverlay(): void {
 		try {
 			if (this.freeSpinAutoplayTimer) {
@@ -509,6 +523,16 @@ export class Symbols {
   
   // Clickable hitbox over the symbol grid to allow skipping during reel drops
   private skipHitbox?: Phaser.GameObjects.Zone;
+
+  public forceStopFreeSpinAutoplay(opts?: { treatAsComplete?: boolean }): void {
+    try {
+      const treatAsComplete = !!opts?.treatAsComplete;
+      if (treatAsComplete) {
+        try { this.freeSpinAutoplaySpinsRemaining = 0; } catch {}
+      }
+      try { this.stopFreeSpinAutoplay(); } catch {}
+    } catch {}
+  }
 
   constructor() { 
     this.scatterAnimationManager = ScatterAnimationManager.getInstance();
@@ -701,7 +725,10 @@ export class Symbols {
   public requestSkipReelDrops(): void {
     try {
       try { if ((gameStateManager as any).isCriticalSequenceLocked) return; } catch {}
-      if (this.skipReelDropsActive) return;
+      // If the player taps skip very early (before the drop tweens exist), we need to
+      // remember the intent and re-apply skip tweaks once the spin data arrives and
+      // the drop timing is configured.
+      this.skipReelDropsPending = true;
       this.skipReelDropsActive = true;
       // Speed up only symbol-related tweens (avoid global tween timeScale to not affect logo breathing)
       const gd = (this.scene as any)?.gameData as GameData | undefined;
@@ -722,6 +749,7 @@ export class Symbols {
     try {
       if (!this.skipReelDropsActive) return;
       this.skipReelDropsActive = false;
+      this.skipReelDropsPending = false;
       console.log('[Symbols] Skip cleared');
     } catch (e) {
       console.warn('[Symbols] Failed to clear skip state:', e);
@@ -1037,6 +1065,7 @@ export class Symbols {
       zone.on('pointerdown', () => {
         try {
           try { if ((gameStateManager as any).isCriticalSequenceLocked) return; } catch {}
+          if (gameStateManager.isShowingWinDialog) return;
           if (gameStateManager.isReelSpinning && !gameStateManager.isTurbo) {
             this.requestSkipReelDrops();
           }
@@ -1048,7 +1077,7 @@ export class Symbols {
       // Enable/disable around spin lifecycle
       const enable = () => {
         try { this.updateSkipHitboxGeometry(); } catch {}
-        if (gameStateManager.isTurbo) {
+        if (gameStateManager.isTurbo || gameStateManager.isShowingWinDialog) {
           try { this.skipHitbox?.disableInteractive(); } catch {}
         } else {
           try { this.skipHitbox?.setInteractive({ useHandCursor: false }); } catch {}
@@ -1856,8 +1885,7 @@ export class Symbols {
 			const speed = gameStateManager.isTurbo ? 0.65 : 1.0;
 			const placeDurationMs = Math.max(80, Math.floor(140 * speed));
 			const despawnDurationMs = Math.max(70, Math.floor(120 * speed));
-			const explodeIntervalMs = Math.max(45, Math.floor(65 * speed));
-			const replaceDelayMs = Math.max(55, Math.floor(95 * speed));
+			const explodeIntervalMs = Math.max(10, Math.floor(35 * speed));
 
 			type DynEntry = {
 				t: { col: number; row: number; value: number };
@@ -1936,47 +1964,45 @@ export class Symbols {
 				}
 			} catch {}
 
-			const explodeOne = async (e: DynEntry): Promise<void> => {
-				try {
-					if (e.dyn) {
-						try { await despawnDynamiteImage(this.scene, e.dyn, despawnDurationMs); } catch {}
-						try { e.dyn.destroy?.(); } catch {}
-						e.dyn = null;
-					}
-				} catch {}
+			const boomPromises: Promise<void>[] = [];
 
+			const explodeOne = async (e: DynEntry): Promise<void> => {
 				try {
 					const tw = (e.bWidth && e.bWidth > 0) ? e.bWidth : this.displayWidth;
 					const th = (e.bHeight && e.bHeight > 0) ? e.bHeight : this.displayHeight;
-					await playBoom(this.scene, e.wx, e.wy, 20014, tw, th);
+					await playMissileStrike(this.scene, e.wx, e.wy, 20015, tw, th);
 				} catch {}
 
-				let oldSym: any = null;
-				try { oldSym = this.symbols?.[e.t.col]?.[e.t.row]; } catch {}
+				let boomPromise: Promise<void> | null = null;
 				try {
-					if (oldSym) {
-						try { this.scene.tweens.killTweensOf(oldSym); } catch {}
-						try {
-							this.scene.tweens.add({
-								targets: oldSym,
-								alpha: 0.0,
-								scaleX: (oldSym.scaleX || 1) * 0.9,
-								scaleY: (oldSym.scaleY || 1) * 0.9,
-								duration: replaceDelayMs,
-								ease: 'Sine.easeIn'
-							});
-						} catch {}
+					const tw = (e.bWidth && e.bWidth > 0) ? e.bWidth : this.displayWidth;
+					const th = (e.bHeight && e.bHeight > 0) ? e.bHeight : this.displayHeight;
+					boomPromise = playBoom(this.scene, e.wx, e.wy, 20014, tw, th);
+				} catch {
+					boomPromise = null;
+				}
+				try {
+					if (boomPromise) {
+						boomPromises.push(Promise.resolve(boomPromise).catch(() => {}));
 					}
 				} catch {}
 
-				await delay(replaceDelayMs);
+				try {
+					if (e.dyn) {
+						const dynToRemove: any = e.dyn;
+						e.dyn = null;
+						try {
+							void despawnDynamiteImage(this.scene, dynToRemove, despawnDurationMs).then(() => {
+								try { dynToRemove.destroy?.(); } catch {}
+							});
+						} catch {
+							try { dynToRemove.destroy?.(); } catch {}
+						}
+					}
+				} catch {}
 
 				try {
 					const old: any = this.symbols?.[e.t.col]?.[e.t.row];
-					if (old) {
-						try { (old.parentContainer as any)?.remove?.(old); } catch {}
-						try { old.destroy?.(); } catch {}
-					}
 					let created: any = null;
 					try {
 						let variant = getSymbol5VariantForCell(spinData, e.t.col, e.t.row) || getDefaultSymbol5Variant();
@@ -2048,8 +2074,17 @@ export class Symbols {
 							}
 						}
 					} catch {}
+
 					if (created) {
+						try {
+							if (old) {
+								try { this.scene.tweens.killTweensOf(old); } catch {}
+								try { (old.parentContainer as any)?.remove?.(old); } catch {}
+								try { old.destroy?.(); } catch {}
+							}
+						} catch {}
 						try { this.symbols[e.t.col][e.t.row] = created; } catch {}
+						try { this.updateMoneyValueOverlays(spinData); } catch {}
 					}
 				} catch {}
 			};
@@ -2063,9 +2098,14 @@ export class Symbols {
 				}
 			} catch {}
 
+			try { await Promise.all(boomPromises); } catch {}
+
 			try {
 				this.updateMoneyValueOverlays(spinData);
 				try { this.container?.setVisible(true); this.container?.setAlpha(1); } catch {}
+			} catch {}
+			try {
+				await waitForCharacterBonusComplete(this.scene, 6000);
 			} catch {}
 			try { (this.scene as any)?.events?.emit?.('dynamite-complete'); } catch {}
 		} catch {} finally {
@@ -2938,7 +2978,7 @@ export class Symbols {
                 try { (spineSymbol as any).__pngHome = { x, y }; } catch {}
                 // Set canonical measurement pose before centering
                 try { spineSymbol.skeleton.setToSetupPose(); spineSymbol.update(0); } catch {}
-                this.centerAndFitSpine(spineSymbol, x, y, this.displayWidth, this.displayHeight, configuredScale, this.getWinSymbolNudge(symbolValue));
+                this.centerAndFitSpine(spineSymbol, x, y, displayWidth, displayHeight, configuredScale, this.getWinSymbolNudge(symbolValue));
                 try {
                   const m = this.getSpineScaleMultiplier(symbolValue) * this.getIdleScaleMultiplier(symbolValue);
                   if (m !== 1) spineSymbol.setScale(spineSymbol.scaleX * m, spineSymbol.scaleY * m);
@@ -2947,6 +2987,9 @@ export class Symbols {
                 // Do not reparent into the masked symbols container
                 spineSymbol.setDepth(990); // Above all gameplay layers, just below dialogs (1000)
                 this.symbols[col][row] = spineSymbol;
+
+                try { (spineSymbol as any).__scatterBaseScaleX = spineSymbol.scaleX; } catch {}
+                try { (spineSymbol as any).__scatterBaseScaleY = spineSymbol.scaleY; } catch {}
                 
                 // Register the scatter symbol with the ScatterAnimationManager
                 if (this.scatterAnimationManager) {
@@ -3307,7 +3350,7 @@ export class Symbols {
       this.freeSpinAutoplayTimer.destroy();
       this.freeSpinAutoplayTimer = null;
     }
-    this.freeSpinAutoplayTimer = this.scene.time.delayedCall(1000, () => {
+    this.freeSpinAutoplayTimer = this.scene.time.delayedCall(2300, () => {
       try {
         const gm: any = (this.scene as any)?.gaugeMeter;
         gm?.playIndicatorIntro?.();
@@ -3329,6 +3372,28 @@ export class Symbols {
       return;
     }
     if (this.freeSpinAutoplaySpinsRemaining <= 0) {
+			let pendingProgressAtZero = false;
+			try { pendingProgressAtZero = this.hasPendingBonusProgressionAtZero(); } catch { pendingProgressAtZero = false; }
+			if (pendingProgressAtZero) {
+				try {
+					await gameStateManager.waitForOverlaySafeState({ timeoutMs: 12000 });
+				} catch {}
+				try {
+					await this.waitForBonusStageCompletionSignals(2000);
+				} catch {}
+				try {
+					if (this.tryApplyQueuedRetriggerAtZero()) {
+						return;
+					}
+				} catch {}
+				try {
+					this.scene?.time?.delayedCall?.(100, () => { try { void this.performFreeSpinAutoplay(); } catch {} });
+					return;
+				} catch {
+					try { setTimeout(() => { try { void this.performFreeSpinAutoplay(); } catch {} }, 100); } catch {}
+					return;
+				}
+			}
       let allowContinue = false;
       try {
         const availableCredits = Math.max(0, (Number(this.bonusLevelsCompleted) || 0) - (Number(this.bonusRetriggersConsumed) || 0));
@@ -3596,6 +3661,18 @@ export class Symbols {
     try {
       // Use our free spin simulation instead of the old backend
       console.log('[Symbols] Triggering free spin via SlotController...');
+      try {
+        if ((gameStateManager as any).isCriticalSequenceLocked) {
+          console.log('[Symbols] Free spin autoplay blocked - critical sequence still active, retrying');
+          try {
+            this.scene.time.delayedCall(100, () => { try { void this.performFreeSpinAutoplay(); } catch {} });
+            return;
+          } catch {
+            try { setTimeout(() => { try { void this.performFreeSpinAutoplay(); } catch {} }, 100); } catch {}
+            return;
+          }
+        }
+      } catch {}
       
       // Emit a custom event that SlotController will handle
       gameEventManager.emit(GameEventType.FREE_SPIN_AUTOPLAY);
@@ -3626,6 +3703,8 @@ export class Symbols {
     console.log(`[Symbols] ===== CONTINUING FREE SPIN AUTOPLAY =====`);
     console.log(`[Symbols] Free spin autoplay: ${this.freeSpinAutoplaySpinsRemaining} spins remaining`);
 		const atZero = this.freeSpinAutoplaySpinsRemaining <= 0;
+		let pendingProgressAtZero = false;
+		try { pendingProgressAtZero = this.hasPendingBonusProgressionAtZero(); } catch { pendingProgressAtZero = false; }
 		if (gameStateManager.isBonus && atZero) {
 			let winlines = false;
 			try {
@@ -3637,7 +3716,7 @@ export class Symbols {
 				const sp: any = (this.scene as any)?.scene;
 				hasRetriggerOverlay = !!(sp?.isActive?.('FreeSpinRetriggerOverlay') || sp?.isSleeping?.('FreeSpinRetriggerOverlay'));
 			} catch { hasRetriggerOverlay = false; }
-			if (!winlines && !gameStateManager.isShowingWinDialog && !hasRetriggerOverlay) {
+			if (!pendingProgressAtZero && !winlines && !gameStateManager.isShowingWinDialog && !hasRetriggerOverlay) {
 				console.log('[Symbols] Reels stopped at 0 spins - running final bonus completion check');
 				try {
 					this.scene?.time?.delayedCall?.(0, () => { try { void this.performFreeSpinAutoplay(); } catch {} });
@@ -3672,7 +3751,7 @@ export class Symbols {
     // Check if we still have spins remaining
     // IMPORTANT: even if allowContinueAtZero is currently false, if we still have queued fake spins
     // we must wait for WIN_STOP so stage completion can update availableCredits.
-		if (this.freeSpinAutoplaySpinsRemaining > 0 || allowContinueAtZero || hasMoreQueued || shouldWaitAtZero) {
+		if (this.freeSpinAutoplaySpinsRemaining > 0 || allowContinueAtZero || hasMoreQueued || shouldWaitAtZero || pendingProgressAtZero) {
       // Wait for WIN_STOP event to ensure winlines complete before next spin
       // This is the same approach as normal autoplay - no safety timer needed
       console.log('[Symbols] Waiting for WIN_STOP event before continuing free spin autoplay');
@@ -4307,6 +4386,16 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   // Apply timing to GameData for animations
   setSpeed(self.scene.gameData, adjustedDelay);
   self.scene.gameData.dropReelsDelay = 0;
+
+	// If skip was requested very early (before spin data / tweens existed), the timing we just set
+	// would overwrite the earlier skip tweaks. Re-apply the skip tweaks now, right before
+	// we create/run the reel-drop tweens.
+	try {
+		if (!gameStateManager.isTurbo && ((self as any).skipReelDropsPending || (self as any).skipReelDropsActive)) {
+			applySkipReelTweaks(self, self.scene.gameData, 60);
+			try { (self as any).skipReelDropsPending = false; } catch {}
+		}
+	} catch {}
   
   // Set spinning state
   gameStateManager.isReelSpinning = true;
@@ -5062,7 +5151,30 @@ function replaceWithSpineAnimations(self: Symbols, symbols: number[][], winsMap:
   }
 
   const winningPositions = new Set<string>();
-  let hasPlayedWinSfx = false;
+
+  // Play win SFX once per win evaluation, independent of whether Spine animations are available for the winning symbols.
+  try {
+    let hasAnyWinningGrid = false;
+    for (const grids of winsMap.values()) {
+      if (Array.isArray(grids) && grids.length > 0) {
+        hasAnyWinningGrid = true;
+        break;
+      }
+    }
+    if (hasAnyWinningGrid) {
+      const audio = (window as any)?.audioManager;
+      if (audio && typeof audio.playSoundEffect === 'function') {
+        audio.playSoundEffect(SoundEffectType.HIT_WIN);
+        try {
+          if (gameStateManager.isScatter) {
+            self.scene.time.delayedCall(100, () => {
+              try { audio.playSoundEffect(SoundEffectType.SCATTER); } catch {}
+            });
+          }
+        } catch {}
+      }
+    }
+  } catch {}
 
   for (const [, grids] of winsMap.entries()) {
     for (const grid of grids) {
@@ -5207,24 +5319,6 @@ function replaceWithSpineAnimations(self: Symbols, symbols: number[][], winsMap:
           self.symbols[grid.x][grid.y] = spineSymbol;
         }
 
-        // Play win SFX once when winning symbol animations start
-        try {
-          if (!hasPlayedWinSfx) {
-            const audio = (window as any)?.audioManager;
-            if (audio && typeof audio.playSoundEffect === 'function') {
-              audio.playSoundEffect(SoundEffectType.HIT_WIN);
-              hasPlayedWinSfx = true;
-              try {
-                if (gameStateManager.isScatter) {
-                  self.scene.time.delayedCall(100, () => {
-                    try { audio.playSoundEffect(SoundEffectType.SCATTER); } catch {}
-                  });
-                }
-              } catch {}
-            }
-          }
-        } catch {}
-        
       } catch (error) {
         console.warn(`[Symbols] Failed to apply Spine animation at (${grid.x}, ${grid.y}):`, error);
         // Fallback to the old tint method if animation target not available

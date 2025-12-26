@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import { SpinData, PaylineData } from '../../backend/SpinData';
+import { WINLINES } from '../../config/GameConfig';
 
 interface WinTrackerLayoutOptions {
   offsetX?: number;
@@ -71,6 +72,7 @@ export class WinTracker {
         this.container.removeAll(true);
         this.container.destroy();
       }
+
     } catch {}
 
     this.container = scene.add.container(0, 0);
@@ -110,6 +112,122 @@ export class WinTracker {
         this.resizeHandler = undefined;
       });
     } catch {}
+  }
+
+  private resolvePaylineToRegisteredWinlineIndex(spinData: SpinData, payline: PaylineData): number | null {
+    try {
+      const desired = typeof payline.lineKey === 'number' ? payline.lineKey : -1;
+      const count = Math.max(0, Number(payline.count) || 0);
+      const targetSymbol = Number(payline.symbol);
+
+      const withinRange = isFinite(desired) && desired >= 0 && desired < WINLINES.length;
+      if (withinRange) {
+        const len = this.computeStreakLengthForWinline(spinData, desired, targetSymbol, count);
+        if (len >= 3) {
+          return desired;
+        }
+      }
+
+      let bestIndex: number | null = null;
+      let bestLen = -1;
+      let bestExact = false;
+
+      for (let i = 0; i < WINLINES.length; i++) {
+        const len = this.computeStreakLengthForWinline(spinData, i, targetSymbol, count);
+        const exact = count >= 3 && len === count;
+
+        if (exact && !bestExact) {
+          bestExact = true;
+          bestLen = len;
+          bestIndex = i;
+          continue;
+        }
+
+        if (bestExact && exact) {
+          if (bestIndex === null || Math.abs(i - desired) < Math.abs(bestIndex - desired)) {
+            bestLen = len;
+            bestIndex = i;
+          }
+          continue;
+        }
+
+        if (!bestExact) {
+          if (len > bestLen) {
+            bestLen = len;
+            bestIndex = i;
+          } else if (len === bestLen && bestIndex !== null && Math.abs(i - desired) < Math.abs(bestIndex - desired)) {
+            bestIndex = i;
+          } else if (len === bestLen && bestIndex === null) {
+            bestIndex = i;
+          }
+        }
+      }
+
+      if (bestIndex === null) {
+        return null;
+      }
+
+      return bestLen >= 3 ? bestIndex : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private computeStreakLengthForWinline(
+    spinData: SpinData,
+    winlineIndex: number,
+    targetSymbol: number,
+    requiredCount?: number
+  ): number {
+    if (winlineIndex < 0 || winlineIndex >= WINLINES.length) {
+      return 0;
+    }
+
+    const winline = WINLINES[winlineIndex];
+    const positions: Array<{ x: number; y: number }> = [];
+    for (let x = 0; x < winline.length; x++) {
+      for (let y = 0; y < winline[x].length; y++) {
+        if (winline[x][y] === 1) {
+          positions.push({ x, y });
+        }
+      }
+    }
+
+    positions.sort((a, b) => a.x - b.x);
+    const firstPos = positions[0];
+    if (!firstPos || firstPos.x !== 0) {
+      return 0;
+    }
+
+    const required = Math.max(0, Number(requiredCount) || 0);
+    if (required > 0 && required < 3) {
+      return 0;
+    }
+
+    const firstSymbol = spinData.slot.area?.[firstPos.x]?.[firstPos.y];
+    if (firstSymbol !== targetSymbol) {
+      return 0;
+    }
+
+    let len = 1;
+    for (let i = 1; i < positions.length; i++) {
+      const pos = positions[i];
+      const prev = positions[i - 1];
+      if (pos.x !== prev.x + 1) {
+        break;
+      }
+      const symbolAtPosition = spinData.slot.area?.[pos.x]?.[pos.y];
+      if (symbolAtPosition === targetSymbol) {
+        len++;
+        if (required >= 3 && len >= required) {
+          return required;
+        }
+      } else {
+        break;
+      }
+    }
+
+    return len;
   }
 
   private refreshLayout(): void {
@@ -196,6 +314,30 @@ export class WinTracker {
     if (!payline) {
       this.clear();
       return;
+    }
+
+    const count = Number(payline.count) || 0;
+    const win = Number(payline.win) || 0;
+    if (win <= 0 || count < 3) {
+      this.clear();
+      return;
+    }
+
+    // Only allow preview if this payline corresponds to a registered winline.
+    // Note: WinLineDrawer may resolve a payline to a different winline index than payline.lineKey,
+    // so avoid validating against payline.lineKey directly.
+    const spinData = this.lastSpinData;
+    if (spinData) {
+      const resolvedLineKey = this.resolvePaylineToRegisteredWinlineIndex(spinData, payline);
+      if (resolvedLineKey === null) {
+        this.clear();
+        return;
+      }
+      const streakLen = this.computeStreakLengthForWinline(spinData, resolvedLineKey, Number(payline.symbol), payline.count);
+      if (streakLen < 3) {
+        this.clear();
+        return;
+      }
     }
 
     if (this.autoHideTimer) {
@@ -399,11 +541,23 @@ export class WinTracker {
 
     const summary = new Map<number, SymbolSummary>();
     for (const payline of spinData.slot.paylines) {
+      const win = Number(payline.win) || 0;
+      if (win <= 0) {
+        continue;
+      }
+      const resolvedLineKey = this.resolvePaylineToRegisteredWinlineIndex(spinData, payline);
+      if (resolvedLineKey === null) {
+        continue;
+      }
+      const streakLen = this.computeStreakLengthForWinline(spinData, resolvedLineKey, Number(payline.symbol), payline.count);
+      if (streakLen < 3) {
+        continue;
+      }
       const stats = this.getPaylineMultiplierStats(payline);
       const existing = summary.get(payline.symbol) || { lines: 0, totalWin: 0, multiplier: 1, baseValue: 0, multiplierIcons: [] };
       // Track the total count of matching symbols across winning lines for this symbol
-      existing.lines += (payline.count || 0);
-      existing.totalWin += payline.win;
+      existing.lines += streakLen;
+      existing.totalWin += win;
       existing.multiplier = Math.max(existing.multiplier || 1, stats.product || 1);
       const prevMap = new Map<number, number>();
       for (const it of (existing.multiplierIcons || [])) {
@@ -417,7 +571,7 @@ export class WinTracker {
       existing.baseValue = existing.totalWin / effectiveMultiplier;
       summary.set(payline.symbol, existing);
     }
-    return summary;
+    return summary.size > 0 ? summary : null;
   }
 
   private addSymbolItem(x: number, symbolId: number, data: SymbolSummary): void {

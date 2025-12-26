@@ -13,9 +13,9 @@ export interface BetOptionsConfig {
 }
 
 export class BetOptions {
-	private container: Phaser.GameObjects.Container;
-	private background: Phaser.GameObjects.Graphics;
-	private confirmButtonMask: Phaser.GameObjects.Graphics;
+	private container!: Phaser.GameObjects.Container;
+	private background!: Phaser.GameObjects.Graphics;
+	private confirmButtonMask?: Phaser.GameObjects.Graphics;
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
 	private currentBet: number = 240.00;
@@ -23,11 +23,11 @@ export class BetOptions {
 
 	private betButtons: Phaser.GameObjects.Container[] = [];
 	private selectedButtonIndex: number = -1;
-	private closeButton: Phaser.GameObjects.Text;
-	private confirmButton: Phaser.GameObjects.Text;
-	private betDisplay: Phaser.GameObjects.Text;
-	private minusButton: Phaser.GameObjects.Text;
-	private plusButton: Phaser.GameObjects.Text;
+	private closeButton!: Phaser.GameObjects.Text;
+	private confirmButton!: Phaser.GameObjects.Text;
+	private betDisplay!: Phaser.GameObjects.Text;
+	private minusButton!: Phaser.GameObjects.Text;
+	private plusButton!: Phaser.GameObjects.Text;
 	private onCloseCallback?: () => void;
 	private onConfirmCallback?: (betAmount: number) => void;
 
@@ -60,6 +60,7 @@ export class BetOptions {
 		
 		// Initially hide the component
 		this.container.setVisible(false);
+		this.setInputEnabled(false);
 	}
 
 	private createBackground(scene: Scene): void {
@@ -73,6 +74,7 @@ export class BetOptions {
 		this.background.fillStyle(0x000000, 0.80); // Semi-transparent black overlay
 		this.background.fillRoundedRect(0, backgroundTop, screenWidth, backgroundHeight, 20);
 		this.background.setInteractive(new Phaser.Geom.Rectangle(0, backgroundTop, screenWidth, backgroundHeight), Phaser.Geom.Rectangle.Contains);
+		try { this.background.disableInteractive(); } catch {}
 		this.container.add(this.background);
 	}
 
@@ -372,6 +374,7 @@ export class BetOptions {
 		
 		// Start positioned below the screen for slide-up effect
 		this.container.setY(this.container.scene.scale.height);
+		this.setInputEnabled(true);
 		this.container.setVisible(true);
 		
 		// Show the mask when the panel is shown
@@ -393,11 +396,25 @@ export class BetOptions {
 
 	hide(): void {
 		this.container.setVisible(false);
+		this.setInputEnabled(false);
 		
 		// Hide the mask when the panel is hidden
 		if (this.confirmButtonMask) {
 			this.confirmButtonMask.setVisible(false);
 			this.confirmButtonMask.setAlpha(0);
+		}
+	}
+
+	private setInputEnabled(enabled: boolean): void {
+		const list = (this.container as any)?.list as any[] | undefined;
+		if (!Array.isArray(list)) return;
+		for (const obj of list) {
+			const anyObj: any = obj as any;
+			if (anyObj?.input) {
+				try { anyObj.input.enabled = enabled; } catch {}
+			} else if (!enabled) {
+				try { anyObj?.disableInteractive?.(); } catch {}
+			}
 		}
 	}
 
@@ -416,7 +433,8 @@ export class BetOptions {
 
 	destroy(): void {
 		if (this.container) {
+			this.setInputEnabled(false);
 			this.container.destroy();
 		}
 	}
-} 
+}

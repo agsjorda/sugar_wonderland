@@ -3,6 +3,7 @@ import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { NumberDisplay, NumberDisplayConfig } from './NumberDisplay';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
+import { AudioManager, MusicType } from '../../managers/AudioManager';
 
 export class FreeSpinOverlay {
 	private scene: Scene | null = null;
@@ -28,6 +29,7 @@ export class FreeSpinOverlay {
 	private valueBobTween: Phaser.Tweens.Tween | null = null;
 	private isInitialized: boolean = false;
 	private isShowing: boolean = false;
+	private didBeginTempMusic: boolean = false;
 	private dismissResolver?: () => void;
 	private networkManager: NetworkManager | null = null;
 	private screenModeManager: ScreenModeManager | null = null;
@@ -91,6 +93,7 @@ export class FreeSpinOverlay {
 		this.background.setOrigin(0.5);
 		this.background.setAlpha(0);
 		this.background.setInteractive();
+		try { this.background.disableInteractive(); } catch {}
 		this.container.add(this.background);
 		try {
 			(this.container as any).setScrollFactor?.(0);
@@ -109,6 +112,7 @@ export class FreeSpinOverlay {
 			if (onComplete) onComplete();
 			return;
 		}
+		this.didBeginTempMusic = false;
 		try {
 			this.spineKey = (typeof spineKey === 'string' && spineKey.length > 0) ? spineKey : 'FreeSpin_TB';
 		} catch {}
@@ -117,9 +121,26 @@ export class FreeSpinOverlay {
 		} catch {
 			this.multiplierKey = null;
 		}
+		try {
+			if (this.spineKey === 'FreeSpin_TB') {
+				const audioManager = ((window as any)?.audioManager as AudioManager | undefined);
+				if (audioManager && typeof (audioManager as any).beginTemporaryMusic === 'function') {
+					(audioManager as any).beginTemporaryMusic(MusicType.FREE_SPIN, 220);
+					this.didBeginTempMusic = true;
+				}
+			}
+		} catch {}
 		this.isShowing = true;
 		this.container.setVisible(true);
 		this.container.setDepth(10000);
+		try {
+			const anyBg: any = this.background as any;
+			if (anyBg?.input) {
+				anyBg.input.enabled = true;
+			} else {
+				this.background.setInteractive();
+			}
+		} catch {}
 		try {
 			this.container.setAlpha(1);
 		} catch {}
@@ -396,7 +417,17 @@ export class FreeSpinOverlay {
 					target.setVisible(false);
 					target.setAlpha(1);
 				} catch {}
+				try { this.background?.disableInteractive(); } catch {}
 				this.isShowing = false;
+				try {
+					if (this.didBeginTempMusic) {
+						const audioManager = ((window as any)?.audioManager as AudioManager | undefined);
+						if (audioManager && typeof (audioManager as any).endTemporaryMusic === 'function') {
+							(audioManager as any).endTemporaryMusic(220);
+						}
+					}
+				} catch {}
+				this.didBeginTempMusic = false;
 				if (this.valueBobTween) {
 					try { this.valueBobTween.stop(); } catch {}
 					this.valueBobTween = null;

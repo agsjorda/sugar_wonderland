@@ -36,6 +36,7 @@ export class OutOfBalancePopup extends GameObjects.Container {
             Phaser.Geom.Rectangle.Contains
         );
         this.overlay.visible = false;
+        try { this.overlay.disableInteractive(); } catch {}
         scene.add.existing(this.overlay);
 
         if (options.opacity !== undefined) {
@@ -121,6 +122,17 @@ export class OutOfBalancePopup extends GameObjects.Container {
     public show(): void {
         this.overlay.setVisible(true);
         this.overlay.setDepth(9999);
+        try {
+            const anyOverlay: any = this.overlay as any;
+            if (anyOverlay?.input) {
+                anyOverlay.input.enabled = true;
+            } else {
+                this.overlay.setInteractive(
+                    new Phaser.Geom.Rectangle(0, 0, this.scene.scale.width, this.scene.scale.height),
+                    Phaser.Geom.Rectangle.Contains
+                );
+            }
+        } catch {}
         this.setVisible(true);
         this.setDepth(10000);
         this.setScale(0.5);
@@ -151,6 +163,7 @@ export class OutOfBalancePopup extends GameObjects.Container {
             onComplete: () => {
                 this.setVisible(false);
                 this.overlay.setVisible(false);
+                try { this.overlay.disableInteractive(); } catch {}
                 if (callback) callback();
             }
         });

@@ -21,6 +21,8 @@ export function flashAllSymbolsOverlay(host: SymbolFlashHost): void {
       return;
     }
 
+    const hostContainer: any = (host as any).container;
+
     let overlaysCreated = 0;
     const flashedPositions = new Set<string>();
 
@@ -34,6 +36,15 @@ export function flashAllSymbolsOverlay(host: SymbolFlashHost): void {
       for (let row = 0; row < column.length; row++) {
         const obj: any = column[row];
         if (!obj) continue;
+
+        try {
+          if ((obj as any).destroyed) continue;
+          if ((obj as any).__isCollectorPlaceholder) continue;
+          if ((obj as any).__collectedByHook) continue;
+          if ((obj as any).__skipFlashAllSymbolsOverlay) continue;
+          if (typeof (obj as any).active === 'boolean' && !(obj as any).active) continue;
+          if (hostContainer && (obj as any).parentContainer && (obj as any).parentContainer !== hostContainer) continue;
+        } catch {}
 
         let symbolValue: number | undefined;
         let textureKey: string | undefined;

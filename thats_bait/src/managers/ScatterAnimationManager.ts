@@ -23,6 +23,7 @@ export class ScatterAnimationManager {
   private spinnerContainer: Phaser.GameObjects.Container | null = null;
   private spinnerComponent: any = null; // Reference to the Spinner component
   private dialogsComponent: any = null; // Reference to the Dialogs component
+  private overlayComponent: any = null;
   private scatterWinOverlay: any = null; // Reference to the ScatterWinOverlay component
   private isAnimating: boolean = false;
   public delayedScatterData: any = null;
@@ -53,6 +54,10 @@ export class ScatterAnimationManager {
       ScatterAnimationManager.instance = new ScatterAnimationManager();
     }
     return ScatterAnimationManager.instance;
+  }
+
+  private setupWheelEventListeners(): void {
+    // Intentionally no-op.
   }
 
   public initialize(scene: Scene, symbolsContainer: Phaser.GameObjects.Container, spinnerContainer: Phaser.GameObjects.Container, spinnerComponent?: any, dialogsComponent?: any, _overlayComponent?: any, scatterWinOverlay?: any): void {
@@ -119,16 +124,22 @@ export class ScatterAnimationManager {
       let bonusTransitionListenersRegistered = false;
       let bonusModeActivated = false;
       let bonusTransitionFinished = false;
+      let bonusLogicStarted = false;
       const registerBonusTransitionListeners = () => {
         if (bonusTransitionListenersRegistered) return;
         bonusTransitionListenersRegistered = true;
         this.scene?.events?.once('activateBonusMode', () => {
           bonusModeActivated = true;
-          this.showFreeSpinsDialog();
         });
         this.scene?.events?.once('bonusTransitionComplete', () => {
           bonusTransitionFinished = true;
           try { this.resetAllSymbolsAndAnimations(); } catch {}
+          try {
+            if (!bonusLogicStarted) {
+              bonusLogicStarted = true;
+              this.showFreeSpinsDialog();
+            }
+          } catch {}
           try { this.scene?.events?.emit('dialogAnimationsComplete'); } catch {}
         });
       };
@@ -193,7 +204,7 @@ export class ScatterAnimationManager {
           await new Promise<void>((resolve) => {
             this.scatterWinOverlay.show(spinsToDisplay, async () => {
               console.log('[ScatterAnimationManager] FreeSpinOverlay shown');
-              // Hide base symbols while overlay is up
+              // Dim base symbols while overlay is up
 
               await this.disableSymbols();
               if (typeof this.scatterWinOverlay.waitUntilDismissed === 'function') {
@@ -203,52 +214,34 @@ export class ScatterAnimationManager {
               this.scatterWinOverlay.hide(300, () => {
                 console.log('[ScatterAnimationManager] FreeSpinOverlay hidden');
 
-                try { this.resetRegisteredScatterSymbolsToIdle(); } catch {}
-
                 // Bubble transition into bonus visuals
                 try {
                   const sceneAny: any = this.scene as any;
                   registerBonusTransitionListeners();
 
-                  sceneAny?.events?.emit?.('scatterTransitionStart');
-                  if (sceneAny?.scene && typeof sceneAny.scene.launch === 'function') {
-                    try {
-                      if (sceneAny.scene.isActive?.('BubbleOverlayTransition') || sceneAny.scene.isSleeping?.('BubbleOverlayTransition')) {
-                        sceneAny.scene.stop('BubbleOverlayTransition');
-                      }
-                    } catch {}
-                    try {
-                      if (sceneAny.scene.isActive?.('BubbleTransition') || sceneAny.scene.isSleeping?.('BubbleTransition')) {
-                        sceneAny.scene.stop('BubbleTransition');
-                      }
-                    } catch {}
+                  (async () => {
+                    try { await gameStateManager.waitForOverlaySafeState({ timeoutMs: 15000 }); } catch {}
+                    try { await gameStateManager.waitUntilOverlaysClosed(15000); } catch {}
                     console.log('[ScatterAnimationManager] Launching BubbleOverlayTransition for bonus entry');
                     sceneAny.scene.launch('BubbleOverlayTransition', {
                       fromSceneKey: 'Game',
                       toSceneKey: 'Game',
                       stopFromScene: false,
                       toSceneEvent: 'activateBonusMode',
-                      toSceneEventOnFinish: 'bonusTransitionComplete'
+                      toSceneEventOnFinish: 'bonusTransitionComplete',
+                      sceneSwitchProgress: 0.6
                     });
                     try { sceneAny.scene.bringToTop?.('BubbleOverlayTransition'); } catch {}
                     requestedBonusVisualActivation = true;
                     requestedBonusTransitionFinish = true;
-
                     try {
-                      sceneAny.time?.delayedCall?.(900, () => {
-                        if (!bonusModeActivated) {
-                          try { sceneAny?.events?.emit?.('activateBonusMode'); } catch {}
-                        }
-                      });
-                    } catch {}
-                    try {
-                      sceneAny.time?.delayedCall?.(1700, () => {
+                      sceneAny.time?.delayedCall?.(4800, () => {
                         if (!bonusTransitionFinished) {
                           try { sceneAny?.events?.emit?.('bonusTransitionComplete'); } catch {}
                         }
                       });
                     } catch {}
-                  }
+                  })();
                 } catch {}
 
                 // Fade reel background back in as we transition into bonus
@@ -295,15 +288,28 @@ export class ScatterAnimationManager {
 
     console.log('[ScatterAnimationManager] Disabling symbols...');
 
-    const isBuyFeatureSpin = !!gameStateManager.isBuyFeatureSpin;
-
-    // Immediately disable symbols by setting alpha to 0
-    this.symbolsContainer.setAlpha(1);
-
-    // Also hide scatter symbols that are added directly to the scene
-    if (!isBuyFeatureSpin) {
-      try { this.resetRegisteredScatterSymbolsToIdle(); } catch {}
+    // Keep symbols visible behind the FreeSpinOverlay; just dim them so the scene doesn't "blink".
+    try { this.scene?.tweens?.killTweensOf?.(this.symbolsContainer as any); } catch {}
+    try {
+      this.scene?.tweens?.add?.({
+        targets: this.symbolsContainer,
+        alpha: 0.6,
+        duration: 140,
+        ease: 'Cubic.easeOut'
+      });
+    } catch {
+      try { this.symbolsContainer.setAlpha(0.6); } catch {}
     }
+
+    // Ensure scatter symbols stop looping their win animation while overlay is displayed.
+    try { this.resetRegisteredScatterSymbolsToIdle(); } catch {}
+    try {
+      for (const s of this.scatterSymbols) {
+        if (!s || (s as any).destroyed) continue;
+        try { this.scene?.tweens?.killTweensOf?.(s as any); } catch {}
+        try { (s as any).setAlpha?.(0.6); } catch {}
+      }
+    } catch {}
 
     // Add a small delay to ensure the disable is visible
     await this.delay(50);
@@ -313,62 +319,46 @@ export class ScatterAnimationManager {
 
   private resetRegisteredScatterSymbolsToIdle(): void {
     if (!this.scene) return;
+    const spineKey = 'symbol_0_spine';
 
-    if (!Array.isArray(this.scatterSymbols) || this.scatterSymbols.length === 0) {
-      return;
-    }
-
-    const symbolValue = 0;
-    const spineKey = `symbol_${symbolValue}_spine`;
-    const symbolName = `Symbol${symbolValue}_TB`;
-    let idleAnimationName: string | null = null;
-
+    let idleAnim = 'Symbol0_TB_idle';
     try {
       const cachedJson: any = (this.scene.cache.json as any).get(spineKey);
       const anims = cachedJson?.animations ? Object.keys(cachedJson.animations) : [];
-      const preferred = [`${symbolName}_idle`, `${symbolName}_Idle`, 'idle', 'Idle'];
-      for (const cand of preferred) {
-        if (anims.includes(cand)) {
-          idleAnimationName = cand;
-          break;
+      if (Array.isArray(anims) && anims.length > 0) {
+        if (!anims.includes(idleAnim)) {
+          const hit = 'Symbol0_TB_hit';
+          if (anims.includes(hit)) idleAnim = hit;
+          else {
+            const anyIdle = anims.find((n: string) => String(n).toLowerCase().includes('symbol0') && String(n).endsWith('_idle'));
+            if (anyIdle) idleAnim = anyIdle;
+            else {
+              const anyHit = anims.find((n: string) => String(n).toLowerCase().includes('symbol0') && String(n).endsWith('_hit'));
+              if (anyHit) idleAnim = anyHit;
+              else idleAnim = anims[0];
+            }
+          }
         }
-      }
-      if (!idleAnimationName) {
-        const found = anims.find((a: string) => /idle/i.test(a));
-        if (found) idleAnimationName = found;
-      }
-      if (!idleAnimationName && anims.length > 0) {
-        idleAnimationName = anims[0];
       }
     } catch {}
 
-    const symbolsAny: any = (this.scene as any)?.symbols;
-    const cellW = Number(symbolsAny?.displayWidth) || 0;
-    const cellH = Number(symbolsAny?.displayHeight) || 0;
-    const baseScale = (typeof symbolsAny?.getIdleSpineSymbolScale === 'function')
-      ? Number(symbolsAny.getIdleSpineSymbolScale(symbolValue)) || 0.6
-      : 0.6;
-    const idleNudge = (typeof symbolsAny?.getIdleSymbolNudge === 'function')
-      ? symbolsAny.getIdleSymbolNudge(symbolValue)
-      : undefined;
-
     for (const symbol of this.scatterSymbols) {
-      if (!symbol || symbol.destroyed) continue;
+      if (!symbol || (symbol as any).destroyed) continue;
       try { this.scene.tweens.killTweensOf(symbol); } catch {}
-      try { symbol.setVisible?.(true); } catch {}
-      try { symbol.setAlpha?.(1); } catch {}
-      try { symbol.setDepth?.(990); } catch {}
 
-      if (idleAnimationName && symbol?.animationState?.setAnimation) {
-        try { symbol.animationState.setAnimation(0, idleAnimationName, true); } catch {}
-      }
+      try {
+        const bx = Number((symbol as any).__scatterBaseScaleX);
+        const by = Number((symbol as any).__scatterBaseScaleY);
+        if (isFinite(bx) && bx > 0 && isFinite(by) && by > 0) {
+          try { symbol.setScale?.(bx, by); } catch {}
+        }
+      } catch {}
 
-      if (cellW > 0 && cellH > 0 && typeof symbolsAny?.centerAndFitSpine === 'function') {
-        const home = (symbol as any).__pngHome;
-        const cx = (home && typeof home.x === 'number') ? home.x : symbol.x;
-        const cy = (home && typeof home.y === 'number') ? home.y : symbol.y;
-        try { symbolsAny.centerAndFitSpine(symbol, cx, cy, cellW, cellH, baseScale, idleNudge); } catch {}
-      }
+      try {
+        if ((symbol as any).animationState && typeof (symbol as any).animationState.setAnimation === 'function') {
+          (symbol as any).animationState.setAnimation(0, idleAnim, true);
+        }
+      } catch {}
     }
   }
 
@@ -612,6 +602,7 @@ export class ScatterAnimationManager {
       } catch {}
     }
   }
+
   public isAnimationInProgress(): boolean {
     return this.isAnimating;
   }
@@ -683,12 +674,15 @@ export class ScatterAnimationManager {
   }
 
   private resetAllSymbolsAndAnimations(): void {
-    // Stop any active background music to let overlays/scenes manage BGM exclusively
+    // Stop any active background music only when we're not in active bonus mode.
+    // During bonus/free spins, the Game scene manages bonus music and stopping it here causes abrupt cut-offs.
     try {
-      const audioMgr = (window as any).audioManager;
-      if (audioMgr && typeof audioMgr.stopCurrentMusic === 'function') {
-        audioMgr.stopCurrentMusic();
-        console.log('[ScatterAnimationManager] Stopped current background music to defer control to overlay');
+      if (!this.isInActiveBonusMode()) {
+        const audioMgr = (window as any).audioManager;
+        if (audioMgr && typeof audioMgr.stopCurrentMusic === 'function') {
+          audioMgr.stopCurrentMusic();
+          console.log('[ScatterAnimationManager] Stopped current background music to defer control to overlay');
+        }
       }
     } catch {}
 
@@ -714,6 +708,12 @@ export class ScatterAnimationManager {
     } catch {}
 
     // Re-enable scatter symbols
+    try {
+      for (const s of this.scatterSymbols) {
+        if (!s || (s as any).destroyed) continue;
+        try { (s as any).setAlpha?.(1); } catch {}
+      }
+    } catch {}
     try { this.showScatterSymbols(); } catch {}
 
     // Hide spinner container and kill its tweens

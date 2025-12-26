@@ -16,6 +16,7 @@ export class BubbleTransitionScene extends Scene {
 	private transitionData?: BubbleTransitionData;
 	private hasStartedGame: boolean = false;
 	private hasFinished: boolean = false;
+	private hasPlayedTransitionSfx: boolean = false;
 	private transitionSpine?: any;
 	private overlayRect?: Phaser.GameObjects.Rectangle;
 	private gameCamera?: Phaser.Cameras.Scene2D.Camera;
@@ -29,10 +30,12 @@ export class BubbleTransitionScene extends Scene {
 
 	init(data: BubbleTransitionData): void {
 		this.transitionData = data;
+		try { this.hasPlayedTransitionSfx = false; } catch {}
 	}
 
 	create(): void {
 		console.log('[BubbleTransitionScene] create');
+		try { this.hasPlayedTransitionSfx = false; } catch {}
 		this.cameras.main.setBackgroundColor(0x050d18);
 		try {
 			// Make camera background fully transparent so we can see scenes underneath
@@ -84,7 +87,21 @@ export class BubbleTransitionScene extends Scene {
 		try { this.scene.stop(); } catch {}
 	}
 
+	private playTransitionSfxOnce(): void {
+		if (this.hasPlayedTransitionSfx) return;
+		this.hasPlayedTransitionSfx = true;
+		try {
+			const audio = (this as any)?.audioManager ?? ((window as any)?.audioManager ?? null);
+			if (audio && typeof audio.playSoundEffect === 'function') {
+				audio.playSoundEffect('bubble_transition_TB');
+				return;
+			}
+		} catch {}
+		try { this.sound.play('bubble_transition_TB'); } catch {}
+	}
+
 	private playBubbleAnimation(): void {
+		this.playTransitionSfxOnce();
 		const hasFactory = ensureSpineFactory(this as any, '[BubbleTransitionScene] playBubbleAnimation');
 		if (!hasFactory) {
 			const targets: any[] = [];

@@ -37,6 +37,7 @@ export class TokenExpiredPopup extends GameObjects.Container {
             Phaser.Geom.Rectangle.Contains
         );
         this.overlay.visible = false;
+        try { this.overlay.disableInteractive(); } catch {}
         
         // Add overlay to scene (but not to this container yet)
         scene.add.existing(this.overlay);
@@ -146,6 +147,17 @@ export class TokenExpiredPopup extends GameObjects.Container {
         // Show overlay first
         this.overlay.setVisible(true);
         this.overlay.setDepth(9999); // Just below the popup
+        try {
+            const anyOverlay: any = this.overlay as any;
+            if (anyOverlay?.input) {
+                anyOverlay.input.enabled = true;
+            } else {
+                this.overlay.setInteractive(
+                    new Phaser.Geom.Rectangle(0, 0, this.scene.scale.width, this.scene.scale.height),
+                    Phaser.Geom.Rectangle.Contains
+                );
+            }
+        } catch {}
         
         // Set initial state for animation
         this.setVisible(true);
@@ -185,6 +197,7 @@ export class TokenExpiredPopup extends GameObjects.Container {
             onComplete: () => {
                 this.setVisible(false);
                 this.overlay.setVisible(false);
+                try { this.overlay.disableInteractive(); } catch {}
                 if (callback) callback();
             }
         });
@@ -200,7 +213,7 @@ export class TokenExpiredPopup extends GameObjects.Container {
      */
     public setBackgroundOpacity(opacity: number): void {
         this.backgroundAlpha = Phaser.Math.Clamp(opacity, 0, 1);
-        this.background.setFillStyle(this.backgroundColor, this.backgroundAlpha);
+        this.drawBackground();
     }
     
     /**

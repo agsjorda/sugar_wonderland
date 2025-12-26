@@ -23,6 +23,8 @@ export class GameStateManager {
   private _isHookScatterActive: boolean = false;
   private _isBuyFeatureSpin: boolean = false;
 	private _criticalSequenceLockCount: number = 0;
+  private _overlayLockCount: number = 0;
+  private _overlayWaiters: Array<() => void> = [];
 
   private constructor() {
     this.initializeEventListeners();
@@ -89,12 +91,13 @@ export class GameStateManager {
   public get isTurbo(): boolean { return this._isTurbo; }
   public get isAutoPlaySpinRequested(): boolean { return this._isAutoPlaySpinRequested; }
   public get isShowingWinlines(): boolean { return this._isShowingWinlines; }
-  public get isShowingWinDialog(): boolean { return this._isShowingWinDialog; }
+  public get isShowingWinDialog(): boolean { return this._isShowingWinDialog || this.isOverlayLocked; }
   public get scatterIndex(): number { return this._scatterIndex; }
   public get isBonusFinished(): boolean { return this._isBonusFinished; }
   public get isHookScatterActive(): boolean { return this._isHookScatterActive; }
   public get isBuyFeatureSpin(): boolean { return this._isBuyFeatureSpin; }
 	public get isCriticalSequenceLocked(): boolean { return (Number(this._criticalSequenceLockCount) || 0) > 0; }
+	public get isOverlayLocked(): boolean { return (Number(this._overlayLockCount) || 0) > 0; }
 
 	public acquireCriticalSequenceLock(): void {
 		this._criticalSequenceLockCount = (Number(this._criticalSequenceLockCount) || 0) + 1;
@@ -103,6 +106,115 @@ export class GameStateManager {
 	public releaseCriticalSequenceLock(): void {
 		const next = (Number(this._criticalSequenceLockCount) || 0) - 1;
 		this._criticalSequenceLockCount = next > 0 ? next : 0;
+	}
+
+	public acquireOverlayLock(): void {
+		this._overlayLockCount = (Number(this._overlayLockCount) || 0) + 1;
+	}
+
+	public releaseOverlayLock(): void {
+		const next = (Number(this._overlayLockCount) || 0) - 1;
+		this._overlayLockCount = next > 0 ? next : 0;
+		if (this._overlayLockCount === 0 && this._overlayWaiters.length > 0) {
+			const waiters = this._overlayWaiters.slice();
+			this._overlayWaiters = [];
+			for (const w of waiters) {
+				try { w(); } catch {}
+			}
+		}
+	}
+
+	public waitUntilOverlaysClosed(timeoutMs: number = 8000): Promise<void> {
+		if (!this.isOverlayLocked) {
+			return Promise.resolve();
+		}
+		const t = Number(timeoutMs);
+		const safeTimeout = isFinite(t) && t > 0 ? t : 0;
+		return new Promise<void>((resolve) => {
+			let done = false;
+			const finish = () => {
+				if (done) return;
+				done = true;
+				try {
+					this._overlayWaiters = this._overlayWaiters.filter((x) => x !== finish);
+				} catch {}
+				resolve();
+			};
+			try {
+				this._overlayWaiters.push(finish);
+			} catch {
+				finish();
+				return;
+			}
+			if (safeTimeout > 0) {
+				try { setTimeout(() => finish(), safeTimeout); } catch {}
+			}
+		});
+	}
+
+	public async waitForOverlaySafeState(opts?: { timeoutMs?: number; pollIntervalMs?: number }): Promise<void> {
+		const t = Number(opts?.timeoutMs);
+		const timeoutMs = isFinite(t) && t > 0 ? t : 6000;
+		const p = Number(opts?.pollIntervalMs);
+		const pollIntervalMs = isFinite(p) && p > 0 ? Math.max(10, p) : 50;
+		const start = Date.now();
+
+		try {
+			if (this.isReelSpinning) {
+				await this.waitForReelsStop(Math.max(0, timeoutMs - (Date.now() - start)));
+			}
+		} catch {}
+
+		try {
+			if (this.isCriticalSequenceLocked) {
+				await this.waitForCriticalSequenceUnlock(start, timeoutMs, pollIntervalMs);
+			}
+		} catch {}
+	}
+
+	private waitForReelsStop(timeoutMs: number): Promise<void> {
+		if (!this.isReelSpinning) {
+			return Promise.resolve();
+		}
+		const t = Number(timeoutMs);
+		const safeTimeout = isFinite(t) && t > 0 ? t : 0;
+		return new Promise<void>((resolve) => {
+			let done = false;
+			const finish = () => {
+				if (done) return;
+				done = true;
+				try { gameEventManager.off(GameEventType.REELS_STOP, onStop as any); } catch {}
+				resolve();
+			};
+			const onStop = () => finish();
+			try { gameEventManager.on(GameEventType.REELS_STOP, onStop as any); } catch {}
+			if (safeTimeout > 0) {
+				try { setTimeout(() => finish(), safeTimeout); } catch {}
+			}
+		});
+	}
+
+	private waitForCriticalSequenceUnlock(startMs: number, timeoutMs: number, pollIntervalMs: number): Promise<void> {
+		return new Promise<void>((resolve) => {
+			let done = false;
+			const finish = () => {
+				if (done) return;
+				done = true;
+				resolve();
+			};
+			const check = () => {
+				if (!this.isCriticalSequenceLocked) {
+					finish();
+					return;
+				}
+				if (Date.now() - startMs >= timeoutMs) {
+					finish();
+					return;
+				}
+				try { setTimeout(() => check(), pollIntervalMs); } catch { finish(); }
+			};
+			check();
+		});
 	}
 
   // Setters for state properties (with event emission where appropriate)
@@ -121,6 +233,9 @@ export class GameStateManager {
   }
 
   public set isReelSpinning(value: boolean) {
+    if (this._isReelSpinning === value) {
+      return;
+    }
     this._isReelSpinning = value;
     // Emit reel state events - these are safe because they're state changes, not circular
     if (value) {
@@ -223,6 +338,9 @@ export class GameStateManager {
     this._scatterIndex = 0;
     this._isBonusFinished = false;
     this._isBuyFeatureSpin = false;
+		this._criticalSequenceLockCount = 0;
+		this._overlayLockCount = 0;
+		this._overlayWaiters = [];
   }
 
   /**

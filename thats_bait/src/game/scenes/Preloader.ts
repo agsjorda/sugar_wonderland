@@ -10,6 +10,7 @@ import { FullScreenManager } from '../../managers/FullScreenManager';
 import { StudioLoadingScreen, queueGameAssetLoading } from '../components/StudioLoadingScreen';
 import { ClockDisplay } from '../components/ClockDisplay';
 import { WaterWavePipeline } from '../pipelines/WaterWavePipeline';
+import { AudioManager, MusicType } from '../../managers/AudioManager';
 
 export class Preloader extends Scene
 {
@@ -85,7 +86,7 @@ export class Preloader extends Scene
 		// Create persistent clock display (stays on screen forever)
 		const clockY = this.scale.height * 0.009; // 2% from top
 		this.clockDisplay = new ClockDisplay(this, {
-			offsetX: -120,
+			offsetX: -150,
 			offsetY: clockY,
 			fontSize: 16,
 			color: '#FFFFFF',
@@ -409,6 +410,19 @@ export class Preloader extends Scene
 					try { sm.context?.resume?.(); } catch {}
 					try { sm.webaudio?.context?.resume?.(); } catch {}
 					try { (this.game as any)?.sound?.context?.resume?.(); } catch {}
+					try {
+						const existing = (window as any)?.audioManager as AudioManager | undefined;
+						if (existing && typeof (existing as any).setScene === 'function') {
+							(existing as any).setScene(this);
+							try { (existing as any).createMusicInstances?.(); } catch {}
+							try { (existing as any).playBackgroundMusic?.(MusicType.MAIN); } catch {}
+						} else {
+							const am = new AudioManager(this as any);
+							(window as any).audioManager = am;
+							try { (am as any).createMusicInstances?.(); } catch {}
+							try { (am as any).playBackgroundMusic?.(MusicType.MAIN); } catch {}
+						}
+					} catch {}
 				} catch {}
 				// Clear any ongoing tweens on press
 				this.tweens.killTweensOf(spin);

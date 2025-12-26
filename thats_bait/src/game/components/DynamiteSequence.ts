@@ -1,4 +1,10 @@
 import { gameStateManager } from '../../managers/GameStateManager';
+import { SoundEffectType } from '../../managers/AudioManager';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
+
+const WATER_BOMB_VFX_SCALE_MULTIPLIER = 2.2;
+const WATER_BOMB_VFX_SHAKE_DURATION_MS = 90;
+const WATER_BOMB_VFX_SHAKE_INTENSITY = 0.004;
 
 function waitMs(scene: any, ms: number): Promise<void> {
 	return new Promise((resolve) => {
@@ -28,6 +34,62 @@ function tween(scene: any, targets: any, config: any): Promise<void> {
 			resolve();
 		}
 	});
+}
+
+export async function playMissileStrike(scene: any, targetX: number, targetY: number, depth: number = 20015, targetW?: number, targetH?: number): Promise<void> {
+	let missile: any = null;
+	try {
+		if (!scene?.textures?.exists?.('symbol_1')) return;
+		const sw = Number(scene?.scale?.width ?? 0);
+		const sh = Number(scene?.scale?.height ?? 0);
+		const safeW = (isFinite(sw) && sw > 0) ? sw : (Number(targetX) + 800);
+		const safeH = (isFinite(sh) && sh > 0) ? sh : 800;
+		const startX = safeW + 120;
+		let startY = Number(targetY) - safeH * 0.35;
+		if (!isFinite(startY)) startY = -120;
+		startY = Math.min(startY, Number(targetY) - 80);
+		startY = Math.max(-160, startY);
+
+		try {
+			missile = scene.add.image(startX, startY, 'symbol_1').setOrigin(0.5, 0.5);
+		} catch {
+			missile = null;
+		}
+		if (!missile) return;
+		try { missile.setDepth?.(depth); } catch {}
+		try { missile.setScrollFactor?.(0); } catch {}
+		try { missile.setFlipX?.(true); } catch {}
+
+		try {
+			const baseW = Number(missile.width ?? 1) || 1;
+			const baseH = Number(missile.height ?? 1) || 1;
+			let fit = 1;
+			const tw = Number(targetW ?? 0);
+			const th = Number(targetH ?? 0);
+			if (isFinite(tw) && isFinite(th) && tw > 0 && th > 0) {
+				fit = Math.max(0.01, Math.min(tw / baseW, th / baseH));
+			}
+			const scale = fit * 0.75;
+			try { missile.setScale?.(scale); } catch {}
+		} catch {}
+
+		let durationMs = 260;
+		try {
+			const speed = gameStateManager.isTurbo ? 0.65 : 1.0;
+			durationMs = Math.max(120, Math.floor(durationMs * speed));
+		} catch {}
+
+		try {
+			await tween(scene, missile, {
+				x: Number(targetX),
+				y: Number(targetY),
+				duration: durationMs,
+				ease: 'Cubic.easeIn'
+			});
+		} catch {}
+	} finally {
+		try { missile?.destroy?.(); } catch {}
+	}
 }
 
 function getActiveCharacterSpine(scene: any): any {
@@ -147,6 +209,20 @@ async function playCharacterBonusAndWait(scene: any): Promise<void> {
 					gateMs = 420;
 				}
 				scene?.time?.delayedCall?.(Math.max(0, gateMs), () => {
+					try {
+						const sc: any = scene as any;
+						if (!sc.__dynamiteCharacterBonusExplosionSfxPlayed) {
+							sc.__dynamiteCharacterBonusExplosionSfxPlayed = true;
+							try {
+								const audio: any = (scene as any)?.audioManager ?? (window as any)?.audioManager;
+								if (audio && typeof audio.playSoundEffect === 'function') {
+									audio.playSoundEffect(SoundEffectType.EXPLOSION);
+								} else {
+									try { scene?.sound?.play?.(String(SoundEffectType.EXPLOSION)); } catch {}
+								}
+							} catch {}
+						}
+					} catch {}
 					try { (scene as any)?.__dynamiteCharacterBonusGateResolve?.(); } catch {}
 				});
 			} catch {}
@@ -209,6 +285,7 @@ async function playCharacterBonusAndWait(scene: any): Promise<void> {
 			delete sc.__dynamiteCharacterBonusGateResolve;
 			delete sc.__dynamiteCharacterBonusGatePromise;
 			delete sc.__dynamiteCharacterBonusGateRatio;
+			delete sc.__dynamiteCharacterBonusExplosionSfxPlayed;
 		} catch {}
 	}
 }
@@ -229,6 +306,18 @@ async function waitForCharacterBonusGate(scene: any, ratio: number = 0.6): Promi
 	} catch {}
 	// Fallback if gate isn't available
 	try { await waitMs(scene, 420); } catch {}
+}
+
+export async function waitForCharacterBonusComplete(scene: any, timeoutMs: number = 6000): Promise<void> {
+	try {
+		const sc: any = scene as any;
+		const p: any = sc?.__dynamiteCharacterBonusPromise;
+		if (!p || typeof p.then !== 'function') return;
+		await Promise.race([
+			Promise.resolve(p),
+			waitMs(scene, Math.max(0, (Number(timeoutMs) || 0) | 0))
+		]);
+	} catch {}
 }
 
 export function triggerCharacterBonusOnce(scene: any): void {
@@ -332,53 +421,97 @@ export async function playDynamiteOverlay(scene: any, x: number, y: number, dept
 }
 
 export async function playBoom(scene: any, x: number, y: number, depth: number = 20014, targetW?: number, targetH?: number): Promise<void> {
-	let boom: any = null;
+	let vfx: any = null;
 	try { (gameStateManager as any).acquireCriticalSequenceLock?.(); } catch {}
 	try {
 		try {
-			if (!scene?.textures?.exists?.('boom')) return;
-			boom = scene.add.image(x, y, 'boom').setOrigin(0.5, 0.5);
-			try { boom.setDepth(depth); } catch {}
-			try { boom.setScrollFactor(0); } catch {}
-			try { boom.setAlpha(1); } catch {}
-			try {
-				const baseW = (boom.width ?? 1) as number;
-				const baseH = (boom.height ?? 1) as number;
-				let fit = 1;
-				try {
-					const tw = Number(targetW ?? 0);
-					const th = Number(targetH ?? 0);
-					if (isFinite(tw) && isFinite(th) && tw > 0 && th > 0 && baseW > 0 && baseH > 0) {
-						fit = Math.max(0.01, Math.min(tw / baseW, th / baseH));
-					}
-				} catch {}
-				boom.__boomFitScale = fit;
-				boom.setScale(fit * 0.25);
-			} catch {
-				try { boom.setScale(0.25); } catch {}
+			const speed = gameStateManager.isTurbo ? 0.8 : 1.0;
+			scene?.cameras?.main?.shake?.(
+				Math.max(30, Math.floor(WATER_BOMB_VFX_SHAKE_DURATION_MS * speed)),
+				WATER_BOMB_VFX_SHAKE_INTENSITY
+			);
+		} catch {}
+		try {
+			const audio: any = (scene as any)?.audioManager ?? (window as any)?.audioManager;
+			if (audio && typeof audio.playSoundEffect === 'function') {
+				audio.playSoundEffect(SoundEffectType.EXPLOSION);
+			} else {
+				try { scene?.sound?.play?.(String(SoundEffectType.EXPLOSION)); } catch {}
 			}
+		} catch {}
+
+		let canCreateSpine = false;
+		try {
+			canCreateSpine = ensureSpineFactory(scene as any, '[DynamiteSequence] playBoom')
+				&& !!(scene?.cache?.json as any)?.has?.('Water_Bomb_VFX');
 		} catch {
-			boom = null;
+			canCreateSpine = false;
 		}
-		if (!boom) return;
+		if (!canCreateSpine) return;
 
 		try {
-			try { scene?.cameras?.main?.shake?.(70, 0.002); } catch {}
-			const speed = gameStateManager.isTurbo ? 0.65 : 1.0;
+			vfx = (scene.add as any).spine(x, y, 'Water_Bomb_VFX', 'Water_Bomb_VFX-atlas');
+		} catch {
+			vfx = null;
+		}
+		if (!vfx) return;
+		try { vfx.setOrigin?.(0.5, 0.5); } catch {}
+		try { vfx.setDepth?.(depth); } catch {}
+		try { vfx.setScrollFactor?.(0); } catch {}
+		try { vfx.setAlpha?.(1); } catch {}
+
+		try {
 			let fit = 1;
-			try {
-				const f = Number((boom as any).__boomFitScale ?? 1);
-				if (isFinite(f) && f > 0) fit = f;
-			} catch {}
-			await tween(scene, boom, {
-				scaleX: fit * 1.25,
-				scaleY: fit * 1.25,
-				alpha: 0,
-				duration: Math.max(140, Math.floor(280 * speed)),
-				ease: 'Sine.easeOut',
-			});
+			const baseW = 158;
+			const baseH = 158;
+			const tw = Number(targetW ?? 0);
+			const th = Number(targetH ?? 0);
+			if (isFinite(tw) && isFinite(th) && tw > 0 && th > 0 && baseW > 0 && baseH > 0) {
+				fit = Math.max(0.01, Math.min(tw / baseW, th / baseH));
+			}
+			try { vfx.setScale?.(fit * WATER_BOMB_VFX_SCALE_MULTIPLIER); } catch {}
 		} catch {}
-		try { boom.destroy?.(); } catch {}
+
+		let durationMs = 1000;
+		try {
+			const data: any = vfx?.skeleton?.data;
+			const anim: any = data?.findAnimation?.('Water_Bomb_VFX');
+			const sec = Number(anim?.duration);
+			if (isFinite(sec) && sec > 0) durationMs = Math.floor(sec * 1000);
+		} catch {}
+		try {
+			const speed = gameStateManager.isTurbo ? 0.65 : 1.0;
+			durationMs = Math.max(180, Math.floor(durationMs * speed));
+		} catch {}
+
+		try {
+			const state: any = vfx?.animationState;
+			state?.setAnimation?.(0, 'Water_Bomb_VFX', false);
+		} catch {}
+
+		await new Promise<void>((resolve) => {
+			let done = false;
+			const finish = () => {
+				if (done) return;
+				done = true;
+				resolve();
+			};
+			try {
+				const state: any = vfx?.animationState;
+				if (state && typeof state.addListener === 'function') {
+					const listener = {
+						complete: () => {
+							try { state.removeListener?.(listener); } catch {}
+							finish();
+						}
+					};
+					state.addListener(listener);
+				}
+			} catch {}
+			try { scene?.time?.delayedCall?.(Math.max(120, durationMs), () => finish()); } catch { finish(); }
+		});
+
+		try { vfx.destroy?.(); } catch {}
 	} finally {
 		try { (gameStateManager as any).releaseCriticalSequenceLock?.(); } catch {}
 	}
