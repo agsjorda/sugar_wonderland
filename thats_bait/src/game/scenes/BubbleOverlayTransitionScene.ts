@@ -11,6 +11,12 @@ interface BubbleTransitionData {
 	toSceneEventData?: any;
 	toSceneEventOnFinish?: string;
 	toSceneEventOnFinishData?: any;
+	disableHookIntro?: boolean;
+	hookFishScaleModifier?: number;
+	hookStringScaleXModifier?: number;
+	hookStringScaleYModifier?: number;
+	hookFishOffsetX?: number;
+	hookFishOffsetY?: number;
 	overlayAlpha?: number;
 	overlayFadeInDurationMs?: number;
 	overlayFadeInDelayMs?: number;
@@ -23,6 +29,9 @@ export class BubbleOverlayTransitionScene extends Scene {
 	private overlayRect?: Phaser.GameObjects.Rectangle;
 	private transitionSpine?: any;
 	private bubbles: Phaser.GameObjects.Arc[] = [];
+	private hookContainer?: Phaser.GameObjects.Container;
+	private hookString?: Phaser.GameObjects.Image;
+	private hookFish?: Phaser.GameObjects.Image;
 	private hasStarted: boolean = false;
 	private hasFinished: boolean = false;
 	private hasPlayedTransitionSfx: boolean = false;
@@ -63,6 +72,10 @@ export class BubbleOverlayTransitionScene extends Scene {
 				try { (this.overlayRect as any)?.disableInteractive?.(); } catch {}
 				try { this.overlayRect?.destroy(); } catch {}
 				try { this.transitionSpine?.destroy(); } catch {}
+				try { this.hookContainer?.destroy(true); } catch {}
+				try { this.hookContainer = undefined; } catch {}
+				try { this.hookString = undefined; } catch {}
+				try { this.hookFish = undefined; } catch {}
 				for (const b of this.bubbles) {
 					try { b.destroy(); } catch {}
 				}
@@ -72,7 +85,14 @@ export class BubbleOverlayTransitionScene extends Scene {
 
 		try { this.hardStopTimer?.destroy(); } catch {}
 		try {
-			this.hardStopTimer = this.time.delayedCall(4500, () => {
+			let extraMs = 0;
+			try {
+				const shouldPlayHookIntro = !this.transitionData?.disableHookIntro && this.transitionData?.toSceneEvent === 'activateBonusMode';
+				if (shouldPlayHookIntro && this.textures?.exists('transition-string') && this.textures?.exists('transition-fish')) {
+					extraMs = 1300;
+				}
+			} catch {}
+			this.hardStopTimer = this.time.delayedCall(4500 + extraMs, () => {
 				if (this.hasFinished) return;
 				console.warn('[BubbleOverlayTransitionScene] Hard stop fallback triggered');
 				try { this.hasFinished = true; } catch {}
@@ -101,8 +121,132 @@ export class BubbleOverlayTransitionScene extends Scene {
 				}
 			});
 		} catch {}
+		this.playHookIntro();
+	}
 
-		this.playBubbleAnimation();
+	private playHookIntro(): void {
+		const shouldPlayHookIntro = !this.transitionData?.disableHookIntro && this.transitionData?.toSceneEvent === 'activateBonusMode';
+		if (!shouldPlayHookIntro) {
+			this.playBubbleAnimation();
+			return;
+		}
+
+		let hasAssets = false;
+		try {
+			hasAssets = !!this.textures?.exists('transition-string') && !!this.textures?.exists('transition-fish');
+		} catch {
+			hasAssets = false;
+		}
+		if (!hasAssets) {
+			this.playBubbleAnimation();
+			return;
+		}
+
+		const cx = this.scale.width * 0.5;
+		const desiredStringH = this.scale.height * 1.15;
+		const downDurationMs = 850;
+		const upDurationMs = 1050;
+
+		let stringImg: Phaser.GameObjects.Image | undefined;
+		try {
+			stringImg = this.add.image(0, 0, 'transition-string');
+			stringImg.setOrigin(0.5, 0);
+		} catch {
+			try { stringImg?.destroy(); } catch {}
+			return;
+		}
+
+		try {
+			const s = desiredStringH / Math.max(1, stringImg.height);
+			const rawX = Number(this.transitionData?.hookStringScaleXModifier);
+			const rawY = Number(this.transitionData?.hookStringScaleYModifier);
+			const modX = (isFinite(rawX) && rawX > 0) ? rawX : 1;
+			const modY = (isFinite(rawY) && rawY > 0) ? rawY : 5;
+			stringImg.setScale(s * modX, s * modY);
+		} catch {}
+		try { stringImg.setDepth(999905); } catch {}
+
+		const hookLocalY = Math.max(0, stringImg.displayHeight - 80);
+
+		let cont: Phaser.GameObjects.Container | undefined;
+		try {
+			cont = this.add.container(cx, -stringImg.displayHeight);
+			cont.add([stringImg]);
+			cont.setDepth(999904);
+		} catch {
+			try { stringImg?.destroy(); } catch {}
+			try { cont?.destroy(); } catch {}
+			return;
+		}
+
+		this.hookContainer = cont;
+		this.hookString = stringImg;
+		this.hookFish = undefined;
+
+		try {
+			let fishImg: Phaser.GameObjects.Image | undefined;
+			try {
+				const rawScaleMod = Number(this.transitionData?.hookFishScaleModifier);
+				const fishScaleMod = (isFinite(rawScaleMod) && rawScaleMod > 0) ? rawScaleMod : 1;
+				const rawOffX = Number(this.transitionData?.hookFishOffsetX);
+				const rawOffY = Number(this.transitionData?.hookFishOffsetY);
+				const fishOffX = isFinite(rawOffX) ? rawOffX : 0;
+				const fishOffY = isFinite(rawOffY) ? rawOffY : 0;
+				if (fishOffX !== 0 || fishOffY !== 0) {
+					console.log('[BubbleOverlayTransitionScene] hook fish offsets', { x: fishOffX, y: fishOffY });
+				}
+				fishImg = this.add.image(0, 0, 'transition-fish');
+				fishImg.setOrigin(0.5, 0.5);
+				const maxW = this.scale.width * 0.22;
+				const s = maxW / Math.max(1, fishImg.width);
+				fishImg.setScale(Math.min(s, 1) * fishScaleMod);
+				fishImg.setDepth(999906);
+				try { fishImg.setVisible(false); } catch {}
+				try { fishImg.setAlpha(0); } catch {}
+				cont.add(fishImg);
+				try { fishImg.setPosition(fishOffX, hookLocalY + fishOffY); } catch {}
+				this.hookFish = fishImg;
+			} catch {
+				try { fishImg?.destroy(); } catch {}
+			}
+		} catch {}
+
+		try {
+			const exitBottomY = this.scale.height + 40;
+			this.tweens.add({
+				targets: cont,
+				y: exitBottomY,
+				duration: downDurationMs,
+				ease: 'Sine.easeIn',
+					onComplete: () => {
+					try {
+						if (this.hookFish) {
+							this.hookFish.setVisible(true);
+							this.hookFish.setAlpha(1);
+						}
+					} catch {}
+					this.playBubbleAnimation();
+					try {
+						const exitTopMargin = 120;
+						let maxLocalBottom = stringImg!.displayHeight;
+						try {
+							const fish = this.hookFish;
+							if (fish) {
+								const fishLocalBottom = fish.y + (fish.displayHeight * (1 - fish.originY));
+								maxLocalBottom = Math.max(maxLocalBottom, fishLocalBottom);
+							}
+						} catch {}
+						const exitTopY = -maxLocalBottom - exitTopMargin;
+						this.tweens.add({
+							targets: cont,
+							y: exitTopY,
+							duration: upDurationMs,
+							ease: 'Sine.easeOut'
+						});
+					} catch {}
+				}
+			});
+		} catch {}
 	}
 
 	private playTransitionSfxOnce(): void {
@@ -437,6 +581,9 @@ export class BubbleOverlayTransitionScene extends Scene {
 		const targets: any[] = [];
 		if (this.transitionSpine) targets.push(this.transitionSpine);
 		if (this.overlayRect) targets.push(this.overlayRect);
+		if (this.hookContainer) targets.push(this.hookContainer);
+		if (this.hookString) targets.push(this.hookString);
+		if (this.hookFish) targets.push(this.hookFish);
 		for (const b of this.bubbles) targets.push(b);
 
 		if (targets.length === 0) {

@@ -35,7 +35,7 @@ export class ScatterAnimationManager {
   private config: ScatterAnimationConfig = {
     scatterRevealDelay: 500,
     slideInDuration: 1200,
-    spinDelay: 500,
+    spinDelay: 200,
     slideDistance: 200,
     dialogDelay: 300
   };
@@ -211,46 +211,81 @@ export class ScatterAnimationManager {
                 await this.scatterWinOverlay.waitUntilDismissed();
                 console.log('[ScatterAnimationManager] FreeSpinOverlay dismissed by user');
               }
-              this.scatterWinOverlay.hide(300, () => {
-                console.log('[ScatterAnimationManager] FreeSpinOverlay hidden');
 
-                // Bubble transition into bonus visuals
-                try {
-                  const sceneAny: any = this.scene as any;
-                  registerBonusTransitionListeners();
+              try {
+                const sceneAny: any = this.scene as any;
+                registerBonusTransitionListeners();
 
-                  (async () => {
-                    try { await gameStateManager.waitForOverlaySafeState({ timeoutMs: 15000 }); } catch {}
-                    try { await gameStateManager.waitUntilOverlaysClosed(15000); } catch {}
-                    console.log('[ScatterAnimationManager] Launching BubbleOverlayTransition for bonus entry');
+                requestedBonusVisualActivation = true;
+                requestedBonusTransitionFinish = true;
+
+                (async () => {
+                  try { await gameStateManager.waitForOverlaySafeState({ timeoutMs: 15000 }); } catch {}
+                  try { await gameStateManager.waitUntilOverlaysClosed(15000); } catch {}
+                  console.log('[ScatterAnimationManager] Launching BubbleOverlayTransition for bonus entry');
+                  try {
+                    if (sceneAny.scene.isActive?.('BubbleOverlayTransition') || sceneAny.scene.isSleeping?.('BubbleOverlayTransition')) {
+                      try { sceneAny.scene.stop('BubbleOverlayTransition'); } catch {}
+                    }
+                  } catch {}
+                  try {
                     sceneAny.scene.launch('BubbleOverlayTransition', {
                       fromSceneKey: 'Game',
                       toSceneKey: 'Game',
                       stopFromScene: false,
+                      hookFishScaleModifier: 6,
+                      hookFishOffsetX: 0,
+                      hookFishOffsetY: 40,
                       toSceneEvent: 'activateBonusMode',
                       toSceneEventOnFinish: 'bonusTransitionComplete',
-                      sceneSwitchProgress: 0.6
+                      overlayAlpha: 1,
+                      overlayFadeInDurationMs: 520,
+                      overlayFadeInDelayMs: 30,
+                      spineFadeInDurationMs: 620
                     });
                     try { sceneAny.scene.bringToTop?.('BubbleOverlayTransition'); } catch {}
-                    requestedBonusVisualActivation = true;
-                    requestedBonusTransitionFinish = true;
                     try {
-                      sceneAny.time?.delayedCall?.(4800, () => {
+                      sceneAny.time?.delayedCall?.(3000, () => {
                         if (!bonusTransitionFinished) {
                           try { sceneAny?.events?.emit?.('bonusTransitionComplete'); } catch {}
                         }
                       });
                     } catch {}
-                  })();
-                } catch {}
+                  } catch {
+                    try { sceneAny?.events?.emit?.('activateBonusMode'); } catch {}
+                    try { sceneAny?.events?.emit?.('bonusTransitionComplete'); } catch {}
+                  }
+                })();
+              } catch {}
 
-                // Fade reel background back in as we transition into bonus
+              try {
+                const sceneAny: any = this.scene as any;
+                let hidden = false;
+                const hideNow = () => {
+                  if (hidden) return;
+                  hidden = true;
+                  try {
+                    this.scatterWinOverlay.hide(300, () => {
+                      console.log('[ScatterAnimationManager] FreeSpinOverlay hidden');
+                    });
+                  } catch {}
+                };
+                try { sceneAny?.events?.once?.('activateBonusMode', hideNow as any); } catch {}
                 try {
-                  const symbols = (this.scene as any)?.symbols;
-                  symbols?.fadeInReelBackground?.(400);
-                } catch {}
-                resolve();
-              });
+                  sceneAny.time?.delayedCall?.(500, () => {
+                    try { hideNow(); } catch {}
+                  });
+                } catch {
+                  try { setTimeout(() => { try { hideNow(); } catch {} }, 2500); } catch { try { hideNow(); } catch {} }
+                }
+              } catch {}
+
+              try {
+                const symbols = (this.scene as any)?.symbols;
+                symbols?.fadeInReelBackground?.(400);
+              } catch {}
+
+              resolve();
             });
           });
         } catch (e) {
@@ -260,28 +295,26 @@ export class ScatterAnimationManager {
         console.warn('[ScatterAnimationManager] FreeSpinOverlay not available, proceeding directly to bonus');
       }
 
-      // Step 3: Enter bonus mode using backend freespin data and emit events
-      try {
-        registerBonusTransitionListeners();
-        // Fallback path: if we didn't run BubbleTransition, do the same sequencing immediately.
-        if (!requestedBonusVisualActivation) {
-          try { (this.scene as any)?.events?.emit?.('activateBonusMode'); } catch {}
-        }
-        if (!requestedBonusTransitionFinish) {
-          try { (this.scene as any)?.events?.emit?.('bonusTransitionComplete'); } catch {}
-        }
-      } catch (e) {
-        console.error('[ScatterAnimationManager] Error while entering bonus after FreeSpinOverlay:', e);
+    try {
+      registerBonusTransitionListeners();
+      if (!requestedBonusVisualActivation) {
+        try { (this.scene as any)?.events?.emit?.('activateBonusMode'); } catch {}
       }
-
-      console.log('[ScatterAnimationManager] Scatter bonus sequence completed, waiting for dialog animations to finish');
-
-    } catch (error) {
-      console.error('[ScatterAnimationManager] Error during scatter animation:', error);
-    } finally {
-      this.isAnimating = false;
+      if (!requestedBonusTransitionFinish) {
+        try { (this.scene as any)?.events?.emit?.('bonusTransitionComplete'); } catch {}
+      }
+    } catch (e) {
+      console.error('[ScatterAnimationManager] Error while entering bonus after FreeSpinOverlay:', e);
     }
+
+    console.log('[ScatterAnimationManager] Scatter bonus sequence completed, waiting for dialog animations to finish');
+
+  } catch (error) {
+    console.error('[ScatterAnimationManager] Error during scatter animation:', error);
+  } finally {
+    this.isAnimating = false;
   }
+}
 
   private async disableSymbols(): Promise<void> {
     if (!this.symbolsContainer) return;

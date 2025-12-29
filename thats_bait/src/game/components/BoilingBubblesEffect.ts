@@ -3,6 +3,8 @@ import { Scene } from "phaser";
 export interface BoilingBubblesConfig {
 	x: number;
 	y: number;
+	emitOffsetX?: number;
+	emitOffsetY?: number;
 	depth?: number;
 	textureKey?: string;
 	spawnPerSecond?: number;
@@ -26,6 +28,8 @@ export class BoilingBubblesEffect {
 
 	private x: number;
 	private y: number;
+	private emitOffsetX: number;
+	private emitOffsetY: number;
 	private depth: number;
 	private textureKey: string;
 	private spawnPerSecond: number;
@@ -42,10 +46,12 @@ export class BoilingBubblesEffect {
 
 	constructor(scene: Scene, config: BoilingBubblesConfig) {
 		this.scene = scene;
-		this.container = scene.add.container(0, 0);
+		this.container = scene.add.container(config.x, config.y);
 
 		this.x = config.x;
 		this.y = config.y;
+		this.emitOffsetX = (typeof config.emitOffsetX === 'number' && isFinite(config.emitOffsetX)) ? config.emitOffsetX : 0;
+		this.emitOffsetY = (typeof config.emitOffsetY === 'number' && isFinite(config.emitOffsetY)) ? config.emitOffsetY : 0;
 		this.depth = typeof config.depth === 'number' ? config.depth : 29950;
 		this.textureKey = (typeof config.textureKey === 'string' && config.textureKey.trim().length > 0) ? config.textureKey.trim() : 'bubble';
 		this.spawnPerSecond = typeof config.spawnPerSecond === 'number' ? Math.max(1, config.spawnPerSecond) : 14;
@@ -66,6 +72,16 @@ export class BoilingBubblesEffect {
 	setPosition(x: number, y: number): void {
 		this.x = x;
 		this.y = y;
+		try { this.container.setPosition(x, y); } catch {}
+	}
+
+	setEmitOffset(x: number, y: number): void {
+		this.emitOffsetX = (typeof x === 'number' && isFinite(x)) ? x : 0;
+		this.emitOffsetY = (typeof y === 'number' && isFinite(y)) ? y : 0;
+	}
+
+	setEmitOffsetY(y: number): void {
+		this.emitOffsetY = (typeof y === 'number' && isFinite(y)) ? y : 0;
 	}
 
 	setMask(mask: Phaser.Display.Masks.GeometryMask | null | undefined): void {
@@ -78,29 +94,8 @@ export class BoilingBubblesEffect {
 		} catch {}
 	}
 
-	start(): void {
-		if (this.running) return;
-		this.running = true;
-
-		try { this.timer?.destroy(); } catch {}
-		this.timer = undefined;
-
-		const delayMs = Math.max(10, Math.floor(1000 / Math.max(1, this.spawnPerSecond)));
-		try {
-			this.timer = this.scene.time.addEvent({
-				delay: delayMs,
-				loop: true,
-				callback: () => {
-					try { this.spawnOne(); } catch {}
-				}
-			});
-		} catch {}
-
-		try {
-			for (let i = 0; i < 3; i++) {
-				this.spawnOne();
-			}
-		} catch {}
+	start(withBurst: boolean = true): void {
+		this.startInternal(!!withBurst);
 	}
 
 	stopSpawning(): void {
@@ -109,9 +104,15 @@ export class BoilingBubblesEffect {
 		this.timer = undefined;
 	}
 
-	stop(): void {
-		this.stopSpawning();
+	resume(): void {
+		this.startInternal(false);
+	}
 
+	stopGracefully(): void {
+		this.stopSpawning();
+	}
+
+	clearBubbles(): void {
 		try {
 			const children = this.container.list.slice();
 			for (const obj of children) {
@@ -120,6 +121,11 @@ export class BoilingBubblesEffect {
 			}
 			this.container.removeAll(true);
 		} catch {}
+	}
+
+	stop(): void {
+		this.stopSpawning();
+		this.clearBubbles();
 	}
 
 	destroy(): void {
@@ -131,8 +137,8 @@ export class BoilingBubblesEffect {
 		if (!this.scene || !this.running) return;
 		if (!this.scene.textures || !this.scene.textures.exists(this.textureKey)) return;
 
-		const ox = this.x + (Math.random() * 2 - 1) * this.spreadX;
-		const oy = this.y + (Math.random() * 2 - 1) * this.spreadY;
+		const ox = this.emitOffsetX + (Math.random() * 2 - 1) * this.spreadX;
+		const oy = this.emitOffsetY + (Math.random() * 2 - 1) * this.spreadY;
 		const riseDist = this.riseDistanceMin + Math.random() * (this.riseDistanceMax - this.riseDistanceMin);
 		const life = this.lifeMinMs + Math.random() * (this.lifeMaxMs - this.lifeMinMs);
 		const scale = this.scaleMin + Math.random() * (this.scaleMax - this.scaleMin);
@@ -168,5 +174,31 @@ export class BoilingBubblesEffect {
 		} catch {
 			try { img?.destroy(); } catch {}
 		}
+	}
+
+	private startInternal(withBurst: boolean): void {
+		if (this.running) return;
+		this.running = true;
+
+		try { this.timer?.destroy(); } catch {}
+		this.timer = undefined;
+
+		const delayMs = Math.max(10, Math.floor(1000 / Math.max(1, this.spawnPerSecond)));
+		try {
+			this.timer = this.scene.time.addEvent({
+				delay: delayMs,
+				loop: true,
+				callback: () => {
+					try { this.spawnOne(); } catch {}
+				}
+			});
+		} catch {}
+
+		if (!withBurst) return;
+		try {
+			for (let i = 0; i < 3; i++) {
+				this.spawnOne();
+			}
+		} catch {}
 	}
 }

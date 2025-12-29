@@ -452,6 +452,10 @@ export class AssetConfig {
 	getTransitionAssets(): AssetGroup {
 		const forcedPortraitHighPrefix = `assets/portrait/high`;
 		return {
+			images: {
+				'transition-string': `${forcedPortraitHighPrefix}/transitions/string.webp`,
+				'transition-fish': `${forcedPortraitHighPrefix}/transitions/Fish.webp`,
+			},
 			spine: {
 				'bubbles_transition': {
 					atlas: `${forcedPortraitHighPrefix}/transitions/Bubbles_Transition.atlas`,

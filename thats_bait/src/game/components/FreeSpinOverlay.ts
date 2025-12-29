@@ -29,6 +29,7 @@ export class FreeSpinOverlay {
 	private valueBobTween: Phaser.Tweens.Tween | null = null;
 	private isInitialized: boolean = false;
 	private isShowing: boolean = false;
+	private dismissRequested: boolean = false;
 	private didBeginTempMusic: boolean = false;
 	private dismissResolver?: () => void;
 	private networkManager: NetworkManager | null = null;
@@ -101,9 +102,23 @@ export class FreeSpinOverlay {
 		} catch {}
 		this.background.on('pointerdown', () => {
 			if (!this.isShowing) return;
-			this.hide(200);
+			this.requestDismiss();
 		});
 		this.isInitialized = true;
+	}
+
+	private requestDismiss(): void {
+		if (!this.isShowing) return;
+		if (this.dismissRequested) return;
+		this.dismissRequested = true;
+		try { this.background?.disableInteractive(); } catch {}
+		try {
+			if (this.dismissResolver) {
+				const resolver = this.dismissResolver;
+				this.dismissResolver = undefined;
+				resolver();
+			}
+		} catch {}
 	}
 
 	public show(spinsLeft: number, onComplete?: () => void, spineKey?: string, multiplierKey?: string | null): void {
@@ -112,6 +127,8 @@ export class FreeSpinOverlay {
 			if (onComplete) onComplete();
 			return;
 		}
+		this.dismissRequested = false;
+		this.dismissResolver = undefined;
 		this.didBeginTempMusic = false;
 		try {
 			this.spineKey = (typeof spineKey === 'string' && spineKey.length > 0) ? spineKey : 'FreeSpin_TB';
@@ -419,6 +436,7 @@ export class FreeSpinOverlay {
 				} catch {}
 				try { this.background?.disableInteractive(); } catch {}
 				this.isShowing = false;
+				this.dismissRequested = false;
 				try {
 					if (this.didBeginTempMusic) {
 						const audioManager = ((window as any)?.audioManager as AudioManager | undefined);
@@ -459,17 +477,20 @@ export class FreeSpinOverlay {
 					this.numberDisplay = null;
 				}
 				if (onComplete) onComplete();
-				if (this.dismissResolver) {
-					const resolver = this.dismissResolver;
-					this.dismissResolver = undefined;
-					resolver();
-				}
+				try {
+					if (this.dismissResolver) {
+						const resolver = this.dismissResolver;
+						this.dismissResolver = undefined;
+						resolver();
+					}
+				} catch {}
 			}
 		});
 	}
 
 	public waitUntilDismissed(): Promise<void> {
 		if (!this.isShowing) return Promise.resolve();
+		if (this.dismissRequested) return Promise.resolve();
 		return new Promise<void>((resolve) => {
 			this.dismissResolver = resolve;
 		});

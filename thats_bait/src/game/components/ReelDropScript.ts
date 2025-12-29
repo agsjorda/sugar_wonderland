@@ -1,9 +1,9 @@
 import { GameData } from "./GameData";
 import { gameStateManager } from "../../managers/GameStateManager";
-import { SLOT_ROWS, SLOT_COLUMNS, SCATTER_SYMBOL } from "../../config/GameConfig";
+import { SLOT_ROWS, SLOT_COLUMNS } from "../../config/GameConfig";
 import { SoundEffectType } from "../../managers/AudioManager";
 import { getRandomSymbol5Variant, getSymbol5ImageKeyForVariant } from "./Symbol5VariantHelper";
-import { BoilingBubblesEffect } from "./BoilingBubblesEffect";
+import { ScatterAnticipationSequenceController } from "./ScatterAnticipationSequenceController";
 
 /**
  * Run the reel-drop sequence, including previous symbols, filler symbols, and new symbols.
@@ -29,16 +29,33 @@ export async function runDropReels(self: any, symbols: number[][], fillerCount: 
 
   const reelCompletionPromises: Promise<void>[] = [];
 
+  let anticipationController: ScatterAnticipationSequenceController | null = null;
+  let extendReels: boolean[] = new Array<boolean>(SLOT_COLUMNS).fill(false);
+  try {
+    anticipationController = (self.scene as any).__scatterAnticipationSequenceController as ScatterAnticipationSequenceController;
+  } catch {
+    anticipationController = null;
+  }
+  try {
+    if (!anticipationController) {
+      anticipationController = new ScatterAnticipationSequenceController(self);
+      (self.scene as any).__scatterAnticipationSequenceController = anticipationController;
+    }
+  } catch {
+    anticipationController = null;
+  }
+  try {
+    if (anticipationController) {
+      extendReels = anticipationController.resetForSpin(symbols);
+    }
+  } catch {}
+
   // Anticipation: if upcoming SpinData shows a scatter on 1st or 3rd columns (x = 0 or 2),
   // extend only the last reel's animation (x = SLOT_COLUMNS - 1)
   let extendLastReelDrop = false;
   try {
-    const s: number[][] = symbols || [];
-    const scatterVal = SCATTER_SYMBOL[0];
-    const hasScatterCol1 = Array.isArray(s[0]) && s[0].some(v => v === scatterVal);
-    const hasScatterCol3 = Array.isArray(s[2]) && s[2].some(v => v === scatterVal);
-    extendLastReelDrop = !!(hasScatterCol1 && hasScatterCol3);
-    console.log(`[ReelDropScript] Anticipation check (reel 1 AND reel 3 scatter): r1=${hasScatterCol1}, r3=${hasScatterCol3} → extend=${extendLastReelDrop}`);
+    extendLastReelDrop = Array.isArray(extendReels) ? extendReels.some(Boolean) : false;
+    console.log(`[ReelDropScript] Anticipation check (dynamic): extend=${extendLastReelDrop}`);
   } catch (e) {
     console.warn("[ReelDropScript] Anticipation check failed:", e);
     extendLastReelDrop = false;
@@ -62,13 +79,13 @@ export async function runDropReels(self: any, symbols: number[][], fillerCount: 
 
   for (let col = 0; col < SLOT_COLUMNS; col++) {
     console.log(`[ReelDropScript] Processing reel ${col}`);
-    const isLastReel = col === (SLOT_COLUMNS - 1);
+    const extendThisReel = !!extendReels?.[col];
 
     const stopStaggerMs = useSequentialStartForBuyAnticipation ? 0 : Math.max(0, col * REEL_STAGGER_MS);
 
-    dropPrevSymbols(self, fillerCount, col, isLastReel && extendLastReelDrop, stopStaggerMs);
-    dropFillers(self, fillerCount, col, isLastReel && extendLastReelDrop, stopStaggerMs);
-    const reelPromise = dropNewSymbols(self, fillerCount, col, isLastReel && extendLastReelDrop, stopStaggerMs);
+    dropPrevSymbols(self, fillerCount, col, extendThisReel, stopStaggerMs);
+    dropFillers(self, fillerCount, col, extendThisReel, stopStaggerMs);
+    const reelPromise = dropNewSymbols(self, fillerCount, col, extendThisReel, stopStaggerMs, anticipationController);
     reelCompletionPromises.push(reelPromise);
 
     if (useSequentialStartForBuyAnticipation && sequentialStartDelayMs > 0 && col < (SLOT_COLUMNS - 1)) {
@@ -214,7 +231,7 @@ function dropFillers(self: any, fillerCount: number, index: number, extendDurati
   }
 
   const isBuyFeatureSpin = !!gameStateManager.isBuyFeatureSpin;
-  const isAnticipationLastReel = !!extendDuration && index === (SLOT_COLUMNS - 1) && !!(self.scene as any)?.__isScatterAnticipationActive;
+  const isAnticipationLastReel = !!extendDuration && !!(self.scene as any)?.__isScatterAnticipationActive;
   const anticipationEase = (window as any).Phaser?.Math?.Easing?.Cubic?.Out
     || (window as any).Phaser?.Math?.Easing?.Quadratic?.Out
     || (window as any).Phaser?.Math?.Easing?.Linear;
@@ -372,7 +389,7 @@ function dropFillers(self: any, fillerCount: number, index: number, extendDurati
   }
 }
 
-function dropNewSymbols(self: any, fillerCount: number, index: number, extendDuration: boolean = false, stopStaggerMs: number = 0): Promise<void> {
+function dropNewSymbols(self: any, fillerCount: number, index: number, extendDuration: boolean = false, stopStaggerMs: number = 0, anticipationController?: ScatterAnticipationSequenceController | null): Promise<void> {
   return new Promise<void>((resolve) => {
     // Check if symbols array has valid structure
     if (!Array.isArray(self.symbols) || self.symbols.length === 0 || !Array.isArray(self.symbols[0]) || self.symbols[0].length === 0) {
@@ -394,7 +411,7 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
     const START_INDEX = START_INDEX_BASE + extraRows;
     const DROP_DISTANCE = START_INDEX * height + self.scene.gameData.winUpHeight;
 
-    const isAnticipationLastReel = !!extendDuration && index === (SLOT_COLUMNS - 1) && !!(self.scene as any)?.__isScatterAnticipationActive;
+    const isAnticipationLastReel = !!extendDuration && !!(self.scene as any)?.__isScatterAnticipationActive;
     const anticipationEase = (window as any).Phaser?.Math?.Easing?.Cubic?.Out
       || (window as any).Phaser?.Math?.Easing?.Quadratic?.Out
       || (window as any).Phaser?.Math?.Easing?.Linear;
@@ -535,130 +552,12 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
       // Trigger _idle animations for this reel's NEW symbols immediately after drop completion
       self.triggerIdleAnimationsForNewReel(index);
 
-      // Scatter anticipation show/hide logic mirrors existing behaviour
       try {
-        const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
-        if (isAnticipation && index === 2) {
-          try { hideActiveFillers(self); } catch {}
-          try { (self.scene as any).__isScatterAnticipationOverlayVisible = true; } catch {}
-          if (self.overlayRect) {
-            if (self.baseOverlayRect) {
-              self.scene.tweens.add({
-                targets: self.baseOverlayRect,
-                alpha: 0,
-                duration: 300,
-                ease: "Cubic.easeOut"
-              });
-            }
-            self.overlayRect.setAlpha(0);
-            self.overlayRect.setVisible(true);
-            self.scene.tweens.add({
-              targets: self.overlayRect,
-              alpha: 0.85,
-              duration: 500,
-              ease: "Cubic.easeOut"
-            });
-          }
-          const sa = (self.scene as any)?.scatterAnticipation;
-          try { if (sa && typeof sa.setDepth === 'function') sa.setDepth(30000); } catch {}
-          try { if (sa && typeof (self.scene as any)?.children?.bringToTop === 'function') (self.scene as any).children.bringToTop(sa); } catch {}
-          if (sa && typeof sa.show === "function") { sa.show(); }
-          const sa2 = (self.scene as any)?.scatterAnticipation2;
-          try { if (sa2 && typeof sa2.setDepth === 'function') sa2.setDepth(30000); } catch {}
-          try { if (sa2 && typeof (self.scene as any)?.children?.bringToTop === 'function') (self.scene as any).children.bringToTop(sa2); } catch {}
-          if (sa2 && typeof sa2.show === "function") { sa2.show(); }
-
-          try {
-            const symbolTotalWidth = self.displayWidth + (self.horizontalSpacing || 0);
-            const symbolTotalHeight = self.displayHeight + (self.verticalSpacing || 0);
-            const startX = self.slotX - self.totalGridWidth * 0.5;
-            const startY = self.slotY - self.totalGridHeight * 0.5;
-            const col = (SLOT_COLUMNS - 1);
-            const row = (SLOT_ROWS - 1);
-            const x = startX + col * symbolTotalWidth + symbolTotalWidth * 0.5;
-            const y = startY + row * symbolTotalHeight + symbolTotalHeight * 2;
-
-            let bb: any = (self.scene as any).__boilingBubblesAnticipationEffect;
-            if (!bb) {
-              bb = new BoilingBubblesEffect(self.scene, {
-                x,
-                y,
-                depth: 877,
-                textureKey: 'anticipation-bubble',
-                spawnPerSecond: 60,
-                spreadX: Math.max(20, Math.floor(symbolTotalWidth * 0.35)),
-                spreadY: 8,
-                riseDistanceMin: Math.max(250, Math.floor(symbolTotalHeight * 1)),
-                riseDistanceMax: Math.max(350, Math.floor(symbolTotalHeight * 2)),
-                lifeMinMs: 750,
-                lifeMaxMs: 800,
-                scaleMin: 0.05,
-                scaleMax: 0.1,
-                alphaMin: 0.95,
-                alphaMax: 1,
-              });
-              try { (self.scene as any).__boilingBubblesAnticipationEffect = bb; } catch {}
-              try { bb.setMask?.((self as any)?.gridMask); } catch {}
-            } else {
-              try { bb.setPosition?.(x, y); } catch {}
-              try { bb.setMask?.((self as any)?.gridMask); } catch {}
-            }
-            try { bb.start?.(); } catch {}
-          } catch {}
-
-          console.log("[ReelDropScript] Scatter anticipation shown after 3rd reel drop");
-        }
+        anticipationController?.onReelStopped(index);
       } catch {}
-
       try {
-        const isAnticipation = !!(self.scene as any)?.__isScatterAnticipationActive;
-        if (isAnticipation && index === (SLOT_COLUMNS - 1)) {
-          const sa = (self.scene as any)?.scatterAnticipation;
-          if (sa && typeof sa.hide === "function") { sa.hide(); }
-          const sa2 = (self.scene as any)?.scatterAnticipation2;
-          if (sa2 && typeof sa2.hide === "function") { sa2.hide(); }
-          if (self.overlayRect) {
-            self.scene.tweens.add({
-              targets: self.overlayRect,
-              alpha: 0,
-              duration: 300,
-              ease: "Cubic.easeIn",
-              onComplete: () => {
-                try { self.overlayRect.setVisible(false); } catch {}
-              }
-            });
-            if (self.baseOverlayRect) {
-              self.baseOverlayRect.setAlpha(0);
-              self.baseOverlayRect.setVisible(true);
-              self.scene.tweens.add({
-                targets: self.baseOverlayRect,
-                alpha: 0.2,
-                duration: 300,
-                ease: "Cubic.easeOut"
-              });
-            }
-          }
-          console.log("[ReelDropScript] Scatter anticipation hidden after last reel drop");
-          try {
-            const bb = (self.scene as any).__boilingBubblesAnticipationEffect;
-            if (bb && typeof bb.stopSpawning === 'function') {
-              bb.stopSpawning();
-            } else if (bb && typeof bb.stop === 'function') {
-              bb.stop();
-            }
-          } catch {}
-          (self.scene as any).__isScatterAnticipationActive = false;
-          try { (self.scene as any).__isScatterAnticipationOverlayVisible = false; } catch {}
-          try {
-            const arr = (self as any).__activeFillerSymbols;
-            if (Array.isArray(arr) && arr.length > 0) {
-              for (const s of arr) {
-                if (!s || (s as any).destroyed) continue;
-                try { s.setAlpha?.(1); } catch {}
-              }
-              (self as any).__activeFillerSymbols = arr.filter((s: any) => s && !(s as any).destroyed);
-            }
-          } catch {}
+        if (index === (SLOT_COLUMNS - 1)) {
+          anticipationController?.finish();
         }
       } catch {}
 

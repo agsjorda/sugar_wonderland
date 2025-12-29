@@ -725,6 +725,16 @@ export class Symbols {
   public requestSkipReelDrops(): void {
     try {
       try { if ((gameStateManager as any).isCriticalSequenceLocked) return; } catch {}
+			try {
+				if (!!(this.scene as any)?.__scatterAnticipationStageRunning) {
+					return;
+				}
+			} catch {}
+			try {
+				if (!!gameStateManager.isBuyFeatureSpin && !!(this.scene as any)?.__isScatterAnticipationActive) {
+					return;
+				}
+			} catch {}
       // If the player taps skip very early (before the drop tweens exist), we need to
       // remember the intent and re-apply skip tweaks once the spin data arrives and
       // the drop timing is configured.
@@ -1100,6 +1110,16 @@ export class Symbols {
       zone.on('pointerdown', () => {
         try {
           try { if ((gameStateManager as any).isCriticalSequenceLocked) return; } catch {}
+				try {
+					if (!!(this.scene as any)?.__scatterAnticipationStageRunning) {
+						return;
+					}
+				} catch {}
+				try {
+					if (!!gameStateManager.isBuyFeatureSpin && !!(this.scene as any)?.__isScatterAnticipationActive) {
+						return;
+					}
+				} catch {}
           if (gameStateManager.isShowingWinDialog) return;
           if (gameStateManager.isReelSpinning && !gameStateManager.isTurbo) {
             this.requestSkipReelDrops();
@@ -2285,7 +2305,7 @@ export class Symbols {
         });
 
         try {
-          this.scene.time.delayedCall(1200, () => {
+          this.scene.time.delayedCall(500, () => {
             try {
               if (!gameStateManager.isBonus) return;
               this.triggerAutoplayForFreeSpins();
@@ -3434,7 +3454,8 @@ export class Symbols {
       this.freeSpinAutoplayTimer.destroy();
       this.freeSpinAutoplayTimer = null;
     }
-    this.freeSpinAutoplayTimer = this.scene.time.delayedCall(2300, () => {
+    const firstSpinDelayMs = gameStateManager.isTurbo ? 700 : 1200;
+    this.freeSpinAutoplayTimer = this.scene.time.delayedCall(firstSpinDelayMs, () => {
       try {
         const gm: any = (this.scene as any)?.gaugeMeter;
         gm?.playIndicatorIntro?.();
