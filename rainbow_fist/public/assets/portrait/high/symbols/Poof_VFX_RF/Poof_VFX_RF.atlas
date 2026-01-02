@@ -1,7 +1,7 @@
 Poof_VFX_RF.webp
 size:2048,2048
 filter:Linear,Linear
-pma:true
+pma:false
 Poof_00000
 bounds:487,611,1,1
 Poof_00001
@@ -71,7 +71,7 @@ offsets:265,251,1170,1097
 Poof_VFX_RF_2.webp
 size:420,420
 filter:Linear,Linear
-pma:true
+pma:false
 Poof_00003
 bounds:2,35,415,382
 offsets:38,52,500,500

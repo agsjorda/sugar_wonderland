@@ -4,7 +4,6 @@ import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { Data } from "../../tmp_backend/Data";
 import { GameEventData, gameEventManager, GameEventType, UpdateMultiplierValueEventData } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
-import { PaylineData } from '../../backend/SpinData';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { hideSpineAttachmentsByKeywords, playSpineAnimationSequenceWithConfig } from "./SpineBehaviorHelper";
@@ -30,7 +29,7 @@ export class Header {
 	private currentMultiplier: number = 0;
 
 	// Slightly adjusted for larger font sizes (amount +2px, label +2px)
-	private winningsLabelTextOffset: {x: number, y: number} = {x: 0, y: -16};
+	private winningsLabelTextOffset: {x: number, y: number} = {x: 0, y: -12};
 	private winningsValueTextOffset: {x: number, y: number} = {x: 0, y: 7};
 	private multiplierNumberDisplayOffset: {x: number, y: number} = {x: 12, y: 0};
 
@@ -89,10 +88,6 @@ export class Header {
 		const multiplierBarY = scene.scale.height * multiplierBarHeightRatio;
 		this.createMultiplierBar(scene, multiplierBarX, multiplierBarY, assetScale);
 		this.createMultiplierDisplay(scene, multiplierBarX, multiplierBarY);
-
-		this.scene.time.delayedCall(1000, () => {
-			this.updateWinningsDisplay(20000);
-		});
 	}
 
 	private createMultiplierBar(scene: Scene, x: number, y: number, assetScale: number): void {
@@ -114,13 +109,13 @@ export class Header {
 		const multiplierConfig: NumberDisplayConfig = {
 			x: displayX,
 			y: displayY,
-			scale: 0.019,
-			prefixScale: 0.009,
-			prefixYOffset: 0.5,
+			scale: 0.2,
+			prefixScale: 0.2,
+			prefixYOffset: -0.5,
 			spacing: -10,
 			alignment: 'center',
 			decimalPlaces: 0,
-			showCommas: false,
+			showCommas: true,
 			prefix: 'x',
 		};
 
@@ -206,7 +201,7 @@ export class Header {
 
 		// Line 2: "$ 0.00" with bold formatting (base winnings / expression prefix)
 		this.amountText = scene.add.text(x + this.winningsValueTextOffset.x, y + this.winningsValueTextOffset.y, '$ 0.00', {
-			fontSize: '22px',
+			fontSize: '20px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold',
 			stroke: this.textStrokeColor,
@@ -216,7 +211,7 @@ export class Header {
 
 		// Separate text object for the total winnings part (shown in green)
 		this.amountTotalText = scene.add.text(x + this.winningsValueTextOffset.x, y + this.winningsValueTextOffset.y, '', {
-			fontSize: '22px',
+			fontSize: '20px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold',
 			stroke: this.textStrokeColor,
@@ -277,6 +272,7 @@ export class Header {
 		gameEventManager.on(GameEventType.WIN_STOP, () => {
 			// If we're currently showing an equation (prefix + separate total), the total is already green.
 			if (this.amountTotalText?.visible) {
+				this.animateWinningsDisplay(this.amountTotalText);
 				return;
 			}
 
@@ -284,6 +280,8 @@ export class Header {
 				this.amountText.setColor(this.totalAmountTextColor);
 				// For green total win, use the same theme stroke
 				this.amountText.setStroke(this.textStrokeColor, this.textStrokeThickness);
+				// Animate the final total win display
+				this.animateWinningsDisplay(this.amountText);
 			}
 		});
 
@@ -475,7 +473,7 @@ export class Header {
 			targets: target,
 			scaleX: 1.25,
 			scaleY: 1.25,
-			duration: 250,
+			duration: 150 * (gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1),
 			ease: 'Sine.easeInOut',
 			yoyo: true,
 		});
@@ -487,24 +485,6 @@ export class Header {
 
 	private showMultiplierText(): void {
 		this.multiplierDisplay?.setVisible(true);
-	}
-
-	/**
-	 * Calculate total winnings from paylines array
-	 */
-	private calculateTotalWinningsFromPaylines(paylines: PaylineData[]): number {
-		if (!paylines || paylines.length === 0) {
-			return 0;
-		}
-		
-		const totalWin = paylines.reduce((sum, payline) => {
-			const winAmount = payline.win || 0;
-			console.log(`[Header] Payline ${payline.lineKey}: ${winAmount} (symbol ${payline.symbol}, count ${payline.count})`);
-			return sum + winAmount;
-		}, 0);
-		
-		console.log(`[Header] Calculated total winnings: ${totalWin} from ${paylines.length} paylines`);
-		return totalWin;
 	}
 
 	/**

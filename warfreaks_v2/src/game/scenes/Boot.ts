@@ -43,8 +43,11 @@ export class Boot extends Scene
 		
 		// Load loading assets using AssetLoader
 		this.assetLoader.loadLoadingAssets(this);
+
+		// Preload font assets as early as possible so loading/studio screens can use Poppins
+		this.assetLoader.loadFontAssets(this);
 		
-		console.log(`[Boot] Loading assets for Boot scene`);
+		console.log(`[Boot] Loading assets (loading + fonts) for Boot scene`);
 	}
 
 	create ()

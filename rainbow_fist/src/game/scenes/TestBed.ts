@@ -52,12 +52,12 @@ export class TestBed extends Scene {
 		// this.loadSpineAsset(winPath + '/EpicW_RF', 'EpicW_RF');
 		// this.loadSpineAsset(winPath + '/SuperW_RF', 'SuperW_RF');
 		// this.loadSpineAsset(winPath + '/FreeSpin_RF', 'FreeSpin_RF');
-		// this.loadSpineAsset(winPath + '/MaxW_RF', 'MaxW_RF');
+		this.loadSpineAsset(winPath + '/MaxW_RF', 'MaxW_RF');
 
-		for (let i = 0; i <= 5; i++) {
-			const symbolBasePath = `assets/portrait/high/symbols/Symbol${i}_RF`;
-			this.loadSpineAsset(symbolBasePath, `Symbol${i}_RF`);
-		}
+		// for (let i = 0; i <= 5; i++) {
+		// 	const symbolBasePath = `assets/portrait/high/symbols/Symbol${i}_RF`;
+		// 	this.loadSpineAsset(symbolBasePath, `Symbol${i}_RF`);
+		// }
 	}
 
 	create() {
@@ -70,18 +70,18 @@ export class TestBed extends Scene {
 		// this.displayEpicWinSpine({ x: 0.5, y: 0.5 });
 		// this.displaySuperWinSpine({ x: 0.5, y: 0.5 });
 
-		this.displaySymbolSpine(0, scale, { x: 0.2, y: 0.75 }, 0, false);
+		// this.displaySymbolSpine(0, scale, { x: 0.2, y: 0.75 }, 0, false);
 		// this.displaySymbolSpine(1, 1, { x: 0.5, y: 0.5 }, 1);
 		// this.displaySymbolSpine(2, scale, { x: 0.5, y: 0.5 }, 1);
 		// this.displaySymbolSpine(3, scale, { x: 0.5, y: 0.5 }, 1);
-		this.displaySymbolSpine(4, scale, { x: 0.5, y: 0.5 }, 1);
-		this.displaySymbolSpine(5, scale, { x: 0.8, y: 0.85 }, 0, false);
+		// this.displaySymbolSpine(4, scale, { x: 0.5, y: 0.5 }, 1);
+		// this.displaySymbolSpine(5, scale, { x: 0.8, y: 0.85 }, 0, false);
 		// this.displaySymbolSpine(10, scale, { x: 0.2, y: 0.95 }, 1);
-		this.displaySymbolSpine(5, scale, { x: 0.5, y: 0.95 }, 2);
-		this.displaySymbolSpine(5, scale, { x: 0.8, y: 0.95 }, 3);
+		// this.displaySymbolSpine(5, scale, { x: 0.5, y: 0.95 }, 2);
+		// this.displaySymbolSpine(5, scale, { x: 0.8, y: 0.95 }, 3);
 
 		// this.displayFreeSpinSpine({ x: 0.3, y: 0.2 });
-		// this.displayMaxWinSpine({ x: 0.7, y: 0.2 });
+		this.displayMaxWinSpine({ x: 0.485, y: 0.5 });
 	}
 
 	update() {
@@ -130,9 +130,7 @@ export class TestBed extends Scene {
 		const scale = getFullScreenSpineScale(this, spine, false);
 		const offset = { x: 0, y: 0 };
 		const origin = { x: 0.5, y: 0.5 };
-		playSpineAnimationSequenceWithConfig(this, spine, [0], scale, anchor, origin, offset);
-
-		this.testPfx.createFeatherFx();
+		playSpineAnimationSequenceWithConfig(this, spine, [0], {x: scale.x * 1.01, y: scale.y * 1.01}, anchor, origin, offset);
 	}
 
 	displayLogoSpine() {

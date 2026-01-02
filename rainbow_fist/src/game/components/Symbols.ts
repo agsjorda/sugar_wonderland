@@ -1115,6 +1115,12 @@ export class Symbols {
     if (!dialogs || typeof dialogs.showBonusFreeSpinDialog !== 'function') {
       console.warn('[Symbols] Dialogs component unavailable - skipping bonus retrigger dialog');
       gameStateManager.isScatter = false;
+      try {
+        gameEventManager.emit(GameEventType.SYMBOLS_BONUS_RETRIGGER_COMPLETE);
+        console.log('[Symbols] Emitted SYMBOLS_BONUS_RETRIGGER_COMPLETE (dialogs unavailable)');
+      } catch (error) {
+        console.warn('[Symbols] Failed to emit SYMBOLS_BONUS_RETRIGGER_COMPLETE:', error);
+      }
       return;
     }
 
@@ -1127,6 +1133,12 @@ export class Symbols {
       console.error('[Symbols] Failed to show bonus free spin dialog during retrigger:', error);
       gameStateManager.isShowingWinDialog = false;
       gameStateManager.isScatter = false;
+      try {
+        gameEventManager.emit(GameEventType.SYMBOLS_BONUS_RETRIGGER_COMPLETE);
+        console.log('[Symbols] Emitted SYMBOLS_BONUS_RETRIGGER_COMPLETE (dialogs unavailable)');
+      } catch (error) {
+        console.warn('[Symbols] Failed to emit SYMBOLS_BONUS_RETRIGGER_COMPLETE:', error);
+      }
       return;
     }
 
@@ -1152,6 +1164,12 @@ export class Symbols {
         this.scene.events.emit('dialogAnimationsComplete');
       } catch (error) {
         console.warn('[Symbols] Failed to emit dialogAnimationsComplete after bonus retrigger dialog:', error);
+      }
+      try {
+        gameEventManager.emit(GameEventType.SYMBOLS_BONUS_RETRIGGER_COMPLETE);
+        console.log('[Symbols] Emitted SYMBOLS_BONUS_RETRIGGER_COMPLETE after bonus retrigger dialog');
+      } catch (error) {
+        console.warn('[Symbols] Failed to emit SYMBOLS_BONUS_RETRIGGER_COMPLETE after bonus retrigger dialog:', error);
       }
     }
   }
@@ -1517,7 +1535,9 @@ export class Symbols {
                     completedCount++;
                     if (completedCount === 1) {
                       // Immediately replay the same animation once more
-                      playScatterAnimSfx();
+                      this.scene?.time?.delayedCall?.(250, () => {
+                        playScatterAnimSfx();
+                      });
                       try { state.setAnimation(0, nameToPlay, false); } catch { }
                       return;
                     }
@@ -1541,7 +1561,9 @@ export class Symbols {
 
               try { state.addListener?.(listener as any); } catch { }
               try {
-                playScatterAnimSfx();
+                this.scene?.time?.delayedCall?.(200, () => {
+                  playScatterAnimSfx();
+                });
                 state.setAnimation(0, nameToPlay, false);
               } catch { safeResolve(); }
             });
@@ -2832,173 +2854,126 @@ function createInitialSymbols(self: Symbols) {
 }
 
 /**
- * Process symbols from SpinData (GameAPI response)
+ * Wire the event-driven chain for the SpinData symbol processing flow.
+ *
+ * Phases:
+ *   1) dropReels -> SYMBOLS_DROP_REELS_COMPLETE
+ *   2) applyTumbles (optional) -> SYMBOLS_TUMBLES_COMPLETE
+ *   3) playMultiplierSymbolAnimations (optional) -> SYMBOLS_MULTIPLIER_ANIMATIONS_COMPLETE
+ *   4) scatter / bonus handling (uses SYMBOLS_SCATTER_ANIMATIONS_COMPLETE and
+ *      SYMBOLS_BONUS_RETRIGGER_COMPLETE internally)
+ *   5) finalizeSpinProcessing -> SYMBOLS_PROCESSING_COMPLETE + WIN_STOP/REELS_STOP
  */
-async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinData: any) {
-  console.log('[Symbols] Processing SpinData symbols:', symbols);
+function setupSpinProcessingEventChain(
+  self: Symbols,
+  mockData: Data,
+  spinData: any,
+  tumbles: any,
+  hasTumbles: boolean
+): void {
+  // 1) After dropReels has finished, swap in the new grid, dispose old symbols,
+  //    and re-evaluate wins. Then either start tumbles or skip ahead.
+  gameEventManager.once(GameEventType.SYMBOLS_DROP_REELS_COMPLETE, () => {
+    console.log('[Symbols] SYMBOLS_DROP_REELS_COMPLETE received - updating symbol grid');
 
-  const waitForWinDialogToClose = async (reason: string) => {
-    if (!gameStateManager.isShowingWinDialog) {
-      return;
+    // Update symbols after animation: swap to new grid immediately so logic uses it,
+    // but dispose old symbols asynchronously to keep the drop frame light.
+    const oldSymbols = self.symbols;
+    self.symbols = self.newSymbols;
+    self.newSymbols = [];
+
+    // Schedule disposal of the old symbol grid on the next tick
+    try {
+      if (oldSymbols && oldSymbols.length > 0) {
+        self.scene.time.delayedCall(0, () => {
+          try { disposeSymbols(self, oldSymbols); } catch { }
+        });
+      }
+    } catch { }
+
+    // Re-evaluate wins after initial drop completes (async so visuals continue)
+    try {
+      self.scene.time.delayedCall(0, () => {
+        try { reevaluateWinsFromGrid(self); } catch { }
+      });
+    } catch { }
+
+    // If there are tumble steps from the backend, start them now.
+    if (hasTumbles && tumbles && Array.isArray(tumbles.items) && tumbles.items.length > 0) {
+      console.log('[Symbols] Starting tumble sequence from SYMBOLS_DROP_REELS_COMPLETE');
+      try {
+        applyTumbles(self, tumbles.items, mockData).catch((e) => {
+          console.warn('[Symbols] applyTumbles rejected:', e);
+          try {
+            gameEventManager.emit(GameEventType.SYMBOLS_TUMBLES_COMPLETE);
+          } catch { }
+        });
+      } catch (e) {
+        console.warn('[Symbols] applyTumbles threw synchronously:', e);
+        try {
+          gameEventManager.emit(GameEventType.SYMBOLS_TUMBLES_COMPLETE);
+        } catch { }
+      }
+    } else {
+      // No tumbles to apply; advance chain immediately.
+      try {
+        gameEventManager.emit(GameEventType.SYMBOLS_TUMBLES_COMPLETE);
+      } catch { }
+      try {
+        gameEventManager.emit(GameEventType.SYMBOLS_MULTIPLIER_ANIMATIONS_COMPLETE);
+      } catch { }
     }
-
-    console.log(`[Symbols] Win dialog is open (${reason}) - pausing spin processing until it closes`);
-
-    let resolved = false;
-    const pollIntervalMs = 50;
-    // Give the dialog auto-close timer ample time plus buffer before timing out.
-    const maxWaitMs = AUTO_SPIN_WIN_DIALOG_TIMEOUT + 4000;
-
-    await new Promise<void>((resolve) => {
-      const cleanup = () => {
-        if (resolved) {
-          return;
-        }
-        resolved = true;
-        try { gameEventManager.off(GameEventType.WIN_DIALOG_CLOSED, onClosed); } catch { }
-        resolve();
-      };
-
-      const onClosed = () => {
-        console.log('[Symbols] WIN_DIALOG_CLOSED received while waiting to start spin processing');
-        cleanup();
-      };
-
-      try { gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, onClosed); } catch { }
-
-      const poll = async () => {
-        let waitedMs = 0;
-        while (!resolved && gameStateManager.isShowingWinDialog && waitedMs < maxWaitMs) {
-          await delay(pollIntervalMs);
-          waitedMs += pollIntervalMs;
-        }
-
-        if (resolved) {
-          return;
-        }
-
-        if (!gameStateManager.isShowingWinDialog) {
-          cleanup();
-          return;
-        }
-
-        console.warn('[Symbols] Timed out waiting for win dialog to close - continuing spin processing');
-        cleanup();
-      };
-
-      poll();
-    });
-  };
-
-  await waitForWinDialogToClose('processSpinDataSymbols start');
-
-  // Clear all scatter symbols from previous spin
-  if (self.scatterAnimationManager) {
-    self.scatterAnimationManager.clearScatterSymbols();
-  }
-
-  // Reset symbols and clear previous state before starting new spin
-  console.log('[Symbols] Resetting symbols and clearing previous state for new spin');
-  self.ensureCleanSymbolState();
-  self.resetSymbolsState();
-
-  // Always clear win lines and overlay when a new spin starts
-  console.log('[Symbols] Clearing win lines and overlay for new spin');
-  self.clearWinLines();
-  self.hideWinningOverlay();
-
-  self.resetSymbolDepths();
-  self.restoreSymbolVisibility();
-
-  // Create a mock Data object to use with existing functions
-  const mockData = new Data();
-  mockData.symbols = symbols;
-
-  // Convert SpinData paylines to the format expected by the game
-  const convertedWins = convertPaylinesToWinFormat(spinData);
-  console.log('[Symbols] Converted SpinData paylines to win format:', convertedWins);
-
-  // Create a Wins object with the converted data
-  mockData.wins = new Wins(convertedWins);
-
-  mockData.balance = 0; // Not used in symbol processing
-  mockData.bet = parseFloat(spinData.bet);
-  mockData.freeSpins = (
-    (spinData?.slot?.freespin?.items && Array.isArray(spinData.slot.freespin.items))
-      ? spinData.slot.freespin.items.length
-      : (spinData?.slot?.freespin?.count || 0)
-  );
-
-  // Set proper timing for animations
-  const baseDelay = DELAY_BETWEEN_SPINS; // 2500ms default
-  const adjustedDelay = gameStateManager.isTurbo ?
-    baseDelay * TurboConfig.TURBO_SPEED_MULTIPLIER : baseDelay;
-
-  console.log('[Symbols] Setting animation timing:', {
-    baseDelay,
-    isTurbo: gameStateManager.isTurbo,
-    adjustedDelay
   });
 
-  // Set the timing in the mock data
-  mockData.delayBetweenSpins = adjustedDelay;
-
-  // Apply timing to GameData for animations
-  setSpeed(self.scene.gameData, adjustedDelay);
-
-  // Set spinning state
-  gameStateManager.isReelSpinning = true;
-
-  // Use the existing createNewSymbols function
-  createNewSymbols(self, mockData);
-
-  // Use the existing dropReels function
-  await dropReels(self, mockData);
-
-  // Update symbols after animation
-  disposeSymbols(self, self.symbols);
-  self.symbols = self.newSymbols;
-  self.newSymbols = [];
-
-  // Re-evaluate wins after initial drop completes
-  try { reevaluateWinsFromGrid(self); } catch { }
-
-  // Apply tumble steps if provided by backend
-  try {
-    // Pre-compute tumble information for the event chain
-    let tumbles: any = undefined;
-    let hasTumbles = false;
-    try {
-      tumbles = gameStateManager.isBonus
-        ? spinData?.slot?.freespin?.items[self.scene.gameAPI.getCurrentFreeSpinIndex() - 1]?.tumble
-        : spinData?.slot?.tumbles;
-      hasTumbles = Array.isArray(tumbles?.items) && tumbles.items.length > 0;
-      if (hasTumbles) {
-        console.log(`[Symbols] Tumble steps detected from SpinData: count=${tumbles.items.length}`);
-      } else {
-        console.log('[Symbols] No tumble steps detected from SpinData');
+  // 2) After tumbles have completed, resume multiplier symbol animations (if any).
+  if (hasTumbles) {
+    gameEventManager.once(GameEventType.SYMBOLS_TUMBLES_COMPLETE, () => {
+      console.log('[Symbols] SYMBOLS_TUMBLES_COMPLETE received - starting multiplier symbol animations');
+      try {
+        playMultiplierSymbolAnimations(self)
+          .then(() => {
+            console.log('[Symbols] Multiplier symbol animations completed successfully');
+            try {
+              gameEventManager.emit(GameEventType.SYMBOLS_MULTIPLIER_ANIMATIONS_COMPLETE);
+            } catch { }
+          })
+          .catch((e) => {
+            console.warn('[Symbols] playMultiplierSymbolAnimations rejected:', e);
+            try {
+              gameEventManager.emit(GameEventType.SYMBOLS_MULTIPLIER_ANIMATIONS_COMPLETE);
+            } catch { }
+          });
+      } catch (e) {
+        console.warn('[Symbols] playMultiplierSymbolAnimations threw synchronously:', e);
+        try {
+          gameEventManager.emit(GameEventType.SYMBOLS_MULTIPLIER_ANIMATIONS_COMPLETE);
+        } catch { }
       }
-    } catch (e) {
-      console.warn('[Symbols] Failed inspecting tumbles from SpinData:', e);
-      tumbles = undefined;
-      hasTumbles = false;
-    }
-
-    if (hasTumbles) {
-      console.log(`[Symbols] Applying ${tumbles.items.length} tumble step(s) from SpinData`);
-      await applyTumbles(self, tumbles.items);
-
-      console.log('[Symbols] Tumbles applied');
-      // After all tumbles have finished, resume multiplier symbol animations (index >= 10)
-      await playMultiplierSymbolAnimations(self);
-    }
-  } catch (e) {
-    console.warn('[Symbols] Failed applying tumbles:', e);
+    });
   }
 
+  // 3) After multiplier animations finish (or are skipped), handle scatter/bonus
+  //    and finally schedule spin completion.
+  gameEventManager.once(GameEventType.SYMBOLS_MULTIPLIER_ANIMATIONS_COMPLETE, () => {
+    console.log('[Symbols] SYMBOLS_MULTIPLIER_ANIMATIONS_COMPLETE received - handling post-win flow');
+    handlePostMultiplierFlow(self, mockData, spinData);
+  });
+}
+
+/**
+ * Handle everything that originally came after tumbles + multiplier animations:
+ * - Replace symbols with Spine animations if enabled
+ * - Detect scatter and branch into scatter/bonus handling
+ * - For non-scatter spins, immediately proceed to finalization
+ */
+function handlePostMultiplierFlow(self: Symbols, mockData: Data, spinData: any): void {
   // Replace with spine animations if needed (disabled while using symbol-count logic)
-  if (!(Symbols as any).WINLINE_CHECKING_DISABLED) {
-    replaceWithSpineAnimations(self, mockData);
+  try {
+    if (!(Symbols as any).WINLINE_CHECKING_DISABLED) {
+      replaceWithSpineAnimations(self, mockData);
+    }
+  } catch (e) {
+    console.warn('[Symbols] replaceWithSpineAnimations failed:', e);
   }
 
   // Check for scatter symbols and trigger scatter bonus if found
@@ -3012,9 +2987,11 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   const colCount = srcSymbols.length;
 
   if (rowCount > 0 && colCount > 0) {
+    // Ensure outer buffer size
     if (!Array.isArray(self.scatterTransposedBuffer)) {
       self.scatterTransposedBuffer = [];
     }
+
     for (let row = 0; row < rowCount; row++) {
       const rowArr = self.scatterTransposedBuffer[row] || (self.scatterTransposedBuffer[row] = []);
       for (let col = 0; col < colCount; col++) {
@@ -3043,31 +3020,198 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   console.log('[Symbols] ScatterGrids found:', scatterGrids);
   console.log('[Symbols] ScatterGrids length:', scatterGrids.length);
 
-  // Check if this win meets the dialog threshold and pause autoplay if so
-  // if (spinData) {
-  //   const totalWin = calculateTotalWinFromPaylines(spinData as SpinData);
-  //   const betAmount = parseFloat(spinData.bet);
-  //   const multiplier = totalWin / betAmount;
+  // NOW handle scatter symbols AFTER winlines are drawn
+  const targetScatterSymbolCount = gameStateManager.isBonus ? 3 : 4;
+  if (scatterGrids.length >= targetScatterSymbolCount) {
+    handleScatterAndBonusFlow(self, mockData, spinData, scatterGrids);
+  } else {
+    console.log(`[Symbols] No scatter detected (found ${scatterGrids.length} scatter symbols, need ${targetScatterSymbolCount}+)`);
+    finalizeSpinProcessing(self, spinData);
+  }
+}
 
-  //   if (multiplier >= 20) {
-  //     console.log(`[Symbols] Win meets dialog threshold (${multiplier.toFixed(2)}x) - pausing autoplay immediately`);
-  //     gameStateManager.isShowingWinDialog = true;
-  //   } else {
-  //     console.log(`[Symbols] Win below dialog threshold (${multiplier.toFixed(2)}x) - autoplay continues`);
-  //   }
-  // }
+/**
+ * Handle scatter detection branch: play scatter SFX/autoplay stop, run scatter symbol
+ * animations, then either run bonus retrigger flow or start the standard scatter
+ * animation sequence before finalizing the spin.
+ */
+function handleScatterAndBonusFlow(
+  self: Symbols,
+  mockData: Data,
+  spinData: any,
+  scatterGrids: any[]
+): void {
+  console.log(`[Symbols] Scatter detected! Found ${scatterGrids.length} scatter symbols`);
+  try {
+    self.calculateAndCacheTotalWin(spinData);
+    self.calculateAndCachePreBonusWins(spinData);
+  } catch { }
+  gameStateManager.isScatter = true;
 
+  // If there are no normal wins (no paylines), play scatter SFX now
+  try {
+    const hasWins = Array.isArray(spinData.slot?.paylines) && spinData.slot.paylines.length > 0;
+    if (!hasWins) {
+      const audio = (window as any)?.audioManager;
+      if (audio && typeof audio.playSoundEffect === 'function') {
+        audio.playSoundEffect(SoundEffectType.SCATTER);
+        console.log('[Symbols] Played scatter SFX for scatter-only hit');
+      }
+    }
+  } catch { }
 
-  const finalizeSpinFlow = () => {
+  // Stop normal autoplay immediately when scatter is detected
+  if (gameStateManager.isAutoPlaying) {
+    console.log('[Symbols] Scatter detected during autoplay - stopping normal autoplay immediately');
+    // Access SlotController to stop autoplay
+    const slotController = (self.scene as any).slotController;
+    if (slotController && typeof slotController.stopAutoplay === 'function') {
+      slotController.stopAutoplay();
+      console.log('[Symbols] Normal autoplay stopped due to scatter detection');
+    } else {
+      console.warn('[Symbols] SlotController not available to stop autoplay');
+    }
+  }
+
+  // Always show the winning overlay behind symbols for scatter
+  self.showWinningOverlay();
+  console.log('[Symbols] Showing winning overlay for scatter symbols');
+
+  // After scatter symbol animations (including their internal delay) complete,
+  // decide whether to run a bonus retrigger flow or start the standard scatter
+  // animation sequence, then finalize the spin.
+  gameEventManager.once(GameEventType.SYMBOLS_SCATTER_ANIMATIONS_COMPLETE, () => {
+    console.log('[Symbols] SYMBOLS_SCATTER_ANIMATIONS_COMPLETE received');
+
+    // Reset winning symbols spine animations back to PNG after scatter symbol animations
+    // Check if win dialog is showing - if so, wait for it to close before starting scatter animation
+    if (gameStateManager.isShowingWinDialog) {
+      console.log('[Symbols] Win dialog is showing - waiting for WIN_DIALOG_CLOSED event before starting scatter animation');
+
+      // Listen for WIN_DIALOG_CLOSED event to start scatter animation
+      const onWinDialogClosed = () => {
+        console.log('[Symbols] WIN_DIALOG_CLOSED received - starting scatter animation sequence');
+        try {
+          gameEventManager.off(GameEventType.WIN_DIALOG_CLOSED, onWinDialogClosed);
+        } catch { }
+        // Start scatter animation after win dialog closes
+        self.startScatterAnimationSequence(mockData);
+        finalizeSpinProcessing(self, spinData);
+      };
+
+      gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, onWinDialogClosed);
+      return;
+    }
+
+    // No win dialog currently showing – branch based on bonus mode
+    if (gameStateManager.isBonus) {
+      console.log('[Symbols] Bonus mode active - starting bonus scatter retrigger flow');
+
+      // When the bonus retrigger dialog flow is complete, finalize the spin.
+      gameEventManager.once(GameEventType.SYMBOLS_BONUS_RETRIGGER_COMPLETE, () => {
+        console.log('[Symbols] SYMBOLS_BONUS_RETRIGGER_COMPLETE received - finalizing spin');
+        finalizeSpinProcessing(self, spinData);
+      });
+
+      try {
+        self.handleBonusScatterRetrigger(mockData, scatterGrids, spinData).catch((e) => {
+          console.warn('[Symbols] handleBonusScatterRetrigger rejected:', e);
+          try {
+            gameEventManager.emit(GameEventType.SYMBOLS_BONUS_RETRIGGER_COMPLETE);
+          } catch { }
+        });
+      } catch (e) {
+        console.warn('[Symbols] handleBonusScatterRetrigger threw synchronously:', e);
+        try {
+          gameEventManager.emit(GameEventType.SYMBOLS_BONUS_RETRIGGER_COMPLETE);
+        } catch { }
+      }
+    } else {
+      console.log('[Symbols] No win dialog showing - starting scatter animation immediately');
+      // No win dialog, start scatter animation immediately
+      self.startScatterAnimationSequence(mockData);
+      finalizeSpinProcessing(self, spinData);
+    }
+  });
+
+  // Animate the individual scatter symbols with their hit animations.
+  console.log('[Symbols] Starting scatter symbol hit animations...');
+  try {
+    self.animateScatterSymbols(mockData, scatterGrids)
+      .then(() => {
+        console.log('[Symbols] Scatter symbol animations completed successfully');
+        try {
+          gameEventManager.emit(GameEventType.SYMBOLS_SCATTER_ANIMATIONS_COMPLETE);
+        } catch { }
+      })
+      .catch((error: any) => {
+        console.error('[Symbols] animateScatterSymbols rejected:', error);
+        // Show Free Spin dialog immediately if cant animate scatter symbols
+        // self.showFreeSpinDialog(mockData.freeSpins || 0);
+        try {
+          gameEventManager.emit(GameEventType.SYMBOLS_SCATTER_ANIMATIONS_COMPLETE);
+        } catch { }
+      });
+  } catch (error) {
+    console.error('[Symbols] Error animating scatter symbols:', error);
+    try {
+      gameEventManager.emit(GameEventType.SYMBOLS_SCATTER_ANIMATIONS_COMPLETE);
+    } catch { }
+  }
+}
+
+/**
+ * Final step in the SpinData symbol processing pipeline.
+ *
+ * During autoplay, we must know *before* WIN_STOP is emitted whether
+ * a win dialog will be shown, so that SlotController's WIN_STOP handler
+ * can pause scheduling the next autoplay spin.
+ *
+ * This function preserves that behavior but uses Phaser timers instead of
+ * async/await to poll for dialog completion.
+ */
+function finalizeSpinProcessing(self: Symbols, spinData: any): void {
+  console.log('[Symbols] finalizeSpinProcessing called');
+
+  // Early win-dialog threshold check (same thresholds as Game.checkAndShowWinDialog)
+  if (spinData) {
+    try {
+      const currentSpinWin = gameStateManager.isScatter
+        ? SpinDataUtils.getScatterSpinWins(spinData)
+        : gameStateManager.isBonus
+          ? SpinDataUtils.getBonusSpinWins(spinData, self.scene.gameAPI.getCurrentFreeSpinIndex() - 1)
+          : spinData.slot.totalWin;
+      const betAmount = parseFloat(spinData.bet);
+      const winRatio = currentSpinWin / betAmount;
+
+      if (winRatio >= self.scene.gameData.bigWinThreshold) {
+        console.log(`[Symbols] Win meets dialog threshold (${winRatio.toFixed(2)}x) - pausing autoplay immediately`);
+        gameStateManager.isShowingWinDialog = true;
+      } else {
+        console.log(`[Symbols] Win below dialog threshold (${winRatio.toFixed(2)}x) - autoplay continues (multiplier < 2x)`);
+      }
+    } catch (e) {
+      console.warn('[Symbols] Failed to compute win ratio for dialog threshold check:', e);
+    }
+  }
+
+  const maxWaitMs = 500;
+  const pollIntervalMs = 50;
+  let waitedMs = 0;
+
+  const completeSpin = () => {
     // Set spinning state to false
     gameStateManager.isReelSpinning = false;
-
     console.log('[Symbols] SpinData symbols processed successfully');
+
+    // Notify listeners that the entire SpinData symbol processing pipeline has completed
+    try {
+      gameEventManager.emit(GameEventType.SYMBOLS_PROCESSING_COMPLETE, { spinData } as any);
+    } catch { }
 
     // Mark spin as done after all animations and tumbles finish (no winline drawer flow)
     console.log('[Symbols] Emitting REELS_STOP and WIN_STOP after symbol animations and tumbles (no winlines flow)');
     try {
-      // Pass spinData to match warfreaks_v2 event payload
       gameEventManager.emit(GameEventType.WIN_STOP, { spinData });
       const scene = self.scene;
       if (scene?.time) {
@@ -3083,117 +3227,124 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
     }
   };
 
-  // NOW handle scatter symbols AFTER winlines are drawn
-  const targetScatterSymbolCount = gameStateManager.isBonus ? 3 : 4;
-  if (scatterGrids.length >= targetScatterSymbolCount) {
-    console.log(`[Symbols] Scatter detected! Found ${scatterGrids.length} scatter symbols`);
-    try {
-      self.calculateAndCacheTotalWin(spinData);
-      self.calculateAndCachePreBonusWins(spinData);
-    } catch { }
-    gameStateManager.isScatter = true;
-
-    // If there are no normal wins (no paylines), play scatter SFX now
-    try {
-      const hasWins = Array.isArray(spinData.slot?.paylines) && spinData.slot.paylines.length > 0;
-      if (!hasWins) {
-        const audio = (window as any)?.audioManager;
-        if (audio && typeof audio.playSoundEffect === 'function') {
-          audio.playSoundEffect(SoundEffectType.SCATTER);
-          console.log('[Symbols] Played scatter SFX for scatter-only hit');
-        }
-      }
-    } catch { }
-
-    // During autoplay, ensure we pause when a dialog will show
-    if (spinData) {
-      const currentSpinWin = gameStateManager.isScatter
-        ? SpinDataUtils.getScatterSpinWins(spinData)
-        : gameStateManager.isBonus
-          ? SpinDataUtils.getBonusSpinWins(spinData, self.scene.gameAPI.getCurrentFreeSpinIndex() - 1)
-          : spinData.slot.totalWin;
-      const betAmount = parseFloat(spinData.bet);
-      const winRatio = currentSpinWin / betAmount;
-      console.log(`[Symbols] Current spin win: isScatter = ${gameStateManager.isScatter}, isBonus = ${gameStateManager.isBonus}`);
-
-      if (winRatio >= self.scene.gameData.bigWinThreshold) {
-        console.log(`[Symbols] Win meets dialog threshold (${winRatio.toFixed(2)}x) | (${currentSpinWin} / ${betAmount}) - pausing autoplay immediately`);
-        gameStateManager.isShowingWinDialog = true;
-      } else {
-        console.log(`[Symbols] Win below dialog threshold (${winRatio.toFixed(2)}x) - autoplay continues (winRatio < 20x)`);
-      }
-
-      const maxWaitMs = 500;
-      const pollIntervalMs = 50;
-      let waitedMs = 0;
-
-      while (waitedMs < maxWaitMs && gameStateManager.isShowingWinDialog) {
-        await delay(pollIntervalMs);
-        waitedMs += pollIntervalMs;
-      }
-    }
-
-    // Stop normal autoplay immediately when scatter is detected
-    if (gameStateManager.isAutoPlaying) {
-      console.log('[Symbols] Scatter detected during autoplay - stopping normal autoplay immediately');
-      const slotController = (self.scene as any).slotController;
-      if (slotController && typeof slotController.stopAutoplay === 'function') {
-        slotController.stopAutoplay();
-        console.log('[Symbols] Normal autoplay stopped due to scatter detection');
-      } else {
-        console.warn('[Symbols] SlotController not available to stop autoplay');
-      }
-    }
-
-    self.showWinningOverlay();
-    console.log('[Symbols] Showing winning overlay for scatter symbols');
-
-    console.log('[Symbols] Starting scatter symbol hit animations...');
-    try {
-      await self.animateScatterSymbols(mockData, scatterGrids);
-      console.log('[Symbols] Scatter symbol hit animations completed');
-    } catch (error) {
-      console.error('[Symbols] Error animating scatter symbols:', error);
-    }
-
-    const runScatterFlow = async () => {
-      if (gameStateManager.isBonus) {
-        console.log('[Symbols] Bonus mode active - starting bonus scatter retrigger flow');
-        await self.handleBonusScatterRetrigger(mockData, scatterGrids, spinData);
-      } else {
-        console.log('[Symbols] Starting standard scatter animation sequence');
-        self.startScatterAnimationSequence(mockData);
-      }
-    };
-
-    if (gameStateManager.isShowingWinDialog) {
-      console.log('[Symbols] Win dialog is showing - waiting for WIN_DIALOG_CLOSED event before continuing scatter flow');
-      const onWinDialogClosed = async () => {
-        console.log('[Symbols] WIN_DIALOG_CLOSED received - continuing scatter flow');
-        try { gameEventManager.off(GameEventType.WIN_DIALOG_CLOSED, onWinDialogClosed); } catch { }
-        try {
-          await runScatterFlow();
-        } catch (error) {
-          console.warn('[Symbols] Scatter flow failed after WIN_DIALOG_CLOSED:', error);
-        }
-        finalizeSpinFlow();
-      };
-
-      gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, onWinDialogClosed);
+  const pollDialogState = () => {
+    if (!gameStateManager.isShowingWinDialog || waitedMs >= maxWaitMs) {
+      completeSpin();
       return;
     }
 
-    try {
-      await runScatterFlow();
-    } catch (error) {
-      console.warn('[Symbols] Scatter flow failed:', error);
-    }
-    finalizeSpinFlow();
-    return;
+    waitedMs += pollIntervalMs;
+    self.scene.time.delayedCall(pollIntervalMs, pollDialogState);
+  };
+
+  // Start dialog polling loop on the next tick
+  self.scene.time.delayedCall(0, pollDialogState);
+}
+
+/**
+ * Process symbols from SpinData (GameAPI response)
+ */
+function processSpinDataSymbols(self: Symbols, symbols: number[][], spinData: any) {
+  console.log('[Symbols] Processing SpinData symbols (event-driven):', symbols);
+
+  // Clear all scatter symbols from previous spin
+  if (self.scatterAnimationManager) {
+    self.scatterAnimationManager.clearScatterSymbols();
   }
 
-  console.log(`[Symbols] No scatter detected (found ${scatterGrids.length} scatter symbols, need ${targetScatterSymbolCount}+)`);
-  finalizeSpinFlow();
+  // Reset symbols and clear previous state before starting new spin
+  console.log('[Symbols] Resetting symbols and clearing previous state for new spin');
+  self.ensureCleanSymbolState();
+  self.resetSymbolsState();
+
+  // Always clear win lines and overlay when a new spin starts
+  console.log('[Symbols] Clearing win lines and overlay for new spin');
+  self.clearWinLines();
+  self.hideWinningOverlay();
+
+  // Reset depths and visibility (using rainbow_fist's separate methods)
+  self.resetSymbolDepths();
+  self.restoreSymbolVisibility();
+
+  // Create a mock Data object to use with existing functions
+  const mockData = new Data();
+  mockData.symbols = symbols;
+
+  // Convert SpinData paylines to the format expected by the game
+  const convertedWins = convertPaylinesToWinFormat(spinData);
+  console.log('[Symbols] Converted SpinData paylines to win format:', convertedWins);
+
+  // Create a Wins object with the converted data
+  mockData.wins = new Wins(convertedWins);
+
+  mockData.balance = 0; // Not used in symbol processing
+  mockData.bet = parseFloat(spinData.bet);
+  mockData.freeSpins = (
+    (spinData?.slot?.freespin?.items && Array.isArray(spinData.slot.freespin.items))
+      ? spinData.slot.freespin.items.length
+      : (spinData?.slot?.freespin?.count || 0)
+  );
+
+  // Set proper timing for animations
+  const baseDelay = DELAY_BETWEEN_SPINS; // 2500ms default
+  const adjustedDelay = gameStateManager.isTurbo
+    ? baseDelay * TurboConfig.TURBO_SPEED_MULTIPLIER
+    : baseDelay;
+
+  console.log('[Symbols] Setting animation timing:', {
+    baseDelay,
+    isTurbo: gameStateManager.isTurbo,
+    adjustedDelay
+  });
+
+  // Set the timing in the mock data
+  mockData.delayBetweenSpins = adjustedDelay;
+
+  // Apply timing to GameData for animations
+  setSpeed(self.scene.gameData, adjustedDelay);
+
+  // Set spinning state
+  gameStateManager.isReelSpinning = true;
+
+  // Pre-compute tumble information for the event chain
+  let tumbles: any = undefined;
+  let hasTumbles = false;
+  try {
+    tumbles = gameStateManager.isBonus
+      ? spinData?.slot?.freespin?.items[self.scene.gameAPI.getCurrentFreeSpinIndex() - 1]?.tumble
+      : spinData?.slot?.tumbles;
+    hasTumbles = Array.isArray(tumbles?.items) && tumbles.items.length > 0;
+    if (hasTumbles) {
+      console.log(`[Symbols] Tumble steps detected from SpinData: count=${tumbles.items.length}`);
+    } else {
+      console.log('[Symbols] No tumble steps detected from SpinData');
+    }
+  } catch (e) {
+    console.warn('[Symbols] Failed inspecting tumbles from SpinData:', e);
+    tumbles = undefined;
+    hasTumbles = false;
+  }
+
+  // Set up the chained event subscriptions for the async phases
+  setupSpinProcessingEventChain(self, mockData, spinData, tumbles, hasTumbles);
+
+  // Kick off the first async phase: create symbols and drop reels.
+  // Subsequent phases are chained via GameEventType events.
+  createNewSymbols(self, mockData);
+  try {
+    // Fire and forget; completion is signaled via SYMBOLS_DROP_REELS_COMPLETE
+    dropReels(self, mockData).catch((e) => {
+      console.warn('[Symbols] dropReels rejected:', e);
+      try {
+        gameEventManager.emit(GameEventType.SYMBOLS_DROP_REELS_COMPLETE);
+      } catch { }
+    });
+  } catch (e) {
+    console.warn('[Symbols] dropReels threw synchronously:', e);
+    try {
+      gameEventManager.emit(GameEventType.SYMBOLS_DROP_REELS_COMPLETE);
+    } catch { }
+  }
 }
 
 /**
@@ -3364,7 +3515,7 @@ function scheduleWinAmountPopup(self: Symbols, x: number, y: number, displayAmou
   const numberConfig: NumberDisplayConfig = {
     x: baseX,
     y: baseY,
-    scale: 0.02,
+    scale: 0.2,
     spacing: -10,
     alignment: 'center',
     decimalPlaces: 2,
@@ -3592,15 +3743,17 @@ async function dropReels(self: Symbols, data: Data): Promise<void> {
     for (let step = 0; step < SLOT_COLUMNS; step++) {
       const actualRow = (SLOT_COLUMNS - 1) - step;
       const isLastReel = actualRow === 0;
-      const startDelay = self.scene.gameData.dropReelsDelay * step;
+      const startDelay = gameStateManager.isTurbo ? 0 : self.scene.gameData.dropReelsDelay * step;
       const p = (async () => {
         // Use Phaser time so dialog/scene pauses don't desync reel scheduling
-        await phaserDelay(self.scene, startDelay);
+        // await phaserDelay(self.scene, startDelay);
+        await delay(startDelay);
         console.log(`[Symbols] Processing row ${actualRow}`);
         dropPrevSymbols(self, actualRow, isLastReel && extendLastReelDrop);
 
         // Wait before spawning new symbols so previous ones are cleared first
-        await phaserDelay(self.scene, PREV_TO_NEW_DELAY_MS);
+        // await phaserDelay(self.scene, PREV_TO_NEW_DELAY_MS);
+        await delay(PREV_TO_NEW_DELAY_MS);
         await dropNewSymbols(self, actualRow, isLastReel && extendLastReelDrop);
       })();
       reelPromises.push(p);
@@ -3608,6 +3761,13 @@ async function dropReels(self: Symbols, data: Data): Promise<void> {
     console.log('[Symbols] Waiting for all reels to complete animation...');
     await Promise.all(reelPromises);
     console.log('[Symbols] All reels have completed animation');
+
+    // Notify listeners that the initial drop-reels phase has fully completed
+    try {
+      gameEventManager.emit(GameEventType.SYMBOLS_DROP_REELS_COMPLETE);
+    } catch (e) {
+      console.warn('[Symbols] Failed to emit SYMBOLS_DROP_REELS_COMPLETE:', e);
+    }
   } finally {
     self.isReelDropping = false;
   }
@@ -3703,7 +3863,7 @@ function dropFillers(self: Symbols, index: number, extendDuration: boolean = fal
   const baseTotal = Symbols.FILLER_COUNT + SLOT_COLUMNS;
   const baseDropDistance = baseTotal * height + GameData.WIN_UP_HEIGHT;
   const extraMs = extendDuration ? 3000 : 0;
-  const baseDropMs = self.scene.gameData.dropDuration * 0.9;
+  const baseDropMs = self.scene.gameData.dropDuration;
   const extraPixels = extraMs > 0 && baseDropMs > 0 ? (baseDropDistance * (extraMs / baseDropMs)) : 0;
   const extraRows = extraPixels > 0 ? Math.ceil(extraPixels / height) : 0;
   const TOTAL_ITEMS = Symbols.FILLER_COUNT + SLOT_COLUMNS + extraRows;
@@ -3993,6 +4153,9 @@ function getYPos(self: Symbols, index: number) {
  */
 async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
   try {
+    // Reset the sequence counter for fly-out animations to ensure proper staggering
+    (animateMultiplierValueToPosition as any)._seq = 0;
+    
     const cols = self.symbols?.length || 0;
     const rows = cols > 0 && self.symbols[0] ? self.symbols[0].length : 0;
 
@@ -4052,7 +4215,12 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
             audio.playSoundEffect(SoundEffectType.MULTIPLIER_HIT);
           }
         } catch { }
-        try { state.setAnimation(0, animationName, false); } catch { }
+        // Clear the track first to ensure the animation restarts from the beginning
+        // This is important when multiple multipliers need to animate simultaneously
+        try {
+          state.clearTrack(0);
+          state.setAnimation(0, animationName, false);
+        } catch { }
         // Estimate duration so we can await the longest-running animation.
         const animDurationSec =
           skeletonData?.findAnimation?.(animationName)?.duration ??
@@ -4517,9 +4685,20 @@ function resolveSymbolHitSfx(symbolIndex: number): SoundEffectType | null {
  * Apply a sequence of tumble steps: remove "out" symbols, compress columns down, and drop "in" symbols from top.
  * Expects tumbles to be in the SpinData format: [{ symbols: { in: number[][], out: {symbol:number,count:number,win:number}[] }, win: number }, ...]
  */
-async function applyTumbles(self: Symbols, tumbles: any[]): Promise<void> {
+async function applyTumbles(self: Symbols, tumbles: any[], mockData?: Data): Promise<void> {
   for (const tumble of tumbles) {
     await applySingleTumble(self, tumble);
+    // Note: synchronizeMockDataSymbols is not available in rainbow_fist
+    // if (mockData) {
+    //   synchronizeMockDataSymbols(self, mockData);
+    // }
+  }
+
+  // Notify listeners that all tumbles have completed
+  try {
+    gameEventManager.emit(GameEventType.SYMBOLS_TUMBLES_COMPLETE);
+  } catch (e) {
+    console.warn('[Symbols] Failed to emit SYMBOLS_TUMBLES_COMPLETE:', e);
   }
 }
 
@@ -5515,19 +5694,6 @@ function createMultiplierSymbol(self: Symbols, value: number, x: number, y: numb
     try { releaseSpineToPool(self, spine as any); } catch { }
     return createPngSymbol(self, value, x, y, alpha);
   }
-}
-
-/**
- * Calculate total win using SpinData (base paylines or all free spins)
- */
-function calculateTotalWinFromPaylines(spinData: SpinData): number {
-  if (!spinData) {
-    return 0;
-  }
-
-  const totalWin = SpinDataUtils.getAggregateTotalWin(spinData);
-  console.log(`[Symbols] Calculated aggregate total win from SpinData: ${totalWin}`);
-  return totalWin;
 }
 
 async function delay(duration: number) {

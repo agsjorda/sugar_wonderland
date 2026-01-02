@@ -2814,7 +2814,6 @@ export class SlotController {
 		const turboButton = this.buttons.get('turbo');
 		if (turboButton) {
 			turboButton.setAlpha(0.3);
-			turboButton.setTint(0x666666); // Grey out the button
 			turboButton.disableInteractive();
 			console.log('[SlotController] Turbo button disabled and greyed out');
 		}
@@ -2827,7 +2826,6 @@ export class SlotController {
 		const turboButton = this.buttons.get('turbo');
 		if (turboButton) {
 			turboButton.setAlpha(1.0);
-			turboButton.clearTint(); // Remove grey tint
 			turboButton.setInteractive();
 			console.log('[SlotController] Turbo button enabled');
 		}

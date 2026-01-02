@@ -64,8 +64,8 @@ export class AssetConfig {
 					json: `${prefix}/bonus_background/bonus_background_spine/Bonus Background RIG.json`
 				},
 				'sparkle_background': {
-					atlas: `${prefix}/bonus_background/Particle_VFX/Particle_VFX.atlas`,
-					json: `${prefix}/bonus_background/Particle_VFX/Particle_VFX.json`
+					atlas: `${prefix}/bonus_background/SparkleBonus_RF_VFX/SparkleBonus_RF_VFX.atlas`,
+					json: `${prefix}/bonus_background/SparkleBonus_RF_VFX/SparkleBonus_RF_VFX.json`
 				},
 			}
 		};
@@ -335,6 +335,10 @@ export class AssetConfig {
 				'total_win': {
 					atlas: `${prefix}/dialogs/TotalW_RF/TotalW_RF.atlas`,
 					json: `${prefix}/dialogs/TotalW_RF/TotalW_RF.json`
+				},
+				'punch_vfx': {
+					atlas: `${prefix}/dialogs/Punch_VFX/Punch_VFX.atlas`,
+					json: `${prefix}/dialogs/Punch_VFX/Punch_VFX.json`
 				},
 			}
 		};

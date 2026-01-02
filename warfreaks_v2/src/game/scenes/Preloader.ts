@@ -232,7 +232,7 @@ export class Preloader extends Scene
 		this.assetLoader.loadSymbolAssets(this);
 		this.assetLoader.loadSymbolEffectsAssets(this);
 		this.assetLoader.loadButtonAssets(this);
-		this.assetLoader.loadFontAssets(this);
+		// Fonts are already loaded in Boot scene, no need to load again
 		this.assetLoader.loadSpinnerAssets(this);
 		this.assetLoader.loadDialogAssets(this);
 		// Load Scatter Anticipation spine (portrait/high only asset paths)

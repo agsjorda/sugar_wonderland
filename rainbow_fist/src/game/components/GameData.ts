@@ -51,12 +51,12 @@ import { DROP_REEL_START_INTERVAL_RATIO } from '../../config/GameConfig';
 
 // Global time multiplier for symbol drop and reset animations
 // Lower than 1.0 = faster; higher than 1.0 = slower
-export const DROP_RESET_TIME_MULTIPLIER: number = 1.1;
+export const DROP_RESET_TIME_MULTIPLIER: number = 1.0;
 
 export function setSpeed(data: GameData, DELAY_BETWEEN_SPINS: number) {
 	// Apply global multiplier to win-up (reset) and drop durations
 	data.winUpDuration = DELAY_BETWEEN_SPINS * 0.05 * DROP_RESET_TIME_MULTIPLIER;
-	data.dropDuration = DELAY_BETWEEN_SPINS * 0.3 * DROP_RESET_TIME_MULTIPLIER;
+	data.dropDuration = DELAY_BETWEEN_SPINS * 0.4 * DROP_RESET_TIME_MULTIPLIER;
     data.dropReelsDelay = DELAY_BETWEEN_SPINS * 0.2 * DROP_REEL_START_INTERVAL_RATIO;
 	data.dropReelsDuration = DELAY_BETWEEN_SPINS * 0.5 * DROP_RESET_TIME_MULTIPLIER;
 }

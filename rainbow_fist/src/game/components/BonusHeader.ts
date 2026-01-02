@@ -37,7 +37,7 @@ export class BonusHeader {
 	private didMultiplierUpdateForCurrentTumble: boolean = false;
 
 	// Slightly adjusted for larger font sizes (amount +2px, label +2px)
-	private winningsLabelTextOffset: {x: number, y: number} = {x: 0, y: -15};
+	private winningsLabelTextOffset: {x: number, y: number} = {x: 0, y: -12};
     private winningsValueTextOffset: {x: number, y: number} = {x: 0, y: 7};
     private multiplierNumberDisplayOffset: {x: number, y: number} = {x: 12, y: 0};
 
@@ -137,13 +137,13 @@ export class BonusHeader {
 		const multiplierConfig: NumberDisplayConfig = {
             x: displayX,
             y: displayY,
-			scale: 0.019,
-			prefixScale: 0.009,
-			prefixYOffset: 0.5,
+			scale: 0.2,
+			prefixScale: 0.2,
+			prefixYOffset: -0.5,
 			spacing: -10,
 			alignment: 'center',
 			decimalPlaces: 0,
-			showCommas: false,
+			showCommas: true,
 			prefix: 'x',
 		};
 
@@ -160,7 +160,6 @@ export class BonusHeader {
 		}
 
 		this.multiplierDisplay.displayValue(1);
-		this.hideMultiplierText();
 	}
 
 	private createLogoImage(scene: Scene): void {
@@ -195,7 +194,7 @@ export class BonusHeader {
 
 		// Line 2: "$ 0.00" with bold formatting
 		this.amountText = scene.add.text(x + this.winningsValueTextOffset.x, y + this.winningsValueTextOffset.y, '$ 999,999,999,999.00', {
-			fontSize: '22px',
+			fontSize: '20px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold',
 			stroke: this.textStrokeColor,
@@ -205,7 +204,7 @@ export class BonusHeader {
 
 		// Separate text object for the total winnings part (shown in green)
 		this.amountTotalText = scene.add.text(x + this.winningsValueTextOffset.x, y + this.winningsValueTextOffset.y, '', {
-			fontSize: '22px',
+			fontSize: '20px',
 			color: this.totalAmountTextColor,
 			fontFamily: 'Poppins-Bold',
 			stroke: this.textStrokeColor,
@@ -606,6 +605,24 @@ export class BonusHeader {
 				});
 			}
 		});
+
+		// // On WIN_STOP during bonus, update total win display if it's the last spin
+		// gameEventManager.on(GameEventType.WIN_STOP, () => {
+		// 	if (!gameStateManager.isBonus) {
+		// 		return;
+		// 	}
+
+		// 	// Check if this is the last spin of bonus mode
+		// 	if (gameStateManager.isBonusFinished) {
+		// 		console.log('[BonusHeader] WIN_STOP: Last spin of bonus mode - updating total win');
+				
+		// 		// Update current winnings to include any pending base winnings
+		// 		this.updateCurrentWinnings();
+
+		// 		// Update the display to show total win
+		// 		this.updateDisplayTextToTotalWin(this.currentWinnings);
+		// 	}
+		// });
 	}
 
 	private updateCurrentWinnings(): void {
@@ -684,30 +701,12 @@ export class BonusHeader {
 				return;
 			}
 		}
-
-		// Fallback: calculate from aggregate SpinData if no subTotalWin available
-		const totalWin = this.calculateTotalWinFromPaylines(spinData as SpinData);
-		console.log(`[BonusHeader] Calculated aggregate total win from SpinData: $${totalWin}`);
-
-		// Only show display if totalWin > 0, otherwise hide it
-		if (totalWin > 0) {
-			console.log(`[BonusHeader] Showing winnings display with aggregate calculation: $${totalWin}`);
-			this.updateWinningsDisplay(totalWin);
-		} else {
-			console.log(`[BonusHeader] No wins found in SpinData, hiding winnings display`);
+		else
+		{
+			console.warn('[BonusHeader] No free spin item found in spin data');
 			this.hideWinningsDisplay();
+			return;
 		}
-	}
-
-	/**
-	 * Calculate total win using SpinData (base paylines or all free spins)
-	 */
-	private calculateTotalWinFromPaylines(spinData: SpinData): number {
-		if (!spinData) {
-			return 0;
-		}
-
-		return SpinDataUtils.getAggregateTotalWin(spinData);
 	}
 
 	private hideMultiplierText(): void {

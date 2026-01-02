@@ -2352,8 +2352,8 @@ function createInitialSymbols(self: Symbols) {
       const value = initialRowMajor[row][col];
       // For the initial grid on scene start, always use lightweight PNG sprites
       // to avoid the cost of creating multiple Spine instances up front.
-      // const created = createPngSymbol(self, value, x, y, 1);
-      const created = createSpineOrPngSymbol(self, value, x, y, 1);
+      const created = createPngSymbol(self, value, x, y, 1);
+      // const created = createSpineOrPngSymbol(self, value, x, y, 1);
       rows.push(created);
     }
     self.symbols.push(rows);

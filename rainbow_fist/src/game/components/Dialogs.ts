@@ -11,6 +11,22 @@ import { WinTracker } from './WinTracker';
 import { AUTO_SPIN_WIN_DIALOG_TIMEOUT } from '../../config/GameConfig';
 import { playUtilityButtonSfx } from '../../utils/audioHelpers';
 
+export interface PreDialogSpineConfig {
+	spineKey: string;
+	animationSequence: number[];
+	atlasKey?: string;
+	scale?: number | { x: number; y: number };
+	anchor?: { x: number; y: number };
+	origin?: { x: number; y: number };
+	offset?: { x: number; y: number };
+	depth?: number;
+	loopLastAnimation?: boolean;
+}
+
+export interface PreDialogTweenConfig {
+	tweenConfig: Phaser.Types.Tweens.TweenBuilderConfig;
+}
+
 export interface DialogConfig {
 	//type: 'confetti_KA' | 'congrats_wf' | 'Explosion_AK' | 'FreeSpinDialog_KA' | 'largeW_KA' | 'LargeW_KA' | 'MediumW_KA' | 'SmallW_KA' | 'superw_wf';
 	type: 'Congratulations' | 'FreeSpinDialog' | 'BonusFreeSpinDialog' | 'BigWin' | 'MegaWin' | 'EpicWin' | 'SuperWin' | 'MaxWin';
@@ -20,6 +36,8 @@ export interface DialogConfig {
 	onComplete?: () => void;
 	winAmount?: number; // Amount to display in the dialog
 	freeSpins?: number; // Number of free spins won
+	preDialogSpines?: PreDialogSpineConfig | PreDialogSpineConfig[]; // Optional pre-win spine animations
+	preDialogTweens?: PreDialogTweenConfig | PreDialogTweenConfig[]; // Optional pre-win tweens (run after pre spines)
 }
 
 export class Dialogs {
@@ -71,14 +89,14 @@ export class Dialogs {
 
 	// Dialog positions (relative: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom)
 	private dialogPositions: Record<string, { x: number; y: number }> = {
-		'Congratulations': { x: 0.5, y: 0.63 },
+		'BigWin': { x: 0.5, y: 0.5 },
+		'MegaWin': { x: 0.52, y: 0.5 },
+		'EpicWin': { x: 0.5, y: 0.5 },
+		'SuperWin': { x: 0.5, y: 0.5075 },
 		'FreeSpinDialog': { x: 0.5, y: 0.35 },
 		'BonusFreeSpinDialog': { x: 0.5, y: 0.35 },
-		'BigWin': { x: 0.54, y: 0.53 },
-		'MegaWin': { x: 0.51, y: 0.555 },
-		'EpicWin': { x: 0.5, y: 0.5175 },
-		'SuperWin': { x: 0.5, y: 0.5075 },
 		'MaxWin': { x: 0.5, y: 0.5175 },
+		'Congratulations': { x: 0.5, y: 0.63 },
 	};
 
 	// Number display positions (relative). Defaults to center + offset when not specified.
@@ -130,6 +148,11 @@ export class Dialogs {
 	private flashTransition: FlashTransition | null = null;
 	private dialogSpinePool: Record<string, SpineGameObject[]> = {};
 	private dialogSpinesPrewarmed: boolean = false;
+	private activePreDialogSpines: SpineGameObject[] = [];
+	private preDialogSequenceId: number = 0;
+	private activePreDialogTweens: Phaser.Tweens.Tween[] = [];
+	private preDialogTweenSequenceId: number = 0;
+	private activePreDialogGraphics: Phaser.GameObjects.GameObject[] = [];
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -174,10 +197,368 @@ export class Dialogs {
 	 * Show a dialog with the specified configuration
 	 */
 	public showDialog(scene: Scene, config: DialogConfig): void {
+		const enhancedConfig = this.addDefaultPreDialogSequence(scene, config);
+
 		if (this.isDialogActive) {
 			this.hideDialog();
 		}
 
+		this.currentScene = scene;
+
+		const hasPreSequence =
+			this.shouldPlayPreDialogSpines(enhancedConfig) ||
+			this.shouldPlayPreDialogTweens(enhancedConfig);
+
+		if (hasPreSequence) {
+			this.isDialogActive = true; // Block re-entrancy while pre-animations play
+			this.currentDialogType = enhancedConfig.type;
+
+			this.startPreDialogSequence(scene, enhancedConfig, () => {
+				this.runShowDialogFlow(scene, {
+					...enhancedConfig,
+					preDialogSpines: undefined,
+					preDialogTweens: undefined
+				});
+			});
+			return;
+		}
+
+		this.runShowDialogFlow(scene, enhancedConfig);
+	}
+
+	private addDefaultPreDialogSequence(scene: Scene, config: DialogConfig): DialogConfig {
+		const isPunchWin =
+			config.type === 'BigWin' ||
+			config.type === 'MegaWin' ||
+			config.type === 'EpicWin' ||
+			config.type === 'SuperWin';
+
+		if (!isPunchWin) {
+			return config;
+		}
+
+		const hasCustomPre = config.preDialogSpines || config.preDialogTweens;
+
+		if (hasCustomPre) {
+			return config;
+		}
+
+		// Create a white rectangle that will slide across the screen before the punch VFX
+		const slideRect = scene.add.rectangle(
+			// scene.scale.width + (scene.scale.width * 0.6) / 2,
+			scene.scale.width / 2,
+			scene.scale.height * 0.5,
+			scene.scale.width * 0.2,
+			scene.scale.height,
+			0xffffff,
+			1
+		);
+		slideRect.setDepth(940);
+		this.activePreDialogGraphics.push(slideRect);
+
+		const tweenToEdge: PreDialogTweenConfig = {
+			tweenConfig: {
+				targets: slideRect,
+				x: -(scene.scale.width * 0.6) / 2,
+				duration: 500,
+				ease: 'Cubic.easeInOut',
+				onComplete: () => {
+					try { slideRect.destroy(); } catch {}
+					this.activePreDialogGraphics = this.activePreDialogGraphics.filter((g) => g !== slideRect);
+				}
+			}
+		};
+
+		const punchSpine: PreDialogSpineConfig = {
+			spineKey: 'punch_vfx',
+			animationSequence: [0],
+			depth: 950,
+			loopLastAnimation: false,
+			anchor: { x: 0.49, y: 0.5 },
+			origin: { x: 0.5, y: 0.5 },
+			offset: { x: 0, y: 0 },
+			scale: 0.51
+		};
+
+		return {
+			...config,
+			preDialogTweens: [tweenToEdge],
+			preDialogSpines: [punchSpine]
+		};
+	}
+
+	private shouldPlayPreDialogSpines(config: DialogConfig): boolean {
+		const hasPreSpines = !!config.preDialogSpines;
+		const isWinType =
+			config.type === 'BigWin' ||
+			config.type === 'MegaWin' ||
+			config.type === 'EpicWin' ||
+			config.type === 'SuperWin';
+
+		if (!hasPreSpines || !isWinType) {
+			return false;
+		}
+
+		const entries = Array.isArray(config.preDialogSpines)
+			? config.preDialogSpines
+			: [config.preDialogSpines];
+		return entries.some(
+			(entry) =>
+				!!entry &&
+				typeof entry.spineKey === 'string' &&
+				Array.isArray(entry.animationSequence) &&
+				entry.animationSequence.length > 0
+		);
+	}
+
+	private shouldPlayPreDialogTweens(config: DialogConfig): boolean {
+		const hasPreTweens = !!config.preDialogTweens;
+		const isWinType =
+			config.type === 'BigWin' ||
+			config.type === 'MegaWin' ||
+			config.type === 'EpicWin' ||
+			config.type === 'SuperWin';
+
+		if (!hasPreTweens || !isWinType) {
+			return false;
+		}
+
+		const entries = Array.isArray(config.preDialogTweens)
+			? config.preDialogTweens
+			: [config.preDialogTweens];
+		return entries.some((entry) => !!entry && !!entry.tweenConfig);
+	}
+
+	private startPreDialogSequence(scene: Scene, config: DialogConfig, onComplete: () => void): void {
+		const runSpines = () => {
+			if (!this.shouldPlayPreDialogSpines(config)) {
+				onComplete();
+				return;
+			}
+			this.playPreDialogSpines(scene, config, onComplete);
+		};
+
+		if (this.shouldPlayPreDialogTweens(config)) {
+			this.playPreDialogTweens(scene, config, () => {
+				runSpines();
+			});
+		} else {
+			runSpines();
+		}
+	}
+
+	private playPreDialogSpines(scene: Scene, config: DialogConfig, onComplete: () => void): void {
+		const rawEntries = Array.isArray(config.preDialogSpines)
+			? config.preDialogSpines
+			: [config.preDialogSpines];
+		const entries = rawEntries.filter(
+			(entry): entry is PreDialogSpineConfig =>
+				!!entry &&
+				typeof entry.spineKey === 'string' &&
+				Array.isArray(entry.animationSequence) &&
+				entry.animationSequence.length > 0
+		);
+
+		if (entries.length === 0) {
+			onComplete();
+			return;
+		}
+
+		this.cleanupPreDialogSpines();
+		const sequenceId = ++this.preDialogSequenceId;
+
+		let remaining = entries.length;
+		const finishEntry = () => {
+			remaining -= 1;
+			if (remaining <= 0) {
+				this.cleanupPreDialogSpines();
+				if (sequenceId !== this.preDialogSequenceId) {
+					return;
+				}
+				onComplete();
+			}
+		};
+
+		for (const entry of entries) {
+			let spine: SpineGameObject | null = null;
+			let finished = false;
+			const finalize = () => {
+				if (finished) return;
+				finished = true;
+				this.destroyPreDialogSpine(spine);
+				finishEntry();
+			};
+
+			try {
+				const atlasKey = entry.atlasKey || `${entry.spineKey}-atlas`;
+				spine = scene.add.spine(0, 0, entry.spineKey, atlasKey);
+				this.activePreDialogSpines.push(spine);
+
+				const scale = this.normalizeSpineScale(entry.scale);
+				const durationMs = playSpineAnimationSequenceWithConfig(
+					scene,
+					spine,
+					entry.animationSequence,
+					scale,
+					entry.anchor || { x: 0.5, y: 0.5 },
+					entry.origin || { x: 0.5, y: 0.5 },
+					entry.offset || { x: 0, y: 0 },
+					entry.depth ?? 900,
+					entry.loopLastAnimation ?? false,
+					finalize
+				);
+
+				// Fallback completion to avoid getting stuck if the animation never signals complete
+				const fallbackMs = durationMs > 0 ? durationMs + 100 : 600;
+				scene.time.delayedCall(fallbackMs, finalize);
+			} catch (error) {
+				console.warn('[Dialogs] Failed to play pre-dialog spine animation', error);
+				finalize();
+			}
+		}
+	}
+
+	private normalizeSpineScale(scale?: number | { x: number; y: number }): { x: number; y: number } {
+		if (typeof scale === 'number') {
+			return { x: scale, y: scale };
+		}
+
+		if (scale && typeof scale.x === 'number' && typeof scale.y === 'number') {
+			return scale;
+		}
+
+		return { x: 1, y: 1 };
+	}
+
+	private destroyPreDialogSpine(spine: SpineGameObject | null): void {
+		if (!spine) return;
+
+		this.activePreDialogSpines = this.activePreDialogSpines.filter((s) => s !== spine);
+
+		try {
+			spine.destroy();
+		} catch {}
+	}
+
+	private cleanupPreDialogSpines(): void {
+		for (const spine of this.activePreDialogSpines) {
+			try {
+				spine.destroy();
+			} catch {}
+		}
+		this.activePreDialogSpines = [];
+	}
+
+	private cancelPreDialogSpines(): void {
+		this.preDialogSequenceId++;
+		this.cleanupPreDialogSpines();
+	}
+
+	private playPreDialogTweens(scene: Scene, config: DialogConfig, onComplete: () => void): void {
+		const rawEntries = Array.isArray(config.preDialogTweens)
+			? config.preDialogTweens
+			: [config.preDialogTweens];
+		const entries = rawEntries.filter(
+			(entry): entry is PreDialogTweenConfig => !!entry && !!entry.tweenConfig
+		);
+
+		if (entries.length === 0) {
+			onComplete();
+			return;
+		}
+
+		this.cleanupPreDialogTweens();
+		const sequenceId = ++this.preDialogTweenSequenceId;
+
+		let remaining = entries.length;
+		const finishEntry = () => {
+			remaining -= 1;
+			if (remaining <= 0) {
+				this.cleanupPreDialogTweens();
+				if (sequenceId !== this.preDialogTweenSequenceId) {
+					return;
+				}
+				onComplete();
+			}
+		};
+
+		for (const entry of entries) {
+			let tween: Phaser.Tweens.Tween | null = null;
+			let finished = false;
+
+			const finalize = () => {
+				if (finished) return;
+				finished = true;
+				this.destroyPreDialogTween(tween);
+				finishEntry();
+			};
+
+			try {
+				const userOnComplete = entry.tweenConfig.onComplete;
+				tween = scene.tweens.add({
+					...entry.tweenConfig,
+					onComplete: (...args: any[]) => {
+						try {
+							if (typeof userOnComplete === 'function') {
+								userOnComplete.apply(entry.tweenConfig.callbackScope || tween, args);
+							}
+						} catch {}
+						finalize();
+					}
+				});
+
+				if (tween) {
+					this.activePreDialogTweens.push(tween);
+
+					const duration =
+						(typeof entry.tweenConfig.duration === 'number' ? entry.tweenConfig.duration : 0) +
+						(typeof entry.tweenConfig.delay === 'number' ? entry.tweenConfig.delay : 0);
+					const fallbackMs = duration > 0 ? duration + 200 : 600;
+					scene.time.delayedCall(fallbackMs, finalize);
+				} else {
+					finalize();
+				}
+			} catch (error) {
+				console.warn('[Dialogs] Failed to play pre-dialog tween', error);
+				finalize();
+			}
+		}
+	}
+
+	private destroyPreDialogTween(tween: Phaser.Tweens.Tween | null): void {
+		if (!tween) return;
+
+		this.activePreDialogTweens = this.activePreDialogTweens.filter((t) => t !== tween);
+		try {
+			tween.remove();
+		} catch {}
+	}
+
+	private cleanupPreDialogTweens(): void {
+		for (const tween of this.activePreDialogTweens) {
+			try {
+				tween.remove();
+			} catch {}
+		}
+		this.activePreDialogTweens = [];
+		this.cleanupPreDialogGraphics();
+	}
+
+	private cancelPreDialogTweens(): void {
+		this.preDialogTweenSequenceId++;
+		this.cleanupPreDialogTweens();
+	}
+
+	private cleanupPreDialogGraphics(): void {
+		for (const g of this.activePreDialogGraphics) {
+			try {
+				(g as any).destroy?.();
+			} catch {}
+		}
+		this.activePreDialogGraphics = [];
+	}
+
+	private runShowDialogFlow(scene: Scene, config: DialogConfig): void {
 		console.log(`[Dialogs] Showing dialog: ${config.type}`);
 		
 		// Track current dialog type for bonus mode detection
@@ -756,8 +1137,8 @@ export class Dialogs {
 		const numberConfig: NumberDisplayConfig = {
 			x: position.x,
 			y: position.y,
-			scale: 0.035,
-			spacing: -15,
+			scale: 0.375,
+			spacing: -18,
 			alignment: 'center',
 			decimalPlaces: freeSpins !== undefined ? 0 : 2, // No decimals for free spins
 			showCommas: freeSpins !== undefined ? false : true, // No commas for free spins
@@ -1553,6 +1934,8 @@ export class Dialogs {
 	 */
 	private performDialogCleanup(): void {
 		console.log('[Dialogs] Starting dialog cleanup');
+		this.cleanupPreDialogSpines();
+		this.cleanupPreDialogTweens();
 		
 		// Clean up current dialog
 		if (this.currentDialog) {
@@ -1617,6 +2000,9 @@ export class Dialogs {
 		if (!this.isDialogActive) return;
 		
 		console.log('[Dialogs] Hiding dialog with black overlay transition');
+		this.cancelPreDialogSpines();
+		this.cancelPreDialogTweens();
+		this.cleanupPreDialogGraphics();
 		
 		if (this.currentScene) {
 			// Stop all effect animations immediately

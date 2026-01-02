@@ -11,14 +11,14 @@
  * Base stable version - revert to this if future changes break functionality
  */
 import { EventBus } from '../EventBus';
-import { Scene, Input } from 'phaser';
+import { Scene } from 'phaser';
 import { Background } from '../components/Background';
 import { Header } from '../components/Header';
 import { SlotController } from '../components/SlotController';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { AssetConfig } from '../../config/AssetConfig';
-import { PaylineData, SpinData, SpinDataUtils } from '../../backend/SpinData';
+import { SpinData, SpinDataUtils } from '../../backend/SpinData';
 import { AssetLoader } from '../../utils/AssetLoader';
 import { Symbols } from '../components/Symbols';
 import { GameData } from '../components/GameData';
@@ -42,6 +42,7 @@ import { WinTracker } from '../components/WinTracker';
 import { GameEventData, SpinDataEventData } from '../../event/EventManager';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { getFullScreenSpineScale } from '../components/SpineBehaviorHelper';
+import { initializeConsoleDebugHelpers } from '../../utils/ConsoleDebugHelpers';
 
 export class Game extends Scene
 {
@@ -67,7 +68,6 @@ export class Game extends Scene
 	private menu: Menu;
 	private scatterAnticipation: ScatterAnticipation;
 		private winTrackerRow?: Phaser.GameObjects.Container;
-	private modeToggleKeys?: { base: Input.Keyboard.Key; bonus: Input.Keyboard.Key };
 	private startupTransitionPlayed: boolean = false;
 	
 	// Note: Payout data now calculated directly from paylines in WIN_STOP handler
@@ -200,9 +200,11 @@ export class Game extends Scene
 				});
 			};
 
-			this.playReverseRainbowTransition(() => {
-				console.log('[Game] Rainbow intro transition complete');
-			}, fallbackFade);
+			this.time.delayedCall(200, () => {
+				this.playReverseRainbowTransition(() => {
+					console.log('[Game] Rainbow intro transition complete');
+				}, fallbackFade);
+			});
 		};
 
 		this.clockDisplay = new ClockDisplay(this, {
@@ -283,112 +285,8 @@ export class Game extends Scene
 		this.dialogs = new Dialogs(this.networkManager, this.screenModeManager);
 		this.dialogs.create(this);
 
-		// Debug helper: expose console-callable functions to simulate win dialogs / free spin dialogs.
-		// Usage (DevTools console):
-		//   showTotalWinDialog(12345)
-		//   showTotalWinDialog(12345, { addSprites: true })
-		//   showBigWinDialog(5000)
-		//   showMegaWinDialog(15000)
-		//   showEpicWinDialog(45000)
-		//   showSuperWinDialog(90000)
-		//   showMaxWinDialog(250000)
-		//   showFreeSpinDialog(10)
-		//   showRetriggerDialog(5) // bonus free spin dialog
-		try {
-			const w = window as any;
-			// Global gate for ALL console dialog calls:
-			// - Set to false to block:   window.__ALLOW_CONSOLE_DIALOG_CALLS__ = false
-			// - Re-enable:               window.__ALLOW_CONSOLE_DIALOG_CALLS__ = true
-			if (typeof w.__ALLOW_CONSOLE_DIALOG_CALLS__ !== 'boolean') {
-				w.__ALLOW_CONSOLE_DIALOG_CALLS__ = true;
-			}
-
-			const isConsoleDialogCallsAllowed = () => {
-				if (w.__ALLOW_CONSOLE_DIALOG_CALLS__ === false) {
-					console.warn('[Debug] Console dialog calls are blocked (window.__ALLOW_CONSOLE_DIALOG_CALLS__ = false).');
-					return false;
-				}
-				return true;
-			};
-
-			const getGameScene = () => {
-				const phaserGame = w.phaserGame;
-				return (
-					phaserGame?.scene?.getScene?.('Game') ??
-					phaserGame?.scene?.scenes?.find((s: any) => s?.scene?.key === 'Game')
-				);
-			};
-
-			const getDialogs = () => {
-				const gameScene = getGameScene();
-				if (!gameScene) return { gameScene: null, dialogs: null };
-				return { gameScene, dialogs: (gameScene as any).dialogs };
-			};
-
-			const closeIfOpen = (dialogs: any) => {
-				try {
-					if (typeof dialogs?.isDialogShowing === 'function' && dialogs.isDialogShowing()) {
-						dialogs.hideDialog?.();
-					}
-				} catch {}
-			};
-
-			// Generic helper (optional, but handy)
-			w.showDialog = (type: string, params?: any) => {
-				if (!isConsoleDialogCallsAllowed()) return false;
-				const { gameScene, dialogs } = getDialogs();
-				if (!gameScene) {
-					console.warn('[Debug] Game scene not found. Is the game running?');
-					return false;
-				}
-				if (!dialogs || typeof dialogs.showDialog !== 'function') {
-					console.warn('[Debug] dialogs.showDialog not available on Game scene.');
-					return false;
-				}
-				closeIfOpen(dialogs);
-				dialogs.showDialog(gameScene, { type, ...(params || {}) });
-				return true;
-			};
-
-			w.showTotalWinDialog = (winAmount: number = 1000, opts?: { addSprites?: boolean; closeExisting?: boolean }) => {
-				if (!isConsoleDialogCallsAllowed()) return false;
-				const addSprites = opts?.addSprites ?? false;
-				const closeExisting = opts?.closeExisting ?? true;
-
-				const { gameScene, dialogs } = getDialogs();
-				if (!gameScene) {
-					console.warn('[Debug] Game scene not found. Is the game running?');
-					return false;
-				}
-				if (!dialogs || typeof dialogs.showCongratulations !== 'function') {
-					console.warn('[Debug] dialogs.showCongratulations not available on Game scene.');
-					return false;
-				}
-
-				if (closeExisting) closeIfOpen(dialogs);
-				dialogs.showCongratulations(gameScene, { winAmount: Number(winAmount) || 0 });
-				try {
-					if (addSprites && typeof dialogs.addTotalWinSprites === 'function') {
-						dialogs.addTotalWinSprites(gameScene);
-					}
-				} catch {}
-				return true;
-			};
-
-			// Win dialogs
-			w.showBigWinDialog = (winAmount: number = 5000) => (isConsoleDialogCallsAllowed() ? w.showDialog('BigWin', { winAmount: Number(winAmount) || 0 }) : false);
-			w.showMegaWinDialog = (winAmount: number = 15000) => (isConsoleDialogCallsAllowed() ? w.showDialog('MegaWin', { winAmount: Number(winAmount) || 0 }) : false);
-			w.showEpicWinDialog = (winAmount: number = 45000) => (isConsoleDialogCallsAllowed() ? w.showDialog('EpicWin', { winAmount: Number(winAmount) || 0 }) : false);
-			w.showSuperWinDialog = (winAmount: number = 90000) => (isConsoleDialogCallsAllowed() ? w.showDialog('SuperWin', { winAmount: Number(winAmount) || 0 }) : false);
-			w.showMaxWinDialog = (winAmount: number = 250000) => (isConsoleDialogCallsAllowed() ? w.showDialog('MaxWin', { winAmount: Number(winAmount) || 0 }) : false);
-
-			// Free spin dialogs
-			w.showFreeSpinDialog = (freeSpins: number = 10) => (isConsoleDialogCallsAllowed() ? w.showDialog('FreeSpinDialog', { freeSpins: Number(freeSpins) || 0 }) : false);
-			w.showRetriggerDialog = (freeSpins: number = 5) => (isConsoleDialogCallsAllowed() ? w.showDialog('BonusFreeSpinDialog', { freeSpins: Number(freeSpins) || 0 }) : false);
-
-			// Back-compat alias (some folks type this instinctively)
-			w.totalWinDialog = w.showTotalWinDialog;
-		} catch {}
+		// Initialize console debug helpers (dialog functions and Q/E mode toggle keys)
+		initializeConsoleDebugHelpers(this);
 		
 		// Initialize scatter animation manager with both containers, spinner and dialogs components
 		const scatterAnimationManager = this.symbols.scatterAnimationManager;
@@ -581,19 +479,6 @@ export class Game extends Scene
 			}
 
 			this.gameAPI.incrementCurrentTumbleIndex();
-			
-			// Get current spin data to determine win amount
-			if (this.symbols && this.symbols.currentSpinData) {
-				const spinData = this.symbols.currentSpinData as SpinData;
-				const totalWin = this.calculateTotalWinFromPaylines(spinData);
-				const betAmount = parseFloat(spinData.bet);
-				
-				console.log(`[Game] WIN_START: Total win: $${totalWin}, bet: $${betAmount}`);
-				this.spawnCoinsForWin(totalWin, betAmount);
-			} else {
-				console.log('[Game] WIN_START: No current spin data available, spawning default 5 coins');
-				this.spawnCoins(5);
-			}
 		});
 
 		// Listen for winline animations completion to show win dialogs
@@ -604,7 +489,7 @@ export class Game extends Scene
 			if (this.symbols && this.symbols.currentSpinData) {
 				console.log('[Game] WIN_STOP: Found current spin data, calculating total win from paylines');
 				
-				const slotData = data.spinData?.slot || data?.slot;
+				const slotData = this.symbols.currentSpinData?.slot;
 				console.log('[Game] WIN_STOP: Slot data: ', slotData);
 
 				let totalWin = 0;
@@ -613,9 +498,9 @@ export class Game extends Scene
 				else if(gameStateManager.isBonus)
 					totalWin = SpinDataUtils.getBonusSpinWins(data.spinData, this.gameAPI.getCurrentFreeSpinIndex() - 1);
 				else
-					totalWin = data.spinData.slot.totalWin;
+					totalWin = this.symbols.currentSpinData.slot.totalWin;
 
-				const betAmount = parseFloat(data.spinData.bet);
+				const betAmount = parseFloat(this.symbols.currentSpinData.bet);
 				console.log(`[Game] WIN_STOP: Total win calculated: $${totalWin}, bet: $${betAmount}`);
 				
 				if (totalWin > 0) {
@@ -902,19 +787,6 @@ export class Game extends Scene
 		if (this.autoplayOptions && this.autoplayOptions.isVisible()) {
 			this.autoplayOptions.setCurrentBalance(balance);
 		}
-	}
-
-	/**
-	 * Calculate total win amount using SpinData (base paylines or free spins)
-	 */
-	private calculateTotalWinFromPaylines(spinData: SpinData): number {
-		if (!spinData) {
-			return 0;
-		}
-
-		const totalWin = SpinDataUtils.getAggregateTotalWin(spinData);
-		console.log(`[Game] Calculated aggregate total win from SpinData: ${totalWin}`);
-		return totalWin;
 	}
 
 	/**
@@ -1340,8 +1212,6 @@ export class Game extends Scene
 			minimizeKey: 'minimize'
 		});
 
-		this.setupModeToggleKeys();
-
 		// Add a test method to manually trigger bonus mode (for debugging)
 		(window as any).testBonusMode = () => {
 			console.log('[Game] TEST: Manually triggering bonus mode');
@@ -1542,6 +1412,7 @@ export class Game extends Scene
 				sparkleSpine.setScrollFactor(0);
 				sparkleSpine.setDepth(30001); // Above rainbow transition
 				sparkleSpine.setVisible(true);
+				sparkleSpine.setScale(0.7);
 
 				// Get the first animation
 				const animations = (sparkleSpine as any)?.skeleton?.data?.animations as Array<{ name: string }> | undefined;
@@ -1724,43 +1595,4 @@ export class Game extends Scene
 		});
 	}
 
-	private setupModeToggleKeys(): void {
-		const keyboard = this.input?.keyboard;
-		if (!keyboard) {
-			console.warn('[Game] Keyboard input not available for mode toggle');
-			return;
-		}
-
-		const baseKey = keyboard.addKey(Input.Keyboard.KeyCodes.Q);
-		const bonusKey = keyboard.addKey(Input.Keyboard.KeyCodes.E);
-
-		baseKey.on('down', () => this.handleModeToggle(false));
-		bonusKey.on('down', () => this.handleModeToggle(true));
-
-		this.modeToggleKeys = { base: baseKey, bonus: bonusKey };
-
-		this.events.once('shutdown', () => {
-			if (this.modeToggleKeys) {
-				this.modeToggleKeys.base.destroy();
-				this.modeToggleKeys.bonus.destroy();
-				this.modeToggleKeys = undefined;
-			}
-		});
-	}
-
-	private handleModeToggle(isBonus: boolean): void {
-		if (this.gameStateManager.isBonus === isBonus) {
-			console.log(`[Game] Already in ${isBonus ? 'bonus' : 'base'} mode`);
-			return;
-		}
-
-		this.gameStateManager.isBonus = isBonus;
-		this.switchBetweenModes(isBonus);
-
-		if (isBonus) {
-			this.audioManager?.playBackgroundMusic(MusicType.BONUS);
-		} else {
-			this.audioManager?.playBackgroundMusic(MusicType.MAIN);
-		}
-	}
 }

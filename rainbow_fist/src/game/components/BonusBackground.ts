@@ -135,6 +135,7 @@ export class BonusBackground {
 			console.log(`[BonusBackground] Sparkle background spine created successfully`);
 			spine.setOrigin(0.5, 0.5);
 			spine.setVisible(true);
+			spine.setScale(0.7);
 			// Play animation at index 0 in a continuous loop
 			playSpineAnimationSequence(spine, [0], true);
 			console.log(`[BonusBackground] Sparkle background animation started`);
