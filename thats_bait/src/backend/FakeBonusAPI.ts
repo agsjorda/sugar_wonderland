@@ -24,6 +24,8 @@ let fakeResponseCache: any = null;
 export class FakeBonusAPI {
     private static instance: FakeBonusAPI;
     private fakeSpinData: SpinData | null = null;
+    private baseSpinData: SpinData | null = null;
+    private baseSpinConsumed: boolean = false;
     private currentFreeSpinIndex: number = 0;
     private forcedDisabled: boolean = false;
     private lastLoadError: any = null;
@@ -83,7 +85,7 @@ export class FakeBonusAPI {
     /**
      * Initialize fake API with bonus data
      */
-    public async initializeBonusData(): Promise<void> {
+    public async initializeBonusData(betOverride?: number): Promise<void> {
         if (!this.isEnabled()) {
             console.log('Fake API is disabled, skipping initialization');
             return;
@@ -95,9 +97,11 @@ export class FakeBonusAPI {
                 return;
             }
 
+            const bonusRaw = this.getBonusSpinRaw(fakeData);
+
             // Convert fake response to SpinData format
-            const bet = Number((fakeData as any).bet) || 1;
-            this.fakeSpinData = normalizeSpinResponse(fakeData, bet);
+            const bet = (Number(betOverride) || Number((bonusRaw as any)?.bet) || 1);
+            this.fakeSpinData = normalizeSpinResponse(bonusRaw, bet);
 
             this.currentFreeSpinIndex = 0;
 
@@ -108,6 +112,120 @@ export class FakeBonusAPI {
             });
         } catch (error) {
             this.disableDueToLoadError(error);
+        }
+    }
+
+    private getBonusSpinRaw(fakeData: any): any {
+        try {
+            const candidate = (fakeData as any)?.bonusSpin
+                || (fakeData as any)?.bonus
+                || (fakeData as any)?.bonusScene
+                || (fakeData as any)?.bonusResponse;
+            if (candidate && typeof candidate === 'object') {
+                return candidate;
+            }
+        } catch {}
+        return fakeData;
+    }
+
+    private getBaseSpinRaw(fakeData: any): any {
+        try {
+            const candidate = (fakeData as any)?.baseSpin
+                || (fakeData as any)?.base
+                || (fakeData as any)?.baseScene
+                || (fakeData as any)?.baseResponse
+                || (fakeData as any)?.normalSpin;
+            if (candidate && typeof candidate === 'object') {
+                return candidate;
+            }
+        } catch {}
+        try {
+            const useRoot = !!((fakeData as any)?.useRootAsBaseSpin || (fakeData as any)?.useRootForBaseSpin);
+            if (useRoot) {
+                return fakeData;
+            }
+        } catch {}
+        return null;
+    }
+
+    public async simulateBaseSpin(bet: number): Promise<SpinData | null> {
+        if (!this.isEnabled()) {
+            return null;
+        }
+
+        try {
+            if (this.baseSpinConsumed) {
+                return null;
+            }
+
+            const fakeData = await this.loadFakeResponse();
+            if (!fakeData) {
+                return null;
+            }
+
+            let baseRaw: any = this.getBaseSpinRaw(fakeData);
+            if (!baseRaw) {
+                const bonusRaw: any = this.getBonusSpinRaw(fakeData);
+                const slot: any = (bonusRaw as any)?.slot;
+                const fs: any = slot?.freespin || slot?.freeSpin;
+                const hasItems = Array.isArray(fs?.items) && fs.items.length > 0;
+                const hasCount = Number(fs?.count) > 0;
+                if (slot && (hasItems || hasCount)) {
+                    const count = Number(fs?.count) || 0;
+                    baseRaw = {
+                        ...(bonusRaw && typeof bonusRaw === 'object' ? bonusRaw : {}),
+                        slot: {
+                            ...(slot && typeof slot === 'object' ? slot : {}),
+                            totalWin: 0,
+                            paylines: [],
+                            freespin: {
+                                count,
+                                totalWin: 0,
+                                items: []
+                            },
+                            freeSpin: {
+                                count,
+                                win: 0,
+                                items: []
+                            }
+                        }
+                    };
+                }
+            }
+            if (!baseRaw) {
+                return null;
+            }
+            const betNum = Number(bet);
+            const normalizedBet = (isFinite(betNum) && betNum > 0) ? betNum : (Number((baseRaw as any)?.bet) || 1);
+            const rawObj: any = (baseRaw && typeof baseRaw === 'object') ? baseRaw : {};
+
+            const normalized = normalizeSpinResponse({
+                ...rawObj,
+                bet: String(normalizedBet)
+            }, normalizedBet);
+
+            try {
+                const fs: any = (normalized as any)?.slot?.freespin || (normalized as any)?.slot?.freeSpin;
+                const hasItems = Array.isArray(fs?.items) && fs.items.length > 0;
+                const hasCount = Number(fs?.count) > 0;
+                if (!hasItems && !hasCount) {
+                    return null;
+                }
+            } catch {
+                return null;
+            }
+
+            this.baseSpinData = normalized;
+            this.baseSpinConsumed = true;
+
+            try {
+                await this.initializeBonusData(normalizedBet);
+            } catch {}
+
+            return normalized;
+        } catch (error) {
+            this.disableDueToLoadError(error);
+            return null;
         }
     }
 
@@ -257,6 +375,8 @@ export class FakeBonusAPI {
     public clearCache(): void {
         fakeResponseCache = null;
         this.fakeSpinData = null;
+        this.baseSpinData = null;
+        this.baseSpinConsumed = false;
         this.currentFreeSpinIndex = 0;
         this.forcedDisabled = false;
         this.lastLoadError = null;

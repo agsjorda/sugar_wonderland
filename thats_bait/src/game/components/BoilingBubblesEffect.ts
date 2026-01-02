@@ -9,7 +9,6 @@ export interface BoilingBubblesConfig {
 	textureKey?: string;
 	spawnPerSecond?: number;
 	spreadX?: number;
-	spreadY?: number;
 	riseDistanceMin?: number;
 	riseDistanceMax?: number;
 	lifeMinMs?: number;
@@ -34,7 +33,6 @@ export class BoilingBubblesEffect {
 	private textureKey: string;
 	private spawnPerSecond: number;
 	private spreadX: number;
-	private spreadY: number;
 	private riseDistanceMin: number;
 	private riseDistanceMax: number;
 	private lifeMinMs: number;
@@ -56,7 +54,6 @@ export class BoilingBubblesEffect {
 		this.textureKey = (typeof config.textureKey === 'string' && config.textureKey.trim().length > 0) ? config.textureKey.trim() : 'bubble';
 		this.spawnPerSecond = typeof config.spawnPerSecond === 'number' ? Math.max(1, config.spawnPerSecond) : 14;
 		this.spreadX = typeof config.spreadX === 'number' ? Math.max(0, config.spreadX) : 40;
-		this.spreadY = typeof config.spreadY === 'number' ? Math.max(0, config.spreadY) : 6;
 		this.riseDistanceMin = typeof config.riseDistanceMin === 'number' ? Math.max(10, config.riseDistanceMin) : 140;
 		this.riseDistanceMax = typeof config.riseDistanceMax === 'number' ? Math.max(this.riseDistanceMin, config.riseDistanceMax) : 220;
 		this.lifeMinMs = typeof config.lifeMinMs === 'number' ? Math.max(80, config.lifeMinMs) : 260;
@@ -138,7 +135,7 @@ export class BoilingBubblesEffect {
 		if (!this.scene.textures || !this.scene.textures.exists(this.textureKey)) return;
 
 		const ox = this.emitOffsetX + (Math.random() * 2 - 1) * this.spreadX;
-		const oy = this.emitOffsetY + (Math.random() * 2 - 1) * this.spreadY;
+		const oy = this.emitOffsetY;
 		const riseDist = this.riseDistanceMin + Math.random() * (this.riseDistanceMax - this.riseDistanceMin);
 		const life = this.lifeMinMs + Math.random() * (this.lifeMaxMs - this.lifeMinMs);
 		const scale = this.scaleMin + Math.random() * (this.scaleMax - this.scaleMin);

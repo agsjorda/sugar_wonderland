@@ -10,7 +10,7 @@ import { FullScreenManager } from '../../managers/FullScreenManager';
 import { StudioLoadingScreen, queueGameAssetLoading } from '../components/StudioLoadingScreen';
 import { ClockDisplay } from '../components/ClockDisplay';
 import { WaterWavePipeline } from '../pipelines/WaterWavePipeline';
-import { AudioManager, MusicType } from '../../managers/AudioManager';
+import { AudioManager, MusicType, SoundEffectType } from '../../managers/AudioManager';
 
 export class Preloader extends Scene
 {
@@ -29,6 +29,7 @@ export class Preloader extends Scene
 	private fullscreenBtn?: Phaser.GameObjects.Image;
 	private clockDisplay?: ClockDisplay;
 	private preloaderVerticalOffsetModifier: number = 10; // Vertical offset for Preloader elements only
+	private helloTbVolumeMultiplier: number = 0.7;
 
 	constructor ()
 	{
@@ -407,38 +408,54 @@ export class Preloader extends Scene
 				try {
 					const sm: any = this.sound as any;
 					try { sm.unlock?.(); } catch {}
-					try { sm.context?.resume?.(); } catch {}
-					try { sm.webaudio?.context?.resume?.(); } catch {}
-					try { (this.game as any)?.sound?.context?.resume?.(); } catch {}
 					try {
-						const existing = (window as any)?.audioManager as AudioManager | undefined;
-						if (existing && typeof (existing as any).setScene === 'function') {
-							(existing as any).setScene(this);
-							try { (existing as any).createMusicInstances?.(); } catch {}
-							try { (existing as any).playBackgroundMusic?.(MusicType.MAIN); } catch {}
-						} else {
-							const am = new AudioManager(this as any);
-							(window as any).audioManager = am;
-							try { (am as any).createMusicInstances?.(); } catch {}
-							try { (am as any).playBackgroundMusic?.(MusicType.MAIN); } catch {}
-						}
+						const sm: any = this.sound as any;
+						try { sm.unlock?.(); } catch {}
+						try { sm.context?.resume?.(); } catch {}
+						try { sm.webaudio?.context?.resume?.(); } catch {}
+						try { (this.game as any)?.sound?.context?.resume?.(); } catch {}
+						try {
+							const existing = (window as any)?.audioManager as AudioManager | undefined;
+							if (existing && typeof (existing as any).setScene === 'function') {
+								(existing as any).setScene(this);
+								try { (existing as any).createMusicInstances?.(); } catch {}
+								try { (existing as any).playBackgroundMusic?.(MusicType.MAIN, 500); } catch {}
+								try {
+									const base = typeof (existing as any).getSfxVolume === 'function' ? (existing as any).getSfxVolume() : 0.4;
+									const vol = Math.max(0, Math.min(1, (Number(base) || 0) * this.helloTbVolumeMultiplier));
+									(existing as any).playSoundEffect?.(SoundEffectType.HELLO, { volume: vol });
+								} catch {}
+							} else {
+								const am = new AudioManager(this as any);
+								(window as any).audioManager = am;
+								try { (am as any).createMusicInstances?.(); } catch {}
+								try { (am as any).playBackgroundMusic?.(MusicType.MAIN, 500); } catch {}
+								try {
+									const base = typeof (am as any).getSfxVolume === 'function' ? (am as any).getSfxVolume() : 0.4;
+									const vol = Math.max(0, Math.min(1, (Number(base) || 0) * this.helloTbVolumeMultiplier));
+									(am as any).playSoundEffect?.(SoundEffectType.HELLO, { volume: vol });
+								} catch {}
+							}
+						} catch {}
 					} catch {}
-				} catch {}
-				// Clear any ongoing tweens on press
-				this.tweens.killTweensOf(spin);
-				if (bg) this.tweens.killTweensOf(bg);
-				// Press-in: scale both foreground and background for a clear feedback
-				this.tweens.add({
-					targets: [spin, bg].filter(Boolean) as any,
-					scaleX: (t: any) => (t === spin ? baseScaleX * 0.9 : baseBgScaleX * 0.96),
-					scaleY: (t: any) => (t === spin ? baseScaleY * 0.9 : baseBgScaleY * 0.96),
-					duration: 80,
-					ease: 'Power2'
-				});
-				// Optional quick background flash for emphasis
-				if (bg) {
-					const startAlpha = bg.alpha;
-					this.tweens.add({ targets: bg, alpha: Math.min(0.5, startAlpha + 0.2), duration: 80, yoyo: true, ease: 'Linear' });
+					// Clear any ongoing tweens on press
+					this.tweens.killTweensOf(spin);
+					if (bg) this.tweens.killTweensOf(bg);
+					// Press-in: scale both foreground and background for a clear feedback
+					this.tweens.add({
+						targets: [spin, bg].filter(Boolean) as any,
+						scaleX: (t: any) => (t === spin ? baseScaleX * 0.9 : baseBgScaleX * 0.96),
+						scaleY: (t: any) => (t === spin ? baseScaleY * 0.9 : baseBgScaleY * 0.96),
+						duration: 80,
+						ease: 'Power2'
+					});
+					// Optional quick background flash for emphasis
+					if (bg) {
+						const startAlpha = bg.alpha;
+						this.tweens.add({ targets: bg, alpha: Math.min(0.5, startAlpha + 0.2), duration: 80, yoyo: true, ease: 'Linear' });
+					}
+				} catch (e) {
+					console.error('[Preloader] Error on spin button press:', e);
 				}
 			});
 			const bounceBack = () => {

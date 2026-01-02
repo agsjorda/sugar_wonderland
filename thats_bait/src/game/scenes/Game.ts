@@ -28,73 +28,75 @@ import {
   WINTRACKER_BASE_OFFSET_X,
   WINTRACKER_BASE_OFFSET_Y,
   WINTRACKER_BONUS_OFFSET_X,
-  WINTRACKER_BONUS_OFFSET_Y
+  WINTRACKER_BONUS_OFFSET_Y,
+  AUTOPLAY_AMPLIFY_BET_SCALE_MODIFIER_X,
+  AUTOPLAY_AMPLIFY_BET_SCALE_MODIFIER_Y
 } from '../../config/UIPositionConfig';
 
 export class Game extends Phaser.Scene {
-	private networkManager!: NetworkManager;
-	private screenModeManager!: ScreenModeManager;
-	private slotController!: SlotController;
-	private infoText!: Phaser.GameObjects.Text;
-	private autoplayOptions!: AutoplayOptions;
-	private rope?: RopeCable;
-	private startHandle?: Phaser.GameObjects.Arc;
-	private endHandle?: Phaser.GameObjects.Arc;
-	private readonly startAnchor = new Phaser.Math.Vector2();
-	private readonly endAnchor = new Phaser.Math.Vector2();
-	private readonly dragBoundsPadding = 32;
-	private readonly ropeStyle = {
-		color: 0x000000,
-		coreColor: 0x000000,
-		outlineVisible: false,
-		damping: 0.85
-	};
-	private readonly ropeDepth = 890;
-	private readonly ropeHandleDepth = 860;
-	private readonly rodTipBoneName = 'bone59';
-	private hookImage?: Phaser.GameObjects.Image;
-	private readonly hookTextureKey = 'hook';
-	private readonly hookScale = 0.20;
-	private readonly hookTipAttachFactor: number = 0.78;
-	private isHookScatterEventActive: boolean = false;
-	private hookScatterPointer?: Phaser.GameObjects.Arc;
-	private hookScatterTarget?: Phaser.Math.Vector2;
-	private hookScatterTween?: Phaser.Tweens.Tween;
-	private wasInputEnabledBeforeHookScatter: boolean = true;
-	private hookPointerOffsetX: number = 0;
-	private hookPointerOffsetY: number = 0;
-	private wasRopeEndInitiallyPinned: boolean = true;
-	private hookScatterCol: number = -1;
-	private hookScatterRow: number = -1;
-	private hookScatterSymbol?: any;
-	private hookOffscreenOffsetY: number = 200;
-	private hookOriginalDepth: number = 0;
-	private hookCollectorRopeGraphics?: Phaser.GameObjects.Graphics;
-	private hookCollectorRopeOriginalDepth: number = 0;
-	private hookCollectorCollectorOriginalDepth: number = 0;
-	private hookCollectorRaisedCollector?: any;
-	private hookCollectorOverlayContainer?: Phaser.GameObjects.Container;
-	private hookCollectorCollectorOriginalParent?: Phaser.GameObjects.Container;
-	private hookCollectorCollectorOriginalParentIndex: number = -1;
-	private hookCollectorRaisedParentContainer?: Phaser.GameObjects.Container;
-	private hookCollectorParentContainerOriginalDepth: number = 0;
-	private hookCollectorRaisedSymbolsContainer?: Phaser.GameObjects.Container;
-	private hookCollectorSymbolsContainerOriginalDepth: number = 0;
-	private hookCollectorSymbolsContainerOriginalMask?: any;
-	private hookCollectorCollectorOriginalMask?: any;
-	private hookCollectorRaisedDepths: boolean = false;
-	private hookScatterStartTimingMultiplier: number = 0.5;
-	private hookScatterEndTimingMultiplier: number = 0.35;
-	private enableRope: boolean = true;
-	private hookCharacterEndPromise: Promise<void> | null = null;
-	private hookFinalizePending: boolean = false;
-	private reelsStopListener?: (data?: any) => void;
-	private winStopListener?: (data?: any) => void;
-	private winTrackerHideListener?: () => void;
-	private bonusOverlayQueue: Array<() => Promise<void>> = [];
-	private bonusOverlayQueueRunning: boolean = false;
-	private freeSpinRetriggerOverlaySeq: number = 0;
-	private shownBonusRetriggerStages: Set<number> = new Set<number>();
+  private networkManager!: NetworkManager;
+  private screenModeManager!: ScreenModeManager;
+  private slotController!: SlotController;
+  private infoText!: Phaser.GameObjects.Text;
+  private autoplayOptions!: AutoplayOptions;
+  private rope?: RopeCable;
+  private startHandle?: Phaser.GameObjects.Arc;
+  private endHandle?: Phaser.GameObjects.Arc;
+  private readonly startAnchor = new Phaser.Math.Vector2();
+  private readonly endAnchor = new Phaser.Math.Vector2();
+  private readonly dragBoundsPadding = 32;
+  private readonly ropeStyle = {
+    color: 0x000000,
+    coreColor: 0x000000,
+    outlineVisible: false,
+    damping: 0.85
+  };
+  private readonly ropeDepth = 890;
+  private readonly ropeHandleDepth = 860;
+  private readonly rodTipBoneName = 'bone59';
+  private hookImage?: Phaser.GameObjects.Image;
+  private readonly hookTextureKey = 'hook';
+  private readonly hookScale = 0.20;
+  private readonly hookTipAttachFactor: number = 0.78;
+  private isHookScatterEventActive: boolean = false;
+  private hookScatterPointer?: Phaser.GameObjects.Arc;
+  private hookScatterTarget?: Phaser.Math.Vector2;
+  private hookScatterTween?: Phaser.Tweens.Tween;
+  private wasInputEnabledBeforeHookScatter: boolean = true;
+  private hookPointerOffsetX: number = 0;
+  private hookPointerOffsetY: number = 0;
+  private wasRopeEndInitiallyPinned: boolean = true;
+  private hookScatterCol: number = -1;
+  private hookScatterRow: number = -1;
+  private hookScatterSymbol?: any;
+  private hookOffscreenOffsetY: number = 200;
+  private hookOriginalDepth: number = 0;
+  private hookCollectorRopeGraphics?: Phaser.GameObjects.Graphics;
+  private hookCollectorRopeOriginalDepth: number = 0;
+  private hookCollectorCollectorOriginalDepth: number = 0;
+  private hookCollectorRaisedCollector?: any;
+  private hookCollectorOverlayContainer?: Phaser.GameObjects.Container;
+  private hookCollectorCollectorOriginalParent?: Phaser.GameObjects.Container;
+  private hookCollectorCollectorOriginalParentIndex: number = -1;
+  private hookCollectorRaisedParentContainer?: Phaser.GameObjects.Container;
+  private hookCollectorParentContainerOriginalDepth: number = 0;
+  private hookCollectorRaisedSymbolsContainer?: Phaser.GameObjects.Container;
+  private hookCollectorSymbolsContainerOriginalDepth: number = 0;
+  private hookCollectorSymbolsContainerOriginalMask?: any;
+  private hookCollectorCollectorOriginalMask?: any;
+  private hookCollectorRaisedDepths: boolean = false;
+  private hookScatterStartTimingMultiplier: number = 0.5;
+  private hookScatterEndTimingMultiplier: number = 0.35;
+  private enableRope: boolean = true;
+  private hookCharacterEndPromise: Promise<void> | null = null;
+  private hookFinalizePending: boolean = false;
+  private reelsStopListener?: (data?: any) => void;
+  private winStopListener?: (data?: any) => void;
+  private winTrackerHideListener?: () => void;
+  private bonusOverlayQueue: Array<() => Promise<void>> = [];
+  private bonusOverlayQueueRunning: boolean = false;
+  private freeSpinRetriggerOverlaySeq: number = 0;
+  private shownBonusRetriggerStages: Set<number> = new Set<number>();
 
 	public readonly gameData: GameData;
 	public readonly gameAPI: GameAPI;
@@ -2019,6 +2021,8 @@ export class Game extends Phaser.Scene {
 			currentBet: normalizedBaseBet,
 			currentBalance,
 			isEnhancedBet,
+			amplifyBetScaleModifierX: AUTOPLAY_AMPLIFY_BET_SCALE_MODIFIER_X,
+			amplifyBetScaleModifierY: AUTOPLAY_AMPLIFY_BET_SCALE_MODIFIER_Y,
 			onClose: () => {
 				this.updateInfoText('Autoplay options closed.');
 			},

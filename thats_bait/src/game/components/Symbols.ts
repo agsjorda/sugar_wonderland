@@ -75,8 +75,8 @@ export class Symbols {
   // Grid mask configuration and references
   public gridMaskShape?: Phaser.GameObjects.Graphics;
   public gridMask?: Phaser.Display.Masks.GeometryMask;
-  public gridMaskPaddingLeft: number = 10;
-  public gridMaskPaddingRight: number = 20;
+  public gridMaskPaddingLeft: number = 60;
+  public gridMaskPaddingRight: number = 60;
   public gridMaskPaddingTop: number = 43;
   public gridMaskPaddingBottom: number = 120;
 
@@ -731,7 +731,7 @@ export class Symbols {
 				}
 			} catch {}
 			try {
-				if (!!gameStateManager.isBuyFeatureSpin && !!(this.scene as any)?.__isScatterAnticipationActive) {
+				if (!!(this.scene as any)?.__isScatterAnticipationActive) {
 					return;
 				}
 			} catch {}
@@ -881,50 +881,6 @@ export class Symbols {
       this.scene.add.existing(this.scatterOverlay);
     } catch (error) {
       console.error('[Symbols] Error creating scatter overlay:', error);
-    }
-  }
-
-  public showScatterOverlay(): void {
-    try {
-      if (!this.scatterOverlay) {
-        this.createScatterOverlay();
-      }
-      
-      if (this.scatterOverlay) {
-        this.scene.tweens.add({
-          targets: this.scatterOverlay,
-          alpha: 1,
-          duration: 500,
-          ease: 'Cubic.easeOut'
-        });
-      }
-    } catch (error) {
-      console.error('[Symbols] Error showing scatter overlay:', error);
-    }
-  }
-
-  public hideScatterOverlay(): void {
-    try {
-      if (!this.scatterOverlay) return;
-      
-      this.scene.tweens.add({
-        targets: this.scatterOverlay,
-        alpha: 0,
-        duration: 300,
-        ease: 'Cubic.easeIn',
-        onComplete: () => {
-          try {
-            if (this.scatterOverlay) {
-              this.scatterOverlay.destroy();
-              this.scatterOverlay = null;
-            }
-          } catch (error) {
-            console.error('[Symbols] Error in scatter overlay hide complete:', error);
-          }
-        }
-      });
-    } catch (error) {
-      console.error('[Symbols] Error hiding scatter overlay:', error);
     }
   }
 
@@ -1116,7 +1072,7 @@ export class Symbols {
 					}
 				} catch {}
 				try {
-					if (!!gameStateManager.isBuyFeatureSpin && !!(this.scene as any)?.__isScatterAnticipationActive) {
+					if (!!(this.scene as any)?.__isScatterAnticipationActive) {
 						return;
 					}
 				} catch {}
@@ -1132,7 +1088,14 @@ export class Symbols {
       // Enable/disable around spin lifecycle
       const enable = () => {
         try { this.updateSkipHitboxGeometry(); } catch {}
-        if (gameStateManager.isTurbo || gameStateManager.isShowingWinDialog) {
+        const blockForAnticipation = (() => {
+          try {
+            return !!((this.scene as any)?.__isScatterAnticipationActive || (this.scene as any)?.__scatterAnticipationStageRunning);
+          } catch {
+            return false;
+          }
+        })();
+        if (blockForAnticipation || gameStateManager.isTurbo || gameStateManager.isShowingWinDialog) {
           try { this.skipHitbox?.disableInteractive(); } catch {}
         } else {
           try { this.skipHitbox?.setInteractive({ useHandCursor: false }); } catch {}
@@ -1899,19 +1862,6 @@ export class Symbols {
 				(this.scene as any).currentSymbolData = area;
 				this.currentSymbolData = area;
 			} catch {}
-
-			try {
-				const scAny: any = (this.scene as any);
-				let bg: any = scAny?.background;
-				try {
-					const bb: any = scAny?.bonusBackground;
-					const bbVisible = !!bb?.getContainer?.()?.visible;
-					if (bbVisible) {
-						bg = bb;
-					}
-				} catch {}
-				bg?.darkenDepthForWinSequence?.();
-			} catch {}
 			try {
 				const keepBright = new Set<string>();
 				try {
@@ -1930,7 +1880,9 @@ export class Symbols {
 						}
 					}
 				} catch {}
-				try { applyNonWinningSymbolDim(this.scene as any, this.symbols, keepBright, area as any); } catch {}
+				try {
+					applyNonWinningSymbolDim(this.scene as any, this.symbols, keepBright, area as any, { darkenBgDepth: false });
+				} catch {}
 			} catch {}
 			try {
 				const x = typeof this.slotX === 'number' ? this.slotX : (this.scene?.scale?.width ?? 0) * 0.5;
@@ -2041,6 +1993,7 @@ export class Symbols {
 			} catch {}
 
 			const boomPromises: Promise<void>[] = [];
+			let didDarkenBgDepth = false;
 
 			const explodeOne = async (e: DynEntry): Promise<void> => {
 				try {
@@ -2051,6 +2004,21 @@ export class Symbols {
 
 				let boomPromise: Promise<void> | null = null;
 				try {
+					if (!didDarkenBgDepth) {
+						didDarkenBgDepth = true;
+						try {
+							const scAny: any = (this.scene as any);
+							let bg: any = scAny?.background;
+							try {
+								const bb: any = scAny?.bonusBackground;
+								const bbVisible = !!bb?.getContainer?.()?.visible;
+								if (bbVisible) {
+									bg = bb;
+								}
+							} catch {}
+							bg?.darkenDepthForWinSequence?.();
+						} catch {}
+					}
 					const tw = (e.bWidth && e.bWidth > 0) ? e.bWidth : this.displayWidth;
 					const th = (e.bHeight && e.bHeight > 0) ? e.bHeight : this.displayHeight;
 					boomPromise = playBoom(this.scene, e.wx, e.wy, 20014, tw, th);
@@ -2160,7 +2128,12 @@ export class Symbols {
 							}
 						} catch {}
 						try { this.symbols[e.t.col][e.t.row] = created; } catch {}
-						try { this.updateMoneyValueOverlays(spinData); } catch {}
+						try {
+							const override: any[][] = [];
+							override[e.t.col] = [];
+							override[e.t.col][e.t.row] = created;
+							this.updateMoneyValueOverlays(spinData, override);
+						} catch {}
 					}
 				} catch {}
 			};
@@ -2238,6 +2211,52 @@ export class Symbols {
       try { this.container?.setVisible(true); this.container?.setAlpha(1); } catch {}
       try { this.scatterForegroundContainer?.setVisible(true); this.scatterForegroundContainer?.setAlpha(1); } catch {}
       try { this.ensureScatterSymbolsVisible(); } catch {}
+      try {
+        const data: any = this.currentSymbolData;
+			let idleAnim = 'Symbol0_TB_idle';
+			try {
+				const spineKey = 'symbol_0_spine';
+				const cachedJson: any = (this.scene.cache.json as any).get(spineKey);
+				const anims = cachedJson?.animations ? Object.keys(cachedJson.animations) : [];
+				if (Array.isArray(anims) && anims.length > 0) {
+					if (!anims.includes(idleAnim)) {
+						const hit = 'Symbol0_TB_hit';
+						if (anims.includes(hit)) idleAnim = hit;
+						else {
+							const anyIdle = anims.find((n: string) => String(n).toLowerCase().includes('symbol0') && String(n).endsWith('_idle'));
+							if (anyIdle) idleAnim = anyIdle;
+							else {
+								const anyHit = anims.find((n: string) => String(n).toLowerCase().includes('symbol0') && String(n).endsWith('_hit'));
+								if (anyHit) idleAnim = anyHit;
+								else idleAnim = anims[0];
+							}
+						}
+					}
+				}
+			} catch {}
+        const grid: any[][] = this.symbols;
+        if (Array.isArray(grid)) {
+          let ci = -1;
+          for (const col of grid) {
+            ci++;
+            if (!Array.isArray(col)) continue;
+            let ri = -1;
+            for (const sym of col) {
+              ri++;
+              if (!sym) continue;
+              try { this.scene.tweens.killTweensOf(sym); } catch {}
+              try {
+                const v = data?.[ci]?.[ri];
+                const isScatter = v === 0 || typeof (sym as any)?.__scatterBaseScaleX === 'number' || typeof (sym as any)?.__scatterBaseScaleY === 'number';
+                if (isScatter && (sym as any)?.animationState && typeof (sym as any).animationState.setAnimation === 'function') {
+                  (sym as any).animationState.setAnimation(0, idleAnim, true);
+                }
+              } catch {}
+              try { clearNonWinningSymbolDim(this.scene as any, sym); } catch {}
+            }
+          }
+        }
+      } catch {}
     });
 
     const __turboLayerFix = () => {
@@ -2252,28 +2271,74 @@ export class Symbols {
     gameEventManager.on(GameEventType.TURBO_OFF, __turboLayerFix);
 
     // Listen for bonus mode toggles to recreate borders with correct assets
-    this.scene.events.on('setBonusMode', (isBonus: boolean) => {
-      try {
-        try {
-          if (isBonus) {
-            this.bonusStage1Complete = false;
-            this.bonusLevelsCompleted = 0;
-            this.bonusRetriggersConsumed = 0;
-            this.pendingBackendRetriggerTotal = null;
-            this.lastAppliedRetriggerTotal = null;
-          }
-        } catch {}
-        if (!isBonus) {
+	    this.scene.events.on('setBonusMode', (isBonus: boolean) => {
+	      try {
+	        try {
+	          if (isBonus) {
+	            this.bonusStage1Complete = false;
+	            this.bonusLevelsCompleted = 0;
+	            this.bonusRetriggersConsumed = 0;
+	            this.pendingBackendRetriggerTotal = null;
+	            this.lastAppliedRetriggerTotal = null;
+	          }
+	        } catch {}
+	        if (!isBonus) {
 
-        } else {
-          try { this.container?.setVisible(true); this.container?.setAlpha(1); } catch {}
-          try { this.scatterForegroundContainer?.setVisible(true); this.scatterForegroundContainer?.setAlpha(1); } catch {}
-          try { this.ensureScatterSymbolsVisible(); } catch {}
-        }
-        // Rebuild simple PNG borders (no dragon or spine borders) based on current bounds
-        try { this.createBaseOverlayRect(); } catch {}
-      } catch {}
-    });
+	        } else {
+	          try {
+	            const data: any = this.currentSymbolData;
+					let idleAnim = 'Symbol0_TB_idle';
+					try {
+						const spineKey = 'symbol_0_spine';
+						const cachedJson: any = (this.scene.cache.json as any).get(spineKey);
+						const anims = cachedJson?.animations ? Object.keys(cachedJson.animations) : [];
+						if (Array.isArray(anims) && anims.length > 0) {
+							if (!anims.includes(idleAnim)) {
+								const hit = 'Symbol0_TB_hit';
+								if (anims.includes(hit)) idleAnim = hit;
+								else {
+									const anyIdle = anims.find((n: string) => String(n).toLowerCase().includes('symbol0') && String(n).endsWith('_idle'));
+									if (anyIdle) idleAnim = anyIdle;
+									else {
+										const anyHit = anims.find((n: string) => String(n).toLowerCase().includes('symbol0') && String(n).endsWith('_hit'));
+										if (anyHit) idleAnim = anyHit;
+										else idleAnim = anims[0];
+									}
+								}
+							}
+						}
+					} catch {}
+	            const grid: any[][] = this.symbols;
+	            if (Array.isArray(grid)) {
+	              let ci = -1;
+	              for (const col of grid) {
+	                ci++;
+	                if (!Array.isArray(col)) continue;
+	                let ri = -1;
+	                for (const sym of col) {
+	                  ri++;
+	                  if (!sym) continue;
+	                  try { this.scene.tweens.killTweensOf(sym); } catch {}
+	                  try {
+	                    const v = data?.[ci]?.[ri];
+	                    const isScatter = v === 0 || typeof (sym as any)?.__scatterBaseScaleX === 'number' || typeof (sym as any)?.__scatterBaseScaleY === 'number';
+	                    if (isScatter && (sym as any)?.animationState && typeof (sym as any).animationState.setAnimation === 'function') {
+	                      (sym as any).animationState.setAnimation(0, idleAnim, true);
+	                    }
+	                  } catch {}
+	                  try { clearNonWinningSymbolDim(this.scene as any, sym); } catch {}
+	                }
+	              }
+	            }
+	          } catch {}
+	          try { this.container?.setVisible(true); this.container?.setAlpha(1); } catch {}
+	          try { this.scatterForegroundContainer?.setVisible(true); this.scatterForegroundContainer?.setAlpha(1); } catch {}
+	          try { this.ensureScatterSymbolsVisible(); } catch {}
+	        }
+	        // Rebuild simple PNG borders (no dragon or spine borders) based on current bounds
+	        try { this.createBaseOverlayRect(); } catch {}
+	      } catch {}
+	    });
 
     // Listen for scatter bonus completion to restore symbol visibility
     this.scene.events.on('scatterBonusCompleted', () => {
@@ -2317,6 +2382,19 @@ export class Symbols {
       }
       
       console.log('[Symbols] Symbol visibility restored after scatter bonus completion');
+      try {
+        const grid: any[][] = this.symbols;
+        if (Array.isArray(grid)) {
+          for (const col of grid) {
+            if (!Array.isArray(col)) continue;
+            for (const sym of col) {
+              if (!sym) continue;
+              try { this.scene.tweens.killTweensOf(sym); } catch {}
+              try { clearNonWinningSymbolDim(this.scene as any, sym); } catch {}
+            }
+          }
+        }
+      } catch {}
     });
 
     // Listen for reels stop to continue free spin autoplay
@@ -2998,16 +3076,15 @@ export class Symbols {
     const animationPromises = scatterGrids.map(grid => {
       return new Promise<void>((resolve) => {
         // Note: scatterGrids coordinates are [row][col] from transposed data
-        // but this.symbols array is [col][row] format, so we need to swap coordinates
-        const col = grid.x; // grid.x is actually the column in transposed data
-        const row = grid.y; // grid.y is actually the row in transposed data
-        
+        const col = grid.x;
+        const row = grid.y;
+
         console.log(`[Symbols] ScatterGrid coordinates: grid.x=${grid.x}, grid.y=${grid.y} -> col=${col}, row=${row}`);
         console.log(`[Symbols] Accessing this.symbols[${col}][${row}]`);
-        
+
         if (this.symbols && this.symbols[col] && this.symbols[col][row]) {
           const currentSymbol = this.symbols[col][row];
-          
+
           try {
             // Get the scatter symbol value (0) and construct the Spine key
             const symbolValue = 0; // Symbol 0 is scatter
@@ -3024,33 +3101,49 @@ export class Symbols {
                 hitAnimationName = anims.includes(fallback) ? fallback : hitAnimationName;
               }
             } catch {}
-            
-            // Store original position and scale
-            const x = currentSymbol.x;
-            const y = currentSymbol.y;
-            const displayWidth = currentSymbol.displayWidth;
-            const displayHeight = currentSymbol.displayHeight;
-            
+
+            const x = (currentSymbol as any).x;
+            const y = (currentSymbol as any).y;
+            const displayWidth = (currentSymbol as any).displayWidth;
+            const displayHeight = (currentSymbol as any).displayHeight;
+
             if ((currentSymbol as any)?.animationState) {
               const spineSymbol: any = currentSymbol;
               try { spineSymbol.setDepth(990); } catch {}
               try {
+                if (typeof (spineSymbol as any).__scatterBaseScaleX !== 'number') {
+                  (spineSymbol as any).__scatterBaseScaleX = spineSymbol.scaleX;
+                }
+              } catch {}
+              try {
+                if (typeof (spineSymbol as any).__scatterBaseScaleY !== 'number') {
+                  (spineSymbol as any).__scatterBaseScaleY = spineSymbol.scaleY;
+                }
+              } catch {}
+              try { this.scatterAnimationManager?.registerScatterSymbol?.(spineSymbol); } catch {}
+              try {
                 spineSymbol.animationState.setAnimation(0, hitAnimationName, true);
               } catch {}
+              // Notify listeners exactly when Symbol0 winning animation starts (base-only)
               try {
                 if (!gameStateManager.isBonus && !this.hasEmittedScatterWinStart) {
                   this.hasEmittedScatterWinStart = true;
                   this.scene.events.emit('symbol0-win-start');
+                  // Also fade the light grey base overlay for base scene when scatter starts
                   this.fadeBaseOverlayForScatterStart(250, 0);
                 }
               } catch {}
+              // Re-center on next tick to compensate for bounds changes after animation starts
+              try { this.reCenterSpineNextTick(spineSymbol, x, y, this.getWinSymbolNudge(symbolValue)); } catch {}
               try {
-                const base = this.getWinSpineSymbolScale(symbolValue);
-                const enlargedScale = base * 1.5;
+                const baseX = Number((spineSymbol as any).__scatterBaseScaleX);
+                const baseY = Number((spineSymbol as any).__scatterBaseScaleY);
+                const bx = isFinite(baseX) && baseX > 0 ? baseX : Number(spineSymbol.scaleX);
+                const by = isFinite(baseY) && baseY > 0 ? baseY : Number(spineSymbol.scaleY);
                 this.scene.tweens.add({
                   targets: spineSymbol,
-                  scaleX: enlargedScale,
-                  scaleY: enlargedScale,
+                  scaleX: bx * 1.5,
+                  scaleY: by * 1.5,
                   duration: 500,
                   ease: 'Power2.easeOut'
                 });
@@ -3058,10 +3151,8 @@ export class Symbols {
               setTimeout(() => resolve(), 100);
               return;
             }
-            
+
             console.log(`[Symbols] Replacing scatter sprite with Spine animation: ${spineKey} at column ${col}, row ${row}`);
-            
-            // Remove the current sprite
             currentSymbol.destroy();
 
             const attemptCreate = (attempts: number) => {
@@ -3094,17 +3185,17 @@ export class Symbols {
 
                 try { (spineSymbol as any).__scatterBaseScaleX = spineSymbol.scaleX; } catch {}
                 try { (spineSymbol as any).__scatterBaseScaleY = spineSymbol.scaleY; } catch {}
-                
+
                 // Register the scatter symbol with the ScatterAnimationManager
                 if (this.scatterAnimationManager) {
                   this.scatterAnimationManager.registerScatterSymbol(spineSymbol);
                 }
-                
+
                 // Ensure the Spine animation maintains the elevated depth
                 // Depth within container is sufficient; overlay and win lines manage their own depths
-                
+
                 console.log(`[Symbols] Successfully replaced scatter sprite with Spine animation at column ${col}, row ${row} with depth:`, spineSymbol.depth);
-                
+
                 // Play the hit animation (looped)
                 spineSymbol.animationState.setAnimation(0, hitAnimationName, true);
                 // Notify listeners exactly when Symbol0 winning animation starts (base-only)
@@ -3119,22 +3210,31 @@ export class Symbols {
                 // Re-center on next tick to compensate for bounds changes after animation starts
                 this.reCenterSpineNextTick(spineSymbol, x, y, this.getWinSymbolNudge(symbolValue));
                 console.log(`[Symbols] Playing looped scatter animation: ${hitAnimationName}`);
-                
+
                 // Create smooth scale tween to increase size by 20%
-                const enlargedScale = configuredScale * 1.5; // Increase by 20%
+                let enlargedScaleX = configuredScale * 1.5;
+                let enlargedScaleY = configuredScale * 1.5;
+                try {
+                  const baseX = Number((spineSymbol as any).__scatterBaseScaleX);
+                  const baseY = Number((spineSymbol as any).__scatterBaseScaleY);
+                  const bx = isFinite(baseX) && baseX > 0 ? baseX : Number(spineSymbol.scaleX);
+                  const by = isFinite(baseY) && baseY > 0 ? baseY : Number(spineSymbol.scaleY);
+                  enlargedScaleX = bx * 1.5;
+                  enlargedScaleY = by * 1.5;
+                } catch {}
                 this.scene.tweens.add({
                   targets: spineSymbol,
-                  scaleX: enlargedScale,
-                  scaleY: enlargedScale,
+                  scaleX: enlargedScaleX,
+                  scaleY: enlargedScaleY,
                   duration: 500, // Smooth 500ms transition
                   ease: 'Power2.easeOut', // Smooth easing
                   onComplete: () => {
-                    console.log(`[Symbols] Scatter symbol scale tween completed: ${configuredScale} → ${enlargedScale}`);
+                    console.log(`[Symbols] Scatter symbol scale tween completed: ${configuredScale} → ${enlargedScaleX}`);
                   }
                 });
-                
-                console.log(`[Symbols] Applied smooth scale tween: ${configuredScale} → ${enlargedScale} to scatter symbol ${symbolValue}`);
-                
+
+                console.log(`[Symbols] Applied smooth scale tween: ${configuredScale} → ${enlargedScaleX} to scatter symbol ${symbolValue}`);
+
                 // Resolve after a short delay to allow animation to start
                 setTimeout(() => resolve(), 100);
               } catch (e) {
@@ -3145,16 +3245,15 @@ export class Symbols {
                 throw e;
               }
             };
+
             attemptCreate(0);
-            
           } catch (error) {
             console.warn(`[Symbols] Failed to replace scatter sprite with Spine animation at column ${col}, row ${row}:`, error);
-            
+
             // Fallback to the old pulse method if Spine replacement fails
             if (this.symbols[col] && this.symbols[col][row]) {
               const symbol = this.symbols[col][row];
-              
-              
+
               // Add glow effect - check if methods exist before calling
               if (typeof symbol.setTint === 'function') {
                 symbol.setTint(0x00FFFF); // Cyan tint for scatter
@@ -3162,19 +3261,18 @@ export class Symbols {
               if (typeof symbol.setBlendMode === 'function') {
                 symbol.setBlendMode(Phaser.BlendModes.ADD);
               }
-            } else {
-              resolve();
             }
+            resolve();
           }
         } else {
           resolve();
         }
       });
     });
-    
+
     // Wait for all Spine animations to start
     await Promise.all(animationPromises);
-    
+
     // Wait longer for the animations to play and scale tween to complete
     // Apply turbo mode to the delay for consistent timing
     const baseDelay = 3000;
@@ -3182,7 +3280,7 @@ export class Symbols {
     const adjustedDelay = baseDelay * turboMultiplier;
     console.log(`[Symbols] Scatter animation delay: base=${baseDelay}ms, turbo=${gameStateManager.isTurbo}, adjusted=${adjustedDelay}ms`);
     await this.delay(adjustedDelay);
-    
+
     console.log('[Symbols] Scatter symbol Spine animation completed');
   }
 
@@ -3422,7 +3520,7 @@ export class Symbols {
     console.log(`[Symbols] Starting free spin autoplay with ${spinCount} spins`);
 
 		try {
-			const alreadyProgressed = (Number(this.bonusLevelsCompleted) || 0) > 0 || (Number(this.bonusRetriggersConsumed) || 0) > 0 || this.pendingBackendRetriggerTotal !== null;
+			const alreadyProgressed = (Number((this as any).bonusLevelsCompleted) || 0) > 0 || (Number((this as any).bonusRetriggersConsumed) || 0) > 0 || this.pendingBackendRetriggerTotal !== null;
 			if (!alreadyProgressed) {
 				this.bonusStage1Complete = false;
 				this.bonusLevelsCompleted = 0;
@@ -3479,7 +3577,7 @@ export class Symbols {
     if (this.freeSpinAutoplaySpinsRemaining <= 0) {
 			let pendingProgressAtZero = false;
 			try { pendingProgressAtZero = this.hasPendingBonusProgressionAtZero(); } catch { pendingProgressAtZero = false; }
-			if (pendingProgressAtZero) {
+			if (gameStateManager.isBonus && pendingProgressAtZero) {
 				try {
 					await gameStateManager.waitForOverlaySafeState({ timeoutMs: 12000 });
 				} catch {}
@@ -3695,7 +3793,6 @@ export class Symbols {
         this.freeSpinAutoplayWaitingForRetriggerOverlay = true;
         this.scene.events.once('freeSpinRetriggerOverlayClosed', () => {
           console.log('[Symbols] freeSpinRetriggerOverlayClosed received');
-					resumed = true;
           this.freeSpinAutoplayWaitingForRetriggerOverlay = false;
 				this.freeSpinAutoplayResumeImmediateOnce = false;
           try { gameStateManager.isShowingWinDialog = false; } catch {}
@@ -3915,7 +4012,7 @@ export class Symbols {
     } catch {
       delayMs = baseDelay;
     }
-    console.log(`[Symbols] Scheduling next free spin in ${delayMs}ms (base: ${baseDelay}ms, turbo: ${gameStateManager.isTurbo})`);
+    console.log(`[Symbols] Scheduling next free spin in ${delayMs}ms (base: ${baseDelay}ms, turbo: ${gameStateManager.isTurbo}, immediate: ${delayMs === 0})`);
 
     this.freeSpinAutoplayTimer = this.scene.time.delayedCall(delayMs, () => {
       this.performFreeSpinAutoplay();
@@ -4492,15 +4589,56 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   setSpeed(self.scene.gameData, adjustedDelay);
   self.scene.gameData.dropReelsDelay = 0;
 
-	// If skip was requested very early (before spin data / tweens existed), the timing we just set
-	// would overwrite the earlier skip tweaks. Re-apply the skip tweaks now, right before
-	// we create/run the reel-drop tweens.
-	try {
-		if (!gameStateManager.isTurbo && ((self as any).skipReelDropsPending || (self as any).skipReelDropsActive)) {
-			applySkipReelTweaks(self, self.scene.gameData, 60);
-			try { (self as any).skipReelDropsPending = false; } catch {}
-		}
-	} catch {}
+  // Ensure anticipation state is available early (before any pending skip is re-applied).
+  // This also allows us to suppress skip for anticipation spins even if the player tapped skip very early.
+  try {
+    const sc: any = self.scene as any;
+    const isAnticipationSpin = (() => {
+      try {
+        const scatterVal = SCATTER_SYMBOL[0];
+        let count = 0;
+        for (let c = 0; c < symbols.length; c++) {
+          const colArr = symbols[c];
+          if (!Array.isArray(colArr)) continue;
+          for (let r = 0; r < colArr.length; r++) {
+            if (colArr[r] === scatterVal) count += 1;
+            if (count >= 3) return true;
+          }
+        }
+      } catch {}
+      return false;
+    })();
+
+    try { sc.__isScatterAnticipationActive = isAnticipationSpin; } catch {}
+    try { sc.__scatterAnticipationStageRunning = false; } catch {}
+    if (isAnticipationSpin) {
+      try { (self as any).skipReelDropsPending = false; } catch {}
+      try { (self as any).skipReelDropsActive = false; } catch {}
+      try { (self as any).skipHitbox?.disableInteractive?.(); } catch {}
+    }
+  } catch {}
+
+  // If skip was requested very early (before spin data / tweens existed), the timing we just set
+  // would overwrite the earlier skip tweaks. Re-apply the skip tweaks now, right before
+  // we create/run the reel-drop tweens.
+  try {
+    if (!gameStateManager.isTurbo && ((self as any).skipReelDropsPending || (self as any).skipReelDropsActive)) {
+      const blockForAnticipation = (() => {
+        try {
+          return !!((self.scene as any)?.__isScatterAnticipationActive || (self.scene as any)?.__scatterAnticipationStageRunning);
+        } catch {
+          return false;
+        }
+      })();
+      if (blockForAnticipation) {
+        try { (self as any).skipReelDropsPending = false; } catch {}
+        try { (self as any).skipReelDropsActive = false; } catch {}
+      } else {
+        applySkipReelTweaks(self, self.scene.gameData, 60);
+        try { (self as any).skipReelDropsPending = false; } catch {}
+      }
+    }
+  } catch {}
   
   // Set spinning state
   gameStateManager.isReelSpinning = true;
@@ -4551,9 +4689,7 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
       (self as any).hasPendingCollectorSequence = !!(hasCollector && hasMoney);
     } else {
       (self as any).hasPendingCollectorSequence = false;
-      try {
-        self.clearWinLines();
-      } catch {}
+      try { self.clearWinLines(); } catch {}
       try {
         const grid: any[][] = self.symbols;
         if (Array.isArray(grid)) {
@@ -4567,14 +4703,8 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
           }
         }
       } catch {}
-      try {
-        const bg: any = (self.scene as any).background;
-        bg?.restoreDepthAfterWinSequence?.();
-      } catch {}
-      try {
-        self.updateMoneyValueOverlays(spinData);
-        try { self.container?.setVisible(true); self.container?.setAlpha(1); } catch {}
-      } catch {}
+      try { self.updateMoneyValueOverlays(spinData); } catch {}
+      try { self.container?.setVisible(true); self.container?.setAlpha(1); } catch {}
 		let didDynamite = false;
 		try {
 			const special = spinData && spinData.slot && spinData.slot.special ? spinData.slot.special : null;
@@ -4660,6 +4790,16 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
 	if (willTriggerScatter) {
 		try { gameStateManager.isScatter = true; } catch {}
 		try { (self.scene as any)?.events?.emit('scatterTransitionStart'); } catch {}
+		try {
+			const keepBright = new Set<string>();
+			try {
+				for (const g of effectiveScatterGrids) {
+					if (!g) continue;
+					keepBright.add(`${(g as any).x}_${(g as any).y}`);
+				}
+			} catch {}
+			applyNonWinningSymbolDim(self.scene as any, self.symbols, keepBright, symbols as any, { darkenBgDepth: false });
+		} catch {}
 	}
   
   // Check if this win meets the dialog threshold and pause autoplay if so

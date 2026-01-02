@@ -29,6 +29,8 @@ export class ScatterAnimationManager {
   public delayedScatterData: any = null;
   private scatterSymbols: any[] = []; // Store references to scatter symbols
   private useSpinner: boolean = false; // TEMP: disable spinner, use overlay
+  private __bonusModeResetListener?: any;
+  private __activateBonusModeResetListener?: any;
 
   private bonusEntryFreeSpinsOverride: number | null = null;
 
@@ -68,6 +70,29 @@ export class ScatterAnimationManager {
     this.dialogsComponent = dialogsComponent;
     this.overlayComponent = null;
     this.scatterWinOverlay = scatterWinOverlay || null;
+
+    try {
+      if (this.__bonusModeResetListener) {
+        try { this.scene?.events?.off?.('setBonusMode', this.__bonusModeResetListener); } catch {}
+      }
+      this.__bonusModeResetListener = (isBonus: boolean) => {
+        try {
+          if (!isBonus) return;
+          this.stopRegisteredScatterSymbolsAnimations();
+        } catch {}
+      };
+      try { this.scene?.events?.on?.('setBonusMode', this.__bonusModeResetListener); } catch {}
+    } catch {}
+
+    try {
+      if (this.__activateBonusModeResetListener) {
+        try { this.scene?.events?.off?.('activateBonusMode', this.__activateBonusModeResetListener); } catch {}
+      }
+      this.__activateBonusModeResetListener = () => {
+        try { this.stopRegisteredScatterSymbolsAnimations(); } catch {}
+      };
+      try { this.scene?.events?.on?.('activateBonusMode', this.__activateBonusModeResetListener); } catch {}
+    } catch {}
 
     // Set up event listeners for wheel events
     this.setupWheelEventListeners();
@@ -130,7 +155,9 @@ export class ScatterAnimationManager {
         bonusTransitionListenersRegistered = true;
         this.scene?.events?.once('activateBonusMode', () => {
           bonusModeActivated = true;
+          try { this.stopRegisteredScatterSymbolsAnimations(); } catch {}
         });
+
         this.scene?.events?.once('bonusTransitionComplete', () => {
           bonusTransitionFinished = true;
           try { this.resetAllSymbolsAndAnimations(); } catch {}
@@ -220,8 +247,6 @@ export class ScatterAnimationManager {
                 requestedBonusTransitionFinish = true;
 
                 (async () => {
-                  try { await gameStateManager.waitForOverlaySafeState({ timeoutMs: 15000 }); } catch {}
-                  try { await gameStateManager.waitUntilOverlaysClosed(15000); } catch {}
                   console.log('[ScatterAnimationManager] Launching BubbleOverlayTransition for bonus entry');
                   try {
                     if (sceneAny.scene.isActive?.('BubbleOverlayTransition') || sceneAny.scene.isSleeping?.('BubbleOverlayTransition')) {
@@ -233,15 +258,20 @@ export class ScatterAnimationManager {
                       fromSceneKey: 'Game',
                       toSceneKey: 'Game',
                       stopFromScene: false,
-                      hookFishScaleModifier: 6,
-                      hookFishOffsetX: 0,
-                      hookFishOffsetY: 40,
                       toSceneEvent: 'activateBonusMode',
                       toSceneEventOnFinish: 'bonusTransitionComplete',
-                      overlayAlpha: 1,
-                      overlayFadeInDurationMs: 520,
-                      overlayFadeInDelayMs: 30,
-                      spineFadeInDurationMs: 620
+                      transitionPreset: 'bonusEnter',
+                      timings: {
+                        overlayAlpha: 1,
+                        overlayInMs: 560,
+                        overlayDelayMs: 1800,
+                        spineInMs: 620,
+                        switchProgress: 0.8,
+                        overlayOutMs: 200,
+                        finishOutMs: 800
+                      },
+                      spineOffsetX: 0,
+                      spineOffsetY: -560
                     });
                     try { sceneAny.scene.bringToTop?.('BubbleOverlayTransition'); } catch {}
                     try {
@@ -270,6 +300,7 @@ export class ScatterAnimationManager {
                     });
                   } catch {}
                 };
+                try { hideNow(); } catch {}
                 try { sceneAny?.events?.once?.('activateBonusMode', hideNow as any); } catch {}
                 try {
                   sceneAny.time?.delayedCall?.(500, () => {
@@ -326,21 +357,21 @@ export class ScatterAnimationManager {
     try {
       this.scene?.tweens?.add?.({
         targets: this.symbolsContainer,
-        alpha: 0.6,
+        alpha: 1,
         duration: 140,
         ease: 'Cubic.easeOut'
       });
     } catch {
-      try { this.symbolsContainer.setAlpha(0.6); } catch {}
+      try { this.symbolsContainer.setAlpha(1); } catch {}
     }
 
     // Ensure scatter symbols stop looping their win animation while overlay is displayed.
-    try { this.resetRegisteredScatterSymbolsToIdle(); } catch {}
+    try { this.stopRegisteredScatterSymbolsAnimations(); } catch {}
     try {
       for (const s of this.scatterSymbols) {
         if (!s || (s as any).destroyed) continue;
         try { this.scene?.tweens?.killTweensOf?.(s as any); } catch {}
-        try { (s as any).setAlpha?.(0.6); } catch {}
+        try { (s as any).setAlpha?.(1); } catch {}
       }
     } catch {}
 
@@ -392,6 +423,15 @@ export class ScatterAnimationManager {
           (symbol as any).animationState.setAnimation(0, idleAnim, true);
         }
       } catch {}
+    }
+  }
+
+  private stopRegisteredScatterSymbolsAnimations(): void {
+    if (!this.scene) return;
+    try { this.resetRegisteredScatterSymbolsToIdle(); } catch {}
+    for (const symbol of this.scatterSymbols) {
+      if (!symbol || (symbol as any).destroyed) continue;
+      try { (symbol as any).setAlpha?.(1); } catch {}
     }
   }
 
@@ -741,6 +781,13 @@ export class ScatterAnimationManager {
     } catch {}
 
     // Re-enable scatter symbols
+    try {
+      if (this.isInActiveBonusMode()) {
+        this.stopRegisteredScatterSymbolsAnimations();
+      } else {
+        this.resetRegisteredScatterSymbolsToIdle();
+      }
+    } catch {}
     try {
       for (const s of this.scatterSymbols) {
         if (!s || (s as any).destroyed) continue;

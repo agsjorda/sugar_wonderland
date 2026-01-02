@@ -4,7 +4,8 @@ export function applyNonWinningSymbolDim(
   scene: Phaser.Scene,
   symbols: any[][],
   winningPositions: Set<string>,
-  symbolValues?: number[][]
+  symbolValues?: number[][],
+  options?: { darkenBgDepth?: boolean; scaleDown?: boolean }
 ): void {
   try {
     if (!scene || !symbols || !Array.isArray(symbols)) {
@@ -16,12 +17,14 @@ export function applyNonWinningSymbolDim(
 
 		// Darken the BG-Depth layer during this non-winning dim sequence if a
 		// Background component is attached to the scene.
-		try {
-			const bg: any = (scene as any).background;
-			if (bg && typeof bg.darkenDepthForWinSequence === 'function') {
-				bg.darkenDepthForWinSequence();
-			}
-		} catch {}
+		if (options?.darkenBgDepth !== false) {
+			try {
+				const bg: any = (scene as any).background;
+				if (bg && typeof bg.darkenDepthForWinSequence === 'function') {
+					bg.darkenDepthForWinSequence();
+				}
+			} catch {}
+		}
 
     for (let col = 0; col < symbols.length; col++) {
       const column = symbols[col];
@@ -132,14 +135,17 @@ export function applyNonWinningSymbolDim(
         try {
           const baseScaleX = (anySymbol.__nonWinOriginalScaleX ?? anySymbol.scaleX ?? 1) as number;
           const baseScaleY = (anySymbol.__nonWinOriginalScaleY ?? anySymbol.scaleY ?? 1) as number;
-          const tween = scene.tweens.add({
+          const tweenConfig: any = {
             targets: anySymbol,
-            scaleX: baseScaleX * 0.8,
-            scaleY: baseScaleY * 0.8,
             alpha: 0.5,
             duration: 400,
             ease: Phaser.Math.Easing.Sine.Out,
-          });
+          };
+          if (options?.scaleDown !== false) {
+            tweenConfig.scaleX = baseScaleX * 0.8;
+            tweenConfig.scaleY = baseScaleY * 0.8;
+          }
+          const tween = scene.tweens.add(tweenConfig);
 
           // For Spine objects or anything that implements setAlpha, keep the
           // rendered opacity in sync with the tweened alpha value.

@@ -946,7 +946,7 @@ export class Menu {
         musicSlider.fillStyle(0xffffff, 1);
         // Draw knob at local origin and position the graphics instead of drawing at world coords
         musicSlider.fillCircle(0, 0, 12 * scaleFactor);
-        musicSlider.setPosition(sliderStartX + 0.50 * widthSlider * scaleFactor, musicSliderY + 4);
+        musicSlider.setPosition(sliderStartX + scene.audioManager.getVolume() * widthSlider * scaleFactor, musicSliderY + 4);
         // Enlarge interactive hit area and keep it local to the graphics
         musicSlider.setInteractive(
             new Geom.Circle(0, 0, 22 * scaleFactor),
@@ -956,7 +956,7 @@ export class Menu {
         contentArea.add(musicSlider);
 
         // Music value text
-        const musicValue = scene.add.text(sliderStartX , musicSliderY + 25, '50%', {
+        const musicValue = scene.add.text(sliderStartX , musicSliderY + 25, Math.round(scene.audioManager.getVolume() * 100) + '%', {
             fontSize: '16px',
             color: '#FFFFFF',
             fontFamily: 'Poppins-Regular'

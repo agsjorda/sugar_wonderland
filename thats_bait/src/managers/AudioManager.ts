@@ -44,7 +44,7 @@ export class AudioManager {
 	private scene: Phaser.Scene;
 	private boundSoundManager: AnySoundManager | null = null;
 
-	private musicVolume = 0.5;
+	private musicVolume = 1;
 	private sfxVolume = 0.40;
 	private duckFactor = 1;
 

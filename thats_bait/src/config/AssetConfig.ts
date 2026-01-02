@@ -433,7 +433,6 @@ export class AssetConfig {
 				'fishreel_TB': 'assets/sounds/SFX/fishreel_TB.ogg',
 				'explosion_TB': 'assets/sounds/SFX/explosion_TB.ogg',
 				'hello_TB': 'assets/sounds/SFX/hello_TB.ogg',
-
 				// Hit win SFX
 				'hit_win_TB': 'assets/sounds/SFX/hit_win_TB.ogg',
 				// Wild multi SFX
@@ -444,7 +443,6 @@ export class AssetConfig {
 				'superw_TB': 'assets/sounds/Wins/superw_TB.ogg',
 				'epicw_TB': 'assets/sounds/Wins/epicw_TB.ogg',
 				'congrats_TB': 'assets/sounds/Wins/congrats_TB.ogg',
-				
 			}
 		};
 	}
@@ -452,14 +450,14 @@ export class AssetConfig {
 	getTransitionAssets(): AssetGroup {
 		const forcedPortraitHighPrefix = `assets/portrait/high`;
 		return {
-			images: {
-				'transition-string': `${forcedPortraitHighPrefix}/transitions/string.webp`,
-				'transition-fish': `${forcedPortraitHighPrefix}/transitions/Fish.webp`,
-			},
 			spine: {
 				'bubbles_transition': {
 					atlas: `${forcedPortraitHighPrefix}/transitions/Bubbles_Transition.atlas`,
 					json: `${forcedPortraitHighPrefix}/transitions/Bubbles_Transition.json`
+				},
+				'bubbles_transition_TB': {
+					atlas: `${forcedPortraitHighPrefix}/transitions/Bubbles_Transition_TB.atlas`,
+					json: `${forcedPortraitHighPrefix}/transitions/Bubbles_Transition_TB.json`
 				}
 			}
 		};
@@ -469,7 +467,7 @@ export class AssetConfig {
 		const forcedPortraitHighPrefix = `assets/portrait/high`;
 		return {
 			images: {
-				'dynamite': `${forcedPortraitHighPrefix}/dynamite/dynamite.png`
+				'dynamite': `${forcedPortraitHighPrefix}/dynamite/dynamite.webp`
 			},
 			spine: {
 				'Water_Bomb_VFX': {
@@ -505,4 +503,4 @@ export class AssetConfig {
 		console.log(`[AssetConfig] Asset prefix: ${prefix}`);
 		console.log(`[AssetConfig] Available asset groups:`, Object.keys(this.getAllAssets()));
 	}
-} 
+}

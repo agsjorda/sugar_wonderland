@@ -2,6 +2,30 @@ import { Scene } from 'phaser';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { gameStateManager } from '../../managers/GameStateManager';
 
+ type TransitionPreset = 'default' | 'bonusEnter' | 'bonusExit';
+
+ interface BubbleTransitionTimings {
+ 	overlayAlpha?: number;
+ 	overlayInMs?: number;
+ 	overlayDelayMs?: number;
+ 	spineInMs?: number;
+ 	switchProgress?: number;
+ 	switchMs?: number;
+ 	overlayOutMs?: number;
+ 	finishOutMs?: number;
+ }
+
+ interface ResolvedBubbleTransitionTimings {
+ 	overlayAlpha: number;
+ 	overlayInMs: number;
+ 	overlayDelayMs: number;
+ 	spineInMs: number;
+ 	switchProgress: number;
+ 	switchMs: number | null;
+ 	overlayOutMs: number;
+ 	finishOutMs: number;
+ }
+
 interface BubbleTransitionData {
 	fromSceneKey?: string;
 	toSceneKey?: string;
@@ -11,16 +35,14 @@ interface BubbleTransitionData {
 	toSceneEventData?: any;
 	toSceneEventOnFinish?: string;
 	toSceneEventOnFinishData?: any;
-	disableHookIntro?: boolean;
-	hookFishScaleModifier?: number;
-	hookStringScaleXModifier?: number;
-	hookStringScaleYModifier?: number;
-	hookFishOffsetX?: number;
-	hookFishOffsetY?: number;
+	transitionPreset?: TransitionPreset;
+	timings?: BubbleTransitionTimings;
 	overlayAlpha?: number;
 	overlayFadeInDurationMs?: number;
 	overlayFadeInDelayMs?: number;
 	spineFadeInDurationMs?: number;
+	spineOffsetX?: number;
+	spineOffsetY?: number;
 	sceneSwitchProgress?: number;
 }
 
@@ -29,9 +51,6 @@ export class BubbleOverlayTransitionScene extends Scene {
 	private overlayRect?: Phaser.GameObjects.Rectangle;
 	private transitionSpine?: any;
 	private bubbles: Phaser.GameObjects.Arc[] = [];
-	private hookContainer?: Phaser.GameObjects.Container;
-	private hookString?: Phaser.GameObjects.Image;
-	private hookFish?: Phaser.GameObjects.Image;
 	private hasStarted: boolean = false;
 	private hasFinished: boolean = false;
 	private hasPlayedTransitionSfx: boolean = false;
@@ -39,6 +58,7 @@ export class BubbleOverlayTransitionScene extends Scene {
 	private toSceneKey?: string;
 	private ensureOnTopTimer?: Phaser.Time.TimerEvent;
 	private startGameStarted: boolean = false;
+	private resolvedTimings?: ResolvedBubbleTransitionTimings;
 
 	constructor() {
 		super('BubbleOverlayTransition');
@@ -49,6 +69,7 @@ export class BubbleOverlayTransitionScene extends Scene {
 		try { this.hasStarted = false; } catch {}
 		try { this.hasFinished = false; } catch {}
 		try { this.toSceneKey = undefined; } catch {}
+		try { this.resolvedTimings = undefined; } catch {}
 		try { this.hasPlayedTransitionSfx = false; } catch {}
 	}
 
@@ -58,6 +79,7 @@ export class BubbleOverlayTransitionScene extends Scene {
 		try { this.hasFinished = false; } catch {}
 		try { this.toSceneKey = undefined; } catch {}
 		try { this.startGameStarted = false; } catch {}
+		try { this.resolvedTimings = undefined; } catch {}
 		try { this.hasPlayedTransitionSfx = false; } catch {}
 		try { this.scene.bringToTop('BubbleOverlayTransition'); } catch {}
 		this.cameras.main.setBackgroundColor(0x000000);
@@ -72,10 +94,6 @@ export class BubbleOverlayTransitionScene extends Scene {
 				try { (this.overlayRect as any)?.disableInteractive?.(); } catch {}
 				try { this.overlayRect?.destroy(); } catch {}
 				try { this.transitionSpine?.destroy(); } catch {}
-				try { this.hookContainer?.destroy(true); } catch {}
-				try { this.hookContainer = undefined; } catch {}
-				try { this.hookString = undefined; } catch {}
-				try { this.hookFish = undefined; } catch {}
 				for (const b of this.bubbles) {
 					try { b.destroy(); } catch {}
 				}
@@ -85,14 +103,7 @@ export class BubbleOverlayTransitionScene extends Scene {
 
 		try { this.hardStopTimer?.destroy(); } catch {}
 		try {
-			let extraMs = 0;
-			try {
-				const shouldPlayHookIntro = !this.transitionData?.disableHookIntro && this.transitionData?.toSceneEvent === 'activateBonusMode';
-				if (shouldPlayHookIntro && this.textures?.exists('transition-string') && this.textures?.exists('transition-fish')) {
-					extraMs = 1300;
-				}
-			} catch {}
-			this.hardStopTimer = this.time.delayedCall(4500 + extraMs, () => {
+			this.hardStopTimer = this.time.delayedCall(4500, () => {
 				if (this.hasFinished) return;
 				console.warn('[BubbleOverlayTransitionScene] Hard stop fallback triggered');
 				try { this.hasFinished = true; } catch {}
@@ -121,145 +132,102 @@ export class BubbleOverlayTransitionScene extends Scene {
 				}
 			});
 		} catch {}
-		this.playHookIntro();
-	}
-
-	private playHookIntro(): void {
-		const shouldPlayHookIntro = !this.transitionData?.disableHookIntro && this.transitionData?.toSceneEvent === 'activateBonusMode';
-		if (!shouldPlayHookIntro) {
-			this.playBubbleAnimation();
-			return;
-		}
-
-		let hasAssets = false;
-		try {
-			hasAssets = !!this.textures?.exists('transition-string') && !!this.textures?.exists('transition-fish');
-		} catch {
-			hasAssets = false;
-		}
-		if (!hasAssets) {
-			this.playBubbleAnimation();
-			return;
-		}
-
-		const cx = this.scale.width * 0.5;
-		const desiredStringH = this.scale.height * 1.15;
-		const downDurationMs = 850;
-		const upDurationMs = 1050;
-
-		let stringImg: Phaser.GameObjects.Image | undefined;
-		try {
-			stringImg = this.add.image(0, 0, 'transition-string');
-			stringImg.setOrigin(0.5, 0);
-		} catch {
-			try { stringImg?.destroy(); } catch {}
-			return;
-		}
-
-		try {
-			const s = desiredStringH / Math.max(1, stringImg.height);
-			const rawX = Number(this.transitionData?.hookStringScaleXModifier);
-			const rawY = Number(this.transitionData?.hookStringScaleYModifier);
-			const modX = (isFinite(rawX) && rawX > 0) ? rawX : 1;
-			const modY = (isFinite(rawY) && rawY > 0) ? rawY : 5;
-			stringImg.setScale(s * modX, s * modY);
-		} catch {}
-		try { stringImg.setDepth(999905); } catch {}
-
-		const hookLocalY = Math.max(0, stringImg.displayHeight - 80);
-
-		let cont: Phaser.GameObjects.Container | undefined;
-		try {
-			cont = this.add.container(cx, -stringImg.displayHeight);
-			cont.add([stringImg]);
-			cont.setDepth(999904);
-		} catch {
-			try { stringImg?.destroy(); } catch {}
-			try { cont?.destroy(); } catch {}
-			return;
-		}
-
-		this.hookContainer = cont;
-		this.hookString = stringImg;
-		this.hookFish = undefined;
-
-		try {
-			let fishImg: Phaser.GameObjects.Image | undefined;
-			try {
-				const rawScaleMod = Number(this.transitionData?.hookFishScaleModifier);
-				const fishScaleMod = (isFinite(rawScaleMod) && rawScaleMod > 0) ? rawScaleMod : 1;
-				const rawOffX = Number(this.transitionData?.hookFishOffsetX);
-				const rawOffY = Number(this.transitionData?.hookFishOffsetY);
-				const fishOffX = isFinite(rawOffX) ? rawOffX : 0;
-				const fishOffY = isFinite(rawOffY) ? rawOffY : 0;
-				if (fishOffX !== 0 || fishOffY !== 0) {
-					console.log('[BubbleOverlayTransitionScene] hook fish offsets', { x: fishOffX, y: fishOffY });
-				}
-				fishImg = this.add.image(0, 0, 'transition-fish');
-				fishImg.setOrigin(0.5, 0.5);
-				const maxW = this.scale.width * 0.22;
-				const s = maxW / Math.max(1, fishImg.width);
-				fishImg.setScale(Math.min(s, 1) * fishScaleMod);
-				fishImg.setDepth(999906);
-				try { fishImg.setVisible(false); } catch {}
-				try { fishImg.setAlpha(0); } catch {}
-				cont.add(fishImg);
-				try { fishImg.setPosition(fishOffX, hookLocalY + fishOffY); } catch {}
-				this.hookFish = fishImg;
-			} catch {
-				try { fishImg?.destroy(); } catch {}
-			}
-		} catch {}
-
-		try {
-			const exitBottomY = this.scale.height + 40;
-			this.tweens.add({
-				targets: cont,
-				y: exitBottomY,
-				duration: downDurationMs,
-				ease: 'Sine.easeIn',
-					onComplete: () => {
-					try {
-						if (this.hookFish) {
-							this.hookFish.setVisible(true);
-							this.hookFish.setAlpha(1);
-						}
-					} catch {}
-					this.playBubbleAnimation();
-					try {
-						const exitTopMargin = 120;
-						let maxLocalBottom = stringImg!.displayHeight;
-						try {
-							const fish = this.hookFish;
-							if (fish) {
-								const fishLocalBottom = fish.y + (fish.displayHeight * (1 - fish.originY));
-								maxLocalBottom = Math.max(maxLocalBottom, fishLocalBottom);
-							}
-						} catch {}
-						const exitTopY = -maxLocalBottom - exitTopMargin;
-						this.tweens.add({
-							targets: cont,
-							y: exitTopY,
-							duration: upDurationMs,
-							ease: 'Sine.easeOut'
-						});
-					} catch {}
-				}
-			});
-		} catch {}
+		this.playBubbleAnimation();
 	}
 
 	private playTransitionSfxOnce(): void {
 		if (this.hasPlayedTransitionSfx) return;
 		this.hasPlayedTransitionSfx = true;
-		try {
-			const audio = (this as any)?.audioManager ?? ((window as any)?.audioManager ?? null);
-			if (audio && typeof audio.playSoundEffect === 'function') {
-				audio.playSoundEffect('bubble_transition_TB');
+		const playNow = () => {
+			try {
+				const audio = (this as any)?.audioManager ?? ((window as any)?.audioManager ?? null);
+				if (audio && typeof audio.playSoundEffect === 'function') {
+					audio.playSoundEffect('bubble_transition_TB');
+					return;
+				}
+			} catch {}
+			try { this.sound.play('bubble_transition_TB'); } catch {}
+		};
+
+		const shouldDelay = this.transitionData?.toSceneEvent === 'activateBonusMode';
+		if (shouldDelay) {
+			try {
+				this.time.delayedCall(1250, () => playNow());
 				return;
+			} catch {}
+		}
+		playNow();
+	}
+
+	private resolvePreset(): TransitionPreset {
+		const raw = this.transitionData?.transitionPreset;
+		if (raw === 'bonusEnter' || raw === 'bonusExit' || raw === 'default') return raw;
+		const evt = this.transitionData?.toSceneEvent;
+		if (evt === 'activateBonusMode') return 'bonusEnter';
+		if (evt === 'prepareBonusExit') return 'bonusExit';
+		return 'default';
+	}
+
+	private resolveTimings(isFallback: boolean): ResolvedBubbleTransitionTimings {
+		const preset = this.resolvePreset();
+		const presetDefaults = (() => {
+			switch (preset) {
+				case 'bonusEnter':
+					return { overlayAlpha: 1, overlayInMs: 560, overlayDelayMs: 1800, spineInMs: 620, switchProgress: 0.5, overlayOutMs: 200, finishOutMs: 500 };
+				case 'bonusExit':
+					return { overlayAlpha: 0.55, overlayInMs: 520, overlayDelayMs: 30, spineInMs: 620, switchProgress: 0.5, overlayOutMs: 200, finishOutMs: 500 };
+				default:
+					return { overlayAlpha: 0.65, overlayInMs: 200, overlayDelayMs: undefined as any, spineInMs: 800, switchProgress: 0.5, overlayOutMs: 200, finishOutMs: 500 };
 			}
-		} catch {}
-		try { this.sound.play('bubble_transition_TB'); } catch {}
+		})();
+
+		const t = this.transitionData?.timings;
+		const num = (v: any): number => Number(v);
+		const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
+		const resolveDelayDefault = (): number => {
+			const d = num((presetDefaults as any).overlayDelayMs);
+			if (isFinite(d)) return Math.max(0, d | 0);
+			return isFallback ? 0 : 600;
+		};
+
+		const overlayAlphaRaw = num(t?.overlayAlpha);
+		const overlayAlphaLegacyRaw = num(this.transitionData?.overlayAlpha);
+		const overlayAlphaDefaultRaw = num((presetDefaults as any).overlayAlpha);
+		const overlayAlpha = clamp01(
+			isFinite(overlayAlphaRaw) ? overlayAlphaRaw : (isFinite(overlayAlphaLegacyRaw) ? overlayAlphaLegacyRaw : (isFinite(overlayAlphaDefaultRaw) ? overlayAlphaDefaultRaw : 0.65))
+		);
+
+		const overlayInRaw = num(t?.overlayInMs);
+		const overlayInLegacyRaw = num(this.transitionData?.overlayFadeInDurationMs);
+		const overlayInDefaultRaw = num((presetDefaults as any).overlayInMs);
+		const overlayInMs = (isFinite(overlayInRaw) ? Math.max(0, overlayInRaw | 0) : (isFinite(overlayInLegacyRaw) ? Math.max(0, overlayInLegacyRaw | 0) : (isFinite(overlayInDefaultRaw) ? Math.max(0, overlayInDefaultRaw | 0) : 200)));
+
+		const overlayDelayRaw = num(t?.overlayDelayMs);
+		const overlayDelayLegacyRaw = num(this.transitionData?.overlayFadeInDelayMs);
+		const overlayDelayMs = (isFinite(overlayDelayRaw) ? Math.max(0, overlayDelayRaw | 0) : (isFinite(overlayDelayLegacyRaw) ? Math.max(0, overlayDelayLegacyRaw | 0) : resolveDelayDefault()));
+
+		const spineInRaw = num(t?.spineInMs);
+		const spineInLegacyRaw = num(this.transitionData?.spineFadeInDurationMs);
+		const spineInDefaultRaw = num((presetDefaults as any).spineInMs);
+		const spineInMs = (isFinite(spineInRaw) ? Math.max(0, spineInRaw | 0) : (isFinite(spineInLegacyRaw) ? Math.max(0, spineInLegacyRaw | 0) : (isFinite(spineInDefaultRaw) ? Math.max(0, spineInDefaultRaw | 0) : 800)));
+
+		const switchProgressRaw = num(t?.switchProgress);
+		const switchProgressLegacyRaw = num(this.transitionData?.sceneSwitchProgress);
+		const switchProgressDefaultRaw = num((presetDefaults as any).switchProgress);
+		const switchProgress = (isFinite(switchProgressRaw) ? clamp01(switchProgressRaw) : (isFinite(switchProgressLegacyRaw) ? clamp01(switchProgressLegacyRaw) : (isFinite(switchProgressDefaultRaw) ? clamp01(switchProgressDefaultRaw) : 0.5)));
+
+		const switchMsRaw = num(t?.switchMs);
+		const switchMs = (isFinite(switchMsRaw) && switchMsRaw >= 0) ? Math.max(0, switchMsRaw | 0) : null;
+
+		const overlayOutRaw = num(t?.overlayOutMs);
+		const overlayOutDefaultRaw = num((presetDefaults as any).overlayOutMs);
+		const overlayOutMs = (isFinite(overlayOutRaw) ? Math.max(0, overlayOutRaw | 0) : (isFinite(overlayOutDefaultRaw) ? Math.max(0, overlayOutDefaultRaw | 0) : 200));
+
+		const finishOutRaw = num(t?.finishOutMs);
+		const finishOutDefaultRaw = num((presetDefaults as any).finishOutMs);
+		const finishOutMs = (isFinite(finishOutRaw) ? Math.max(0, finishOutRaw | 0) : (isFinite(finishOutDefaultRaw) ? Math.max(0, finishOutDefaultRaw | 0) : 500));
+
+		return { overlayAlpha, overlayInMs, overlayDelayMs, spineInMs, switchProgress, switchMs, overlayOutMs, finishOutMs };
 	}
 
 	private playBubbleAnimation(): void {
@@ -269,8 +237,10 @@ export class BubbleOverlayTransitionScene extends Scene {
 			this.playFallbackOverlay();
 			return;
 		}
+		this.resolvedTimings = this.resolveTimings(false);
 
-		const spineKey = 'bubbles_transition';
+		const shouldUseTbTransition = this.transitionData?.toSceneEvent === 'activateBonusMode';
+		const spineKey = shouldUseTbTransition ? 'bubbles_transition_TB' : 'bubbles_transition';
 		const atlasKey = spineKey + '-atlas';
 		const jsonCache: any = (this.cache as any).json;
 		if (!jsonCache?.has?.(spineKey)) {
@@ -291,35 +261,50 @@ export class BubbleOverlayTransitionScene extends Scene {
 		try { spine.setOrigin(0.5, 0.5); } catch {}
 		try { spine.setDepth(1); } catch {}
 		try {
+			const desiredWidth = this.scale.width * 1.1;
 			const desiredHeight = this.scale.height * 1.1;
-			const spineH = (spine as any).height || 800;
-			const scale = desiredHeight / spineH;
+			const bounds: any = (spine as any).getBounds?.();
+			const spineW = (bounds?.width && isFinite(bounds.width) && bounds.width > 0)
+				? bounds.width
+				: ((spine as any).width || 1200);
+			const spineH = (bounds?.height && isFinite(bounds.height) && bounds.height > 0)
+				? bounds.height
+				: ((spine as any).height || 800);
+			const scale = Math.max(desiredWidth / spineW, desiredHeight / spineH);
 			spine.setScale(scale);
+			const boundsAfter: any = (spine as any).getBounds?.();
+			if (boundsAfter && isFinite(boundsAfter.x) && isFinite(boundsAfter.y) && isFinite(boundsAfter.width) && isFinite(boundsAfter.height)) {
+				spine.x += cx - (boundsAfter.x + boundsAfter.width * 0.5);
+				spine.y += cy - (boundsAfter.y + boundsAfter.height * 0.5);
+			}
+		} catch {}
+		try {
+			if (shouldUseTbTransition) {
+				const rawX = Number(this.transitionData?.spineOffsetX);
+				const rawY = Number(this.transitionData?.spineOffsetY);
+				const offsetX = isFinite(rawX) ? rawX : 0;
+				const offsetY = isFinite(rawY) ? rawY : 0;
+				spine.x += offsetX;
+				spine.y += offsetY;
+			}
 		} catch {}
 		try { spine.setAlpha(0); } catch {}
 
 		try {
-			const overlayAlphaRaw = Number(this.transitionData?.overlayAlpha);
-			const overlayAlpha = (isFinite(overlayAlphaRaw) ? overlayAlphaRaw : 0.65);
-			const overlayFadeInDurationMsRaw = Number(this.transitionData?.overlayFadeInDurationMs);
-			const overlayFadeInDurationMs = (isFinite(overlayFadeInDurationMsRaw) ? Math.max(0, overlayFadeInDurationMsRaw | 0) : 200);
-			const overlayFadeInDelayMsRaw = Number(this.transitionData?.overlayFadeInDelayMs);
-			const overlayFadeInDelayMs = (isFinite(overlayFadeInDelayMsRaw) ? Math.max(0, overlayFadeInDelayMsRaw | 0) : 0);
-			const spineFadeInDurationMsRaw = Number(this.transitionData?.spineFadeInDurationMs);
-			const spineFadeInDurationMs = (isFinite(spineFadeInDurationMsRaw) ? Math.max(0, spineFadeInDurationMsRaw | 0) : 800);
+			const timing = this.resolvedTimings || this.resolveTimings(false);
 			if (this.overlayRect) {
 				this.tweens.add({
 					targets: this.overlayRect,
-					alpha: Math.max(0, Math.min(1, overlayAlpha)),
-					duration: overlayFadeInDurationMs,
-					delay: overlayFadeInDelayMs,
+					alpha: Math.max(0, Math.min(1, timing.overlayAlpha)),
+					duration: timing.overlayInMs,
+					delay: timing.overlayDelayMs,
 					ease: 'Power2'
 				});
 			}
 			this.tweens.add({
 				targets: spine,
 				alpha: 1,
-				duration: spineFadeInDurationMs,
+				duration: timing.spineInMs,
 				ease: 'Power2'
 			});
 		} catch {}
@@ -368,9 +353,10 @@ export class BubbleOverlayTransitionScene extends Scene {
 			totalMsForTiming = 2000;
 		}
 
-		const switchProgressRaw = Number(this.transitionData?.sceneSwitchProgress);
-		const switchProgress = (isFinite(switchProgressRaw) ? Math.max(0, Math.min(1, switchProgressRaw)) : 0.5);
-		const midMs = Math.max(0, Math.round(totalMsForTiming * switchProgress));
+		const timing = this.resolvedTimings || this.resolveTimings(false);
+		const midMs = (timing.switchMs !== null)
+			? Math.max(0, Math.min(totalMsForTiming, timing.switchMs))
+			: Math.max(0, Math.round(totalMsForTiming * timing.switchProgress));
 		this.time.delayedCall(midMs, () => {
 			this.startGameIfNeeded();
 			this.fadeOverlayOutEarly();
@@ -408,32 +394,30 @@ export class BubbleOverlayTransitionScene extends Scene {
 	}
 
 	private playFallbackOverlay(): void {
+		this.resolvedTimings = this.resolveTimings(true);
 		try {
-			const overlayAlphaRaw = Number(this.transitionData?.overlayAlpha);
-			const overlayAlpha = (isFinite(overlayAlphaRaw) ? overlayAlphaRaw : 0.65);
-			const overlayFadeInDurationMsRaw = Number(this.transitionData?.overlayFadeInDurationMs);
-			const overlayFadeInDurationMs = (isFinite(overlayFadeInDurationMsRaw) ? Math.max(0, overlayFadeInDurationMsRaw | 0) : 200);
-			const overlayFadeInDelayMsRaw = Number(this.transitionData?.overlayFadeInDelayMs);
-			const overlayFadeInDelayMs = (isFinite(overlayFadeInDelayMsRaw) ? Math.max(0, overlayFadeInDelayMsRaw | 0) : 0);
+			const timing = this.resolvedTimings || this.resolveTimings(true);
 			this.tweens.add({
 				targets: this.overlayRect,
-				alpha: Math.max(0, Math.min(1, overlayAlpha)),
-				duration: overlayFadeInDurationMs,
-				delay: overlayFadeInDelayMs,
+				alpha: Math.max(0, Math.min(1, timing.overlayAlpha)),
+				duration: timing.overlayInMs,
+				delay: timing.overlayDelayMs,
 				ease: 'Power2'
 			});
 		} catch {}
 
 		this.spawnBubbles();
 
-		const switchProgressRaw = Number(this.transitionData?.sceneSwitchProgress);
-		const switchProgress = (isFinite(switchProgressRaw) ? Math.max(0, Math.min(1, switchProgressRaw)) : 0.5);
-		const midMs = Math.max(0, Math.round(2200 * switchProgress));
+		const timing = this.resolvedTimings || this.resolveTimings(true);
+		const totalMsForTiming = 2200;
+		const midMs = (timing.switchMs !== null)
+			? Math.max(0, Math.min(totalMsForTiming, timing.switchMs))
+			: Math.max(0, Math.round(totalMsForTiming * timing.switchProgress));
 		this.time.delayedCall(midMs, () => {
 			this.startGameIfNeeded();
 			this.fadeOverlayOutEarly();
 		});
-		this.time.delayedCall(2200, () => {
+		this.time.delayedCall(totalMsForTiming, () => {
 			this.finishTransition();
 		});
 	}
@@ -443,10 +427,11 @@ export class BubbleOverlayTransitionScene extends Scene {
 			if (!this.overlayRect) return;
 			if (this.hasFinished) return;
 			this.tweens.killTweensOf(this.overlayRect);
+			const timing = this.resolvedTimings || this.resolveTimings(false);
 			this.tweens.add({
 				targets: this.overlayRect,
 				alpha: 0,
-				duration: 200,
+				duration: timing.overlayOutMs,
 				ease: 'Power2'
 			});
 		} catch {}
@@ -581,9 +566,6 @@ export class BubbleOverlayTransitionScene extends Scene {
 		const targets: any[] = [];
 		if (this.transitionSpine) targets.push(this.transitionSpine);
 		if (this.overlayRect) targets.push(this.overlayRect);
-		if (this.hookContainer) targets.push(this.hookContainer);
-		if (this.hookString) targets.push(this.hookString);
-		if (this.hookFish) targets.push(this.hookFish);
 		for (const b of this.bubbles) targets.push(b);
 
 		if (targets.length === 0) {
@@ -592,10 +574,11 @@ export class BubbleOverlayTransitionScene extends Scene {
 		}
 
 		try {
+			const timing = this.resolvedTimings || this.resolveTimings(false);
 			this.tweens.add({
 				targets,
 				alpha: 0,
-				duration: 500,
+				duration: timing.finishOutMs,
 				ease: 'Power2',
 				onComplete: () => {
 					this.cleanupAndStop();

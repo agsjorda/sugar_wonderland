@@ -18,6 +18,36 @@ export class MoneyValueOverlayManager {
 	private host: MoneyOverlayHost;
 	private overlays: (NumberDisplay | null)[][] = [];
 
+	private getOwnerAlpha(owner: any): number {
+		try {
+			const a = owner?.alpha;
+			if (typeof a === 'number' && isFinite(a)) {
+				return Math.max(0, Math.min(1, a));
+			}
+		} catch {}
+		return 1;
+	}
+
+	private getOwnerVisible(owner: any): boolean {
+		try {
+			const v = owner?.visible;
+			if (typeof v === 'boolean') {
+				return v;
+			}
+		} catch {}
+		return true;
+	}
+
+	private syncOverlayVisibilityWithOwner(cont: any, owner: any): void {
+		try {
+			if (!cont || !owner) return;
+			const visible = this.getOwnerVisible(owner);
+			const alpha = this.getOwnerAlpha(owner);
+			try { cont.setVisible?.(visible); } catch { try { cont.visible = visible; } catch {} }
+			try { cont.setAlpha?.(alpha); } catch { try { cont.alpha = alpha; } catch {} }
+		} catch {}
+	}
+
 	constructor(host: MoneyOverlayHost) {
 		this.host = host;
 		try {
@@ -124,6 +154,10 @@ export class MoneyValueOverlayManager {
 						const cont = nd.getContainer();
 						this.host.container.add(cont);
 						try {
+							(cont as any).__isMoneyValueOverlay = true;
+							(cont as any).__ownerSymbol = symbolObj;
+						} catch {}
+						try {
 							const b = cont.getBounds();
 							const symbolWidth = (symbolObj.displayWidth || this.host.displayWidth) as number;
 							const targetW = symbolWidth * this.host.moneyValueWidthPaddingFactor;
@@ -139,8 +173,6 @@ export class MoneyValueOverlayManager {
 							try {
 								const ownerScaleX = typeof symbolObj.scaleX === 'number' ? symbolObj.scaleX : 1;
 								const ownerScaleY = typeof symbolObj.scaleY === 'number' ? symbolObj.scaleY : 1;
-								(cont as any).__isMoneyValueOverlay = true;
-								(cont as any).__ownerSymbol = symbolObj;
 								(cont as any).__baseOwnerScaleX = ownerScaleX;
 								(cont as any).__baseOwnerScaleY = ownerScaleY;
 								(cont as any).__baseOverlayScaleX = cont.scaleX;
@@ -148,6 +180,7 @@ export class MoneyValueOverlayManager {
 							} catch {}
 						} catch {}
 						try { (this.host.container as any).bringToTop?.(cont as any); } catch {}
+						try { this.syncOverlayVisibilityWithOwner(cont, symbolObj); } catch {}
 						this.overlays[col].push(nd);
 					} catch {
 						try { nd?.destroy(); } catch {}
@@ -179,6 +212,7 @@ export class MoneyValueOverlayManager {
 						col[r] = null;
 						continue;
 					}
+					try { this.syncOverlayVisibilityWithOwner(cont, owner); } catch {}
 					try {
 						const baseOwnerScaleX = (cont as any).__baseOwnerScaleX || 1;
 						const baseOwnerScaleY = (cont as any).__baseOwnerScaleY || 1;
@@ -202,6 +236,16 @@ export class MoneyValueOverlayManager {
 						const symbolHeight = (owner.displayHeight || this.host.displayHeight) as number;
 						cont.x = owner.x;
 						cont.y = owner.y + symbolHeight * 0.28 + this.host.moneyValueOffsetY;
+					} catch {}
+					try {
+						const parent: any = this.host.container;
+						if (parent && typeof parent.getIndex === 'function' && typeof parent.bringToTop === 'function') {
+							const contIndex = parent.getIndex(cont);
+							const ownerIndex = parent.getIndex(owner);
+							if (typeof contIndex === 'number' && typeof ownerIndex === 'number' && contIndex <= ownerIndex) {
+								parent.bringToTop(cont);
+							}
+						}
 					} catch {}
 				}
 			}

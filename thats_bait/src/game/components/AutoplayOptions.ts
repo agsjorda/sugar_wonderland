@@ -4,6 +4,7 @@ import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { SoundEffectType } from '../../managers/AudioManager';
 import { BET_OPTIONS } from '../../config/BetConfig';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
+import { EventBus } from '../EventBus';
 
 export interface AutoplayOptionsConfig {
 	position?: { x: number; y: number };
@@ -22,6 +23,7 @@ export class AutoplayOptions {
 	private container!: Phaser.GameObjects.Container;
 	private background!: Phaser.GameObjects.Graphics;
 	private confirmButtonMask?: Phaser.GameObjects.Graphics;
+
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
 	private currentAutoplayCount: number = 10;
@@ -50,6 +52,7 @@ export class AutoplayOptions {
 	private amplifyBetScaleModifierX: number = 1;
 	private amplifyBetScaleModifierY: number = 1;
 	private amplifyBetFitScale: number = 1;
+	private amplifyEventHandler?: (enabled: boolean) => void;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -77,6 +80,15 @@ export class AutoplayOptions {
 		
 		// Create confirm button
 		this.createConfirmButton(scene);
+
+		try {
+			this.amplifyEventHandler = (enabled: boolean) => {
+				this.isEnhancedBet = !!enabled;
+				this.updateAmplifyBetVisual();
+				this.updateAutoplayDisplay();
+			};
+			(EventBus as any).on?.('amplify', this.amplifyEventHandler);
+		} catch {}
 		
 		// Initially hide the component
 		this.container.setVisible(false);
@@ -509,7 +521,9 @@ export class AutoplayOptions {
 
 	private updateAutoplayDisplay(): void {
 		if (this.autoplayDisplay) {
-			this.autoplayDisplay.setText(`$${this.currentBet.toFixed(2)}`);
+			const baseBet = Number(this.currentBet);
+			const effectiveBet = this.isEnhancedBet ? baseBet * 1.25 : baseBet;
+			this.autoplayDisplay.setText(`$${effectiveBet.toFixed(2)}`);
 		}
 	}
 
@@ -688,6 +702,12 @@ export class AutoplayOptions {
 	}
 
 	destroy(): void {
+		try {
+			if (this.amplifyEventHandler) {
+				(EventBus as any).off?.('amplify', this.amplifyEventHandler);
+				this.amplifyEventHandler = undefined;
+			}
+		} catch {}
 		if (this.container) {
 			this.setInputEnabled(false);
 			this.container.destroy();

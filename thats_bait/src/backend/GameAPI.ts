@@ -263,7 +263,13 @@ export class GameAPI {
             if (!error) return false;
             if (error?.name === 'AbortError') return true;
             const msg = String(error?.message || '').toLowerCase();
-            return msg.includes('aborted');
+            return (
+                msg.includes('aborted') ||
+                msg.includes('timeout') ||
+                msg.includes('network') ||
+                msg.includes('401') ||
+                msg.includes('400')
+            );
         } catch {
             return false;
         }
@@ -479,6 +485,20 @@ export class GameAPI {
     }
 
     public async doSpin(bet: number, isBuyFs: boolean, isEnhancedBet: boolean): Promise<SpinData> {
+        // Optional fake base-spin support (pre-bonus / scatter-trigger spin)
+        // Only applies for normal spins (not buy-feature) and only when not already in bonus mode.
+        try {
+            if (!gameStateManager.isBonus && !isBuyFs && fakeBonusAPI.isEnabled()) {
+                const maybeFake = await fakeBonusAPI.simulateBaseSpin(bet);
+                if (maybeFake) {
+                    try {
+                        this.currentSpinData = maybeFake;
+                    } catch {}
+                    return maybeFake;
+                }
+            }
+        } catch {}
+
         const token = localStorage.getItem('token');
         if (!token) {
             this.showTokenExpiredPopup();

@@ -898,10 +898,16 @@ export class Dialogs {
 					stopFromScene: false,
 					toSceneEvent: 'prepareBonusExit',
 					toSceneEventOnFinish: 'finalizeBonusExit',
-					overlayAlpha: 0.55,
-					overlayFadeInDurationMs: 520,
-					overlayFadeInDelayMs: 30,
-					spineFadeInDurationMs: 620
+					transitionPreset: 'bonusExit',
+					timings: {
+						overlayAlpha: 0.55,
+						overlayInMs: 520,
+						overlayDelayMs: 30,
+						spineInMs: 620,
+						switchProgress: 0.5,
+						overlayOutMs: 200,
+						finishOutMs: 500
+					}
 				});
 				try { scene.scene.bringToTop?.('BubbleOverlayTransition'); } catch {}
 			} catch {}

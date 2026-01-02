@@ -1,6 +1,7 @@
 import { SCATTER_SYMBOL, SLOT_COLUMNS, SLOT_ROWS } from "../../config/GameConfig";
 import { BoilingBubblesEffect } from "./BoilingBubblesEffect";
 import { flashRowSymbolsOverlay } from "./SymbolFlash";
+import { applyNonWinningSymbolDim, clearNonWinningSymbolDim } from "../effects/NonWinningSymbolDimmer";
 
 type ScatterPos = { x: number; y: number };
 
@@ -10,7 +11,14 @@ export class ScatterAnticipationSequenceController {
 	private scattersByReel: number[] = [];
 	private totalScatters: number = 0;
 	private revealedScatters: number = 0;
+	private symbolValuesGrid?: number[][];
+	private symbolsDimmedByAnticipation: boolean = false;
+	private lastDimmedReelIndex: number = -1;
 	private activeTarget: number | null = null;
+	private activeStageReel: number | null = null;
+	private lastReelStopped: number = -1;
+	private pendingStageTimer?: any;
+	private bgDimmedByAnticipation: boolean = false;
 	private bubbleEffect?: BoilingBubblesEffect;
 	private bubbleEffectKey: string = '__boilingBubblesAnticipationEffect';
 
@@ -18,7 +26,24 @@ export class ScatterAnticipationSequenceController {
 		this.host = host;
 	}
 
+	public getActiveTarget(): number | null {
+		return this.activeTarget;
+	}
+
+	public getTargetReel(target: number): number | null {
+		try {
+			const t = Number(target);
+			if (!isFinite(t) || t < 1) return null;
+			const pos = this.scatterPositions[t - 1];
+			if (!pos) return null;
+			return typeof pos.x === 'number' ? pos.x : null;
+		} catch {
+			return null;
+		}
+	}
+
 	public resetForSpin(symbols: number[][], opts?: { disableReelExtensions?: boolean }): boolean[] {
+		this.symbolValuesGrid = symbols;
 		this.scatterPositions = this.extractScatterPositions(symbols);
 		this.scatterPositions.sort((a, b) => (a.x - b.x) || (a.y - b.y));
 		this.totalScatters = this.scatterPositions.length;
@@ -28,6 +53,8 @@ export class ScatterAnticipationSequenceController {
 		}
 		this.revealedScatters = 0;
 		this.activeTarget = null;
+		this.symbolsDimmedByAnticipation = false;
+		this.lastDimmedReelIndex = -1;
 
 		const extendReels = new Array<boolean>(SLOT_COLUMNS).fill(false);
 		if (!opts?.disableReelExtensions) {
@@ -63,7 +90,89 @@ export class ScatterAnticipationSequenceController {
 		return extendReels;
 	}
 
+	private getActiveSymbolGrid(): any[][] {
+		try {
+			const grid = (Array.isArray(this.host?.newSymbols) && this.host.newSymbols.length > 0)
+				? this.host.newSymbols
+				: this.host.symbols;
+			return Array.isArray(grid) ? grid : [];
+		} catch {
+			return [];
+		}
+	}
+
+	private applyAnticipationSymbolDim(): void {
+		try {
+			const scene: any = this.host?.scene;
+			if (!scene) return;
+			const maxReel = Math.max(-1, Math.floor(Number(this.lastReelStopped) || -1));
+			if (maxReel < 0) return;
+			const gridAll = this.getActiveSymbolGrid();
+			if (!Array.isArray(gridAll) || gridAll.length === 0) return;
+
+			const keepBright = new Set<string>();
+			try {
+				for (const p of this.scatterPositions) {
+					if (!p) continue;
+					if (typeof p.x !== 'number' || typeof p.y !== 'number') continue;
+					if (p.x <= maxReel) {
+						keepBright.add(`${p.x}_${p.y}`);
+					}
+				}
+			} catch {}
+			if (keepBright.size === 0) return;
+
+			const staged: any[][] = [];
+			for (let c = 0; c < gridAll.length; c++) {
+				staged[c] = (c <= maxReel) ? gridAll[c] : [];
+			}
+
+			applyNonWinningSymbolDim(scene as any, staged, keepBright, this.symbolValuesGrid, { darkenBgDepth: false, scaleDown: false });
+			this.symbolsDimmedByAnticipation = true;
+			this.lastDimmedReelIndex = maxReel;
+		} catch {}
+	}
+
+	private clearAnticipationSymbolDim(): void {
+		try {
+			if (!this.symbolsDimmedByAnticipation) return;
+			const scene: any = this.host?.scene;
+			if (!scene) return;
+			const gridAll = this.getActiveSymbolGrid();
+			const maxReel = Math.max(-1, Math.floor(Number(this.lastDimmedReelIndex) || -1));
+			if (maxReel < 0) return;
+			for (let c = 0; c < gridAll.length; c++) {
+				if (c > maxReel) break;
+				const col = gridAll[c];
+				if (!Array.isArray(col)) continue;
+				for (const sym of col) {
+					if (!sym) continue;
+					try { scene.tweens?.killTweensOf?.(sym); } catch {}
+					try { clearNonWinningSymbolDim(scene as any, sym); } catch {}
+				}
+			}
+		} catch {}
+		try { this.symbolsDimmedByAnticipation = false; } catch {}
+		try { this.lastDimmedReelIndex = -1; } catch {}
+	}
+
 	public onReelStopped(reelIndex: number): void {
+		this.lastReelStopped = reelIndex;
+
+		let endedStageNow = false;
+		let endedTarget: number | null = null;
+		try {
+			endedTarget = typeof this.activeTarget === 'number' ? this.activeTarget : null;
+		} catch {
+			endedTarget = null;
+		}
+		try {
+			if (typeof this.activeStageReel === 'number' && isFinite(this.activeStageReel) && reelIndex >= this.activeStageReel) {
+				endedStageNow = true;
+				this.stopEffects();
+			}
+		} catch {}
+
 		try {
 			this.revealedScatters += (this.scattersByReel[reelIndex] || 0);
 		} catch {}
@@ -85,7 +194,39 @@ export class ScatterAnticipationSequenceController {
 			return;
 		}
 
-		this.startTarget(nextTarget, pos);
+		let delayMs = endedStageNow ? this.getUndimGapMs() : 0;
+		try {
+			const pauseMs = this.getInterStagePauseMs(endedTarget);
+			if (pauseMs > 0) {
+				delayMs = Math.max(delayMs, pauseMs);
+			}
+		} catch {}
+		this.scheduleStartTarget(nextTarget, pos, delayMs);
+	}
+
+	private getInterStagePauseMs(endedTarget: number | null): number {
+		try {
+			if (endedTarget !== 3) return 0;
+			try {
+				const isTurbo = !!((this.host.scene as any)?.gameData?.isTurbo);
+				if (isTurbo) return 0;
+			} catch {}
+			try {
+				if (typeof (this.host as any)?.isSkipReelDropsActive === 'function') {
+					if (!!(this.host as any).isSkipReelDropsActive()) return 0;
+				}
+			} catch {}
+			try {
+				if (!!((this.host as any)?.skipReelDropsPending || (this.host as any)?.skipReelDropsActive)) return 0;
+			} catch {}
+			let v: any;
+			try { v = (this.host.scene as any)?.__scatterAnticipationInterStagePauseMs; } catch { v = undefined; }
+			const n = Number(v);
+			if (isFinite(n)) return Math.max(0, Math.floor(n));
+			return this.getUndimGapMs();
+		} catch {
+			return 0;
+		}
 	}
 
 	public finish(): void {
@@ -93,6 +234,71 @@ export class ScatterAnticipationSequenceController {
 		try {
 			(this.host.scene as any).__isScatterAnticipationActive = false;
 		} catch {}
+	}
+
+	private scheduleStartTarget(target: number, pos: ScatterPos, delayMs: number): void {
+		try { this.cancelPendingStage(); } catch {}
+		const ms = (typeof delayMs === 'number' && isFinite(delayMs)) ? Math.max(0, Math.floor(delayMs)) : 0;
+		if (ms <= 0) {
+			this.startTarget(target, pos);
+			return;
+		}
+		try {
+			this.pendingStageTimer = this.host.scene?.time?.delayedCall?.(ms, () => {
+				try {
+					this.pendingStageTimer = undefined;
+				} catch {}
+				try {
+					const next = this.getNextTarget();
+					if (next !== target) return;
+					if (this.revealedScatters < target - 1) return;
+					const curPos = this.scatterPositions[target - 1];
+					if (!curPos || curPos.x !== pos.x || curPos.y !== pos.y) return;
+					if (curPos.x <= this.lastReelStopped) return;
+					this.startTarget(target, pos);
+				} catch {}
+			});
+		} catch {}
+	}
+
+	private cancelPendingStage(): void {
+		try { this.pendingStageTimer?.destroy?.(); } catch {}
+		try { this.pendingStageTimer = undefined; } catch {}
+	}
+
+	private getUndimGapMs(): number {
+		let v: any = 250;
+		try { v = (this.host.scene as any)?.__scatterAnticipationUndimGapMs; } catch {}
+		const n = Number(v);
+		if (!isFinite(n)) return 250;
+		return Math.max(0, Math.floor(n));
+	}
+
+	private getActiveBackgroundComponent(): any {
+		let bg: any;
+		try { bg = (this.host.scene as any)?.background; } catch { bg = undefined; }
+		try {
+			const bb: any = (this.host.scene as any)?.bonusBackground;
+			const bbVisible = !!bb?.getContainer?.()?.visible;
+			if (bbVisible) {
+				bg = bb;
+			}
+		} catch {}
+		return bg;
+	}
+
+	private applyAnticipationBackgroundDim(): void {
+		if (this.bgDimmedByAnticipation) return;
+		const bg: any = this.getActiveBackgroundComponent();
+		try { bg?.darkenDepthForWinSequence?.(); } catch {}
+		this.bgDimmedByAnticipation = true;
+	}
+
+	private restoreAnticipationBackgroundDim(): void {
+		if (!this.bgDimmedByAnticipation) return;
+		const bg: any = this.getActiveBackgroundComponent();
+		try { bg?.restoreDepthAfterWinSequence?.(); } catch {}
+		this.bgDimmedByAnticipation = false;
 	}
 
 	private getNextTarget(): number | null {
@@ -106,6 +312,9 @@ export class ScatterAnticipationSequenceController {
 	}
 
 	private startTarget(target: number, pos: ScatterPos): void {
+		try { this.cancelPendingStage(); } catch {}
+		try { this.applyAnticipationBackgroundDim(); } catch {}
+
 		const stageKey = `${target}_${pos.x}_${pos.y}`;
 		if (this.activeTarget === target) {
 			try {
@@ -117,6 +326,7 @@ export class ScatterAnticipationSequenceController {
 		}
 
 		this.activeTarget = target;
+		this.activeStageReel = pos.x;
 		try { (this.host.scene as any).__scatterAnticipationStageKey = stageKey; } catch {}
 		try { (this.host.scene as any).__scatterAnticipationStageRunning = true; } catch {}
 
@@ -127,10 +337,12 @@ export class ScatterAnticipationSequenceController {
 			};
 			flashRowSymbolsOverlay(flashHost, pos.y);
 		} catch {}
+		try { this.applyAnticipationSymbolDim(); } catch {}
 
-		const { x, y, symbolTotalWidth, symbolTotalHeight } = this.getCellCenter(pos.x, pos.y);
+		const { x, symbolTotalWidth, symbolTotalHeight } = this.getCellCenter(pos.x, pos.y);
 		const emitYOffsetPx = this.getBubbleEmitYOffsetPx();
-		const emitY = y + symbolTotalHeight * 2;
+		const bottomRowCenterY = this.getCellCenter(pos.x, SLOT_ROWS - 1).y;
+		const emitY = bottomRowCenterY + symbolTotalHeight * 2;
 
 		let bb: any;
 		let reused = false;
@@ -144,7 +356,6 @@ export class ScatterAnticipationSequenceController {
 				textureKey: 'anticipation-bubble',
 				spawnPerSecond: 60,
 				spreadX: Math.max(16, Math.floor(symbolTotalWidth * 0.35)),
-				spreadY: 8,
 				riseDistanceMin: Math.max(250, Math.floor(symbolTotalHeight * 1)),
 				riseDistanceMax: Math.max(350, Math.floor(symbolTotalHeight * 2)),
 				lifeMinMs: 750,
@@ -190,12 +401,30 @@ export class ScatterAnticipationSequenceController {
 	}
 
 	private stopEffects(): void {
+		try { this.cancelPendingStage(); } catch {}
 		this.activeTarget = null;
+		this.activeStageReel = null;
 		try { delete (this.host.scene as any).__scatterAnticipationStageKey; } catch {}
 		try { (this.host.scene as any).__scatterAnticipationStageRunning = false; } catch {}
+		try { this.clearAnticipationSymbolDim(); } catch {}
+		try { this.restoreAnticipationBackgroundDim(); } catch {}
 		try {
+			const isSkipActive = (() => {
+				try {
+					if (typeof (this.host as any)?.isSkipReelDropsActive === 'function') {
+						return !!(this.host as any).isSkipReelDropsActive();
+					}
+				} catch {}
+				try {
+					return !!((this.host as any)?.skipReelDropsPending || (this.host as any)?.skipReelDropsActive);
+				} catch {}
+				return false;
+			})();
+
 			const bb: any = (this.host.scene as any)[this.bubbleEffectKey];
-			if (bb && typeof bb.stopGracefully === 'function') {
+			if (isSkipActive && bb && typeof bb.stop === 'function') {
+				bb.stop();
+			} else if (bb && typeof bb.stopGracefully === 'function') {
 				bb.stopGracefully();
 			} else if (bb && typeof bb.stopSpawning === 'function') {
 				bb.stopSpawning();

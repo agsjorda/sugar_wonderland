@@ -16,33 +16,35 @@ export interface BuyFeatureConfig {
 }
 
 export class BuyFeature {
-	private container: Phaser.GameObjects.Container;
-	private background: Phaser.GameObjects.Graphics;
-	private confirmButtonMask: Phaser.GameObjects.Graphics;
+	private container!: Phaser.GameObjects.Container;
+	private background!: Phaser.GameObjects.Graphics;
+	private confirmButtonMask!: Phaser.GameObjects.Graphics;
 	private featurePrice: number = 24000.00;
 	private currentBet: number = 0.2; // Start with first bet option
 	private slotController: SlotController | null = null;
 	private readonly BET_MULTIPLIER: number = 100; // Multiplier for price display
 	private betOptions: number[] = BET_OPTIONS;
 	private currentBetIndex: number = 0; // Index in betOptions array
-	private closeButton: Phaser.GameObjects.Text;
-	private confirmButton: Phaser.GameObjects.Text;
-	private betDisplay: Phaser.GameObjects.Text;
-	private minusButton: Phaser.GameObjects.Text;
-	private plusButton: Phaser.GameObjects.Text;
+	private closeButton!: Phaser.GameObjects.Text;
+	private confirmButton!: Phaser.GameObjects.Text;
+	private betDisplay!: Phaser.GameObjects.Text;
+	private minusButton!: Phaser.GameObjects.Text;
+	private plusButton!: Phaser.GameObjects.Text;
+	private readonly betButtonDisabledAlpha: number = 0.35;
+	private readonly betButtonEnabledAlpha: number = 1;
 	
 	// Continuous button press functionality
 	private minusButtonTimer: Phaser.Time.TimerEvent | null = null;
 	private plusButtonTimer: Phaser.Time.TimerEvent | null = null;
 	private readonly CONTINUOUS_DELAY: number = 500; // 1 second initial delay
 	private readonly CONTINUOUS_INTERVAL: number = 200; // 150ms interval for continuous press
-	private priceDisplay: Phaser.GameObjects.Text;
+	private priceDisplay!: Phaser.GameObjects.Text;
 	private featureLogo?: Phaser.GameObjects.Image;
 	private featureLogoBackground?: Phaser.GameObjects.Image;
 	private featureLogoSpine?: any;
 	private featureLogoScale: number = 0.35; // Manual scale for scatter logo (spine or image)
 	private featureLogoBackgroundScale: number = 0.89; // Manual scale for background PNG logo
-	private backgroundImage: Phaser.GameObjects.Image;
+	private backgroundImage!: Phaser.GameObjects.Image;
 	private onCloseCallback?: () => void;
 	private onConfirmCallback?: () => void;
 	private sceneRef?: Scene;
@@ -543,9 +545,13 @@ export class BuyFeature {
 		
 		// Handle pointer down for continuous press
 		this.minusButton.on('pointerdown', () => {
+			if (!this.minusButton?.input?.enabled) {
+				return;
+			}
 			if ((window as any).audioManager) {
 				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
 			}
+			this.playBetButtonClickAnimation(this.minusButton);
 			this.selectPreviousBet();
 			this.startContinuousDecrement(scene);
 		});
@@ -582,9 +588,13 @@ export class BuyFeature {
 		
 		// Handle pointer down for continuous press
 		this.plusButton.on('pointerdown', () => {
+			if (!this.plusButton?.input?.enabled) {
+				return;
+			}
 			if ((window as any).audioManager) {
 				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
 			}
+			this.playBetButtonClickAnimation(this.plusButton);
 			this.selectNextBet();
 			this.startContinuousIncrement(scene);
 		});
@@ -600,6 +610,55 @@ export class BuyFeature {
 		});
 		
 		this.container.add(this.plusButton);
+		this.updateBetButtonStates();
+	}
+
+	private playBetButtonClickAnimation(btn: Phaser.GameObjects.Text): void {
+		const scene = this.container?.scene;
+		if (!scene) return;
+		try { scene.tweens.killTweensOf(btn); } catch {}
+		try { btn.setScale(1); } catch {}
+		try {
+			scene.tweens.add({
+				targets: btn,
+				scaleX: 1.15,
+				scaleY: 1.15,
+				duration: 70,
+				ease: 'Sine.easeOut',
+				yoyo: true
+			});
+		} catch {}
+	}
+
+	private setBetButtonEnabled(btn: Phaser.GameObjects.Text, enabled: boolean): void {
+		try {
+			if (btn?.input) {
+				btn.input.enabled = enabled;
+			}
+		} catch {}
+		try {
+			btn.setAlpha(enabled ? this.betButtonEnabledAlpha : this.betButtonDisabledAlpha);
+		} catch {}
+		try {
+			btn.setColor(enabled ? '#ffffff' : '#777777');
+		} catch {}
+	}
+
+	private updateBetButtonStates(): void {
+		const atMin = this.currentBetIndex <= 0;
+		const atMax = this.currentBetIndex >= this.betOptions.length - 1;
+		if (this.minusButton) {
+			this.setBetButtonEnabled(this.minusButton, !atMin);
+			if (atMin) {
+				this.stopContinuousDecrement();
+			}
+		}
+		if (this.plusButton) {
+			this.setBetButtonEnabled(this.plusButton, !atMax);
+			if (atMax) {
+				this.stopContinuousIncrement();
+			}
+		}
 	}
 
 	private selectPreviousBet(): void {
@@ -614,6 +673,7 @@ export class BuyFeature {
 			}
 			console.log(`[BuyFeature] Previous bet selected: $${this.currentBet.toFixed(2)}`);
 		}
+		this.updateBetButtonStates();
 	}
 
 	private selectNextBet(): void {
@@ -628,6 +688,7 @@ export class BuyFeature {
 			}
 			console.log(`[BuyFeature] Next bet selected: $${this.currentBet.toFixed(2)}`);
 		}
+		this.updateBetButtonStates();
 	}
 
 	/**
@@ -728,6 +789,7 @@ export class BuyFeature {
 		}
 		this.updatePriceDisplay();
 		this.updateBetDisplay();
+		this.updateBetButtonStates();
 		this.setInputEnabled(true);
 		this.animateIn();
 		

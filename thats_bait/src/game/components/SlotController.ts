@@ -530,6 +530,15 @@ export class SlotController {
 		if (this.betAmountText) {
 			this.betAmountText.disableInteractive();
 		}
+		if (this.betDollarText) {
+			this.betDollarText.setAlpha(0.5);
+		}
+		if (this.betLabelRef) {
+			this.betLabelRef.setAlpha(0.5);
+		}
+		if (this.betAmountText) {
+			this.betAmountText.setAlpha(0.5);
+		}
 	}
 
 	/**
@@ -566,6 +575,18 @@ export class SlotController {
 		if (this.betAmountText) {
 			this.betAmountText.setInteractive();
 		}
+		if (this.betDollarText) {
+			this.betDollarText.setAlpha(1.0);
+		}
+		if (this.betLabelRef) {
+			this.betLabelRef.setAlpha(1.0);
+		}
+		if (this.betAmountText) {
+			this.betAmountText.setAlpha(1.0);
+		}
+
+		// Ensure +/- buttons reflect min/max state after restoring interaction
+		this.updateBetButtonStates();
 	}
 
 	/**
@@ -609,6 +630,7 @@ export class SlotController {
 		const menuButton = this.buttons.get('menu');
 		if (menuButton) {
 			try { menuButton.setTint(0x666666); } catch {}
+			try { menuButton.setAlpha(0.6); } catch {}
 			try { menuButton.disableInteractive(); } catch {}
 		}
 	}
@@ -617,10 +639,11 @@ export class SlotController {
 		const menuButton = this.buttons.get('menu');
 		if (menuButton) {
 			if (this.externalControlLock || this.bonusUiLock || gameStateManager.isReelSpinning || this.isSpinLocked || gameStateManager.isAutoPlaying) {
-				try { menuButton.disableInteractive(); } catch {}
+				this.disableMenuButton();
 				return;
 			}
 			try { menuButton.clearTint(); } catch {}
+			try { menuButton.setAlpha(1); } catch {}
 			try { menuButton.setInteractive(); } catch {}
 		}
 	}
@@ -1009,6 +1032,9 @@ export class SlotController {
 				this.disableAutoplayButton();
 				this.disableBetButtons();
 				this.disableFeatureButton();
+				this.disableAmplifyButton();
+				this.disableTurboButton();
+				this.disableMenuButton();
 				this.playSpinButtonAnimation();
 				this.rotateSpinButton();
 				try { this.scene?.events.emit('flashAllSymbolsNow'); } catch {}
@@ -1899,6 +1925,9 @@ export class SlotController {
 				this.disableAutoplayButton();
 				this.disableBetButtons();
 				this.disableFeatureButton();
+				this.disableAmplifyButton();
+				this.disableTurboButton();
+				this.disableMenuButton();
 				this.playSpinButtonAnimation();
 				this.rotateSpinButton();
 				try { this.scene?.events.emit('flashAllSymbolsNow'); } catch {}
@@ -2385,6 +2414,8 @@ setBuyFeatureBetAmount(amount: number): void {
 			console.log('[SlotController] Reels started - disabling amplify and bet UI');
 			this.disableAmplifyButton();
 			this.disableBetButtons();
+			this.disableTurboButton();
+			this.disableMenuButton();
 			// Reset per-spin guards at the start of each spin
 			this.hasDecrementedAutoplayForCurrentSpin = false;
 			this.hasScheduledNextAutoplayForCurrentSpin = false;
@@ -3173,7 +3204,9 @@ setBuyFeatureBetAmount(amount: number): void {
 	public disableAmplifyButton(): void {
 		const amplifyButton = this.buttons.get('amplify');
 		if (amplifyButton) {
-			amplifyButton.removeInteractive();
+			try { amplifyButton.setTint(0x666666); } catch {}
+			try { amplifyButton.setAlpha(0.6); } catch {}
+			try { amplifyButton.disableInteractive(); } catch { try { amplifyButton.removeInteractive(); } catch {} }
 			console.log('[SlotController] Amplify button disabled');
 		}
 	}
@@ -3184,7 +3217,13 @@ setBuyFeatureBetAmount(amount: number): void {
 	public enableAmplifyButton(): void {
 		const amplifyButton = this.buttons.get('amplify');
 		if (amplifyButton) {
+			try { amplifyButton.setAlpha(1); } catch {}
+			try { amplifyButton.clearTint(); } catch {}
 			amplifyButton.setInteractive();
+			try {
+				const gameData = this.getGameData();
+				this.setAmplifyButtonState(!!gameData?.isEnhancedBet);
+			} catch {}
 			console.log('[SlotController] Amplify button enabled');
 		}
 	}
@@ -3201,8 +3240,15 @@ setBuyFeatureBetAmount(amount: number): void {
 		const turboButton = this.buttons.get('turbo');
 		if (!turboButton) return;
 
-		// Disable turbo button if spinning, enable otherwise
-		if (gameStateManager.isReelSpinning) {
+		// Disable turbo button whenever its click handler would be ignored
+		if (
+			gameStateManager.isReelSpinning ||
+			gameStateManager.isAutoPlaying ||
+			this.autoplaySpinsRemaining > 0 ||
+			this.externalControlLock ||
+			this.bonusUiLock ||
+			this.isSpinLocked
+		) {
 			console.log(`[SlotController] Disabling turbo button - isReelSpinning: ${gameStateManager.isReelSpinning}`);
 			this.disableTurboButton();
 		} else {
@@ -4377,6 +4423,7 @@ public updateAutoplayButtonState(): void {
 			this.disableAmplifyButton();
 			this.disableBetButtons();
 			this.disableTurboButton();
+			this.disableMenuButton();
 			this.disableFeatureButton();
 		});
 
@@ -4396,6 +4443,8 @@ public updateAutoplayButtonState(): void {
 			this.disableAutoplayButton();
 			this.disableAmplifyButton();
 			this.disableBetButtons();
+			this.disableTurboButton();
+			this.disableMenuButton();
 			this.disableFeatureButton();
 			
 			console.log(`[SlotController] Scatter bonus activated with index ${data.scatterIndex} and ${data.actualFreeSpins} free spins - hiding primary controller, free spin display will appear after dialog closes`);
