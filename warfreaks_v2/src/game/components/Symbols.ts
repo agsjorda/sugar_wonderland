@@ -3282,60 +3282,64 @@ function scheduleTranslate(self: Symbols, obj: any, delayMs: number = 500, durat
 function createSpineOrPngSymbol(self: Symbols, value: number, x: number, y: number, alpha: number = 1): any {
   console.log(`[Symbols] Creating PNG or special symbol for value: ${value}`);
 
-  // Regular symbols 0–9 (scatter + low + high paying) -> always PNG on the grid.
+  // Regular symbols 0–9 (scatter + low + high paying)
   if (value >= 0 && value <= 9) {
-    try {
-      const isHighPaying = value >= 1 && value <= 5;
-      const spineKey = value === 0 ? 'Symbol0_WF' : `Symbol_${isHighPaying ? 'HP' : 'LP'}_WF`;
-      const atlasKey = `${spineKey}-atlas`;
+    const isHighPaying = value >= 1 && value <= 5;
+    
+    // Only use Spine for high paying symbols (1-5)
+    // Scatter (0) and low paying (6-9) default to PNG
+    if (isHighPaying) {
+      try {
+        const spineKey = `Symbol_HP_WF`;
+        const atlasKey = `${spineKey}-atlas`;
 
-      const spine = acquireSpineFromPool(self, spineKey, atlasKey);
-      if (spine) {
-        try { (spine as any).symbolValue = value; } catch { }
+        const spine = acquireSpineFromPool(self, spineKey, atlasKey);
+        if (spine) {
+          try { (spine as any).symbolValue = value; } catch { }
 
-        // Configure transform
-        try {
-          const origin = self.getSpineSymbolOrigin(value);
-          spine.setOrigin(origin.x, origin.y);
-        } catch { }
-        try { spine.setScale(self.getSpineSymbolScale(value)); } catch { }
-        try {
-          spine.setPosition(x, y);
-          spine.setAlpha(alpha);
-          spine.setVisible(true);
-          spine.setActive(true);
-        } catch { }
+          // Configure transform
+          try {
+            const origin = self.getSpineSymbolOrigin(value);
+            spine.setOrigin(origin.x, origin.y);
+          } catch { }
+          try { spine.setScale(self.getSpineSymbolScale(value)); } catch { }
+          try {
+            spine.setPosition(x, y);
+            spine.setAlpha(alpha);
+            spine.setVisible(true);
+            spine.setActive(true);
+          } catch { }
 
-        // Select the correct per-symbol animation inside the shared HP/LP rig
-        try {
-          const state = spine.animationState;
-          if (state) {
-            const animationName = `symbol${value}_WF`;
-            let entry: any = null;
-            try { entry = state.setAnimation(0, animationName, true); } catch { }
-            if (!entry) {
-              const fallback = spine.skeleton?.data?.animations?.[0]?.name;
-              if (fallback) {
-                try { state.setAnimation(0, fallback, true); } catch { }
+          // Select the correct per-symbol animation inside the shared HP rig
+          try {
+            const state = spine.animationState;
+            if (state) {
+              const animationName = `symbol${value}_WF_idle`;
+              let entry: any = null;
+              try { entry = state.setAnimation(0, animationName, true); } catch { }
+              if (!entry) {
+                const fallback = spine.skeleton?.data?.animations?.[0]?.name;
+                if (fallback) {
+                  try { state.setAnimation(0, fallback, true); } catch { }
+                }
               }
             }
-          }
-        } catch { }
+          } catch { }
 
-        try {
-          if (self.container && spine.parentContainer !== self.container) {
-            self.container.add(spine);
-          }
-        } catch { }
+          try {
+            if (self.container && spine.parentContainer !== self.container) {
+              self.container.add(spine);
+            }
+          } catch { }
 
-        return spine;
+          return spine;
+        }
+      } catch (spineError) {
+        console.warn('[Symbols] Failed to create pooled Spine symbol, falling back to PNG:', spineError);
       }
-    } catch (spineError) {
-      console.warn('[Symbols] Failed to create pooled Spine symbol, falling back to PNG:', spineError);
     }
 
-    // Fallback to PNG if Spine acquisition/configuration failed
-    
+    // Use PNG for scatter (0) and low paying symbols (6-9), or as fallback for high paying
     return createPngSymbol(self, value, x, y, alpha);
   }
   // Multiplier symbols (value >= 10) use a dedicated creation path.
