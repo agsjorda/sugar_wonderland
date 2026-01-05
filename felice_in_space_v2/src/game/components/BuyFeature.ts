@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import { SlotController } from './SlotController';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 
 export interface BuyFeatureConfig {
 	position?: { x: number; y: number };
@@ -215,7 +216,7 @@ export class BuyFeature {
 				// Slightly above the logo center so it appears "on top" visually
 				const y = this.featureLogo.y - this.featureLogo.displayHeight * 0;
 
-				this.scatterSpine = (scene.add as any).spine(
+				this.scatterSpine = (scene.add as any).spine?.(
 					x,
 					y,
 					'symbol_0_spine',
@@ -269,7 +270,7 @@ export class BuyFeature {
 		// Prefer Spine when available
 		try {
 			// If spine factory is missing for some reason, go straight to PNG fallback
-			if (!(scene.add as any).spine) {
+			if (!ensureSpineFactory(scene, '[BuyFeature] createScatterSymbolAnimation')) {
 				console.warn('[BuyFeature] scene.add.spine not available, using PNG scatter sprite.');
 				this.createScatterFallbackSprite(scene);
 				return;

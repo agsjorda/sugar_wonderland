@@ -102,7 +102,8 @@ export class Boot extends Scene
 		
 		this.scene.start('Preloader', { 
 			networkManager: this.networkManager, 
-			screenModeManager: this.screenModeManager 
+			screenModeManager: this.screenModeManager,
+			assetConfig: this.assetConfig
 		});
 	}
 }

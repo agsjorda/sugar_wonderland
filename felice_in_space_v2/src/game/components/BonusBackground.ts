@@ -3,6 +3,7 @@ import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { gameStateManager } from "../../managers/GameStateManager";
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
+import { ensureSpineFactory } from "../../utils/SpineGuard";
 
 export class BonusBackground {
 	private bonusContainer: Phaser.GameObjects.Container;
@@ -57,6 +58,14 @@ export class BonusBackground {
 		
 		// Add main bonus background as spine animation
 		try {
+			if (!ensureSpineFactory(scene, '[BonusBackground] createPortraitBonusBackground')) {
+				console.warn('[BonusBackground] Spine factory not available yet; will retry BG-Bonus spine later');
+				scene.time.delayedCall(250, () => {
+					this.createPortraitBonusBackground(scene, assetScale);
+				});
+				return;
+			}
+
 			// Check if the spine assets are loaded
 			if (!scene.cache.json.has('BG-Bonus')) {
 				console.warn('[BonusBackground] BG-Bonus spine assets not loaded yet, will retry later');
@@ -67,12 +76,15 @@ export class BonusBackground {
 				return;
 			}
 
-			this.bgBonusSpine = (scene.add as any).spine(
+			this.bgBonusSpine = (scene.add as any).spine?.(
 				scene.scale.width * 0.5,
 				scene.scale.height * 0.5,
 				'BG-Bonus',
 				'BG-Bonus-atlas'
 			) as SpineGameObject;
+			if (!this.bgBonusSpine) {
+				throw new Error('scene.add.spine returned null/undefined for BG-Bonus');
+			}
 			this.bgBonusSpine.setOrigin(0.5, 0.5);
 			this.bgBonusSpine.setScale(assetScale);
 			
@@ -94,6 +106,14 @@ export class BonusBackground {
 		
 		// Add main bonus background as spine animation
 		try {
+			if (!ensureSpineFactory(scene, '[BonusBackground] createLandscapeBonusBackground')) {
+				console.warn('[BonusBackground] Spine factory not available yet; will retry BG-Bonus spine later');
+				scene.time.delayedCall(250, () => {
+					this.createLandscapeBonusBackground(scene, assetScale);
+				});
+				return;
+			}
+
 			// Check if the spine assets are loaded
 			if (!scene.cache.json.has('BG-Bonus')) {
 				console.warn('[BonusBackground] BG-Bonus spine assets not loaded yet, will retry later');
@@ -104,12 +124,15 @@ export class BonusBackground {
 				return;
 			}
 
-			this.bgBonusSpine = (scene.add as any).spine(
+			this.bgBonusSpine = (scene.add as any).spine?.(
 				scene.scale.width * 0.5,
 				scene.scale.height * 0.5,
 				'BG-Bonus',
 				'BG-Bonus-atlas'
 			) as SpineGameObject;
+			if (!this.bgBonusSpine) {
+				throw new Error('scene.add.spine returned null/undefined for BG-Bonus');
+			}
 			this.bgBonusSpine.setOrigin(0.5, 0.5);
 			this.bgBonusSpine.setScale(assetScale);
 			

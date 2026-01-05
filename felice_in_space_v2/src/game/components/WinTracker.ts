@@ -219,38 +219,6 @@ export class WinTracker {
     countLabel.setOrigin(0.5, 0.5);
     //countLabel.setShadow(1, .5, '#E7441E', 1, true, true);
 
-    const pipeLabel = this.scene.add.text(
-      0,
-      0,
-      '|',
-      {
-        fontSize: `${this.labelFontSize}px`,
-        color: '#ffffff',
-        fontFamily: this.labelFontFamily,
-        stroke: '#065181',
-        strokeThickness: 4,
-        align: 'center'
-      }
-    );
-    pipeLabel.setOrigin(0.5, 0.5);
-    //pipeLabel.setShadow(1, .5, '#E7441E', 1, true, true);
-
-    const baseValueLabel = this.scene.add.text(
-      0,
-      0,
-      `$${(data.baseValue ?? data.totalWin).toFixed(2)}`,
-      {
-        fontSize: `${this.labelFontSize}px`,
-        color: '#ffffff',
-        fontFamily: this.labelFontFamily,
-        stroke: '#065181',
-        strokeThickness: 4,
-        align: 'center'
-      }
-    );
-    baseValueLabel.setOrigin(0.5, 0.5);
-    //baseValueLabel.setShadow(1, .5, '#E7441E', 1, true, true);
-
     // We no longer display the numeric "x multiplier" section; keep only multiplier icons if present
 
     const eqLabel = this.scene.add.text(
@@ -287,7 +255,6 @@ export class WinTracker {
 
     const baseGap = this.innerGap;
     const gap = Math.max(6, Math.floor(baseGap * 0.6));
-    const pipeGap = Math.max(4, Math.floor(gap * 0.6));
     const iconGapBase = Math.max(2, Math.floor(gap * 0.5));
     const iconGap = Math.max(1, Math.floor(iconGapBase * (this.multiplierIconGap || 1)));
 
@@ -320,10 +287,6 @@ export class WinTracker {
       iconDW +
       (hasMulIcons && mulIconsWidth > 0 ? (gap + mulIconsWidth) : 0) +
       gap +
-      pipeLabel.displayWidth +
-      pipeGap +
-      baseValueLabel.displayWidth +
-      gap +
       eqLabel.displayWidth +
       gap +
       valueLabel.displayWidth;
@@ -350,12 +313,6 @@ export class WinTracker {
 
     cursor += gap;
 
-    pipeLabel.setPosition(cursor + pipeLabel.displayWidth * 0.5, y);
-    cursor += pipeLabel.displayWidth + pipeGap;
-
-    baseValueLabel.setPosition(cursor + baseValueLabel.displayWidth * 0.5, y);
-    cursor += baseValueLabel.displayWidth + gap;
-
     eqLabel.setPosition(cursor + eqLabel.displayWidth * 0.5, y);
     cursor += eqLabel.displayWidth + gap;
 
@@ -367,8 +324,6 @@ export class WinTracker {
     this.container.add(icon);
     this.container.add(countLabel);
     for (const img of mulIcons) { this.container.add(img); }
-    this.container.add(pipeLabel);
-    this.container.add(baseValueLabel);
     this.container.add(eqLabel);
     this.container.add(valueLabel);
   }

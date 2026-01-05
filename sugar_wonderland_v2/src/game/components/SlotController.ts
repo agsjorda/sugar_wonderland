@@ -13,6 +13,7 @@ import { Symbols } from './Symbols';
 import { SoundEffectType } from '../../managers/AudioManager';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { LoadingSpinner } from './LoadingSpinner';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 
 export class SlotController {
 	private controllerContainer: Phaser.GameObjects.Container;
@@ -490,6 +491,12 @@ export class SlotController {
 	 */
 	private createSpinButtonAnimation(scene: Scene, assetScale: number): void {
 		try {
+			if (!ensureSpineFactory(scene, '[SlotController] createSpinButtonAnimation')) {
+				console.warn('[SlotController] Spine factory not available yet; will retry spin button spine shortly');
+				scene.time.delayedCall(250, () => this.createSpinButtonAnimation(scene, assetScale));
+				return;
+			}
+
 			// Check if the spine assets are loaded
 			if (!scene.cache.json.has('spin_button_animation')) {
 				console.warn('[SlotController] spin_button_animation spine assets not loaded yet, will retry later');
@@ -610,6 +617,12 @@ export class SlotController {
 	 */
 	private createAutoplayButtonAnimation(scene: Scene, assetScale: number): void {
 		try {
+			if (!ensureSpineFactory(scene, '[SlotController] createAutoplayButtonAnimation')) {
+				console.warn('[SlotController] Spine factory not available yet; will retry autoplay spine shortly');
+				scene.time.delayedCall(250, () => this.createAutoplayButtonAnimation(scene, assetScale));
+				return;
+			}
+
 			// Check if the spine assets are loaded
 			if (!scene.cache.json.has('button_animation_idle')) {
 				console.warn('[SlotController] button_animation_idle spine assets not loaded yet, will retry later');
@@ -661,6 +674,12 @@ export class SlotController {
 	 */
 	private createTurboButtonAnimation(scene: Scene, assetScale: number): void {
 		try {
+			if (!ensureSpineFactory(scene, '[SlotController] createTurboButtonAnimation')) {
+				console.warn('[SlotController] Spine factory not available yet; will retry turbo spine shortly');
+				scene.time.delayedCall(250, () => this.createTurboButtonAnimation(scene, assetScale));
+				return;
+			}
+
 			// Check if the spine assets are loaded
 			if (!scene.cache.json.has('turbo_animation')) {
 				console.warn('[SlotController] turbo_animation spine assets not loaded yet, will retry later');
@@ -1715,6 +1734,11 @@ export class SlotController {
 	 */
 	private createAmplifyBetAnimation(scene: Scene, betX: number, betY: number, containerWidth: number, containerHeight: number): void {
 		try {
+			if (!ensureSpineFactory(scene, '[SlotController] createAmplifyBetAnimation')) {
+				console.warn('[SlotController] Spine factory not available yet; skipping amplify spine for now');
+				return;
+			}
+
 			// Check if the spine assets are loaded
 			if (!scene.cache.json.has('amplify_bet')) {
 				console.warn('[SlotController] Amplify bet spine assets not loaded, skipping animation creation');
@@ -1756,6 +1780,11 @@ export class SlotController {
 	 */
 	private createEnhanceBetIdleAnimation(scene: Scene, betX: number, betY: number, containerWidth: number, containerHeight: number): void {
 		try {
+			if (!ensureSpineFactory(scene, '[SlotController] createEnhanceBetIdleAnimation')) {
+				console.warn('[SlotController] Spine factory not available yet; skipping enhance-bet idle spine for now');
+				return;
+			}
+
 			if (!scene.cache.json.has('enhance_bet_idle_on')) {
 				console.warn('[SlotController] enhance_bet_idle_on spine assets not loaded, skipping idle animation creation');
 				return;

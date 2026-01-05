@@ -3,17 +3,7 @@
 <head>
 	<meta charset="UTF-8" />
 	<link rel="icon" type="image/png" href="/favicon.png" />
-	<!-- LOW END MOBILE OPTIMIZATION: Viewport and mobile web app meta tags -->
-	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-	<meta name="mobile-web-app-capable" content="yes" />
-	<meta name="apple-mobile-web-app-capable" content="yes" />
-	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-	<meta name="theme-color" content="#10161D" />
-	<meta name="format-detection" content="telephone=no" />
-	<!-- Prevent iOS Safari from zooming on input focus -->
-	<meta name="apple-touch-fullscreen" content="yes" />
-	<!-- Optimize for mobile performance -->
-	<meta http-equiv="x-dns-prefetch-control" content="on" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<link rel="stylesheet" href="/style.css">
 	<title>Felice in Space</title>
 	<link rel="stylesheet" href="/main.scss">
@@ -55,19 +45,6 @@
 			filter: drop-shadow(0 16px 24px rgba(0, 0, 0, 0.7));
 			border-radius: 8px;      /* or whatever radius you want */
 			overflow: hidden;         /* helps ensure content respects rounding */
-			/* LOW END MOBILE OPTIMIZATION: Mobile performance optimizations */
-			touch-action: none;
-			-ms-touch-action: none;
-			-webkit-touch-callout: none;
-			-webkit-user-select: none;
-			user-select: none;
-			/* GPU acceleration */
-			transform: translateZ(0);
-			-webkit-transform: translateZ(0);
-			will-change: transform;
-			/* Prevent image dragging on mobile */
-			-webkit-user-drag: none;
-			user-drag: none;
 		}
 	</style>
 </head>

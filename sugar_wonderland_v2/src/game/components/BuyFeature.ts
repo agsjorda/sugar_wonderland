@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import { SlotController } from './SlotController';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 
 export interface BuyFeatureConfig {
 	position?: { x: number; y: number };
@@ -268,9 +269,9 @@ export class BuyFeature {
 
 		// Prefer Spine when available
 		try {
-			// If spine factory is missing for some reason, go straight to PNG fallback
-			if (!(scene.add as any).spine) {
-				console.warn('[BuyFeature] scene.add.spine not available, using PNG scatter sprite.');
+			// Ensure Spine factory + plugin instance are attached/synced before calling add.spine.
+			if (!ensureSpineFactory(scene, '[BuyFeature] createScatterSymbolAnimation')) {
+				console.warn('[BuyFeature] Spine factory not available, using PNG scatter sprite.');
 				this.createScatterFallbackSprite(scene);
 				return;
 			}

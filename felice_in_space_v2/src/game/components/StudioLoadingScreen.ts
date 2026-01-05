@@ -1,5 +1,5 @@
 import { Scene } from 'phaser';
-import { ensureSpineLoader } from '../../utils/SpineGuard';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { AssetLoader } from '../../utils/AssetLoader';
 import { AssetConfig } from '../../config/AssetConfig';
 
@@ -255,11 +255,14 @@ export class StudioLoadingScreen {
             // Time display disabled in this game (no TimeUtils helper available)
 
             // Spine animation (DI JOKER)
-            const hasSpine = ensureSpineLoader(this.scene, '[StudioLoadingScreen] show');
-            if (hasSpine) {
+            const hasSpineFactory = ensureSpineFactory(this.scene, '[StudioLoadingScreen] show');
+            if (hasSpineFactory && this.scene.cache.json.has('di_joker')) {
                 const cx = this.scene.scale.width * 0.35;
                 const cy = this.scene.scale.height * 0.48;
-                const spine = (this.scene.add as any).spine(cx, cy, 'di_joker', 'di_joker-atlas');
+                const spine = (this.scene.add as any).spine?.(cx, cy, 'di_joker', 'di_joker-atlas');
+                if (!spine) {
+                    console.warn('[StudioLoadingScreen] Spine factory available, but add.spine returned null/undefined');
+                } else {
                 spine.setOrigin(0.5, 0.5);
 
                 // Auto scale to fit comfortably
@@ -292,6 +295,9 @@ export class StudioLoadingScreen {
                 } else {
                     console.warn('DiJoker logo texture not found');
                 }
+                }
+            } else if (hasSpineFactory && !this.scene.cache.json.has('di_joker')) {
+                console.warn('[StudioLoadingScreen] di_joker spine json not in cache yet; skipping spine on studio loading screen');
             }
 
             // Progress bar (similar to Preloader) – positioned just below the spine

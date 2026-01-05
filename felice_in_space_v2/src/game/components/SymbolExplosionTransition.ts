@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { SoundEffectType } from '../../managers/AudioManager';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 
 /**
  * SymbolExplosionTransition
@@ -440,11 +441,16 @@ import { SoundEffectType } from '../../managers/AudioManager';
 		x: number,
 		y: number
 	): SpineGameObject | null {
+		if (!ensureSpineFactory(this.scene, `[SymbolExplosionTransition] createParticle(${desc.spineKey})`)) {
+			console.warn('[SymbolExplosionTransition] Spine factory not available; skipping particle', desc.spineKey);
+			return null;
+		}
+
 		const spineAtlasKey = `${desc.spineKey}-atlas`;
 
 		let particle: SpineGameObject;
 		try {
-			particle = (this.scene.add as any).spine(x, y, desc.spineKey, spineAtlasKey);
+			particle = (this.scene.add as any).spine?.(x, y, desc.spineKey, spineAtlasKey);
 		} catch (e) {
 			console.warn('[SymbolExplosionTransition] Failed to create Spine particle:', desc.spineKey, e);
 			return null;

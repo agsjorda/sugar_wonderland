@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 
 export class CandyTransition {
 	private scene: Scene;
@@ -36,7 +37,22 @@ export class CandyTransition {
 		const centerX = this.scene.cameras.main.centerX;
 		const centerY = this.scene.cameras.main.centerY;
 
-		const spine = this.scene.add.spine(centerX, centerY, 'transition_SW', 'transition_SW-atlas');
+		if (!ensureSpineFactory(this.scene, '[CandyTransition] play')) {
+			console.warn('[CandyTransition] Spine factory not available; skipping transition spine');
+			this.isPlaying = false;
+			if (onComplete) onComplete();
+			this.hide();
+			return;
+		}
+
+		const spine = (this.scene.add as any).spine?.(centerX, centerY, 'transition_SW', 'transition_SW-atlas') as SpineGameObject;
+		if (!spine) {
+			console.warn('[CandyTransition] Failed to create transition spine (add.spine returned null/undefined)');
+			this.isPlaying = false;
+			if (onComplete) onComplete();
+			this.hide();
+			return;
+		}
 		spine.setOrigin(0.5, 0.5);
 		spine.setDepth(this.depth + 1);
 

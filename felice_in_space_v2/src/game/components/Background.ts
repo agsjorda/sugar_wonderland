@@ -4,6 +4,7 @@ import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { AssetConfig } from "../../config/AssetConfig";
 import { gameStateManager } from "../../managers/GameStateManager";
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
+import { ensureSpineFactory } from "../../utils/SpineGuard";
 
 export class Background {
 	private bgContainer: Phaser.GameObjects.Container;
@@ -55,6 +56,14 @@ export class Background {
 	private createBackgroundLayers(scene: Scene, assetScale: number): void {
 		// Add main background as spine animation
 		try {
+			if (!ensureSpineFactory(scene, '[Background] createBackgroundLayers')) {
+				console.warn('[Background] Spine factory not available yet; will retry BG-Default spine later');
+				scene.time.delayedCall(250, () => {
+					this.createBackgroundLayers(scene, assetScale);
+				});
+				return;
+			}
+
 			// Check if the spine assets are loaded
 			if (!scene.cache.json.has('BG-Default')) {
 				console.warn('[Background] BG-Default spine assets not loaded yet, will retry later');
@@ -65,12 +74,15 @@ export class Background {
 				return;
 			}
 
-			this.bgDefaultSpine = (scene.add as any).spine(
+			this.bgDefaultSpine = (scene.add as any).spine?.(
 				scene.scale.width * 0.5 - 3.5,
 				scene.scale.height * 0.5 + 93,
 				'BG-Default',
 				'BG-Default-atlas'
 			) as SpineGameObject;
+			if (!this.bgDefaultSpine) {
+				throw new Error('scene.add.spine returned null/undefined for BG-Default');
+			}
 			this.bgDefaultSpine.setOrigin(0.5, 0.5);
 			this.bgDefaultSpine.setScale(assetScale);
 			

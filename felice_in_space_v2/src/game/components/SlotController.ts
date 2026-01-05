@@ -13,6 +13,7 @@ import { Symbols } from './Symbols';
 import { SoundEffectType } from '../../managers/AudioManager';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { LoadingSpinner } from './LoadingSpinner';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 
 export class SlotController {
 	private controllerContainer: Phaser.GameObjects.Container;
@@ -490,6 +491,11 @@ export class SlotController {
 	 */
 	private createSpinButtonAnimation(scene: Scene, assetScale: number): void {
 		try {
+			if (!ensureSpineFactory(scene, '[SlotController] createSpinButtonAnimation')) {
+				console.warn('[SlotController] Spine factory not available; skipping spin button spine animation');
+				return;
+			}
+
 			// Check if the spine assets are loaded
 			if (!scene.cache.json.has('spin_button_animation')) {
 				console.warn('[SlotController] spin_button_animation spine assets not loaded yet, will retry later');
@@ -509,12 +515,16 @@ export class SlotController {
 
 			// Create spine animation at the same position as the spin button
 			// Following the exact same pattern as kobi-ass animation in Header.ts
-			this.spinButtonAnimation = scene.add.spine(
+			this.spinButtonAnimation = (scene.add as any).spine?.(
 				spinButton.x, 
 				spinButton.y, 
 				"spin_button_animation", 
 				"spin_button_animation-atlas"
 			);
+			if (!this.spinButtonAnimation) {
+				console.warn('[SlotController] add.spine returned null/undefined for spin_button_animation');
+				return;
+			}
 			
 			// Set properties following the same pattern as kobi-ass
 			this.spinButtonAnimation.setOrigin(0.5, 0.5);
@@ -550,12 +560,16 @@ export class SlotController {
 				try {
 					const spineScale = assetScale * 1.2;
 
-					this.freeRoundSpinButtonAnimation = scene.add.spine(
+					this.freeRoundSpinButtonAnimation = (scene.add as any).spine?.(
 						spinButton.x,
 						spinButton.y,
 						"fr_spin_button_animation",
 						"fr_spin_button_animation-atlas"
 					);
+					if (!this.freeRoundSpinButtonAnimation) {
+						console.warn('[SlotController] add.spine returned null/undefined for fr_spin_button_animation');
+						return;
+					}
 					this.freeRoundSpinButtonAnimation.setOrigin(0.5, 0.5);
 					this.freeRoundSpinButtonAnimation.setScale(spineScale);
 					// Depth is managed by container order; keep a sensible default here.
@@ -610,6 +624,11 @@ export class SlotController {
 	 */
 	private createAutoplayButtonAnimation(scene: Scene, assetScale: number): void {
 		try {
+			if (!ensureSpineFactory(scene, '[SlotController] createAutoplayButtonAnimation')) {
+				console.warn('[SlotController] Spine factory not available; skipping autoplay button spine animation');
+				return;
+			}
+
 			// Check if the spine assets are loaded
 			if (!scene.cache.json.has('button_animation_idle')) {
 				console.warn('[SlotController] button_animation_idle spine assets not loaded yet, will retry later');
@@ -629,12 +648,16 @@ export class SlotController {
 
 			// Create spine animation at the same position as the autoplay button
 			// Following the exact same pattern as kobi-ass animation in Header.ts
-			this.autoplayButtonAnimation = scene.add.spine(
+			this.autoplayButtonAnimation = (scene.add as any).spine?.(
 				autoplayButton.x - 4, 
 				autoplayButton.y - 26, 
 				"button_animation_idle", 
 				"button_animation_idle-atlas"
 			);
+			if (!this.autoplayButtonAnimation) {
+				console.warn('[SlotController] add.spine returned null/undefined for button_animation_idle');
+				return;
+			}
 			
 			// Set properties following the same pattern as kobi-ass
 			this.autoplayButtonAnimation.setOrigin(0.5, 0.5);
@@ -661,6 +684,11 @@ export class SlotController {
 	 */
 	private createTurboButtonAnimation(scene: Scene, assetScale: number): void {
 		try {
+			if (!ensureSpineFactory(scene, '[SlotController] createTurboButtonAnimation')) {
+				console.warn('[SlotController] Spine factory not available; skipping turbo button spine animation');
+				return;
+			}
+
 			// Check if the spine assets are loaded
 			if (!scene.cache.json.has('turbo_animation')) {
 				console.warn('[SlotController] turbo_animation spine assets not loaded yet, will retry later');
@@ -680,12 +708,16 @@ export class SlotController {
 
 			// Create spine animation at the same position as the turbo button
 			// Following the exact same pattern as kobi-ass animation in Header.ts
-			this.turboButtonAnimation = scene.add.spine(
+			this.turboButtonAnimation = (scene.add as any).spine?.(
 				turboButton.x, 
 				turboButton.y + 7, 
 				"turbo_animation", 
 				"turbo_animation-atlas"
 			);
+			if (!this.turboButtonAnimation) {
+				console.warn('[SlotController] add.spine returned null/undefined for turbo_animation');
+				return;
+			}
 			
 			// Set properties following the same pattern as kobi-ass
 			this.turboButtonAnimation.setOrigin(0.5, 0.5);
@@ -1715,6 +1747,11 @@ export class SlotController {
 	 */
 	private createAmplifyBetAnimation(scene: Scene, betX: number, betY: number, containerWidth: number, containerHeight: number): void {
 		try {
+			if (!ensureSpineFactory(scene, '[SlotController] createAmplifyBetAnimation')) {
+				console.warn('[SlotController] Spine factory not available; skipping amplify bet spine animation');
+				return;
+			}
+
 			// Check if the spine assets are loaded
 			if (!scene.cache.json.has('amplify_bet')) {
 				console.warn('[SlotController] Amplify bet spine assets not loaded, skipping animation creation');
@@ -1724,12 +1761,16 @@ export class SlotController {
 			// Create the spine animation
 			const amplifyOffsetX = -4; // slight left
 			const amplifyOffsetY =  0; // slight up
-			this.amplifyBetAnimation = scene.add.spine(
+			this.amplifyBetAnimation = (scene.add as any).spine?.(
 				betX + amplifyOffsetX, 
 				betY + amplifyOffsetY, 
 				'amplify_bet', 
 				'amplify_bet-atlas'
 			);
+			if (!this.amplifyBetAnimation) {
+				console.warn('[SlotController] add.spine returned null/undefined for amplify_bet');
+				return;
+			}
 			
 			// Scale the animation to fit within the bet background area
 			const scale = Math.min(containerWidth / 200, containerHeight / 100); // Adjust scale based on container size
@@ -1756,6 +1797,11 @@ export class SlotController {
 	 */
 	private createEnhanceBetIdleAnimation(scene: Scene, betX: number, betY: number, containerWidth: number, containerHeight: number): void {
 		try {
+			if (!ensureSpineFactory(scene, '[SlotController] createEnhanceBetIdleAnimation')) {
+				console.warn('[SlotController] Spine factory not available; skipping enhance bet idle spine');
+				return;
+			}
+
 			if (!scene.cache.json.has('enhance_bet_idle_on')) {
 				console.warn('[SlotController] enhance_bet_idle_on spine assets not loaded, skipping idle animation creation');
 				return;
@@ -1764,7 +1810,11 @@ export class SlotController {
 			// Position to exactly match amplify bet animation if available, including offsets
 			const targetX = this.amplifyBetAnimation ? this.amplifyBetAnimation.x : (betX - 4);
 			const targetY = this.amplifyBetAnimation ? this.amplifyBetAnimation.y : (betY);
-			this.enhanceBetIdleAnimation = scene.add.spine(targetX, targetY, 'enhance_bet_idle_on', 'enhance_bet_idle_on-atlas');
+			this.enhanceBetIdleAnimation = (scene.add as any).spine?.(targetX, targetY, 'enhance_bet_idle_on', 'enhance_bet_idle_on-atlas');
+			if (!this.enhanceBetIdleAnimation) {
+				console.warn('[SlotController] add.spine returned null/undefined for enhance_bet_idle_on');
+				return;
+			}
 			this.enhanceBetIdleAnimation.setOrigin(0.5, 0.5);
 			// Match scale and depth to amplify bet animation if present
 			if (this.amplifyBetAnimation) {

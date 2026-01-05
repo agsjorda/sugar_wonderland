@@ -5,6 +5,7 @@ import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { SoundEffectType } from '../../managers/AudioManager';
+import { ensureSpineFactory } from "../../utils/SpineGuard";
 
 export class BonusHeader {
 	private bonusHeaderContainer: Phaser.GameObjects.Container;
@@ -118,6 +119,14 @@ export class BonusHeader {
 
 	private createCharacterSpineAnimation(scene: Scene, assetScale: number): void {
 		try {
+			if (!ensureSpineFactory(scene, '[BonusHeader] createCharacterSpineAnimation')) {
+				console.warn('[BonusHeader] Spine factory not available yet; will retry Character_FIS later');
+				scene.time.delayedCall(250, () => {
+					this.createCharacterSpineAnimation(scene, assetScale);
+				});
+				return;
+			}
+
 			// Check if the spine assets are loaded
 			if (!scene.cache.json.has('Character_FIS')) {
 				console.warn('[BonusHeader] Character_FIS spine assets not loaded yet, will retry later');
@@ -132,12 +141,15 @@ export class BonusHeader {
 			const x = scene.scale.width * 0.60;
 			const y = scene.scale.height * 0.18;
 
-			const characterSpine = (scene.add as any).spine(
+			const characterSpine = (scene.add as any).spine?.(
 				x,
 				y,
 				'Character_FIS',
 				'Character_FIS-atlas'
 			) as SpineGameObject;
+			if (!characterSpine) {
+				throw new Error('scene.add.spine returned null/undefined for Character_FIS');
+			}
 			
 			characterSpine.setOrigin(0.5, 0.5);
 			characterSpine.setScale(assetScale * 0.1);

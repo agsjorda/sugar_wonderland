@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 
 export class KobiAss {
   public scene: Scene;
@@ -25,7 +26,16 @@ export class KobiAss {
     const width = scene.scale.width;
 		const height = scene.scale.height;
 
-		const spineObject = scene.add.spine(width * 0.18, height * 0.7, "kobiass", "kobiass-atlas");
+		if (!ensureSpineFactory(scene, '[KobiAss] create')) {
+			console.warn('[KobiAss] Spine factory not available; skipping test spine');
+			return;
+		}
+
+		const spineObject = (scene.add as any).spine?.(width * 0.18, height * 0.7, "kobiass", "kobiass-atlas") as SpineGameObject;
+		if (!spineObject) {
+			console.warn('[KobiAss] add.spine returned null/undefined for kobiass');
+			return;
+		}
 		spineObject.setOrigin(0.5, 0.5);
 		spineObject.setScale(0.35)
 		spineObject.animationState.setAnimation(0, "win", true);

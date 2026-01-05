@@ -8,6 +8,7 @@ import { gameStateManager } from '../../managers/GameStateManager';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { SoundEffectType } from '../../managers/AudioManager';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 
 export interface DialogConfig {
 	type: 'Congrats_Dialog' | 'FreeSpin_Dialog' | 'BigWin_Dialog' | 'MegaWin_Dialog'  | 'EpicWin_Dialog' | 'SuperWin_Dialog';
@@ -454,6 +455,11 @@ export class Dialogs {
 		
 		// Create Spine animation for the dialog
 		try {
+			if (!ensureSpineFactory(scene, `[Dialogs] createDialogContent(${config.type})`)) {
+				console.warn('[Dialogs] Spine factory not available; cannot create dialog spine:', config.type);
+				return;
+			}
+
 			// Use dialog type as asset key (each dialog has its own separate spine asset)
 			const assetKey = config.type;
 			const atlasKey = `${config.type}-atlas`;
@@ -461,12 +467,11 @@ export class Dialogs {
 			console.log(`[Dialogs] Creating Spine animation for dialog: ${config.type}`);
 			console.log(`[Dialogs] Using asset: ${assetKey}, atlas: ${atlasKey}`);
 			
-			this.currentDialog = scene.add.spine(
-				position.x,
-				position.y,
-				assetKey,
-				atlasKey
-			);
+			this.currentDialog = (scene.add as any).spine?.(position.x, position.y, assetKey, atlasKey);
+			if (!this.currentDialog) {
+				console.warn('[Dialogs] add.spine returned null/undefined for dialog:', config.type);
+				return;
+			}
 			this.currentDialog.setOrigin(0.5, 0.5);
 			// Set the base scale *before* we trigger any pop tweens.
 			// If we do this after applyDialogScalePop, it overrides the tween's
@@ -2001,6 +2006,11 @@ export class Dialogs {
 			this.currentDialogType = firstStage.type;
 
 			if (this.currentDialog && this.currentScene) {
+				if (!ensureSpineFactory(this.currentScene, `[Dialogs] setupStagedWinNumberAnimation(${firstStage.type})`)) {
+					console.warn('[Dialogs] Spine factory not available; cannot recreate staged win first stage spine:', firstStage.type);
+					return;
+				}
+
 				// Get scale from the existing dialog before destroying it
 				const currentScale = this.currentDialog.scaleX;
 				// Get the correct position for this dialog type (don't preserve old position)
@@ -2017,12 +2027,11 @@ export class Dialogs {
 				console.log(`[Dialogs] Staged win: recreating spine for first stage (${firstStage.type})`);
 				console.log(`[Dialogs] Using asset: ${assetKey}, atlas: ${atlasKey}`);
 				
-				this.currentDialog = this.currentScene.add.spine(
-					position.x,
-					position.y,
-					assetKey,
-					atlasKey
-				);
+				this.currentDialog = (this.currentScene.add as any).spine?.(position.x, position.y, assetKey, atlasKey);
+				if (!this.currentDialog) {
+					console.warn('[Dialogs] add.spine returned null/undefined recreating staged win first stage:', firstStage.type);
+					return;
+				}
 				this.currentDialog.setOrigin(0.5, 0.5);
 				this.currentDialog.setScale(currentScale);
 				
@@ -2166,6 +2175,10 @@ export class Dialogs {
 				const currentScale = this.currentDialog.scaleX;
 				// Get the correct position for this dialog type (don't preserve old position)
 				const sceneRef = this.currentScene || scene;
+				if (!ensureSpineFactory(sceneRef, `[Dialogs] runStagedWinStage(${index}:${stage.type})`)) {
+					console.warn('[Dialogs] Spine factory not available; cannot recreate staged win spine for stage', index, stage.type);
+					return;
+				}
 				const position = this.getDialogPosition(stage.type, sceneRef);
 				
 				// Destroy the old spine object
@@ -2181,12 +2194,11 @@ export class Dialogs {
 				console.log(`[Dialogs] Staged win: recreating spine for stage ${index} (${stage.type})`);
 				console.log(`[Dialogs] Using asset: ${assetKey}, atlas: ${atlasKey}`);
 				
-				this.currentDialog = sceneRef.add.spine(
-					position.x,
-					position.y,
-					assetKey,
-					atlasKey
-				);
+				this.currentDialog = (sceneRef.add as any).spine?.(position.x, position.y, assetKey, atlasKey);
+				if (!this.currentDialog) {
+					console.warn('[Dialogs] add.spine returned null/undefined recreating staged win stage:', index, stage.type);
+					return;
+				}
 				this.currentDialog.setOrigin(0.5, 0.5);
 				this.currentDialog.setScale(currentScale);
 				

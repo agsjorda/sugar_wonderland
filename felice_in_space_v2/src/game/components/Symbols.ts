@@ -9,6 +9,7 @@ import { gameStateManager } from '../../managers/GameStateManager';
 import { TurboConfig } from '../../config/TurboConfig';
 import { SLOT_ROWS, SLOT_COLUMNS, DELAY_BETWEEN_SPINS, MULTIPLIER_SYMBOLS } from '../../config/GameConfig';
 import { SoundEffectType } from '../../managers/AudioManager';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 
 export class Symbols {
   private static readonly WINLINE_CHECKING_DISABLED: boolean = true;
@@ -1338,8 +1339,28 @@ export class Symbols {
                     return;
                   }
                 }
+                if (!ensureSpineFactory(this.scene, `[Symbols] replaceScatterSprite(${spineKey})`)) {
+                  if (attempts < 5) {
+                    console.warn(`[Symbols] Spine factory not available for '${spineKey}'. Retrying (${attempts + 1}/5)...`);
+                    this.scene.time.delayedCall(150, () => attemptCreate(attempts + 1));
+                    return;
+                  }
+                  console.warn(`[Symbols] Spine factory still unavailable for '${spineKey}'. Skipping spine replacement.`);
+                  resolve();
+                  return;
+                }
                 // Create Spine animation in its place
-                const spineSymbol = this.scene.add.spine(x, y, spineKey, spineAtlasKey);
+                const spineSymbol = (this.scene.add as any).spine?.(x, y, spineKey, spineAtlasKey);
+                if (!spineSymbol) {
+                  if (attempts < 5) {
+                    console.warn(`[Symbols] add.spine returned null for '${spineKey}'. Retrying (${attempts + 1}/5)...`);
+                    this.scene.time.delayedCall(150, () => attemptCreate(attempts + 1));
+                    return;
+                  }
+                  console.warn(`[Symbols] add.spine still failing for '${spineKey}'. Skipping spine replacement.`);
+                  resolve();
+                  return;
+                }
                 spineSymbol.setOrigin(0.5, 0.5);
                 try { (spineSymbol as any).symbolValue = 0; } catch {}
                 // Fit to symbol box for consistent sizing
@@ -1699,7 +1720,12 @@ export class Symbols {
               try { symbol.destroy(); } catch {}
               const spineKey = `symbol_0_spine`;
               const spineAtlasKey = spineKey + '-atlas';
-              const spineSymbol = this.scene.add.spine(x, y, spineKey, spineAtlasKey);
+              if (ensureSpineFactory(this.scene, `[Symbols] ensureScatterSpine(${spineKey})`)) {
+                const spineSymbol = (this.scene.add as any).spine?.(x, y, spineKey, spineAtlasKey);
+                if (!spineSymbol) {
+                  resolve();
+                  return;
+                }
               try { (spineSymbol as any).symbolValue = 0; } catch {}
               spineSymbol.setOrigin(0.5, 0.5);
               // Apply configured scale for scatter
@@ -1709,6 +1735,10 @@ export class Symbols {
               symbol = spineSymbol;
               // Enable felice gun and felice eyes for retrigger scatter animation
               enableFeliceAttachmentsForWin(spineSymbol);
+              } else {
+                resolve();
+                return;
+              }
             }
           } catch {}
           
@@ -3381,8 +3411,11 @@ function playSymbolVFX(self: Symbols, symbolObj: any, winAnimationDurationMs: nu
     // Schedule VFX creation
     self.scene.time.delayedCall(vfxStartDelay, () => {
       try {
+        if (!ensureSpineFactory(self.scene as any, `[Symbols] playSymbolVFX(${vfxKey})`)) {
+          return;
+        }
         // Create VFX spine animation
-        const vfxSpine = self.scene.add.spine(x, y, vfxKey, vfxAtlasKey);
+        const vfxSpine = (self.scene.add as any).spine?.(x, y, vfxKey, vfxAtlasKey);
         if (!vfxSpine) {
           console.warn(`[Symbols] Failed to create VFX spine at (${x}, ${y})`);
           return;
@@ -5935,7 +5968,13 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
           currentSymbol.destroy();
           
           // Create Spine animation in its place
-          const spineSymbol = self.scene.add.spine(x, y, spineKey, spineAtlasKey);
+          if (!ensureSpineFactory(self.scene as any, `[Symbols] replaceWinningSprite(${spineKey})`)) {
+            continue;
+          }
+          const spineSymbol = (self.scene.add as any).spine?.(x, y, spineKey, spineAtlasKey);
+          if (!spineSymbol) {
+            continue;
+          }
           try { (spineSymbol as any).symbolValue = symbolValue; } catch {}
           spineSymbol.setOrigin(0.5, 0.5);
           

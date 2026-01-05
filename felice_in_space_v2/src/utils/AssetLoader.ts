@@ -20,26 +20,29 @@ export class AssetLoader {
 
 		// Load Spine animations
 		if (assetGroup.spine) {
+			// Ensure Spine loader APIs are present (combined `load.spine` OR separate `spineJson/spineAtlas`).
+			// If we falsely skip here, later code may still try to create Spine objects and appear "racy".
 			const hasLoader = ensureSpineLoader(scene, '[AssetLoader] loadAssetGroup');
 			if (!hasLoader) {
 				console.warn('[AssetLoader] Spine loader not available. Skipping spine asset group.');
-			} else {
-				Object.entries(assetGroup.spine).forEach(([key, spineData]) => {
-					try {
-						const anyLoad: any = scene.load as any;
-						if (typeof anyLoad.spine === 'function') {
-							console.log(`[AssetLoader] Loading spine (combined): ${key}`);
-							anyLoad.spine(key, spineData.json, spineData.atlas);
-						} else {
-							console.log(`[AssetLoader] Loading spine (separate): ${key} from ${spineData.json}`);
-							scene.load.spineAtlas(`${key}-atlas`, spineData.atlas);
-							scene.load.spineJson(key, spineData.json);
-						}
-					} catch (e) {
-						console.warn(`[AssetLoader] Failed loading spine ${key}:`, e);
-					}
-				});
+				return;
 			}
+
+			Object.entries(assetGroup.spine).forEach(([key, spineData]) => {
+				try {
+					const anyLoad: any = scene.load as any;
+					if (typeof anyLoad.spine === 'function') {
+						console.log(`[AssetLoader] Loading spine (combined): ${key}`);
+						anyLoad.spine(key, spineData.json, spineData.atlas);
+					} else {
+						console.log(`[AssetLoader] Loading spine (separate): ${key} from ${spineData.json}`);
+						scene.load.spineAtlas(`${key}-atlas`, spineData.atlas);
+						scene.load.spineJson(key, spineData.json);
+					}
+				} catch (e) {
+					console.warn(`[AssetLoader] Failed loading spine ${key}:`, e);
+				}
+			});
 		}
 
 		// Load audio files
