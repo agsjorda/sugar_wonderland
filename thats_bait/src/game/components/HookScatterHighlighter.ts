@@ -13,22 +13,47 @@ export function handleHookScatterHighlight(self: Symbols, spinData: any): void {
 
     console.log('[HookScatterHighlighter] Hook-scatter special detected at position:', special.position);
 
-    const col = typeof special.position.x === 'number' ? special.position.x : -1;
-    const row = typeof special.position.y === 'number' ? special.position.y : -1;
+    let col = typeof special.position.x === 'number' ? special.position.x : -1;
+    let row = typeof special.position.y === 'number' ? special.position.y : -1;
 
-    if (
-      col < 0 ||
-      row < 0 ||
-      !self.symbols ||
-      col >= self.symbols.length ||
-      !self.symbols[col] ||
-      row >= self.symbols[col].length
-    ) {
+    const cols = self.symbols ? self.symbols.length : 0;
+    const rows = (self.symbols && self.symbols[0]) ? self.symbols[0].length : 0;
+    const isInBounds = (c: number, r: number): boolean => {
+      if (c < 0 || r < 0) return false;
+      if (!self.symbols) return false;
+      if (c >= self.symbols.length) return false;
+      const column = self.symbols[c];
+      if (!column) return false;
+      if (r >= column.length) return false;
+      return true;
+    };
+
+    if (!isInBounds(col, row) && cols > 0 && rows > 0) {
+      const candidates: Array<{ c: number; r: number }> = [
+        { c: col, r: row },
+        { c: row, r: col },
+        { c: col - 1, r: row - 1 },
+        { c: row - 1, r: col - 1 },
+        { c: col - 1, r: row },
+        { c: col, r: row - 1 },
+        { c: row - 1, r: col },
+        { c: row, r: col - 1 },
+      ];
+      for (const cand of candidates) {
+        if (isInBounds(cand.c, cand.r)) {
+          col = cand.c;
+          row = cand.r;
+          break;
+        }
+      }
+    }
+
+    if (!isInBounds(col, row)) {
       console.warn('[HookScatterHighlighter] Hook-scatter position out of bounds for current grid:', {
         col,
         row,
-        cols: self.symbols ? self.symbols.length : 0,
-        rows: self.symbols && self.symbols[0] ? self.symbols[0].length : 0
+        cols,
+        rows
       });
       return;
     }

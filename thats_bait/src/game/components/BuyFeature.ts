@@ -156,6 +156,7 @@ export class BuyFeature {
 		this.background.fillStyle(0x000000, 0.80);
 		this.background.fillRoundedRect(0, screenHeight - 736, screenWidth, 736, 20);
 		this.background.setDepth(-412412);
+		try { (this.background as any).setName?.('buy_feature_overlay'); } catch {}
 		// Make the background interactive to block clicks behind it
 		this.background.setInteractive(new Phaser.Geom.Rectangle(0, 0, screenWidth, screenHeight), Phaser.Geom.Rectangle.Contains);
 		
@@ -397,6 +398,7 @@ export class BuyFeature {
 		const buttonImage = scene.add.image(x, y, 'long_button');
 		buttonImage.setOrigin(0.5, 0.5);
 		buttonImage.setDisplaySize(364, 62);
+		try { (buttonImage as any).setName?.('buy_feature_confirm_button'); } catch {}
 		this.container.add(buttonImage);
 		
 		// Button label
@@ -408,7 +410,15 @@ export class BuyFeature {
 		this.confirmButton.setOrigin(0.5);
 		this.container.add(this.confirmButton);
 		
-		buttonImage.setInteractive();
+		try {
+			buttonImage.setInteractive({ useHandCursor: true, pixelPerfect: true, alphaTolerance: 10 });
+		} catch {
+			buttonImage.setInteractive();
+			try {
+				(buttonImage as any).input.pixelPerfect = true;
+				(buttonImage as any).input.alphaTolerance = 10;
+			} catch {}
+		}
 		buttonImage.on('pointerdown', () => {
 			if ((window as any).audioManager) {
 				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
@@ -427,6 +437,7 @@ export class BuyFeature {
 			fontFamily: 'Poppins-Regular',
 			color: '#ffffff'
 		});
+		try { (this.closeButton as any).setName?.('buy_feature_close_button'); } catch {}
 		this.closeButton.setOrigin(0.5);
 		this.closeButton.setInteractive();
 		this.closeButton.on('pointerdown', () => {

@@ -491,7 +491,8 @@ export class AudioManager {
 
 		try { mgr.unlock?.(); } catch {}
 		const ctx = this.getAudioContext();
-		try { ctx?.resume?.(); } catch {}
+		let resumePromise: any = null;
+		try { resumePromise = ctx?.resume?.(); } catch {}
 		try { (this.scene.game as any)?.sound?.context?.resume?.(); } catch {}
 		try { (this.scene.game as any)?.sound?.webaudio?.context?.resume?.(); } catch {}
 
@@ -501,12 +502,22 @@ export class AudioManager {
 			}
 		} catch {}
 
-		const state = ctx?.state;
-		if (state === 'running') {
-			try { (mgr as any).locked = false; } catch {}
-			this.unlockComplete = true;
-			this.flushPending();
-		}
+		const finalize = () => {
+			const state = ctx?.state;
+			if (state === 'running') {
+				try { (mgr as any).locked = false; } catch {}
+				this.unlockComplete = true;
+				this.flushPending();
+			}
+		};
+		finalize();
+		try {
+			if (resumePromise && typeof resumePromise.then === 'function') {
+				resumePromise.then(() => {
+					try { finalize(); } catch {}
+				}).catch(() => {});
+			}
+		} catch {}
 	}
 
 	private flushPending(): void {

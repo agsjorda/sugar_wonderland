@@ -2,7 +2,7 @@ import { SpinData } from "../backend/SpinData";
 import { normalizeArea, normalizeMoney, normalizeSpinResponse } from "../backend/GameAPI";
 
 // FAKE API CONFIGURATION - EASILY TOGGLEABLE
-const USE_FAKE_API_FOR_BONUS = true; // Set to false to disable fake API
+const USE_FAKE_API_FOR_BONUS = false; // Set to false to disable fake API
 const FAKE_RESPONSE_PATH = (() => {
     try {
         const baseUrl = (import.meta as any)?.env?.BASE_URL;

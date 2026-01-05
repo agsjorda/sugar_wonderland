@@ -129,7 +129,6 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				// Note: BG-Default.png was removed; only BG-loading.png remains
 				'loading_background': `${prefix}/loading/BG-loading.webp`,
 				'button_bg': `${prefix}/loading/button_bg.webp`,
 				'button_spin': `${prefix}/loading/button_spin.webp`,
@@ -226,21 +225,21 @@ export class AssetConfig {
 		
 		return {
 			images: {
-				'autoplay_off': `assets/controller/${screenMode}/${quality}/autoplay_off.png`,
-				'autoplay_on': `assets/controller/${screenMode}/${quality}/autoplay_on.png`,
-				'decrease_bet': `assets/controller/${screenMode}/${quality}/decrease_bet.png`,
-				'increase_bet': `assets/controller/${screenMode}/${quality}/increase_bet.png`,
-				'menu': `assets/controller/${screenMode}/${quality}/menu.png`,
-				'spin': `assets/controller/${screenMode}/${quality}/spin_bg.png`,
-				'spin_icon': `assets/controller/${screenMode}/${quality}/spin_icon.png`,
-				'autoplay_stop_icon': `assets/controller/${screenMode}/${quality}/autoplay_stop_icon.png`,
-				'turbo_off': `assets/controller/${screenMode}/${quality}/turbo_off.png`,
-				'turbo_on': `assets/controller/${screenMode}/${quality}/turbo_on.png`,
-				'amplify': `assets/controller/${screenMode}/${quality}/amplify.png`,
+				'autoplay_off': `assets/controller/${screenMode}/${quality}/autoplay_off.webp`,
+				'autoplay_on': `assets/controller/${screenMode}/${quality}/autoplay_on.webp`,
+				'decrease_bet': `assets/controller/${screenMode}/${quality}/decrease_bet.webp`,
+				'increase_bet': `assets/controller/${screenMode}/${quality}/increase_bet.webp`,
+				'menu': `assets/controller/${screenMode}/${quality}/menu.webp`,
+				'spin': `assets/controller/${screenMode}/${quality}/spin_bg.webp`,
+				'spin_icon': `assets/controller/${screenMode}/${quality}/spin_icon.webp`,
+				'autoplay_stop_icon': `assets/controller/${screenMode}/${quality}/autoplay_stop_icon.webp`,
+				'turbo_off': `assets/controller/${screenMode}/${quality}/turbo_off.webp`,
+				'turbo_on': `assets/controller/${screenMode}/${quality}/turbo_on.webp`,
+				'amplify': `assets/controller/${screenMode}/${quality}/amplify.webp`,
 				'feature': `assets/controller/${screenMode}/${quality}/feature.webp`,
-				'long_button': `assets/controller/${screenMode}/${quality}/long_button.png`,
-				'maximize': `assets/controller/${screenMode}/${quality}/maximize.png`,
-				'minimize': `assets/controller/${screenMode}/${quality}/minimize.png`,
+				'long_button': `assets/controller/${screenMode}/${quality}/long_button.webp`,
+				'maximize': `assets/controller/${screenMode}/${quality}/maximize.webp`,
+				'minimize': `assets/controller/${screenMode}/${quality}/minimize.webp`,
 			},
 			spine: {
 				'spin_button_animation': {
@@ -285,17 +284,17 @@ export class AssetConfig {
 		return {
 			images: {
 				// Menu tab icons
-				'menu_info': `${prefix}/menu/Info.png`,
-				'menu_history': `${prefix}/menu/History.png`,
-				'menu_settings': `${prefix}/menu/Settings.png`,
+				'menu_info': `${prefix}/menu/Info.webp`,
+				'menu_history': `${prefix}/menu/History.webp`,
+				'menu_settings': `${prefix}/menu/Settings.webp`,
 				// Pagination and loading
-				'icon_left': `${prefix}/menu/icon_left.png`,
-				'icon_most_left': `${prefix}/menu/icon_most_left.png`,
-				'icon_right': `${prefix}/menu/icon_right.png`,
-				'icon_most_right': `${prefix}/menu/icon_most_right.png`,
-				'loading_icon': `${prefix}/menu/loading.png`,
+				'icon_left': `${prefix}/menu/icon_left.webp`,
+				'icon_most_left': `${prefix}/menu/icon_most_left.webp`,
+				'icon_right': `${prefix}/menu/icon_right.webp`,
+				'icon_most_right': `${prefix}/menu/icon_most_right.webp`,
+				'loading_icon': `${prefix}/menu/loading.webp`,
 				// Close icon (portrait/high specific path)
-				'menu_close': `assets/controller/portrait/high/close.png`
+				'menu_close': `assets/controller/portrait/high/close.webp`
 			}
 		};
 	}

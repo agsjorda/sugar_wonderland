@@ -77,9 +77,9 @@ export class RopeCable {
 		this.pinStartAnchor = true;
 		this.pinEndAnchor = true;
 		this.windEnabled = false;
-		this.windAmplitude = 0;
-		this.windFrequency = 0;
-		this.windTime = 0;
+		this.windAmplitude = 20;
+		this.windFrequency = 20;
+		this.windTime = 2;
 		this.curveAmount = 0;
 		this.curveFrequency = 1.5;
 		this.curveAmplitude = 40;

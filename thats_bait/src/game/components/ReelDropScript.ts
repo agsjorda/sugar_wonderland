@@ -126,6 +126,10 @@ function spawnReleaseFillersForHeldReel(
       try { self.container.add(s); } catch {}
       try { (s as any).__fillerReelIndex = reelIndex; } catch {}
       try { (s as any).__fillerDropDone = false; } catch {}
+      try {
+        const dur = Math.max(1, Number(mainDropDuration) || 0);
+        (s as any).__fillerPxPerMs = (Number(dropDistance) || 0) / dur;
+      } catch {}
       try { registerActiveFiller(self, s); } catch {}
 
       try {
@@ -282,7 +286,7 @@ export async function runDropReels(self: any, symbols: number[][], fillerCount: 
 
     const holdTarget = holdTargetByReel[col];
 
-    const stopStaggerMs = useSequentialStartForBuyAnticipation ? 0 : Math.max(0, col * REEL_STAGGER_MS);
+    const stopStaggerMs = (useSequentialStartForBuyAnticipation || isSkipActiveNow()) ? 0 : Math.max(0, col * REEL_STAGGER_MS);
 
     dropPrevSymbols(self, fillerCount, col, extendThisReel, stopStaggerMs);
     if (holdTarget && isReelHeld(col)) {
@@ -320,6 +324,13 @@ export function applySkipReelTweaks(self: any, gd: GameData, timeScale: number):
           }
         }
       } catch {}
+    };
+
+    const shrinkMs = (value: any, minMs: number): number => {
+      const v = Number(value);
+      if (!isFinite(v) || v <= 0) return minMs;
+      const shrunk = Math.floor(v * 0.1);
+      return Math.max(minMs, shrunk);
     };
 
     // Existing symbols
@@ -368,9 +379,9 @@ export function applySkipReelTweaks(self: any, gd: GameData, timeScale: number):
 
     // Reduce any further delays/durations used by drop logic
     gd.dropReelsDelay = 0;
-    gd.dropDuration = Math.max(1, Math.floor(gd.dropDuration * 0.1));
-    gd.dropReelsDuration = Math.max(1, Math.floor(gd.dropReelsDuration * 0.1));
-    gd.winUpDuration = Math.max(1, Math.floor(gd.winUpDuration * 0.1));
+    gd.dropDuration = shrinkMs(gd.dropDuration, 60);
+    gd.dropReelsDuration = shrinkMs(gd.dropReelsDuration, 60);
+    gd.winUpDuration = shrinkMs(gd.winUpDuration, 40);
   } catch (e) {
     console.warn("[ReelDropScript] Failed to apply skip reel tweaks:", e);
   }
@@ -394,7 +405,8 @@ function dropPrevSymbols(self: any, fillerCount: number, index: number, extendDu
   const extraMs = (extendDuration ? 3000 : 0) + Math.max(0, stopStaggerMs);
   const baseDropMs = self.scene.gameData.dropReelsDuration;
   const extraPixels = extraMs > 0 && baseDropMs > 0 ? (baseDropDistance * (extraMs / baseDropMs)) : 0;
-  const extraRows = extraPixels > 0 ? Math.ceil(extraPixels / height) : 0;
+  const extraRowsRaw = extraPixels > 0 ? Math.ceil(extraPixels / height) : 0;
+  const extraRows = Math.min(40, Math.max(0, extraRowsRaw));
   const DROP_DISTANCE = (fillerCount + extraRows) * height + self.scene.gameData.winUpHeight;
 
   const column = self.symbols[index];
@@ -455,7 +467,8 @@ function dropFillers(
   const extraMs = (extendDuration ? 3000 : 0) + Math.max(0, stopStaggerMs);
   const baseDropMs = isBuyFeatureSpin ? self.scene.gameData.dropReelsDuration : (self.scene.gameData.dropDuration * 0.9);
   const extraPixels = extraMs > 0 && baseDropMs > 0 ? (baseDropDistance * (extraMs / baseDropMs)) : 0;
-  const extraRows = extraPixels > 0 ? Math.ceil(extraPixels / height) : 0;
+  const extraRowsRaw = extraPixels > 0 ? Math.ceil(extraPixels / height) : 0;
+  const extraRows = Math.min(40, Math.max(0, extraRowsRaw));
   const TOTAL_ITEMS = fillerCount + SLOT_ROWS + extraRows;
   const EXTRA_VISUAL_ROWS = 0;
   const DROP_DISTANCE = (TOTAL_ITEMS + EXTRA_VISUAL_ROWS) * height + (Number(self.scene?.gameData?.winUpHeight) || 0);
@@ -562,6 +575,10 @@ function dropFillers(
     } catch {}
 
     try { (symbol as any).__fillerReelIndex = index; } catch {}
+    try {
+      const dur = Math.max(1, Number(mainDropDuration) || 0);
+      (symbol as any).__fillerPxPerMs = (Number(DROP_DISTANCE) || 0) / dur;
+    } catch {}
     try { registerActiveFiller(self, symbol); } catch {}
 
     fillerSymbols.push(symbol);
@@ -671,7 +688,8 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
     const extraMs = ((extendDuration && !isHeldAnticipationTarget) ? 3000 : 0) + heldExtraMs + Math.max(0, stopStaggerMs);
     const baseDropMs = (!!gameStateManager.isBuyFeatureSpin) ? self.scene.gameData.dropReelsDuration : (self.scene.gameData.dropDuration * 0.9);
     const extraPixels = extraMs > 0 && baseDropMs > 0 ? (baseDropDistance * (extraMs / baseDropMs)) : 0;
-    const extraRows = extraPixels > 0 ? Math.ceil(extraPixels / height) : 0;
+    const extraRowsRaw = extraPixels > 0 ? Math.ceil(extraPixels / height) : 0;
+    const extraRows = Math.min(40, Math.max(0, extraRowsRaw));
     const START_INDEX = START_INDEX_BASE + extraRows;
     const DROP_DISTANCE = START_INDEX * height + winUpHeightForDrop;
 
@@ -1285,17 +1303,8 @@ function randomizeHeldSpinnerSpriteTexture(self: any, sprite: any): void {
 function applyHeldSpinnerSpriteSize(self: any, sprite: any): void {
   try {
     if (!sprite) return;
-    const visualRaw = Number((sprite as any)?.__heldSpinnerVisual);
-    const visual = (isFinite(visualRaw) ? visualRaw : 0);
-    let imageScale = 1;
-    try {
-      if (typeof (self as any)?.getImageSymbolScaleMultiplier === 'function') {
-        const m = Number((self as any).getImageSymbolScaleMultiplier(visual));
-        if (isFinite(m) && m > 0) imageScale = m;
-      }
-    } catch {}
-    try { sprite.displayWidth = self.displayWidth * imageScale; } catch {}
-    try { sprite.displayHeight = self.displayHeight * imageScale; } catch {}
+    try { sprite.displayWidth = self.displayWidth; } catch {}
+    try { sprite.displayHeight = self.displayHeight; } catch {}
   } catch {}
 }
 
@@ -1328,12 +1337,29 @@ function detachFillersAfterReelStop(self: any, reelIndex: number, attempt: numbe
       if (!s || (s as any).destroyed) continue;
       try { self.scene?.tweens?.killTweensOf?.(s); } catch {}
       try {
+        const bottomEdge = (Number(self.slotY) || 0) + (Number(self.totalGridHeight) || 0) * 0.5 + maskBottomPad;
+        const currentY = Number(s.y) || 0;
+        const pxPerMsRaw = Number((s as any)?.__fillerPxPerMs);
+        const basePxPerMs = (isFinite(pxPerMsRaw) && pxPerMsRaw > 0)
+          ? pxPerMsRaw
+          : (height / 16);
+        const pxPerMs = basePxPerMs * 0.50;
+        const targetY = Math.max(bottomEdge + height, currentY + height);
+        const dist = Math.max(0, targetY - currentY);
+        const computedDuration = Math.max(1, Math.round(dist / Math.max(0.0001, pxPerMs)));
+        const duration = Math.max(80, Math.min(isBuyFeatureSpin ? 1000 : 900, computedDuration));
+
+        if (!(dist > 0)) {
+          try { unregisterActiveFiller(self, s); } catch {}
+          try { s?.destroy?.(); } catch {}
+          continue;
+        }
+
         self.scene?.tweens?.add?.({
           targets: s,
-          y: (s.y as number) + (height * 1.75) + maskBottomPad,
-          alpha: 0,
-          duration: isBuyFeatureSpin ? 380 : 300,
-          ease: 'Cubic.easeIn',
+          y: targetY,
+          duration,
+          ease: (window as any).Phaser?.Math?.Easing?.Linear,
           onComplete: () => {
             try { unregisterActiveFiller(self, s); } catch {}
             try { s?.destroy?.(); } catch {}

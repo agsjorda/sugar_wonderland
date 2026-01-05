@@ -124,18 +124,64 @@ function addDeltaToSpinTotals(spinData: any, delta: number): number {
 			const v = Number(slot?.totalWin);
 			if (isFinite(v) && v >= 0) base = Math.max(base, v);
 		} catch {}
-
-		next = base + delta;
+		try {
+			const v = Number(slot?.__backendTotalWin);
+			if (isFinite(v) && v >= 0) base = Math.max(base, v);
+		} catch {}
+		try {
+			const v = Number(fs?.__backendTotalWin);
+			if (isFinite(v) && v >= 0) base = Math.max(base, v);
+		} catch {}
 		try {
 			const items: any[] | undefined = fs?.items;
-			const cap = Array.isArray(items) && items.length > 0 ? Number(items[0]?.runningWin) : NaN;
-			if (isFinite(cap) && cap > 0 && next > cap) {
-				next = cap;
+			if (Array.isArray(items) && items.length > 0) {
+				const it0: any = (items.find((it: any) => {
+					const v = Number(it?.runningWin);
+					return isFinite(v) && v >= 0;
+				}) ?? items[0]);
+				const vRun = Number(it0?.runningWin);
+				if (isFinite(vRun) && vRun >= 0) base = Math.max(base, vRun);
 			}
 		} catch {}
+		next = base + delta;
 		try { slot.totalWin = next; } catch {}
+		try {
+			const prev = Number(slot.__backendTotalWin);
+			if (!(isFinite(prev) && prev >= 0) || next > prev) {
+				slot.__backendTotalWin = next;
+			}
+		} catch {}
 		try { if (slot.freespin) slot.freespin.totalWin = next; } catch {}
 		try { if (slot.freeSpin) slot.freeSpin.totalWin = next; } catch {}
+		try {
+			if (slot.freespin) {
+				const prev = Number(slot.freespin.__backendTotalWin);
+				if (!(isFinite(prev) && prev >= 0) || next > prev) {
+					slot.freespin.__backendTotalWin = next;
+				}
+			}
+		} catch {}
+		try {
+			if (slot.freeSpin) {
+				const prev = Number(slot.freeSpin.__backendTotalWin);
+				if (!(isFinite(prev) && prev >= 0) || next > prev) {
+					slot.freeSpin.__backendTotalWin = next;
+				}
+			}
+		} catch {}
+		try {
+			const items: any[] | undefined = fs?.items;
+			if (Array.isArray(items) && items.length > 0) {
+				const it0: any = (items.find((it: any) => {
+					const v = Number(it?.runningWin);
+					return isFinite(v) && v >= 0;
+				}) ?? items[0]);
+				const prev = Number(it0?.runningWin);
+				if (!(isFinite(prev) && prev >= 0) || next > prev) {
+					it0.runningWin = next;
+				}
+			}
+		} catch {}
 	} catch {}
 	return next;
 }
@@ -397,7 +443,7 @@ export async function runCollectorMoneySequence(host: any, spinData: any): Promi
 
 		for (let collectorIndex = 0; collectorIndex < collectors.length; collectorIndex++) {
 			const collectorCell = collectors[collectorIndex];
-			const affectTotalsThisCollector = canAffectTotals && collectorIndex === 0;
+			const affectTotalsThisCollector = canAffectTotals && collectorIndex === (collectors.length - 1);
 			let totalValue = 0;
 			let collectorPos: WorldPoint | null = null;
 			let collectorObj: any = null;
@@ -675,6 +721,12 @@ export async function runCollectorMoneySequence(host: any, spinData: any): Promi
 				try {
 					if (gameStateManager.isBonus && affectTotalsThisCollector) {
 						const nextTotal = addDeltaToSpinTotals(spinData, pendingAwardDelta);
+						try {
+							const prev = Number((host as any)?.lastBonusTotalWin);
+							if (!(isFinite(prev) && prev >= 0) || nextTotal > prev) {
+								(host as any).lastBonusTotalWin = nextTotal;
+							}
+						} catch {}
 						try { scene?.events?.emit?.('bonus-win-delta', pendingAwardDelta); } catch {}
 						try { scene?.events?.emit?.('bonus-total-win-updated', nextTotal); } catch {}
 						try { (spinData as any).__collectorMoneyApplied = true; } catch {}

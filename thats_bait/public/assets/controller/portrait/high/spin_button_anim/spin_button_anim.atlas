@@ -1,7 +1,7 @@
-spin_button_anim.png
+spin_button_anim.webp
 size:300,300
 filter:Linear,Linear
-pma:true
+pma:false
 scale:0.09375
 Button
 bounds:146,67,21,21

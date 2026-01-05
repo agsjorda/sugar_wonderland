@@ -1,7 +1,7 @@
-button_animation_idle.png
+button_animation_idle.webp
 size:1388,1388
 filter:Linear,Linear
-pma:true
+pma:false
 Button_Generic_00000
 bounds:695,613,325,223
 offsets:40,269,500,500

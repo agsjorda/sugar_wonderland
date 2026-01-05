@@ -351,16 +351,76 @@ export class Dialogs {
 
 	showCongrats(scene: Scene, config?: { winAmount?: number }): void {
 		let winAmount = Number(config?.winAmount) || 0;
+		const passedWinAmount = winAmount;
 		try {
-			const sceneAny: any = scene as any;
-			const bh: any = sceneAny?.bonusHeader;
-			if (gameStateManager.isBonus && bh && typeof bh.getCurrentWinnings === 'function') {
-				const v = Number(bh.getCurrentWinnings());
-				if (isFinite(v) && v >= 0) {
-					winAmount = v;
+			if (gameStateManager.isBonus) {
+				const sceneAny: any = scene as any;
+				const symbols: any = sceneAny?.symbols;
+				const sd: any = symbols?.currentSpinData;
+				let resolved: number | null = null;
+				try {
+					const fs: any = sd?.slot?.freespin || sd?.slot?.freeSpin;
+					const items: any[] | undefined = fs?.items;
+					const it0: any = Array.isArray(items) && items.length > 0
+						? (items.find((it: any) => {
+							const v = Number(it?.runningWin);
+							return isFinite(v) && v >= 0;
+						}) ?? items[0])
+						: null;
+					const vRun = Number(it0?.runningWin);
+					if (isFinite(vRun) && vRun >= 0) resolved = vRun;
+				} catch {}
+				try {
+					const v0 = Number(sd?.slot?.__backendTotalWin);
+					if (isFinite(v0) && v0 >= 0) resolved = v0;
+				} catch {}
+				if (resolved == null) {
+					try {
+						const v1 = Number(sd?.slot?.totalWin);
+						if (isFinite(v1) && v1 >= 0) resolved = v1;
+					} catch {}
+				}
+				if (resolved == null) {
+					try {
+						const fs: any = sd?.slot?.freespin || sd?.slot?.freeSpin;
+						const v2 = Number(fs?.__backendTotalWin);
+						if (isFinite(v2) && v2 >= 0) resolved = v2;
+					} catch {}
+				}
+				if (resolved == null) {
+					try {
+						const fs: any = sd?.slot?.freespin || sd?.slot?.freeSpin;
+						const v3 = Number(fs?.totalWin);
+						if (isFinite(v3) && v3 >= 0) resolved = v3;
+					} catch {}
+				}
+				if (resolved != null) {
+					if (passedWinAmount > 0 && resolved < passedWinAmount) {
+						winAmount = passedWinAmount;
+					} else {
+						winAmount = resolved;
+					}
+				} else {
+					winAmount = passedWinAmount;
 				}
 			}
 		} catch {}
+		if (!(winAmount > 0)) {
+			try {
+				const sceneAny: any = scene as any;
+				const symbols: any = sceneAny?.symbols;
+				const vCached = Number((symbols as any)?.lastBonusTotalWin);
+				if (isFinite(vCached) && vCached > 0) winAmount = vCached;
+			} catch {}
+		}
+		if (!(winAmount > 0)) {
+			try {
+				const sceneAny: any = scene as any;
+				const bonusHeader: any = sceneAny?.bonusHeader;
+				const vHeader = Number(bonusHeader?.getCurrentWinnings?.());
+				if (isFinite(vHeader) && vHeader > 0) winAmount = vHeader;
+			} catch {}
+		}
 		const sceneAny: any = scene as any;
 		const mgr: any = sceneAny?.scene;
 		const canLaunch = !!(mgr && typeof mgr.launch === 'function');
@@ -445,15 +505,87 @@ export class Dialogs {
 			try { scene.events.off('showTotalWinOverlay', showNow as any); } catch {}
 			let resolved = winAmount;
 			try {
-				const bh: any = (scene as any)?.bonusHeader;
-				if (gameStateManager.isBonus && bh && typeof bh.getCurrentWinnings === 'function') {
-					const v = Number(bh.getCurrentWinnings());
-					if (isFinite(v) && v >= 0) resolved = v;
+				const vEvt = Number(data?.winAmount);
+				if (isFinite(vEvt) && vEvt >= 0) {
+					const vArg = Number(winAmount);
+					resolved = (isFinite(vArg) && vArg >= 0) ? Math.max(vEvt, vArg) : vEvt;
+				}
+			} catch {}
+			try {
+				if (gameStateManager.isBonus) {
+					const sceneAny: any = scene as any;
+					const symbols: any = sceneAny?.symbols;
+					const sd: any = symbols?.currentSpinData;
+					let backendTotal: number | null = null;
+					try {
+						const fs: any = sd?.slot?.freespin || sd?.slot?.freeSpin;
+						const items: any[] | undefined = fs?.items;
+						const it0: any = Array.isArray(items) && items.length > 0
+							? (items.find((it: any) => {
+								const v = Number(it?.runningWin);
+								return isFinite(v) && v >= 0;
+							}) ?? items[0])
+							: null;
+						const vRun = Number(it0?.runningWin);
+						if (isFinite(vRun) && vRun >= 0) backendTotal = vRun;
+					} catch {}
+					try {
+						const v0 = Number(sd?.slot?.__backendTotalWin);
+						if (isFinite(v0) && v0 >= 0) backendTotal = v0;
+					} catch {}
+					if (backendTotal == null) {
+						try {
+							const v1 = Number(sd?.slot?.totalWin);
+							if (isFinite(v1) && v1 >= 0) backendTotal = v1;
+						} catch {}
+					}
+					if (backendTotal == null) {
+						try {
+							const fs: any = sd?.slot?.freespin || sd?.slot?.freeSpin;
+							const v2 = Number(fs?.__backendTotalWin);
+							if (isFinite(v2) && v2 >= 0) backendTotal = v2;
+						} catch {}
+					}
+					if (backendTotal == null) {
+						try {
+							const fs: any = sd?.slot?.freespin || sd?.slot?.freeSpin;
+							const v3 = Number(fs?.totalWin);
+							if (isFinite(v3) && v3 >= 0) backendTotal = v3;
+						} catch {}
+					}
+					try {
+						if (backendTotal != null) {
+							const bt = Number(backendTotal);
+							if (isFinite(bt) && bt >= 0) {
+								if (resolved > 0 && bt < resolved) {
+									resolved = resolved;
+								} else {
+									resolved = bt;
+								}
+							}
+						}
+					} catch {}
 				}
 			} catch {}
 			if (!(resolved >= 0)) {
 				const amount = Number(data?.winAmount);
 				resolved = isFinite(amount) ? amount : winAmount;
+			}
+			if (!(resolved > 0)) {
+				try {
+					const sceneAny: any = scene as any;
+					const symbols: any = sceneAny?.symbols;
+					const vCached = Number((symbols as any)?.lastBonusTotalWin);
+					if (isFinite(vCached) && vCached > 0) resolved = vCached;
+				} catch {}
+			}
+			if (!(resolved > 0)) {
+				try {
+					const sceneAny: any = scene as any;
+					const bonusHeader: any = sceneAny?.bonusHeader;
+					const vHeader = Number(bonusHeader?.getCurrentWinnings?.());
+					if (isFinite(vHeader) && vHeader > 0) resolved = vHeader;
+				} catch {}
 			}
 			this.showDialog(scene, 'TotalW_TB', { winAmount: resolved });
 		};

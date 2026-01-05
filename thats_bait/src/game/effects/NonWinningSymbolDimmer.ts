@@ -39,26 +39,85 @@ export function applyNonWinningSymbolDim(
 
         const key = `${col}_${row}`;
         if (winningPositions.has(key)) {
+          try {
+            const anySymbol: any = symbol;
+            const overlay: any = (anySymbol as any).__nonWinDimOverlaySprite;
+            if (overlay && !overlay.destroyed) {
+              try { overlay.destroy?.(); } catch { try { overlay.destroy?.(true); } catch {} }
+            }
+            try { delete (anySymbol as any).__nonWinDimOverlaySprite; } catch {}
+            try {
+              const ov = (anySymbol as any).__nonWinOriginalVisible;
+              if (typeof ov === 'boolean') {
+                try { anySymbol.setVisible?.(ov); } catch { try { anySymbol.visible = ov; } catch {} }
+              }
+            } catch {}
+            try { delete (anySymbol as any).__nonWinOriginalVisible; } catch {}
+            try { delete (anySymbol as any).__nonWinDimOverlayDestroyHooked; } catch {}
+          } catch {}
           continue;
         }
 
         // Optionally convert non-winning Spine symbols to their PNG/WEBP
         // counterparts for this dimming sequence to ensure consistent
         // opacity handling, including money/multiplier symbols.
-        if (symbolValues && (symbol as any)?.animationState) {
+        if ((symbol as any)?.animationState) {
           try {
-            const colValues = symbolValues[col];
-            const valueFromData = colValues && colValues[row];
-            if (typeof valueFromData === 'number') {
-              let spriteKey = 'symbol_' + valueFromData;
-              if (scene.textures.exists(spriteKey)) {
+            const anySpine: any = symbol;
+            let valueFromData: number | undefined;
+            try {
+              const colValues = symbolValues?.[col];
+              const v = colValues && colValues[row];
+              if (typeof v === 'number') valueFromData = v;
+            } catch {}
+
+            if (valueFromData === undefined) {
+              try {
                 const anySpine: any = symbol;
+                const k = String((anySpine as any)?.key ?? '');
+                const m = k.match(/symbol_(\d+)_spine/i);
+                if (m && m[1]) {
+                  const parsed = parseInt(m[1], 10);
+                  if (!Number.isNaN(parsed)) valueFromData = parsed;
+                }
+              } catch {}
+            }
+
+            if (valueFromData === undefined) {
+              try {
+                const anySpine: any = symbol;
+                const name = String(anySpine?.skeleton?.data?.name ?? '');
+                const m = name.match(/Symbol(\d+)_/i);
+                if (m && m[1]) {
+                  const parsed = parseInt(m[1], 10);
+                  if (!Number.isNaN(parsed)) valueFromData = parsed;
+                }
+              } catch {}
+            }
+
+            if (typeof valueFromData === 'number') {
+              const spriteKey = 'symbol_' + valueFromData;
+              if (scene.textures.exists(spriteKey)) {
                 const home = anySpine.__pngHome as { x: number; y: number } | undefined;
                 const px = (home && typeof home.x === 'number') ? home.x : anySpine.x;
                 const py = (home && typeof home.y === 'number') ? home.y : anySpine.y;
 
                 const parent: any = (anySpine as any).parentContainer;
-                const sprite = scene.add.sprite(px, py, spriteKey);
+                let sprite: any = (anySpine as any).__nonWinDimOverlaySprite;
+                try {
+                  if (!sprite || sprite.destroyed) {
+                    sprite = scene.add.sprite(px, py, spriteKey);
+                    try { (anySpine as any).__nonWinDimOverlaySprite = sprite; } catch {}
+                  } else {
+                    try { sprite.setTexture(spriteKey); } catch {}
+                    try { sprite.setPosition(px, py); } catch {}
+                  }
+                } catch {
+                  sprite = null;
+                }
+                if (!sprite) {
+                  // fall through and rely on Spine alpha forcing
+                } else {
                 try {
                   const dw = (anySpine.displayWidth ?? sprite.displayWidth) as number;
                   const dh = (anySpine.displayHeight ?? sprite.displayHeight) as number;
@@ -85,9 +144,30 @@ export function applyNonWinningSymbolDim(
                   try { parent.add(sprite); } catch {}
                 }
 
-                try { anySpine.destroy(); } catch {}
-                column[row] = sprite;
-                symbol = sprite;
+                try {
+                  if (!(anySpine as any).__nonWinDimOverlayDestroyHooked) {
+                    (anySpine as any).__nonWinDimOverlayDestroyHooked = true;
+                    try {
+                      anySpine.once?.('destroy', () => {
+                        try {
+                          const o: any = (anySpine as any).__nonWinDimOverlaySprite;
+                          if (o && !o.destroyed) {
+                            try { o.destroy?.(); } catch { try { o.destroy?.(true); } catch {} }
+                          }
+                        } catch {}
+                        try { delete (anySpine as any).__nonWinDimOverlaySprite; } catch {}
+                      });
+                    } catch {}
+                  }
+                } catch {}
+
+                try {
+                  if (typeof (anySpine as any).__nonWinOriginalVisible !== 'boolean') {
+                    (anySpine as any).__nonWinOriginalVisible = (anySpine.visible ?? true) as boolean;
+                  }
+                } catch {}
+                try { anySpine.setVisible?.(false); } catch { try { anySpine.visible = false; } catch {} }
+                }
               }
             }
           } catch {}
@@ -106,6 +186,12 @@ export function applyNonWinningSymbolDim(
           if (typeof anySymbol.__nonWinOriginalAlpha !== 'number') {
             anySymbol.__nonWinOriginalAlpha = anySymbol.alpha ?? 1;
           }
+				try {
+					const sc = (anySymbol as any)?.skeleton?.color;
+					if (sc && typeof (anySymbol as any).__nonWinOriginalSkeletonAlpha !== 'number') {
+						(anySymbol as any).__nonWinOriginalSkeletonAlpha = sc.a;
+					}
+				} catch {}
         } catch {}
 
         // Temporarily disable any custom pipeline (e.g. SymbolWaveVertical) so
@@ -153,8 +239,57 @@ export function applyNonWinningSymbolDim(
             try {
               (tween as any).on('update', () => {
                 try { anySymbol.setAlpha(anySymbol.alpha); } catch {}
+						try {
+							const sc = (anySymbol as any)?.skeleton?.color;
+							if (sc) sc.a = anySymbol.alpha;
+						} catch {}
+						try {
+							const overlay: any = (anySymbol as any).__nonWinDimOverlaySprite;
+							if (overlay && !overlay.destroyed) {
+								try { overlay.alpha = anySymbol.alpha; } catch {}
+								try {
+									if (typeof overlay.scaleX === 'number' && typeof anySymbol.scaleX === 'number') overlay.scaleX = anySymbol.scaleX;
+									if (typeof overlay.scaleY === 'number' && typeof anySymbol.scaleY === 'number') overlay.scaleY = anySymbol.scaleY;
+								} catch {}
+								try {
+									overlay.displayWidth = (anySymbol.displayWidth ?? overlay.displayWidth) as number;
+									overlay.displayHeight = (anySymbol.displayHeight ?? overlay.displayHeight) as number;
+								} catch {}
+								try {
+									const home = (anySymbol as any).__pngHome as { x: number; y: number } | undefined;
+									const x = (home && typeof home.x === 'number') ? home.x : anySymbol.x;
+									const y = (home && typeof home.y === 'number') ? home.y : anySymbol.y;
+									overlay.setPosition?.(x, y);
+								} catch {}
+							}
+						} catch {}
               });
             } catch {}
+          } else {
+					try {
+						const sc = (anySymbol as any)?.skeleton?.color;
+						if (sc) sc.a = anySymbol.alpha;
+					} catch {}
+					try {
+						const overlay: any = (anySymbol as any).__nonWinDimOverlaySprite;
+						if (overlay && !overlay.destroyed) {
+							try { overlay.alpha = anySymbol.alpha; } catch {}
+							try {
+								if (typeof overlay.scaleX === 'number' && typeof anySymbol.scaleX === 'number') overlay.scaleX = anySymbol.scaleX;
+								if (typeof overlay.scaleY === 'number' && typeof anySymbol.scaleY === 'number') overlay.scaleY = anySymbol.scaleY;
+							} catch {}
+							try {
+								overlay.displayWidth = (anySymbol.displayWidth ?? overlay.displayWidth) as number;
+								overlay.displayHeight = (anySymbol.displayHeight ?? overlay.displayHeight) as number;
+							} catch {}
+							try {
+								const home = (anySymbol as any).__pngHome as { x: number; y: number } | undefined;
+								const x = (home && typeof home.x === 'number') ? home.x : anySymbol.x;
+								const y = (home && typeof home.y === 'number') ? home.y : anySymbol.y;
+								overlay.setPosition?.(x, y);
+							} catch {}
+						}
+					} catch {}
           }
         } catch {}
       }
@@ -168,6 +303,22 @@ export function clearNonWinningSymbolDim(scene: Phaser.Scene, symbol: any): void
       return;
     }
     const anySymbol: any = symbol;
+
+		try {
+			const overlay: any = (anySymbol as any).__nonWinDimOverlaySprite;
+			if (overlay && !overlay.destroyed) {
+				try { scene.tweens?.killTweensOf?.(overlay); } catch {}
+				try { overlay.destroy?.(); } catch { try { overlay.destroy?.(true); } catch {} }
+			}
+		} catch {}
+		try { delete (anySymbol as any).__nonWinDimOverlaySprite; } catch {}
+		try {
+			const ov = (anySymbol as any).__nonWinOriginalVisible;
+			if (typeof ov === 'boolean') {
+				try { anySymbol.setVisible?.(ov); } catch { try { anySymbol.visible = ov; } catch {} }
+			}
+		} catch {}
+		try { delete (anySymbol as any).__nonWinDimOverlayDestroyHooked; } catch {}
 
     const hasOriginalScaleX = typeof anySymbol.__nonWinOriginalScaleX === 'number';
     const hasOriginalScaleY = typeof anySymbol.__nonWinOriginalScaleY === 'number';
@@ -187,6 +338,13 @@ export function clearNonWinningSymbolDim(scene: Phaser.Scene, symbol: any): void
         }
 
         anySymbol.alpha = resetAlpha;
+				try {
+					const sc = (anySymbol as any)?.skeleton?.color;
+					const oa = (anySymbol as any).__nonWinOriginalSkeletonAlpha;
+					if (sc && typeof oa === 'number') {
+						sc.a = oa;
+					}
+				} catch {}
       } catch {}
     }
 
@@ -204,6 +362,8 @@ export function clearNonWinningSymbolDim(scene: Phaser.Scene, symbol: any): void
     try { delete anySymbol.__nonWinOriginalScaleX; } catch {}
     try { delete anySymbol.__nonWinOriginalScaleY; } catch {}
     try { delete anySymbol.__nonWinOriginalAlpha; } catch {}
-    try { delete (anySymbol as any).__nonWinOriginalPipeline; } catch {}
+		try { delete (anySymbol as any).__nonWinOriginalSkeletonAlpha; } catch {}
+		try { delete (anySymbol as any).__nonWinOriginalVisible; } catch {}
+    try { delete anySymbol.__nonWinOriginalPipeline; } catch {}
   } catch {}
 }

@@ -169,8 +169,14 @@ export function normalizeSpinResponse(raw: any, bet: number): SpinData {
     const freeSpinItems = rawFreeSpinItems.map((item: any) => ({
         spinsLeft: Number(item.spinsLeft) || 0,
         subTotalWin: Number(item.subTotalWin) || 0,
-        runningWin: typeof item.runningWin === 'number' ? item.runningWin : undefined,
-        collectorCount: typeof item.collectorCount === 'number' ? item.collectorCount : undefined,
+        runningWin: (() => {
+            const v = Number((item as any)?.runningWin);
+            return Number.isFinite(v) ? v : undefined;
+        })(),
+        collectorCount: (() => {
+            const v = Number((item as any)?.collectorCount);
+            return Number.isFinite(v) ? v : undefined;
+        })(),
         area: normalizeArea(item.area),
         money: normalizeMoney(item.money),
         special: (item?.special && item.special.action)
@@ -208,11 +214,17 @@ export function normalizeSpinResponse(raw: any, bet: number): SpinData {
 
     const freeSpinData = {
         count: Number(freespinSource.count) || 0,
-        totalWin: typeof freespinSource.totalWin === 'number'
-            ? freespinSource.totalWin
-            : (Number(freespinSource.win) || 0),
+        totalWin: (() => {
+            const total = Number((freespinSource as any)?.totalWin);
+            if (Number.isFinite(total) && total >= 0) {
+                return total;
+            }
+            const win = Number((freespinSource as any)?.win);
+            return Number.isFinite(win) && win >= 0 ? win : 0;
+        })(),
         items: freeSpinItems
     };
+    (freeSpinData as any).__backendTotalWin = (freeSpinData as any).totalWin;
 
     const slotArea = normalizeArea(rawSlot.area);
 
@@ -228,8 +240,12 @@ export function normalizeSpinResponse(raw: any, bet: number): SpinData {
         slot.money = normalizedMoney;
     }
 
-    if (typeof rawSlot.totalWin === 'number') {
-        slot.totalWin = rawSlot.totalWin;
+    {
+        const rawSlotTotalWin = Number((rawSlot as any)?.totalWin);
+        if (Number.isFinite(rawSlotTotalWin) && rawSlotTotalWin >= 0) {
+            slot.totalWin = rawSlotTotalWin;
+            (slot as any).__backendTotalWin = rawSlotTotalWin;
+        }
     }
     if (rawSlot.special && rawSlot.special.action) {
         slot.special = {

@@ -29,7 +29,8 @@ export class Preloader extends Scene
 	private fullscreenBtn?: Phaser.GameObjects.Image;
 	private clockDisplay?: ClockDisplay;
 	private preloaderVerticalOffsetModifier: number = 10; // Vertical offset for Preloader elements only
-	private helloTbVolumeMultiplier: number = 0.7;
+	private helloTbVolumeMultiplier: number = 1.3;
+	private helloTbStartDelayMs: number = 2000;
 
 	constructor ()
 	{
@@ -386,6 +387,7 @@ export class Preloader extends Scene
 			const bg = this.buttonBg;
 			const baseBgScaleX = bg ? bg.scaleX : 1;
 			const baseBgScaleY = bg ? bg.scaleY : 1;
+			let audioStartedOnce = false;
 			spin.on('pointerover', () => {
 				this.tweens.add({
 					targets: spin,
@@ -406,38 +408,41 @@ export class Preloader extends Scene
 			});
 			spin.on('pointerdown', () => {
 				try {
-					const sm: any = this.sound as any;
-					try { sm.unlock?.(); } catch {}
-					try {
+					if (!audioStartedOnce) {
+						audioStartedOnce = true;
+						const helloDelay = Math.max(0, Number(this.helloTbStartDelayMs) || 0);
 						const sm: any = this.sound as any;
 						try { sm.unlock?.(); } catch {}
 						try { sm.context?.resume?.(); } catch {}
 						try { sm.webaudio?.context?.resume?.(); } catch {}
 						try { (this.game as any)?.sound?.context?.resume?.(); } catch {}
+
+						let audio: any = (window as any)?.audioManager as AudioManager | undefined;
+						if (audio && typeof audio.setScene === 'function') {
+							try { audio.setScene(this); } catch {}
+						} else {
+							audio = new AudioManager(this as any);
+							(window as any).audioManager = audio;
+						}
+
+						try { audio.createMusicInstances?.(); } catch {}
+						try { audio.playBackgroundMusic?.(MusicType.MAIN, 500); } catch {}
+
 						try {
-							const existing = (window as any)?.audioManager as AudioManager | undefined;
-							if (existing && typeof (existing as any).setScene === 'function') {
-								(existing as any).setScene(this);
-								try { (existing as any).createMusicInstances?.(); } catch {}
-								try { (existing as any).playBackgroundMusic?.(MusicType.MAIN, 500); } catch {}
-								try {
-									const base = typeof (existing as any).getSfxVolume === 'function' ? (existing as any).getSfxVolume() : 0.4;
-									const vol = Math.max(0, Math.min(1, (Number(base) || 0) * this.helloTbVolumeMultiplier));
-									(existing as any).playSoundEffect?.(SoundEffectType.HELLO, { volume: vol });
-								} catch {}
+							const base = typeof audio.getSfxVolume === 'function' ? audio.getSfxVolume() : 0.4;
+							const vol = Math.max(0, Math.min(1, (Number(base) || 0) * this.helloTbVolumeMultiplier));
+							if (helloDelay > 0) {
+								window.setTimeout(() => {
+									try {
+										const mgr = (window as any)?.audioManager as any;
+										mgr?.playSoundEffect?.(SoundEffectType.HELLO, { volume: vol });
+									} catch {}
+								}, helloDelay);
 							} else {
-								const am = new AudioManager(this as any);
-								(window as any).audioManager = am;
-								try { (am as any).createMusicInstances?.(); } catch {}
-								try { (am as any).playBackgroundMusic?.(MusicType.MAIN, 500); } catch {}
-								try {
-									const base = typeof (am as any).getSfxVolume === 'function' ? (am as any).getSfxVolume() : 0.4;
-									const vol = Math.max(0, Math.min(1, (Number(base) || 0) * this.helloTbVolumeMultiplier));
-									(am as any).playSoundEffect?.(SoundEffectType.HELLO, { volume: vol });
-								} catch {}
+								audio.playSoundEffect?.(SoundEffectType.HELLO, { volume: vol });
 							}
 						} catch {}
-					} catch {}
+					}
 					// Clear any ongoing tweens on press
 					this.tweens.killTweensOf(spin);
 					if (bg) this.tweens.killTweensOf(bg);
@@ -505,6 +510,11 @@ export class Preloader extends Scene
 
 		// Start game on click release (allow user to hold the button)
 		this.buttonSpin?.once('pointerup', () => {
+			try {
+				this.buttonSpin?.disableInteractive();
+				this.buttonSpin?.setTint(0x777777).setAlpha(0.9);
+				this.buttonBg?.setTint(0x777777).setAlpha(0.9);
+			} catch {}
 			this.time.delayedCall(120, () => {
 				this.scene.launch('BubbleTransition', {
 					fromSceneKey: 'Preloader',

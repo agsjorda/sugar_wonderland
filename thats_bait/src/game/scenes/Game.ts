@@ -15,6 +15,7 @@ import { Background } from '../components/Background';
 import { BonusBackground } from '../components/BonusBackground';
 import { FullScreenManager } from '../../managers/FullScreenManager';
 import { AutoplayOptions } from '../components/AutoplayOptions';
+import { BetOptions } from '../components/BetOptions';
 import { Header } from '../components/Header';
 import { WinTracker } from '../components/WinTracker';
 import { FreeSpinOverlay } from '../components/FreeSpinOverlay';
@@ -39,6 +40,7 @@ export class Game extends Phaser.Scene {
   private slotController!: SlotController;
   private infoText!: Phaser.GameObjects.Text;
   private autoplayOptions!: AutoplayOptions;
+  private betOptions!: BetOptions;
   private rope?: RopeCable;
   private startHandle?: Phaser.GameObjects.Arc;
   private endHandle?: Phaser.GameObjects.Arc;
@@ -47,7 +49,7 @@ export class Game extends Phaser.Scene {
   private readonly dragBoundsPadding = 32;
   private readonly ropeStyle = {
     color: 0x000000,
-    coreColor: 0x000000,
+    coreColor: 0xBB583A,
     outlineVisible: false,
     damping: 0.85
   };
@@ -90,6 +92,10 @@ export class Game extends Phaser.Scene {
   private enableRope: boolean = true;
   private hookCharacterEndPromise: Promise<void> | null = null;
   private hookFinalizePending: boolean = false;
+  private hookGravityDropActive: boolean = false;
+  private hookGravityRotation: number = 0;
+  private hookGravityLastEnd?: Phaser.Math.Vector2;
+  private hookRopeEndPinned: boolean = true;
   private reelsStopListener?: (data?: any) => void;
   private winStopListener?: (data?: any) => void;
   private winTrackerHideListener?: () => void;
@@ -192,6 +198,9 @@ export class Game extends Phaser.Scene {
 
 		this.autoplayOptions = new AutoplayOptions(this.networkManager, this.screenModeManager);
 		this.autoplayOptions.create(this);
+
+		this.betOptions = new BetOptions(this.networkManager, this.screenModeManager);
+		this.betOptions.create(this);
 
 		// Create and expose the Symbols component for the base game grid
 		this.symbols = new Symbols();
@@ -663,7 +672,46 @@ export class Game extends Phaser.Scene {
 					const dx = end.x - prev.x;
 					const dy = end.y - prev.y;
 					const angle = Math.atan2(dy, dx) - Math.PI * 0.5;
-					this.hookImage.setRotation(angle);
+					const swayActive = this.hookGravityDropActive || !this.hookRopeEndPinned;
+					if (swayActive) {
+						const dt = Math.max(0.001, (Number(delta) || 0) / 1000);
+						let vx = 0;
+						let vy = 0;
+						try {
+							const last = this.hookGravityLastEnd;
+							if (last) {
+								vx = (end.x - last.x) / dt;
+								vy = (end.y - last.y) / dt;
+							}
+						} catch {}
+						try {
+							if (!this.hookGravityLastEnd) {
+								this.hookGravityLastEnd = new Phaser.Math.Vector2(end.x, end.y);
+							} else {
+								this.hookGravityLastEnd.set(end.x, end.y);
+							}
+						} catch {}
+						const speed = Math.abs(vx) + Math.abs(vy);
+						const motionFactor = Phaser.Math.Clamp(speed / 2400, 0, 1);
+						const fallFactor = Phaser.Math.Clamp(vy / 1200, 0, 1);
+						const swingFactor = this.hookGravityDropActive
+							? fallFactor
+							: Phaser.Math.Clamp(0.35 + motionFactor * 0.65, 0, 1);
+						const velTilt = Phaser.Math.Clamp(vx / 3600, -0.45, 0.45) * swingFactor;
+						const now = (Number((this.time as any)?.now) || 0);
+						const oscA = Math.sin(now * 0.015) * 0.22 * swingFactor;
+						const oscB = Math.sin(now * 0.033) * 0.09 * swingFactor;
+						const targetRot = angle + velTilt + oscA + oscB;
+						const maxDelta = dt * 4.8;
+						this.hookGravityRotation = Phaser.Math.Angle.RotateTo(
+							this.hookGravityRotation,
+							targetRot,
+							maxDelta
+						);
+						this.hookImage.setRotation(this.hookGravityRotation);
+					} else {
+						this.hookImage.setRotation(angle);
+					}
 				}
 			}
 		}
@@ -1065,29 +1113,63 @@ export class Game extends Phaser.Scene {
 				return;
 			}
 			this.rope.setPinnedEnds(true, true);
+			this.hookRopeEndPinned = true;
+
+			const totalDuration = this.scaleHookCollectorMs(1000, 260);
+			let windupDuration = Math.round(totalDuration * 0.14);
+			windupDuration = Math.max(50, Math.min(140, windupDuration));
+			if (windupDuration >= totalDuration) {
+				windupDuration = Math.max(1, totalDuration - 1);
+			}
+			const throwDuration = Math.max(1, totalDuration - windupDuration);
+
+			let windupOffsetY = 28;
+			try {
+				const h = (this.hookImage?.displayHeight ?? 0) as number;
+				if (isFinite(h) && h > 0) {
+					windupOffsetY = Math.max(18, Math.min(60, h * 0.18));
+				}
+			} catch {}
+
+			const windupX = (this.hookScatterTarget.x as number) ?? pointerX;
+			const windupY = (((this.hookScatterTarget.y as number) ?? pointerY) - windupOffsetY);
+
 			this.hookScatterTween = this.tweens.add({
 				targets: this.hookScatterTarget,
-				x: pointerX,
-				y: pointerY,
-				duration: this.scaleHookCollectorMs(1000, 260),
-				ease: 'Sine.easeIn',
+				x: windupX,
+				y: windupY,
+				duration: windupDuration,
+				ease: 'Sine.easeOut',
 				onComplete: () => {
-					try {
-						if (this.hookScatterTarget) {
-							this.hookScatterTarget.set(pointerX, pointerY);
-						}
-					} catch {}
-					try {
-						this.time.delayedCall(this.scaleHookCollectorMs(120, 50), () => {
-							if (!this.isHookScatterEventActive) {
-								try { this.completeHookCollectorEvent(); } catch {}
-								return;
-							}
-							this.handleHookCollectorPullWithCharacter(homeX, homeY);
-						});
-					} catch {
-						this.handleHookCollectorPullWithCharacter(homeX, homeY);
+					if (!this.isHookScatterEventActive || !this.rope || !this.hookScatterTarget) {
+						try { this.completeHookCollectorEvent(); } catch {}
+						return;
 					}
+					this.hookScatterTween = this.tweens.add({
+						targets: this.hookScatterTarget,
+						x: pointerX,
+						y: pointerY,
+						duration: throwDuration,
+						ease: 'Sine.easeIn',
+						onComplete: () => {
+							try {
+								if (this.hookScatterTarget) {
+									this.hookScatterTarget.set(pointerX, pointerY);
+								}
+							} catch {}
+							try {
+								this.time.delayedCall(this.scaleHookCollectorMs(120, 50), () => {
+									if (!this.isHookScatterEventActive) {
+										try { this.completeHookCollectorEvent(); } catch {}
+										return;
+									}
+									this.handleHookCollectorPullWithCharacter(homeX, homeY);
+								});
+							} catch {
+								this.handleHookCollectorPullWithCharacter(homeX, homeY);
+							}
+						}
+					});
 				}
 			});
 		};
@@ -1237,6 +1319,17 @@ export class Game extends Phaser.Scene {
 			// Signal the start of the collector disintegration so bonus win increments can be
 			// synchronized exactly to this visual moment.
 			try { this.events.emit('hook-collector-disintegrate-start'); } catch {}
+			try {
+				if ((gameStateManager as any)?.isBonus) {
+					try {
+						this.hookGravityDropActive = true;
+						this.hookGravityLastEnd = undefined;
+						this.hookGravityRotation = this.hookImage?.rotation ?? this.hookGravityRotation;
+					} catch {}
+					this.rope?.setPinnedEnds?.(true, false);
+					this.hookRopeEndPinned = false;
+				}
+			} catch {}
 
 			let finished = false;
 			let incremented = false;
@@ -1683,6 +1776,10 @@ export class Game extends Phaser.Scene {
 		const finalize = () => {
 			this.isHookScatterEventActive = false;
 			gameStateManager.isHookScatterActive = false;
+			try {
+				this.hookGravityDropActive = false;
+				this.hookGravityLastEnd = undefined;
+			} catch {}
 
 			if (this.hookScatterTween) {
 				try { this.hookScatterTween.stop(); } catch {}
@@ -1696,6 +1793,7 @@ export class Game extends Phaser.Scene {
 
 			if (this.rope) {
 				this.rope.setPinnedEnds(true, this.wasRopeEndInitiallyPinned);
+				this.hookRopeEndPinned = !!this.wasRopeEndInitiallyPinned;
 				this.rope.setCurveAmount(0);
 			}
 
@@ -1972,6 +2070,7 @@ export class Game extends Phaser.Scene {
 			EventBus.off('menu', this.handleMenuRequest, this);
 			EventBus.off('show-bet-options', this.handleBetOptionsRequest, this);
 			EventBus.off('autoplay', this.handleAutoplayRequest, this);
+			try { this.betOptions?.destroy?.(); } catch {}
 			this.events.off('hook-scatter', this.handleHookScatter, this);
 			this.events.off('hook-collector', this.handleHookCollector, this);
 			if (this.reelsStopListener) {
@@ -2005,7 +2104,39 @@ export class Game extends Phaser.Scene {
 	}
 
 	private handleBetOptionsRequest(): void {
-		this.updateInfoText('Bet options requested – plug in the new selector UI.');
+		try {
+			if (!this.betOptions) {
+				this.betOptions = new BetOptions(this.networkManager, this.screenModeManager);
+				this.betOptions.create(this);
+			}
+		} catch {}
+
+		const currentBetText = this.slotController.getBetAmountText();
+		const displayedBet = currentBetText ? parseFloat(currentBetText) : 0.20;
+		const baseBet = this.slotController.getBaseBetAmount();
+		const normalizedBaseBet = !isNaN(baseBet) && baseBet > 0 ? baseBet : displayedBet;
+
+		try {
+			this.betOptions.show({
+				currentBet: normalizedBaseBet,
+				onClose: () => {
+					this.updateInfoText('Bet options closed.');
+				},
+				onConfirm: (betAmount: number) => {
+					const selectedBet = Number(betAmount);
+					if (!isNaN(selectedBet) && Math.abs(selectedBet - normalizedBaseBet) > 0.0001) {
+						this.slotController.updateBetAmount(selectedBet);
+						gameEventManager.emit(GameEventType.BET_UPDATE, {
+							newBet: selectedBet,
+							previousBet: normalizedBaseBet
+						});
+					}
+					this.updateInfoText('Bet updated.');
+				}
+			});
+		} catch {
+			this.updateInfoText('Unable to open bet options. Check console for details.');
+		}
 	}
 
 	private handleAutoplayRequest(): void {
@@ -2066,9 +2197,9 @@ export class Game extends Phaser.Scene {
 		this.endAnchor.set(width * 0.65, height * 0.55);
 
 		this.rope = new RopeCable(this, {
-			segmentCount: 7,
+			segmentCount: 10,
 			iterations: 6,
-			gravity: 2000,
+			gravity: 8000,
 			thickness: 2,
 			coreThickness: 6,
 			color: this.ropeStyle.color,

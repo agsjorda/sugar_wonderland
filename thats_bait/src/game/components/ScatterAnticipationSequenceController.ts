@@ -22,6 +22,19 @@ export class ScatterAnticipationSequenceController {
 	private bubbleEffect?: BoilingBubblesEffect;
 	private bubbleEffectKey: string = '__boilingBubblesAnticipationEffect';
 
+	private getActiveTargetPos(): ScatterPos | null {
+		try {
+			const t = Number(this.activeTarget);
+			if (!isFinite(t) || t < 1) return null;
+			const pos = this.scatterPositions[t - 1];
+			if (!pos) return null;
+			if (typeof pos.x !== 'number' || typeof pos.y !== 'number') return null;
+			return pos;
+		} catch {
+			return null;
+		}
+	}
+
 	constructor(host: any) {
 		this.host = host;
 	}
@@ -92,10 +105,26 @@ export class ScatterAnticipationSequenceController {
 
 	private getActiveSymbolGrid(): any[][] {
 		try {
-			const grid = (Array.isArray(this.host?.newSymbols) && this.host.newSymbols.length > 0)
-				? this.host.newSymbols
-				: this.host.symbols;
-			return Array.isArray(grid) ? grid : [];
+			const base = Array.isArray(this.host?.symbols) ? this.host.symbols : [];
+			const next = Array.isArray(this.host?.newSymbols) ? this.host.newSymbols : [];
+			const maxCols = Math.max(SLOT_COLUMNS, base.length, next.length);
+			const merged: any[][] = new Array(maxCols);
+			for (let c = 0; c < maxCols; c++) {
+				const baseCol = Array.isArray(base?.[c]) ? base[c] : [];
+				const nextCol = Array.isArray(next?.[c]) ? next[c] : [];
+				const maxRows = Math.max(SLOT_ROWS, baseCol.length, nextCol.length);
+				const colOut: any[] = new Array(maxRows);
+				for (let r = 0; r < maxRows; r++) {
+					const vNext = nextCol?.[r];
+					if (vNext !== null && typeof vNext !== 'undefined') {
+						colOut[r] = vNext;
+						continue;
+					}
+					colOut[r] = baseCol?.[r];
+				}
+				merged[c] = colOut;
+			}
+			return merged;
 		} catch {
 			return [];
 		}
@@ -110,6 +139,10 @@ export class ScatterAnticipationSequenceController {
 			const gridAll = this.getActiveSymbolGrid();
 			if (!Array.isArray(gridAll) || gridAll.length === 0) return;
 
+			// Dim the full visible grid during anticipation so the behavior is consistent
+			// regardless of which row the target scatter lands on.
+			const dimToReel = Math.max(0, Math.min(maxReel, gridAll.length - 1));
+
 			const keepBright = new Set<string>();
 			try {
 				for (const p of this.scatterPositions) {
@@ -120,16 +153,22 @@ export class ScatterAnticipationSequenceController {
 					}
 				}
 			} catch {}
+			// Keep the currently-anticipated (next) scatter position bright too.
+			try {
+				const activePos = this.getActiveTargetPos();
+				if (activePos) {
+					keepBright.add(`${activePos.x}_${activePos.y}`);
+				}
+			} catch {}
 			if (keepBright.size === 0) return;
 
-			const staged: any[][] = [];
-			for (let c = 0; c < gridAll.length; c++) {
-				staged[c] = (c <= maxReel) ? gridAll[c] : [];
-			}
-
-			applyNonWinningSymbolDim(scene as any, staged, keepBright, this.symbolValuesGrid, { darkenBgDepth: false, scaleDown: false });
+			const grid = gridAll.slice(0, dimToReel + 1);
+			const valuesGrid = Array.isArray(this.symbolValuesGrid)
+				? this.symbolValuesGrid.slice(0, dimToReel + 1)
+				: this.symbolValuesGrid;
+			applyNonWinningSymbolDim(scene as any, grid, keepBright, valuesGrid, { darkenBgDepth: false, scaleDown: false });
 			this.symbolsDimmedByAnticipation = true;
-			this.lastDimmedReelIndex = maxReel;
+			this.lastDimmedReelIndex = dimToReel;
 		} catch {}
 	}
 
@@ -175,6 +214,17 @@ export class ScatterAnticipationSequenceController {
 
 		try {
 			this.revealedScatters += (this.scattersByReel[reelIndex] || 0);
+		} catch {}
+
+		// During buy-feature anticipation, reels can start/drop sequentially.
+		// Re-apply dimming on each reel stop while a stage is active so newly
+		// created symbols (including Spine symbols) are consistently dimmed.
+		try {
+			if (!endedStageNow && typeof this.activeTarget === 'number' && isFinite(this.activeTarget)) {
+				if (typeof this.activeStageReel === 'number' && isFinite(this.activeStageReel) && reelIndex < this.activeStageReel) {
+					this.applyAnticipationSymbolDim();
+				}
+			}
 		} catch {}
 
 		const nextTarget = this.getNextTarget();

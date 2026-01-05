@@ -220,9 +220,8 @@ export class BonusHeader {
 			if (isFinite(v) && v >= 0) slotTotal = v;
 		} catch {}
 
-		// Prefer slot/freespin totals for incremental UI updates; use runningWin as a fallback/cap.
 		const preferred = isBonus
-			? (fsTotal != null ? fsTotal : (slotTotal != null ? slotTotal : running))
+			? (running != null ? running : (fsTotal != null ? fsTotal : slotTotal))
 			: (slotTotal != null ? slotTotal : (fsTotal != null ? fsTotal : running));
 		if (typeof preferred === 'number' && isFinite(preferred) && preferred >= 0) {
 			// During bonus, never allow the displayed total to regress (common backend transient where totalWin arrives as 0).
@@ -567,6 +566,14 @@ export class BonusHeader {
 				return;
 			}
 			try { this.spinIncrementalActive = false; } catch {}
+			try {
+				const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
+				const sd = symbolsComponent?.currentSpinData;
+				const backendTotal = this.getBackendTotalWin(sd);
+				if (backendTotal != null) {
+					this.animateTotalWinTo(backendTotal);
+				}
+			} catch {}
 		});
 
 		try {

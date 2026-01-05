@@ -30,6 +30,16 @@ export class MoneyValueOverlayManager {
 
 	private getOwnerVisible(owner: any): boolean {
 		try {
+			try {
+				const v = owner?.visible;
+				if (v === false) {
+					const overlay: any = (owner as any)?.__nonWinDimOverlaySprite;
+					const ov = (owner as any)?.__nonWinOriginalVisible;
+					if (overlay && !overlay.destroyed && ov === true) {
+						return true;
+					}
+				}
+			} catch {}
 			const v = owner?.visible;
 			if (typeof v === 'boolean') {
 				return v;
@@ -242,7 +252,19 @@ export class MoneyValueOverlayManager {
 						if (parent && typeof parent.getIndex === 'function' && typeof parent.bringToTop === 'function') {
 							const contIndex = parent.getIndex(cont);
 							const ownerIndex = parent.getIndex(owner);
-							if (typeof contIndex === 'number' && typeof ownerIndex === 'number' && contIndex <= ownerIndex) {
+							let overlayIndex: number | null = null;
+							try {
+								const overlay: any = (owner as any)?.__nonWinDimOverlaySprite;
+								if (overlay && !overlay.destroyed) {
+									const oi = parent.getIndex(overlay);
+									if (typeof oi === 'number') overlayIndex = oi;
+								}
+							} catch {}
+							const maxOwnerIndex = Math.max(
+								typeof ownerIndex === 'number' ? ownerIndex : -1,
+								typeof overlayIndex === 'number' ? overlayIndex : -1
+							);
+							if (typeof contIndex === 'number' && contIndex <= maxOwnerIndex) {
 								parent.bringToTop(cont);
 							}
 						}
