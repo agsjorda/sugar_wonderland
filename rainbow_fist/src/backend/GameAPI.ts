@@ -1,4 +1,4 @@
-import { SpinData } from "./SpinData";
+import { FreeSpinItem, SpinData } from "./SpinData";
 import { GameData } from "../game/components/GameData";
 import { gameStateManager } from "../managers/GameStateManager";
 import { SoundEffectType } from "../managers/AudioManager";
@@ -42,12 +42,16 @@ const getApiBaseUrl = (): string => {
 };
 
 export class GameAPI {  
+    private static readonly GAME_ID: string = '00060725';
+    private static DEMO_BALANCE: number = 10000;
+    
     gameData: GameData;
     exitURL: string = '';
     private currentSpinData: SpinData | null = null;
+    private currentFreeSpinData: SpinData | null = null;
     private isFirstSpin: boolean = false; // Flag to track first spin
-    private currentFreeSpinIndex: number = 0; // Track current free spin item index
-    private currentTumbleIndex: number = 0; // Track current tumble index
+    private static CURRENT_FREE_SPIN_INDEX: number = 0; // Track current free spin item index
+    private static CURRENT_TUMBLE_INDEX: number = 0; // Track current tumble index
     
     constructor(gameData: GameData) {
         this.gameData = gameData;
@@ -64,7 +68,7 @@ export class GameAPI {
             "operator_id": "18b03717-33a7-46d6-9c70-acee80c54d03",
             "bank_id": "1",
             "player_id": 2,
-            "game_id": "00020525",
+            "game_id": GameAPI.GAME_ID,
             "device": "mobile",
             "lang": "en",
             "currency": "USD",
@@ -120,6 +124,16 @@ export class GameAPI {
      * Only generates a new token if token URL parameter is not present
      */
     public async initializeGame(): Promise<string> {
+        const isDemo = this.getDemoState();
+        if (isDemo) {
+            localStorage.setItem('demo', isDemo);
+            sessionStorage.setItem('demo', isDemo);
+        }
+        
+        if(isDemo){
+            return '';
+        }
+        
         try {
             // Check if token is already in the URL parameters
             const existingToken = getUrlParameter('token');
@@ -132,6 +146,7 @@ export class GameAPI {
                 sessionStorage.setItem('token', existingToken);
                 
                 console.log('Game initialized with existing token from URL');
+                
                 return existingToken;
             } else {
                 console.log('No game token in URL, generating new token...');
@@ -156,11 +171,13 @@ export class GameAPI {
             localStorage.removeItem('token');
             localStorage.removeItem('exit_url');
             localStorage.removeItem('what_device');
+            localStorage.removeItem('demo');
 
             sessionStorage.removeItem('token');
             sessionStorage.removeItem('exit_url');
             sessionStorage.removeItem('what_device');
-            
+            sessionStorage.removeItem('demo');
+
             console.log('Starting gameLauncher...');
             let token1 = '';
             let tokenParam = getUrlParameter('token');
@@ -201,6 +218,18 @@ export class GameAPI {
         }
     }
     public async getBalance(): Promise<any> {
+        // Check if demo mode is active
+        const isDemo = this.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        
+        // Return mock balance for demo mode
+        if (isDemo) {
+            return {
+                data: {
+                    balance: GameAPI.DEMO_BALANCE
+                }
+            };
+        }
+        
         try{
             const response = await fetch(`${getApiBaseUrl()}api/v1/slots/balance`, {
             //const response = await fetch('http://192.168.0.17:3000/api/v1/slots/balance', {
@@ -228,24 +257,46 @@ export class GameAPI {
      * This method sends a spin request and returns the server response
      */
     public async doSpin(bet: number, isBuyFs: boolean, isEnhancedBet: boolean): Promise<SpinData> {
-        if (!localStorage.getItem('token')) {
+        // Check if demo mode is active
+        const isDemo = this.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        
+        // Only require token if not in demo mode
+        if (!isDemo && !localStorage.getItem('token')) {
             throw new Error('No game token available. Please initialize the game first.');
         }
         
         try {
-            const response = await fetch(`${getApiBaseUrl()}/api/v1/slots/bet`, {
+            // Build headers - include Authorization only if token exists
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json'
+            };
+            
+            const token = localStorage.getItem('token');
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const url = isDemo ? `${getApiBaseUrl()}/api/v1/analytics/spin` : `${getApiBaseUrl()}/api/v1/slots/bet`;
+            
+            // Build request body based on demo mode
+            const requestBody = isDemo ? {
+                bet: bet.toString(),
+                gameId: GameAPI.GAME_ID,
+                isEnhancedBet: isEnhancedBet,
+                isBuyFs: isBuyFs,
+                isFs: false
+            } : {
+                action: 'spin',
+                bet: bet.toString(),
+                line: 1, // Try different line count
+                isBuyFs: isBuyFs, // Force false
+                isEnhancedBet: isEnhancedBet // Use the parameter value
+            };
+            
+            const response = await fetch(url, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
-                body: JSON.stringify({
-                    action: 'spin',
-                    bet: bet.toString(),
-                    line: 1, // Try different line count
-                    isBuyFs: isBuyFs, // Force false
-                    isEnhancedBet: isEnhancedBet // Use the parameter value
-                })
+                headers: headers,
+                body: JSON.stringify(requestBody)
             });
 
             if (!response.ok) {
@@ -254,6 +305,11 @@ export class GameAPI {
             }
 
             const responseData = await response.json();
+            
+            // Ensure bet is included in the response data (server might not return it)
+            if (!responseData.bet) {
+                responseData.bet = bet.toString();
+            }
             
             // 3. Store the spin data to SpinData.ts
             // If this response contains free spin data, save it for bonus mode
@@ -264,7 +320,7 @@ export class GameAPI {
             console.log('[GameAPI] Response has freeSpin:', !!responseData.slot?.freeSpin);
             console.log('[GameAPI] Response has freeSpin.items:', !!responseData.slot?.freeSpin?.items);
             console.log('[GameAPI] Current isBonus state:', gameStateManager.isBonus);
-            console.log('[GameAPI] Current currentSpinData has freespin:', !!this.currentSpinData?.slot?.freespin?.items);
+            console.log('[GameAPI] Current currentSpinData has freespin:', !!this.currentSpinData?.slot?.freeSpin?.items);
             
             if (responseData.slot && (responseData.slot.freespin?.items || responseData.slot.freeSpin?.items)) {
                 console.log('[GameAPI] Free spin data detected in response - saving for bonus mode');
@@ -272,7 +328,7 @@ export class GameAPI {
                 console.log('[GameAPI] Free spin items count:', items.length);
                 this.currentSpinData = responseData as SpinData;
                 console.log('[GameAPI] Free spin data saved to currentSpinData');
-            } else if (gameStateManager.isBonus && this.currentSpinData && (this.currentSpinData.slot?.freespin?.items || this.currentSpinData.slot?.freeSpin?.items)) {
+            } else if (gameStateManager.isBonus && this.currentSpinData && (this.currentSpinData.slot?.freeSpin?.items)) {
                 console.log('[GameAPI] Preserving original free spin data during bonus mode');
                 // Don't overwrite the original free spin data - keep it for simulation
             } else {
@@ -283,9 +339,9 @@ export class GameAPI {
             console.log('🎰 ===== SERVER RESPONSE DEBUG =====');
             console.log('📊 Full server response:', responseData);
             console.log('🎯 Freespin data:', responseData.slot?.freespin);
-            console.log('🎯 Freespin count:', responseData.slot?.freespin?.count);
-            console.log('🎯 Freespin items:', responseData.slot?.freespin?.items);
-            console.log('🎯 Freespin items length:', responseData.slot?.freespin?.items?.length);
+            console.log('🎯 Freespin count:', responseData.slot?.freeSpin?.count);
+            console.log('🎯 Freespin items:', responseData.slot?.freeSpin?.items);
+            console.log('🎯 Freespin items length:', responseData.slot?.freeSpin?.items?.length);
             console.log('🎲 Grid symbols:', responseData.slot?.area);
             console.log('💰 Paylines:', responseData.slot?.paylines);
             console.log('🎰 ===== END SERVER RESPONSE =====');
@@ -303,22 +359,24 @@ export class GameAPI {
      * This method uses the area and paylines from the freespin items instead of calling the API
      */
     public async simulateFreeSpin(): Promise<SpinData> {
-        if (!this.currentSpinData || (!this.currentSpinData.slot?.freespin?.items && !this.currentSpinData.slot?.freeSpin?.items)) {
+        if (!this.currentSpinData || (!this.currentSpinData.slot?.freeSpin?.items)) {
             console.error('[GameAPI] No free spin data available. Current spin data:', this.currentSpinData);
-            console.error('[GameAPI] Available freespin data:', this.currentSpinData?.slot?.freespin);
+            console.error('[GameAPI] Available freespin data:', this.currentSpinData?.slot?.freeSpin);
             throw new Error('No free spin data available. Please ensure SpinData contains freespin items.');
         }
 
-        const freespinData = this.currentSpinData.slot.freespin || this.currentSpinData.slot.freeSpin;
-        const items = freespinData.items;
+        console.log('[GameAPI] Current spin data:', this.currentSpinData);
+
+        const freeSpinFromSpinData = this.currentSpinData.slot.freeSpin;
+        const freeSpinItems = freeSpinFromSpinData.items;
         
         // Check if we have more items to process
-        if (this.currentFreeSpinIndex >= items.length) {
+        if (GameAPI.CURRENT_FREE_SPIN_INDEX >= freeSpinItems.length) {
             throw new Error('No more free spins available');
         }
         
         // Get the current item based on index
-        const currentItem = items[this.currentFreeSpinIndex];
+        const currentItem = freeSpinItems[GameAPI.CURRENT_FREE_SPIN_INDEX] as FreeSpinItem;
         
         if (!currentItem || currentItem.spinsLeft <= 0) {
             throw new Error('No more free spins available');
@@ -332,37 +390,44 @@ export class GameAPI {
 
         console.log('🎰 ===== SIMULATING FREE SPIN =====');
         console.log('📊 Using pre-determined free spin data');
-        console.log('🎯 Current free spin index:', this.currentFreeSpinIndex);
+        console.log('🎯 Current free spin index:', GameAPI.CURRENT_FREE_SPIN_INDEX);
         console.log('🎯 Spins left:', currentItem.spinsLeft);
-        console.log('💰 Sub total win:', currentItem.subTotalWin);
         console.log('🎲 Area:', currentItem.area);
-        console.log('💎 Paylines:', currentItem.payline);
 
         // Create a new SpinData object for this free spin
+        // Ensure bet is available (should be set in doSpin, but add fallback for safety)
+        const betValue = this.currentSpinData.bet || '0';
         const freeSpinData: SpinData = {
-            playerId: this.currentSpinData.playerId,
-            bet: this.currentSpinData.bet,
+            bet: betValue,
             slot: {
                 area: currentItem.area,
-                paylines: currentItem.payline,
-                freespin: {
-                    count: freespinData.count, // Preserve original count from API response
-                    totalWin: freespinData.totalWin,
-                    items: items // Keep all items as they are
+                totalWin: currentItem.totalWin,
+                freeSpin: {
+                    multiplierValue: currentItem.multiplier,
+                    items: freeSpinItems
+                },
+                tumbles: 
+                {
+                    items: currentItem.tumble.items,
+                    multiplier: 
+                    {
+                        symbols: [],
+                        total: currentItem.tumble.multiplier,
+                    }
                 }
             }
         };
 
         // Update the current spin data
-        this.currentSpinData = freeSpinData;
+        this.currentFreeSpinData = freeSpinData;
         
         // Increment the index for the next free spin
-        this.currentFreeSpinIndex++;
+        GameAPI.CURRENT_FREE_SPIN_INDEX++;
 
         console.log('🎰 ===== FREE SPIN SIMULATION COMPLETE =====');
         console.log('📊 New SpinData:', freeSpinData);
-        console.log('🎯 Remaining free spins:', freeSpinData.slot.freespin.count);
-        console.log('🎯 Next free spin will use index:', this.currentFreeSpinIndex);
+        console.log('🎯 Remaining free spins:', freeSpinData.slot.freeSpin.items.length);
+        console.log('🎯 Next free spin will use index:', GameAPI.CURRENT_FREE_SPIN_INDEX);
         console.log('🎰 ===== END FREE SPIN SIMULATION =====');
 
         return freeSpinData;
@@ -377,12 +442,30 @@ export class GameAPI {
     }
 
     /**
+     * Set the current spin data externally (e.g. offline testing, console injection).
+     * This is the backing data used by free spin simulation logic.
+     */
+    public setCurrentSpinData(
+        spinData: SpinData | null,
+        opts?: { resetFreeSpinIndex?: boolean; resetTumbleIndex?: boolean }
+    ): void {
+        this.currentSpinData = spinData;
+
+        if (opts?.resetFreeSpinIndex) {
+            this.resetFreeSpinIndex();
+        }
+        if (opts?.resetTumbleIndex) {
+            this.resetCurrentTumbleIndex();
+        }
+    }
+
+    /**
      * Reset the free spin index when starting a new scatter bonus
      * This should be called when a new scatter bonus is triggered
      */
     public resetFreeSpinIndex(): void {
         console.log('🎰 Resetting free spin index to 0');
-        this.currentFreeSpinIndex = 0;
+        GameAPI.CURRENT_FREE_SPIN_INDEX = 0;
     }
 
     /**
@@ -390,7 +473,7 @@ export class GameAPI {
      * Returns the current free spin index
      */
     public getCurrentFreeSpinIndex(): number {
-        return this.currentFreeSpinIndex;
+        return GameAPI.CURRENT_FREE_SPIN_INDEX;
     }
 
     /**
@@ -407,8 +490,9 @@ export class GameAPI {
      */
     public setFreeSpinData(spinData: SpinData): void {
         console.log('[GameAPI] Setting free spin data for simulation:', spinData);
-        this.currentSpinData = spinData;
-        this.resetFreeSpinIndex(); // Reset the index when setting new data
+        this.currentFreeSpinData = spinData;
+        // simulateFreeSpin() reads from currentSpinData, so keep them in sync.
+        this.setCurrentSpinData(spinData, { resetFreeSpinIndex: true , resetTumbleIndex: true });
     }
     
     /**
@@ -416,7 +500,7 @@ export class GameAPI {
      * Returns the current tumble index
      */
     public getCurrentTumbleIndex(): number {
-        return this.currentTumbleIndex;
+        return GameAPI.CURRENT_TUMBLE_INDEX;
     }
 
     /**
@@ -424,7 +508,8 @@ export class GameAPI {
      * This method should be called when tumbles are triggered to provide the data for simulation
      */
     public incrementCurrentTumbleIndex(): void {
-        this.currentTumbleIndex++;
+        console.log('[GameAPI] Incrementing current tumble index to:', GameAPI.CURRENT_TUMBLE_INDEX + 1);
+        GameAPI.CURRENT_TUMBLE_INDEX++;
     }
 
     /**
@@ -432,7 +517,7 @@ export class GameAPI {
      * This method should be called when tumbles are finished to reset the index
      */
     public resetCurrentTumbleIndex(): void {
-        this.currentTumbleIndex = 0;
+        GameAPI.CURRENT_TUMBLE_INDEX = 0;
     }
 
     /**
@@ -440,6 +525,11 @@ export class GameAPI {
      * This method calls getBalance and updates the GameData with the current balance
      */
     public async initializeBalance(): Promise<number> {
+        const isDemo = this.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        if(isDemo) {
+            return GameAPI.DEMO_BALANCE;
+        }
+
         try {
             console.log('[GameAPI] Initializing player balance...');
             
@@ -487,5 +577,39 @@ export class GameAPI {
         
         const data = await response.json();
         return data;
+    }
+
+    /**
+     * Get the demo state from URL parameters
+     * @returns The value of the 'demo' URL parameter, or false if not found
+     */
+    public getDemoState(): string | false {
+        const demoValue = getUrlParameter('demo');
+        return demoValue ? demoValue : false;
+    }
+
+    /**
+     * Get the game ID constant
+     * @returns The game ID string
+     */
+    public getGameId(): string {
+        return GameAPI.GAME_ID;
+    }
+
+    /**
+     * Get the demo balance constant
+     * @returns The demo balance number
+     */
+    public getDemoBalance(): number {
+        return GameAPI.DEMO_BALANCE;
+    }
+
+    /**
+     * Update the demo balance value
+     * @param newBalance - The new balance value to set
+     */
+    public updateDemoBalance(newBalance: number): void {
+        console.log(`[GameAPI] Demo balance updated from $${GameAPI.DEMO_BALANCE} to: $${newBalance}`);
+        GameAPI.DEMO_BALANCE = newBalance;
     }
 }   

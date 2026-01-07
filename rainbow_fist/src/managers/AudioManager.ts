@@ -57,6 +57,7 @@ export enum SoundEffectType {
 	SYMBOL_NYET = 'symbol_nyet',
 	SYMBOL_PAU = 'symbol_pau',
 	SYMBOL_PUNCH = 'symbol_punch',
+	WIN_DIALOG_INTRO = 'win_dialog_intro',
 }
 
 export class AudioManager {
@@ -172,7 +173,7 @@ export class AudioManager {
 		addSfxInstance(SoundEffectType.SYMBOL_PAU, 'symbol_pau');
 		addSfxInstance(SoundEffectType.SYMBOL_PUNCH, 'symbol_punch');
 		addSfxInstance(SoundEffectType.MULTIPLIER_HIT, 'multiplier_hit');
-
+		addSfxInstance(SoundEffectType.WIN_DIALOG_INTRO, 'win_dialog_intro');
 		// Win dialog SFX instances
 		addSfxInstance(SoundEffectType.WIN_BIG, 'bigw');
 		addSfxInstance(SoundEffectType.WIN_MEGA, 'megaw');

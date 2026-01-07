@@ -1183,7 +1183,6 @@ export class SlotController {
 		const containerWidth = 125;
 		const containerHeight = 55;
 		const cornerRadius = 10;
-		const balanceValueOffset = 5;
 
 		// Create rounded rectangle background
 		const balanceBg = scene.add.graphics();
@@ -1211,6 +1210,12 @@ export class SlotController {
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(balanceLabel);
 
+		// "$" symbol (2nd line, left part) - positioned dynamically
+		// Check if demo mode is active - if so, use blank currency symbol and center the text
+		const isDemoBalance = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const balanceCurrencySymbol = isDemoBalance ? '' : '$';
+		const balanceValueOffset = isDemoBalance ? 0 : 5; // Center in demo mode, offset right when currency symbol exists
+		
 		// "200,000.00" amount (2nd line, right part)
 		this.balanceAmountText = scene.add.text(
 			balanceX + balanceValueOffset,
@@ -1223,12 +1228,10 @@ export class SlotController {
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
 		this.controllerContainer.add(this.balanceAmountText);
-
-		// "$" symbol (2nd line, left part) - positioned dynamically
 		this.balanceDollarText = scene.add.text(
 			balanceX - (this.balanceAmountText.width / 2) - 3.5,
 			balanceY + 8,
-			'$',
+			balanceCurrencySymbol,
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color
@@ -1245,8 +1248,10 @@ export class SlotController {
 		const containerWidth = 125;
 		const containerHeight = 55;
 		const cornerRadius = 10;
-		const betValueOffset = 3;
-
+		
+		// Check if demo mode is active - if so, center the text (no currency symbol)
+		const isDemoBet = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const betValueOffset = isDemoBet ? 0 : 3; // Center in demo mode, offset right when currency symbol exists
 
 		// Create amplify bet spine animation (behind bet background)
 		this.createAmplifyBetAnimation(scene, betX, betY, containerWidth, containerHeight);
@@ -1318,10 +1323,12 @@ export class SlotController {
 		this.baseBetAmount = 0.20;
 
 		// "$" symbol (2nd line, left part) - positioned dynamically
+		// Check if demo mode is active - if so, use blank currency symbol
+		const betCurrencySymbol = isDemoBet ? '' : '$';
 		this.betDollarText = scene.add.text(
 			betX - (this.betAmountText.width / 2) - 3.5,
 			betY + 8,
-			'$',
+			betCurrencySymbol,
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color
@@ -1539,8 +1546,11 @@ export class SlotController {
 		this.controllerContainer.add(this.featureLabelText);
 
 		// Amount (2nd line, right part) - bound to current bet x100
+		// Check if demo mode is active - if so, center the text (no currency symbol)
+		const isDemoFeature = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const featureXOffset = isDemoFeature ? 0 : 5; // Center in demo mode, offset right when currency symbol exists
 		this.featureAmountText = scene.add.text(
-			featureX + 5,
+			featureX + featureXOffset,
 			featureY + 8,
 			'0',
 			{
@@ -1552,10 +1562,12 @@ export class SlotController {
 		this.controllerContainer.add(this.featureAmountText);
 
 		// "$" symbol (2nd line, left part) - positioned dynamically
+		// Check if demo mode is active - if so, use blank currency symbol
+		const featureCurrencySymbol = isDemoFeature ? '' : '$';
 		this.featureDollarText = scene.add.text(
 			featureX - (this.featureAmountText.width / 2) - 3,
 			featureY + 8,
-			'$',
+			featureCurrencySymbol,
 			{
 				fontSize: '14px',
 				color: '#ffffff',
@@ -1874,11 +1886,23 @@ export class SlotController {
 		if (this.betAmountText) {
 			this.betAmountText.setText(displayBet.toFixed(2));
 
-			// Update dollar sign position based on new bet amount width
-			if (this.betDollarText) {
-				const betX = this.betAmountText.x;
-				const betY = this.betAmountText.y;
-				this.betDollarText.setPosition(betX - (this.betAmountText.width / 2) - 5, betY);
+			// Check if demo mode is active - if so, center the text (no currency symbol)
+			const isDemo = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const betY = this.betAmountText.y;
+			
+			// Get the original betX position (center of bet container)
+			if (!this.scene) return;
+			const betX = this.scene.scale.width * 0.81;
+			
+			if (isDemo) {
+				// Center the text in demo mode
+				this.betAmountText.setPosition(betX, betY);
+			} else {
+				// Maintain offset and reposition dollar sign
+				this.betAmountText.setPosition(betX + 3, betY);
+				if (this.betDollarText) {
+					this.betDollarText.setPosition(betX - (this.betAmountText.width / 2) - 3.5, betY);
+				}
 			}
 		}
 
@@ -1916,10 +1940,21 @@ export class SlotController {
 		const price = displayedBet * 100;
 		// Format with thousands separators and 2 decimals
 		this.featureAmountText.setText(price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-		// Reposition dollar sign based on updated width
-		const x = this.featureAmountText.x;
-		const y = this.featureAmountText.y;
-		this.featureDollarText.setPosition(x - (this.featureAmountText.width / 2) - 3, y);
+		
+		// Check if demo mode is active - if so, center the text (no currency symbol)
+		const isDemo = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const featureY = this.featureAmountText.y;
+		
+		if (isDemo) {
+			// Center the text in demo mode (use feature image center as reference)
+			const featureButtonX = this.featureImage ? this.featureImage.x : this.featureAmountText.x;
+			this.featureAmountText.setPosition(featureButtonX, featureY);
+		} else {
+			// Reposition dollar sign based on updated width
+			const featureX = this.featureImage ? this.featureImage.x : this.featureAmountText.x;
+			this.featureAmountText.setPosition(featureX + 5, featureY); // Maintain offset for currency symbol
+			this.featureDollarText.setPosition(featureX - (this.featureAmountText.width / 2) - 3, featureY);
+		}
 	}
 
 	getBetAmountText(): string | null {
@@ -1937,11 +1972,23 @@ export class SlotController {
 		if (this.balanceAmountText) {
 			this.balanceAmountText.setText(balanceAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
-			// Update dollar sign position based on new balance amount width
-			if (this.balanceDollarText) {
-				const balanceX = this.balanceAmountText.x;
-				const balanceY = this.balanceAmountText.y;
-				this.balanceDollarText.setPosition(balanceX - (this.balanceAmountText.width / 2) - 5, balanceY);
+			// Check if demo mode is active - if so, center the text (no currency symbol)
+			const isDemo = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const balanceY = this.balanceAmountText.y;
+			
+			// Get the original balanceX position (center of balance container)
+			if (!this.scene) return;
+			const balanceX = this.scene.scale.width * 0.19;
+			
+			if (isDemo) {
+				// Center the text in demo mode
+				this.balanceAmountText.setPosition(balanceX, balanceY);
+			} else {
+				// Maintain offset and reposition dollar sign
+				this.balanceAmountText.setPosition(balanceX + 5, balanceY);
+				if (this.balanceDollarText) {
+					this.balanceDollarText.setPosition(balanceX - (this.balanceAmountText.width / 2) - 3.5, balanceY);
+				}
 			}
 		}
 	}
@@ -1968,6 +2015,10 @@ export class SlotController {
 
 			// Update balance display immediately
 			this.updateBalanceAmount(newBalance);
+
+			if(this.gameAPI?.getDemoState()) {
+				this.gameAPI.updateDemoBalance(newBalance);
+			}
 
 			console.log(`[SlotController] Balance decremented: $${currentBalance} -> $${newBalance} (bet charged: $${totalBetToCharge})`);
 
@@ -2086,6 +2137,7 @@ export class SlotController {
 
 			// Update balance from server every time reels stop (skip during scatter/bonus)
 			if (!gameStateManager.isScatter && !gameStateManager.isBonus) {
+				// Check if demo mode is active
 				this.updateBalanceFromServer();
 			} else {
 				console.log('[SlotController] Skipping server balance update on REELS_STOP (scatter/bonus active)');
@@ -2117,20 +2169,6 @@ export class SlotController {
 			// If we're in bonus mode, check if free spins are finishing now
 			if (gameStateManager.isBonus) {
 				try {
-					// Frontend-only: increment balance by the current free spin subtotal win
-					if (this.gameAPI) {
-						const currentSpin = this.gameAPI.getCurrentSpinData();
-						if (currentSpin && currentSpin.slot && Array.isArray(currentSpin.slot.paylines)) {
-							const spinSubtotalWin = SpinDataUtils.getTotalWin(currentSpin);
-							if (spinSubtotalWin && spinSubtotalWin > 0) {
-								const oldBalanceVal = this.getBalanceAmount();
-								const newBalanceVal = oldBalanceVal + spinSubtotalWin;
-								this.updateBalanceAmount(newBalanceVal);
-								console.log(`[SlotController] Bonus mode: incremented balance by subtotalWin ${spinSubtotalWin}. ${oldBalanceVal} -> ${newBalanceVal}`);
-							}
-						}
-					}
-
 					const gameScene: any = this.scene as any;
 					const symbolsComponent = gameScene?.symbols;
 					// Prefer Symbols' remaining counter if available
@@ -3656,7 +3694,7 @@ export class SlotController {
 					console.log(`[SlotController] Updated free spin display to ${gameScene.symbols.freeSpinAutoplaySpinsRemaining} remaining`);
 
 					// Check if there are any more free spins available
-					const hasMoreFreeSpins = spinData.slot.freespin.items.some(item => item.spinsLeft > 0);
+					const hasMoreFreeSpins = spinData.slot?.freeSpin?.items?.length > 0;
 					if (!hasMoreFreeSpins) {
 						// No more free spins - end bonus mode
 						console.log('[SlotController] No more free spins available - ending bonus mode');
@@ -3701,10 +3739,9 @@ export class SlotController {
 			// Display comprehensive spin data information
 			console.log('[SlotController] 🎰 ===== SPIN DATA RECEIVED =====');
 			console.log('[SlotController] 📊 Basic Info:');
-			console.log('  - Player ID:', spinData.playerId);
 			console.log('  - Bet Amount:', spinData.bet);
 			console.log('  - Total Win:', SpinDataUtils.getTotalWin(spinData));
-			console.log('  - Has Wins:', SpinDataUtils.hasWins(spinData));
+			console.log('  - Has Wins:', SpinDataUtils.hasWin(spinData));
 			console.log('  - Has Free Spins:', SpinDataUtils.hasFreeSpins(spinData));
 			console.log('  - Win Multiplier:', SpinDataUtils.getWinMultiplier(spinData));
 
@@ -3717,26 +3754,10 @@ export class SlotController {
 				console.log('  No area data available');
 			}
 
-			console.log('[SlotController] 💎 Paylines:');
-			if (spinData.slot?.paylines && spinData.slot.paylines.length > 0) {
-				spinData.slot.paylines.forEach((payline, index) => {
-					console.log(`  Payline ${index}:`, {
-						lineKey: payline.lineKey,
-						symbol: payline.symbol,
-						count: payline.count,
-						win: payline.win,
-						multipliers: payline.multipliers
-					});
-				});
-			} else {
-				console.log('  No paylines data available');
-			}
-
 			console.log('[SlotController] 🎁 Free Spins Info:');
-			if (spinData.slot?.freespin) {
-				console.log(`  - Count: ${spinData.slot.freespin.count}`);
-				console.log(`  - Total Win: ${spinData.slot.freespin.totalWin}`);
-				console.log(`  - Items: ${spinData.slot.freespin.items.length} items`);
+			if (spinData.slot?.freeSpin) {
+				console.log(`  - Count: ${spinData.slot.freeSpin.items.length}`);
+				console.log(`  - Items: ${spinData.slot.freeSpin.items.length} items`);
 			} else {
 				console.log('  No free spins data available');
 			}
@@ -3831,6 +3852,11 @@ export class SlotController {
 
 			// Deduct the calculated price from balance (frontend only)
 			const newBalance = currentBalance - calculatedPrice;
+			
+			if(this.gameAPI?.getDemoState()) {
+				this.gameAPI.updateDemoBalance(newBalance);
+			}
+
 			this.updateBalanceAmount(newBalance);
 			console.log(`[SlotController] Balance deducted: $${currentBalance.toFixed(2)} -> $${newBalance.toFixed(2)}`);
 
@@ -3843,7 +3869,7 @@ export class SlotController {
 			// If this buy feature spin contains free spin data (scatter), temporarily disable turbo so
 			// scatter symbol animations and sequence play at normal speed, then restore after dialogs
 			try {
-				const hasFsItems = !!(spinData?.slot?.freespin?.items || spinData?.slot?.freeSpin?.items);
+				const hasFsItems = !!(spinData?.slot?.freeSpin?.items);
 				if (hasFsItems) {
 					const gd = this.getGameData();
 					if (gd) {
@@ -3899,6 +3925,12 @@ export class SlotController {
 	 * Update balance from server using getBalance API
 	 */
 	private async updateBalanceFromServer(): Promise<void> {
+		// Check if demo mode is active
+		if (this.gameAPI?.getDemoState()) {
+			console.log('[SlotController] Demo mode active - skipping balance update from server');
+			return;
+		}
+
 		try {
 			console.log('[SlotController] 💰 Updating balance from server after reels stopped...');
 
@@ -4022,20 +4054,17 @@ export class SlotController {
 				try {
 					// Get free spin data from GameAPI directly (this should have the original scatter data)
 					const gameAPISpinData = this.gameAPI.getCurrentSpinData();
-					if (gameAPISpinData && (gameAPISpinData.slot?.freespin?.items || gameAPISpinData.slot?.freeSpin?.items)) {
+					if (gameAPISpinData && gameAPISpinData.slot?.freeSpin?.items) {
 						console.log('[SlotController] Found free spin data in GameAPI');
-						const freespinData = gameAPISpinData.slot?.freespin || gameAPISpinData.slot?.freeSpin;
-						console.log('[SlotController] GameAPI currentSpinData has freespin:', !!gameAPISpinData.slot?.freespin);
+						const freeSpinData = gameAPISpinData.slot?.freeSpin;
 						console.log('[SlotController] GameAPI currentSpinData has freeSpin:', !!gameAPISpinData.slot?.freeSpin);
-						console.log('[SlotController] GameAPI currentSpinData has items:', !!freespinData?.items);
-						console.log('[SlotController] GameAPI currentSpinData items count:', freespinData?.items?.length);
+						console.log('[SlotController] GameAPI currentSpinData has items:', !!freeSpinData?.items);
+						console.log('[SlotController] GameAPI currentSpinData items count:', freeSpinData?.items?.length);
 					} else {
 						console.error('[SlotController] No free spin data available in GameAPI');
 						console.error('[SlotController] GameAPI currentSpinData:', gameAPISpinData);
 						console.error('[SlotController] GameAPI currentSpinData.slot:', gameAPISpinData?.slot);
-						console.error('[SlotController] GameAPI currentSpinData.slot.freespin:', gameAPISpinData?.slot?.freespin);
 						console.error('[SlotController] GameAPI currentSpinData.slot.freeSpin:', gameAPISpinData?.slot?.freeSpin);
-						console.error('[SlotController] GameAPI currentSpinData.slot.freespin.items:', gameAPISpinData?.slot?.freespin?.items);
 						console.error('[SlotController] GameAPI currentSpinData.slot.freeSpin.items:', gameAPISpinData?.slot?.freeSpin?.items);
 						return;
 					}
@@ -4050,8 +4079,7 @@ export class SlotController {
 						console.log(`[SlotController] Updated free spin display to ${gameScene.symbols.freeSpinAutoplaySpinsRemaining} remaining`);
 
 						// Check if there are any more free spins available
-						const freespinData = spinData.slot?.freespin || spinData.slot?.freeSpin;
-						const hasMoreFreeSpins = freespinData?.items?.some(item => item.spinsLeft > 0);
+						const hasMoreFreeSpins = spinData.slot?.freeSpin?.items?.length > 0;
 						if (!hasMoreFreeSpins) {
 							// No more free spins - end bonus mode
 							console.log('[SlotController] No more free spins available - ending bonus mode');

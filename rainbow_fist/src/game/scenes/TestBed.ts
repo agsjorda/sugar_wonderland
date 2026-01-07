@@ -2,16 +2,12 @@ import { Scene, GameObjects } from 'phaser';
 import { EventBus } from '../EventBus';
 import { SpineGameObject, TrackEntry } from '@esotericsoftware/spine-phaser-v3';
 import { getFullScreenSpineScale, hideSpineAttachmentsByKeywords, playSpineAnimationSequenceWithConfig } from '../components/SpineBehaviorHelper';
-import { NumberDisplay, NumberDisplayConfig } from '../components/NumberDisplay';
-import { TestPfx } from '../components/TestPfx';
 import { SplitTransition } from '../components/SplitTransition';
 
 export class TestBed extends Scene {
 	public displaySize: number = 150;
-	public numberDisplay: NumberDisplay;
 
 	public targetSpine: SpineGameObject;
-	testPfx: TestPfx;
 	splitTransition: SplitTransition;
 
 	private multiplierDove: SpineGameObject;
@@ -46,13 +42,16 @@ export class TestBed extends Scene {
 		console.log('[TestBed] preload');
 
 		const winPath = 'assets/portrait/high/dialogs';
+		const testPath = 'assets/portrait/high/Sparkle_VFX';
+
+		this.loadSpineAsset(testPath, 'Sparkle_VFX');
 
 		// this.loadSpineAsset(winPath + '/BigW_RF', 'BigW_RF');
 		// this.loadSpineAsset(winPath + '/MegaW_RF', 'MegaW_RF');
 		// this.loadSpineAsset(winPath + '/EpicW_RF', 'EpicW_RF');
 		// this.loadSpineAsset(winPath + '/SuperW_RF', 'SuperW_RF');
 		// this.loadSpineAsset(winPath + '/FreeSpin_RF', 'FreeSpin_RF');
-		this.loadSpineAsset(winPath + '/MaxW_RF', 'MaxW_RF');
+		// this.loadSpineAsset(winPath + '/MaxW_RF', 'MaxW_RF');
 
 		// for (let i = 0; i <= 5; i++) {
 		// 	const symbolBasePath = `assets/portrait/high/symbols/Symbol${i}_RF`;
@@ -81,7 +80,8 @@ export class TestBed extends Scene {
 		// this.displaySymbolSpine(5, scale, { x: 0.8, y: 0.95 }, 3);
 
 		// this.displayFreeSpinSpine({ x: 0.3, y: 0.2 });
-		this.displayMaxWinSpine({ x: 0.485, y: 0.5 });
+		// this.displayMaxWinSpine({ x: 0.485, y: 0.5 });
+		this.displaySparkleVFXSpine(1, { x: 0.5, y: 0.5 }, 0, true);
 	}
 
 	update() {
@@ -90,6 +90,14 @@ export class TestBed extends Scene {
 	loadSpineAsset(path: string, name: string) {
 		(this.load as any).spineAtlas(`${name}-atlas`, `${path}/${name}.atlas`);
 		(this.load as any).spineJson(`${name}-json`, `${path}/${name}.json`);
+	}
+
+	displaySparkleVFXSpine(scale: number = 1, anchor: { x: number, y: number } = { x: 0.5, y: 0.5 }, animIndex: number = 0, playAnim: boolean = true) {
+		const spine = this.add.spine(0, 0, `Sparkle_VFX-json`, `Sparkle_VFX-atlas`) as SpineGameObject;
+		const offset = { x: 0, y: 0 };
+		const origin = { x: 0.5, y: 0.5 };
+		playSpineAnimationSequenceWithConfig(this, spine, [animIndex], { x: scale, y: scale }, anchor, origin, offset);
+		spine.animationState.timeScale = playAnim ? 1 : 0;
 	}
 	displaySymbolSpine(i: number, scale: number = 1, anchor: { x: number, y: number } = { x: 0.5, y: 0.5 }, animIndex: number = 0, playAnim: boolean = true) {
 		const spine = this.add.spine(0, 0, `Symbol${i}_RF-json`, `Symbol${i}_RF-atlas`) as SpineGameObject;

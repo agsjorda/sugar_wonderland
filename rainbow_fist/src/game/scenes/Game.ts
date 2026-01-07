@@ -43,6 +43,7 @@ import { GameEventData, SpinDataEventData } from '../../event/EventManager';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { getFullScreenSpineScale } from '../components/SpineBehaviorHelper';
 import { initializeConsoleDebugHelpers } from '../../utils/ConsoleDebugHelpers';
+import { RainbowTransition } from '../components/RainbowTransition';
 
 export class Game extends Scene
 {
@@ -67,6 +68,7 @@ export class Game extends Scene
 	public audioManager: AudioManager;
 	private menu: Menu;
 	private scatterAnticipation: ScatterAnticipation;
+	private rainbowTransition: RainbowTransition;
 		private winTrackerRow?: Phaser.GameObjects.Container;
 	private startupTransitionPlayed: boolean = false;
 	
@@ -161,6 +163,10 @@ export class Game extends Scene
 	{
 		console.log(`[Game] Creating game scene`);
 
+		// Initialize RainbowTransition component
+		this.rainbowTransition = new RainbowTransition();
+		this.rainbowTransition.init(this);
+
 		this.showPreloaderSnapshotOverlay();
 
 		const startStartupFadeIn = () => {
@@ -208,7 +214,7 @@ export class Game extends Scene
 		};
 
 		this.clockDisplay = new ClockDisplay(this, {
-			gameTitle: 'Rainbow Fist',
+			gameTitle: `Rainbow Fist${this.gameAPI.getDemoState() ? ' | DEMO' : ''}`,
 		});
 		this.clockDisplay.create();
 		
@@ -256,27 +262,45 @@ export class Game extends Scene
 		this.audioManager = new AudioManager(this);
 		console.log('[Game] AudioManager initialized');
 
-		// Defer audio loading: load audio assets in the background after visuals are ready
-		this.time.delayedCall(3000, () => {
-			console.log('[Game] Background-loading audio assets...');
-			this.load.on('complete', () => {
+		// Load audio assets immediately (no deferred loading)
+		try {
+			const audioAssets = this.assetConfig.getAudioAssets();
+			const audioEntries = Object.entries(audioAssets.audio ?? {});
+			const audioCache: any = (this.cache as any)?.audio;
+
+			const isAudioCached = (key: string): boolean => {
+				try {
+					if (audioCache && typeof audioCache.exists === 'function') return !!audioCache.exists(key);
+					if (audioCache && typeof audioCache.has === 'function') return !!audioCache.has(key);
+				} catch {}
+				return false;
+			};
+
+			const toLoad = audioEntries.filter(([key]) => !isAudioCached(key));
+
+			const initializeAudio = () => {
 				try {
 					this.audioManager.createMusicInstances();
 					this.audioManager.playBackgroundMusic(MusicType.MAIN);
-					console.log('[Game] Audio assets loaded and background music started');
+					console.log('[Game] Audio initialized and background music started');
 				} catch (e) {
-					console.warn('[Game] Failed to initialize or start audio after load:', e);
+					console.warn('[Game] Failed to initialize or start audio:', e);
 				}
-			}, this);
-			// Mirror AssetConfig audio definitions
-			const audioAssets = new AssetConfig(this.networkManager, this.screenModeManager).getAudioAssets();
-			if (audioAssets.audio) {
-				Object.entries(audioAssets.audio).forEach(([key, path]) => {
+			};
+
+			if (toLoad.length === 0) {
+				initializeAudio();
+			} else {
+				console.log(`[Game] Loading ${toLoad.length} audio assets...`);
+				this.load.once('complete', initializeAudio, this);
+				toLoad.forEach(([key, path]) => {
 					try { this.load.audio(key, path as string); } catch {}
 				});
+				this.load.start();
 			}
-			this.load.start();
-		});
+		} catch (e) {
+			console.warn('[Game] Failed to queue audio loading:', e);
+		}
 
 		// Make AudioManager available globally for other components
 		(window as any).audioManager = this.audioManager;
@@ -461,8 +485,7 @@ export class Game extends Scene
 			console.log('[Game] WIN_START event received - spawning coins based on win amount');
 			
 			// Try to obtain SpinData from the event payload, then fall back to Symbols.currentSpinData
-			const spinDataFromEvent = (data as SpinDataEventData | undefined)?.spinData as SpinData | undefined;
-			const spinData = spinDataFromEvent || (this.symbols?.currentSpinData as SpinData | null) || undefined;
+			const spinData = this.gameAPI.getCurrentSpinData();
 
 			if (spinData) {
 				this.showWinTrackerForSpinData(spinData);
@@ -477,8 +500,6 @@ export class Game extends Scene
 			} else {
 				console.log('[Game] Skipping balance update on REELS_STOP (scatter/bonus active)');
 			}
-
-			this.gameAPI.incrementCurrentTumbleIndex();
 		});
 
 		// Listen for winline animations completion to show win dialogs
@@ -486,33 +507,42 @@ export class Game extends Scene
 			console.log('[Game] WIN_STOP event received');
 			
 			// Get the current spin data from the Symbols component
-			if (this.symbols && this.symbols.currentSpinData) {
-				console.log('[Game] WIN_STOP: Found current spin data, calculating total win from paylines');
-				
-				const slotData = this.symbols.currentSpinData?.slot;
-				console.log('[Game] WIN_STOP: Slot data: ', slotData);
+			const spinData = this.gameAPI.getCurrentSpinData();
+			console.log(`[Game] WIN_STOP: Spin data: `, spinData);
 
-				let totalWin = 0;
-				if(gameStateManager.isScatter)
-					totalWin = SpinDataUtils.getScatterSpinWins(data.spinData);
-				else if(gameStateManager.isBonus)
-					totalWin = SpinDataUtils.getBonusSpinWins(data.spinData, this.gameAPI.getCurrentFreeSpinIndex() - 1);
-				else
-					totalWin = this.symbols.currentSpinData.slot.totalWin;
+			if(!spinData) {
+				console.log('[Game] WIN_STOP: No spin data available');
+				return;
+			}
 
-				const betAmount = parseFloat(this.symbols.currentSpinData.bet);
-				console.log(`[Game] WIN_STOP: Total win calculated: $${totalWin}, bet: $${betAmount}`);
-				
-				if (totalWin > 0) {
-					// Note: Win dialog threshold check moved to Symbols component for earlier detection
-					console.log('[Game] WIN_STOP: Showing win dialog');
-					this.checkAndShowWinDialog(totalWin, betAmount);
-					console.log('[Game] WIN_STOP: Win dialog shown');
-				} else {
-					console.log('[Game] WIN_STOP: No wins detected from paylines');
-				}
+			let totalWin: number = 0;
+			if(gameStateManager.isScatter)
+			{
+				totalWin = SpinDataUtils.getScatterSpinWins(spinData);
+			}
+			else if(gameStateManager.isBonus)
+			{
+				totalWin = spinData.slot.freeSpin.items[this.gameAPI.getCurrentFreeSpinIndex() - 1].totalWin as number;
+			}
+			else
+			{
+				totalWin = spinData.slot.totalWin;
+			}	
+
+			const betAmount = parseFloat(spinData.bet);
+			console.log(`[Game] WIN_STOP: Total win calculated: $${totalWin.toFixed(3)} for index ${this.gameAPI.getCurrentFreeSpinIndex() - 1}`);
+			
+			if (totalWin > 0) {
+				// Note: Win dialog threshold check moved to Symbols component for earlier detection
+				console.log('[Game] WIN_STOP: Showing win dialog');
+				this.checkAndShowWinDialog(totalWin, betAmount);
 			} else {
-				console.log('[Game] WIN_STOP: No current spin data available');
+				console.log('[Game] WIN_STOP: No wins detected from paylines');
+			}
+
+			const isDemo = this.gameAPI.getDemoState();
+			if(isDemo && !gameStateManager.isScatter && !gameStateManager.isBonus) {
+				this.gameAPI.updateDemoBalance(this.gameAPI.getDemoBalance() + totalWin);
 			}
 			
 			// Update balance from server after WIN_STOP (skip during scatter/bonus)
@@ -618,7 +648,7 @@ export class Game extends Scene
 	/**
 	 * Show a WinTracker row under the reels border based on SpinData paylines
 	 */
-	private showWinTrackerForSpinData(spinData: any): void {
+	private showWinTrackerForSpinData(spinData: SpinData): void {
 		if (!spinData || !spinData.slot) {
 			console.warn('[Game] showWinTrackerForSpinData called without valid SpinData');
 			return;
@@ -633,7 +663,7 @@ export class Game extends Scene
 		console.log(`[Game] showWinTrackerForSpinData: `, spinData);
 
 		const outResult = gameStateManager.isBonus ? 
-		spinData.slot?.freespin?.items[this.gameAPI.getCurrentFreeSpinIndex() - 1]?.tumble?.items[this.gameAPI.getCurrentTumbleIndex()]?.symbols?.out: 
+		spinData.slot?.freeSpin?.items[this.gameAPI.getCurrentFreeSpinIndex() - 1]?.tumble?.items[this.gameAPI.getCurrentTumbleIndex()]?.symbols?.out: 
 		spinData.slot?.tumbles?.items[this.gameAPI.getCurrentTumbleIndex()]?.symbols?.out;
 
 		if (!outResult || !outResult.length) {
@@ -1052,6 +1082,7 @@ export class Game extends Scene
 				}
 			} else {
 				console.log('[Game] Bonus mode ended - enabling winningsDisplay');
+
 				// Ensure bonus-finished flag is cleared and bonus mode is turned off when leaving bonus
 				this.gameStateManager.isBonus = false;
 				this.gameStateManager.isBonusFinished = false;
@@ -1083,6 +1114,7 @@ export class Game extends Scene
 				}
 				// Notify other systems autoplay is fully stopped
 				gameEventManager.emit(GameEventType.AUTO_STOP);
+
 				// Refresh balance now that bonus spins are complete (updates were skipped during bonus)
 				this.updateBalanceAfterWinStop().catch((err) => {
 					console.warn('[Game] Failed to refresh balance after bonus end:', err);
@@ -1269,11 +1301,15 @@ export class Game extends Scene
 		};
 		
 		// Add offline spin function
-		(window as any).testSpin = async () => {
+		(window as any).testSpin = async (scenario: string) => {
 			console.log('[Game] TEST: Performing offline spin...');
 			if (this.symbols) {
 				try {
-					await this.symbols.performOfflineSpin();
+					if (scenario && scenario.length > 0) {
+						await this.symbols.performOfflineSpin(scenario);
+					} else {
+						await this.symbols.performOfflineSpin(undefined);
+					}
 					console.log('[Game] TEST: Offline spin completed');
 				} catch (error) {
 					console.error('[Game] TEST: Error performing offline spin:', error);
@@ -1336,188 +1372,20 @@ export class Game extends Scene
 			return;
 		}
 
-		const context = 'rainbow_transition';
-		let completed = false;
-		let spine: SpineGameObject | undefined;
-		let listener: any;
-		let sparkleSpine: SpineGameObject | undefined;
-		let sparkleTriggered = false;
-		let sparkleListener: any;
-
-		const hideSpine = () => {
-			try { spine?.setAlpha(0); } catch {}
-			try { spine?.setVisible(false); } catch {}
-			try { (spine as any)?.disableInteractive?.(); } catch {}
-			try { spine && (spine as any).active !== undefined ? (spine as any).active = false : null; } catch {}
-		};
-
-		const cleanupSparkle = () => {
-			if (sparkleSpine) {
-				try {
-					if (sparkleListener && (sparkleSpine as any)?.animationState) {
-						((sparkleSpine as any).animationState as any)?.removeListener?.(sparkleListener);
-					}
-				} catch {}
-				try {
-					sparkleSpine.setVisible(false);
-					sparkleSpine.setAlpha(0);
-				} catch {}
-				try {
-					sparkleSpine.destroy();
-				} catch {}
-				sparkleSpine = undefined;
-				sparkleListener = undefined;
-			}
-		};
-
-		const finish = () => {
-			if (completed) return;
-			completed = true;
-			this.startupTransitionPlayed = true;
-			hideSpine();
-			cleanupSparkle();
-			try { ((spine as any)?.animationState)?.removeListener?.(listener as any); } catch {}
-			try { spine?.destroy(); } catch {}
-			onComplete();
-		};
-
-		const fail = () => {
-			if (completed) return;
-			completed = true;
-			hideSpine();
-			cleanupSparkle();
-			try { spine?.destroy(); } catch {}
+		if (!this.rainbowTransition) {
+			console.warn('[Game] RainbowTransition not initialized, using fallback');
 			onFallback();
-		};
-
-		const playSparkleAnimation = () => {
-			if (sparkleTriggered || sparkleSpine) return;
-			sparkleTriggered = true;
-
-			const sparkleKey = 'sparkle_background';
-			const sparkleContext = `[Game] ${sparkleKey}`;
-
-			try {
-				const centerX = this.scale.width * 0.5;
-				const centerY = this.scale.height * 0.5;
-				const addAny: any = this.add;
-				sparkleSpine = addAny.spine?.(centerX, centerY, sparkleKey, `${sparkleKey}-atlas`) as SpineGameObject;
-
-				if (!sparkleSpine) {
-					console.warn(`${sparkleContext} Failed to create spine`);
-					return;
-				}
-
-				sparkleSpine.setOrigin(0.5, 0.5);
-				sparkleSpine.setScrollFactor(0);
-				sparkleSpine.setDepth(30001); // Above rainbow transition
-				sparkleSpine.setVisible(true);
-				sparkleSpine.setScale(0.7);
-
-				// Get the first animation
-				const animations = (sparkleSpine as any)?.skeleton?.data?.animations as Array<{ name: string }> | undefined;
-				if (!animations || animations.length === 0) {
-					console.warn(`${sparkleContext} No animations found`);
-					cleanupSparkle();
-					return;
-				}
-
-				const firstAnimationName = animations[0].name;
-				const state: any = (sparkleSpine as any).animationState;
-
-				// Play animation once (not looping)
-				const entry = state?.setAnimation?.(0, firstAnimationName, false);
-				if (!entry) {
-					console.warn(`${sparkleContext} Failed to set animation`);
-					cleanupSparkle();
-					return;
-				}
-
-				// Set up listener to clean up when animation completes
-				sparkleListener = {
-					complete: (trackEntry: any) => {
-						try {
-							if (trackEntry?.trackIndex === 0 && trackEntry?.animation?.name === firstAnimationName && !trackEntry?.loop) {
-								state?.removeListener?.(sparkleListener);
-								cleanupSparkle();
-								console.log(`${sparkleContext} Animation completed and cleaned up`);
-							}
-						} catch (e) {
-							console.warn(`${sparkleContext} Error in completion listener:`, e);
-							cleanupSparkle();
-						}
-					}
-				};
-
-				state?.addListener?.(sparkleListener);
-				console.log(`${sparkleContext} Sparkle animation started at normalized time 0.3`);
-			} catch (error) {
-				console.warn(`${sparkleContext} Failed to create sparkle animation:`, error);
-				cleanupSparkle();
-			}
-		};
+			return;
+		}
 
 		try {
-			spine = (this.add as any).spine(0, 0, context, `${context}-atlas`) as SpineGameObject;
-			if (!spine) {
-				fail();
-				return;
-			}
-
-			const scale = getFullScreenSpineScale(this, spine, true);
-			spine.setPosition(this.scale.width * 0.165, this.scale.height * 0.735);
-			spine.setOrigin(0.5, 0.5);
-			spine.setScrollFactor(0);
-			spine.setDepth(30000);
-			spine.setAlpha(0); // Avoid a flash on creation before the first frame renders
-			spine.setScale(scale.x * 1.1, scale.y * 1.1);
-
-			const firstAnimation = spine?.skeleton?.data?.animations?.[0];
-			if (!firstAnimation?.name) {
-				fail();
-				return;
-			}
-
-			const state: any = (spine as any).animationState;
-			const entry = state?.setAnimation?.(0, firstAnimation.name, false);
-			if (!entry) {
-				fail();
-				return;
-			}
-
-			// Let the first frame render before revealing to avoid a visible flash
-			this.time.delayedCall(30, () => {
-				try { spine?.setAlpha(1); } catch {}
-			});
-
-			// Play forward at normal speed
-			state.timeScale = 1;
-
-			// Trigger sparkle shortly after start to mirror prior timing
-			this.time.delayedCall(250, () => {
-				if (!sparkleTriggered) {
-					playSparkleAnimation();
-				}
-			});
-
-			// Clean up when the animation completes
-			listener = {
-				complete: () => {
-					hideSpine();
-					finish();
-				}
-			};
-			state?.addListener?.(listener);
-
-			// Safety timeout in case the complete event never fires
-			const durationMs = firstAnimation.duration > 0 ? firstAnimation.duration * 1000 : 1200;
-			this.time.delayedCall(durationMs + 500, () => {
-				hideSpine();
-				finish();
-			});
+			this.rainbowTransition.playTransition(() => {
+				this.startupTransitionPlayed = true;
+				onComplete();
+			}); // No progress callback needed for intro, default 250ms interval
 		} catch (error) {
-			console.warn(`${context} intro failed, using fallback`, error);
-			fail();
+			console.warn('[Game] RainbowTransition failed, using fallback', error);
+			onFallback();
 		}
 	}
 

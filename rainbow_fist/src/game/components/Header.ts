@@ -117,6 +117,7 @@ export class Header {
 			decimalPlaces: 0,
 			showCommas: true,
 			prefix: 'x',
+			shouldTickUp: false,
 		};
 
 		this.multiplierDisplay = new NumberDisplay(multiplierConfig, this.networkManager, this.screenModeManager);
@@ -200,7 +201,10 @@ export class Header {
 		this.headerContainer.add(this.youWonText);
 
 		// Line 2: "$ 0.00" with bold formatting (base winnings / expression prefix)
-		this.amountText = scene.add.text(x + this.winningsValueTextOffset.x, y + this.winningsValueTextOffset.y, '$ 0.00', {
+		// Check if demo mode is active - if so, use blank currency symbol
+		const isDemoInitial = this.scene?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const currencySymbolInitial = isDemoInitial ? '' : '$';
+		this.amountText = scene.add.text(x + this.winningsValueTextOffset.x, y + this.winningsValueTextOffset.y, `${currencySymbolInitial}${currencySymbolInitial ? ' ' : ''}0.00`, {
 			fontSize: '20px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold',
@@ -321,9 +325,8 @@ export class Header {
 		gameEventManager.on(GameEventType.WIN_START, () => {
 			console.log('[Header] WIN_START received - showing winnings display');
 
-			const symbolsComponent = (this.headerContainer.scene as any).symbols;
-			if(symbolsComponent && symbolsComponent.currentSpinData) {
-				const spinData = symbolsComponent.currentSpinData;
+			const spinData = this.scene.gameAPI.getCurrentSpinData();
+			if(spinData) {
 				const winnings = spinData?.slot?.tumbles?.items[this.scene.gameAPI.getCurrentTumbleIndex()]?.win || 0;
 
 				console.log(`[Header] Current winnings: ${winnings} ${this.scene.gameAPI.getCurrentTumbleIndex()}`);
@@ -491,19 +494,21 @@ export class Header {
 	 * Format currency value for display
 	 */
 	private formatCurrency(amount: number): string {
+		// Check if demo mode is active - if so, use blank currency symbol
+		const isDemo = this.scene?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const currencySymbol = isDemo ? '' : '$';
+		
 		if (amount === 0) {
-			return '$ 0.00';
+			return `${currencySymbol} 0.00`;
 		}
 		
 		// Format with commas for thousands and 2 decimal places
 		const formatted = new Intl.NumberFormat('en-US', {
-			style: 'currency',
-			currency: 'USD',
 			minimumFractionDigits: 2,
 			maximumFractionDigits: 2
 		}).format(amount);
 		
-		return formatted;
+		return `${currencySymbol}${formatted}`;
 	}
 
 	/**

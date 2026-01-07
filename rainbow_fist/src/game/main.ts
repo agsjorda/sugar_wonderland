@@ -4,23 +4,11 @@ import { Game as MainGame } from './scenes/Game';
 import { AUTO, Game } from 'phaser';
 import { Preloader } from './scenes/Preloader';
 import { SpinePlugin } from '@esotericsoftware/spine-phaser-v3';
-import { DeviceCapabilityManager } from '../managers/DeviceCapabilityManager';
 
 //  Find out more information about the Game Config at:
 //  https://docs.phaser.io/api-documentation/typedef/types-core#gameconfig
 
-// LOW END MOBILE OPTIMIZATION: Detect device capabilities early to configure game settings
-// This automatically adjusts FPS, power preference, and antialiasing based on device capabilities
-const deviceCapabilityManager = new DeviceCapabilityManager();
-const capabilities = deviceCapabilityManager.getCapabilities();
-
-// LOW END MOBILE OPTIMIZATION: Determine optimal render settings based on device
-const useWebGL = true; // Always use WEBGL for better performance
-const useAntialias = !capabilities.isLowEndDevice && capabilities.gpuTier !== 'low';
-const powerPreference = capabilities.shouldUseLowPowerMode ? 'low-power' : 'default';
-const targetFPS = capabilities.recommendedFPS;
-
-console.log(`[GameConfig] Device: ${capabilities.isMobile ? 'Mobile' : 'Desktop'}, GPU: ${capabilities.gpuTier}, FPS: ${targetFPS}, Antialias: ${useAntialias}, Power: ${powerPreference}`);
+const targetFPS = 60;
 
 const config: Phaser.Types.Core.GameConfig = {
 	type: Phaser.WEBGL,
@@ -35,9 +23,7 @@ const config: Phaser.Types.Core.GameConfig = {
 	fps: {
 		target: targetFPS,
 		min: 1,
-		forceSetTimeOut: false,
-		// Throttle FPS when tab is hidden to save battery
-		limit: document.hidden ? 10 : targetFPS
+		forceSetTimeOut: false
 	},
 	physics: {
 		default: 'arcade',
@@ -62,16 +48,13 @@ const config: Phaser.Types.Core.GameConfig = {
 		]
 	},
 	render: {
-		// LOW END MOBILE OPTIMIZATION: Disable antialiasing on low-end devices
-		antialias: useAntialias,
-		antialiasGL: useAntialias,
+		antialias: true,
+		antialiasGL: true,
 		pixelArt: false,
 		mipmapFilter: 'LINEAR',
-		powerPreference: powerPreference,
-		// LOW END MOBILE OPTIMIZATION: reduce batch size on low-end devices
-		batchSize: capabilities.isLowEndDevice ? 1000 : 4096,
-		// LOW END MOBILE OPTIMIZATION: round pixels on low-end devices for better performance
-		roundPixels: capabilities.isLowEndDevice,
+		powerPreference: 'default',
+		batchSize: 4096,
+		roundPixels: false,
 	}
 };
 
@@ -87,22 +70,6 @@ const StartGame = (parent: string) => {
     };
 
     const game = new Game({ ...config, parent });
-
-	// LOW END MOBILE OPTIMIZATION: Throttle FPS when tab is hidden to save battery
-	if (capabilities.isMobile) {
-		const handleVisibilityChange = () => {
-			if (document.hidden) {
-				game.loop.targetFPS = 10; // Very low FPS when hidden
-			} else {
-				game.loop.targetFPS = targetFPS; // Restore normal FPS
-			}
-		};
-		document.addEventListener('visibilitychange', handleVisibilityChange);
-		// Initial check
-		if (document.hidden) {
-			game.loop.targetFPS = 10;
-		}
-	}
 
     if (isMobile()) {
         try {

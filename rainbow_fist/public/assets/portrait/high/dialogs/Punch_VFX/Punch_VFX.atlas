@@ -1,36 +1,34 @@
 Punch_VFX.webp
-size:1088,1088
+size:1384,1384
 filter:Linear,Linear
-pma:false
-Default
-bounds:2,620,856,463
+pma:true
 Punch VFX_00000
-bounds:601,340,278,278
-offsets:11,11,300,300
+bounds:2,434,464,464
+offsets:18,18,500,500
 Punch VFX_00001
-bounds:860,669,206,206
-offsets:47,47,300,300
+bounds:994,690,344,344
+offsets:78,78,500,500
 Punch VFX_00002
-bounds:881,489,181,178
-offsets:62,61,300,300
+bounds:987,392,303,296
+offsets:102,102,500,500
 Punch VFX_00003
-bounds:860,877,220,206
-offsets:42,47,300,300
+bounds:994,1036,366,343
+offsets:70,79,500,500
 Punch VFX_00004
-bounds:833,112,250,226
-offsets:27,37,300,300
+bounds:931,12,419,378
+offsets:44,61,500,500
 Punch VFX_00005
-bounds:304,102,277,250
-offsets:14,24,300,300
+bounds:468,51,461,417
+offsets:24,40,500,500
 Punch VFX_00006
-bounds:304,354,295,264
-offsets:5,18,300,300
+bounds:492,470,493,440
+offsets:7,30,500,500
 Punch VFX_00007
-bounds:2,338,300,280
-offsets:0,10,300,300
+bounds:492,912,500,467
+offsets:0,16,500,500
 Punch VFX_00008
-bounds:2,49,293,287
-offsets:7,10,300,300
+bounds:2,900,488,479
+offsets:12,16,500,500
 Punch VFX_00009
-bounds:583,81,248,257
-offsets:33,19,300,300
+bounds:2,2,414,430
+offsets:54,31,500,500

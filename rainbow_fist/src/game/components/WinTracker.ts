@@ -315,7 +315,10 @@ export class WinTracker {
 		currentX += equalsText.width + 6;
 
 		// [currency][space][total win amount]
-		const currency = this.config.currencyText ?? '$';
+		// Check if demo mode is active - if so, use blank currency symbol
+		const isDemo = (scene as any).gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const defaultCurrency = isDemo ? '' : '$';
+		const currency = this.config.currencyText ?? defaultCurrency;
 
 		const currencyStyle: Phaser.Types.GameObjects.Text.TextStyle = {
 			...baseStyle,

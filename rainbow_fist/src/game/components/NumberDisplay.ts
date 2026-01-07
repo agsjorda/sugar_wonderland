@@ -24,38 +24,7 @@ export interface NumberDisplayConfig {
 	suffix?: string;
 	commaYOffset?: number;
 	dotYOffset?: number;
-	/**
-	 * Starting position as a percentage of the target value (0.0 - 1.0).
-	 * 0 starts at zero, 0.5 starts at half the target, 1 starts at the target.
-	 */
-	startAtPercent?: number;
-	/**
-	 * The threshold at which the animation will start.
-	 * If the value is less than the threshold, the number will simply be displayed and not animate.
-	 * Default is 0.0.
-	 */
-	animateThreshold?: number;
-	/**
-	 * The delay in milliseconds before the animation will start.
-	 * Default is 0.0.
-	 */
-	animationDelayMs?: number;
-	/**
-	 * Whether to use an easing curve for the tick-up animation.
-	 * Default is true (fast-to-slow).
-	 */
-	useCurve?: boolean;
-	/**
-	 * Duration of the tick-up animation in milliseconds when using curve.
-	 * Default 1000ms.
-	 */
-	tickDurationMs?: number;
-	/**
-	 * Easing for the tick-up animation when using curve.
-	 * Can be a preset string or a custom function (t in [0,1]).
-	 * Defaults to 'easeOut' (fast-to-slow).
-	 */
-	tickEasing?: 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | ((t: number) => number);
+	shouldTickUp?: boolean;
 }
 
 export class NumberDisplay {
@@ -113,12 +82,7 @@ export class NumberDisplay {
 			suffix: '',
 			commaYOffset: 0,
 			dotYOffset: 0,
-			startAtPercent: 0.0,
-			animateThreshold: 100.0,
-			animationDelayMs: 500,
-			useCurve: true,
-			tickDurationMs: 2000,
-			tickEasing: 'easeInOut',
+			shouldTickUp: true,
 			...config
 		};
 	}
@@ -127,8 +91,6 @@ export class NumberDisplay {
 	 * Initialize the number display
 	 */
 	create(scene: Scene): void {
-		console.log('[NumberDisplay] Creating number display');
-		
 		this.scene = scene;
 		
 		// Create container for all number sprites
@@ -147,18 +109,11 @@ export class NumberDisplay {
 			return;
 		}
 		
-		const animateThreshold = this.config.animateThreshold ?? 0;
-		const animationDelayMs = this.config.animationDelayMs ?? 0;
-		const willAnimate = value >= animateThreshold;
-
-		this.currentValue = willAnimate ? 0 : value;
+		this.currentValue = this.config.shouldTickUp ? 0 : value;
 		this.updateDisplay();
 
-		if(willAnimate) {
-			this.scene!.time.delayedCall(animationDelayMs, () => {
-				this.currentValue = value;
-				this.animateNumberTickUp(value);
-			});
+		if(this.config.shouldTickUp) {
+			this.animateNumberTickUp(value);
 		}
 	}
 
@@ -193,7 +148,6 @@ export class NumberDisplay {
 		const baseScale = this.config.scale ?? 1;
 		const prefixScale = this.config.prefixScale ?? baseScale;
 		const prefixYOffset = this.config.prefixYOffset ?? 0;
-		console.log(`[NumberDisplay] Displaying: ${formattedNumber}`);
 
 		// Create sprites for each character
 		let currentX = 0;
@@ -293,137 +247,62 @@ export class NumberDisplay {
 			this.tickEvent = null;
 		}
 
-		// Determine starting value from percentage of target
-		const rawStartPercent = this.config.startAtPercent ?? 0;
-		const startPercent = Math.min(1, Math.max(0, rawStartPercent));
-		const startValue = targetNumber * startPercent;
-
-		// If already at target, just display and exit
-		if (Math.abs(targetNumber - startValue) <= Number.EPSILON) {
+		const startValue = this.currentValue;
+		const difference = targetNumber - startValue;
+		
+		// If already at target, no need to animate
+		if (Math.abs(difference) < 0.01) {
 			this.currentValue = targetNumber;
 			this.updateDisplay();
 			return;
 		}
 
-		this.currentValue = startValue;
-		this.updateDisplay();
-
-		// Determine step behavior
-		const decimalPlaces = Math.max(0, this.config.decimalPlaces ?? 0);
-		const roundToDecimals = (value: number): number => {
-			const factor = Math.pow(10, decimalPlaces);
-			return Math.round(value * factor) / factor;
-		};
-
-		const useCurve = this.config.useCurve ?? true;
-		const remaining = targetNumber - startValue;
-
-		if (useCurve) {
-			const duration = Math.max(50, this.config.tickDurationMs ?? 1000);
-			const tickMs = 50;
-			const steps = Math.max(1, Math.round(duration / tickMs));
-			let stepIndex = 0;
-			const easingFn = this.resolveEasing(this.config.tickEasing);
-
-			this.tickEvent = this.scene.time.addEvent({
-				delay: tickMs,
-				repeat: Math.max(0, steps - 1),
-				callback: () => {
-					stepIndex++;
-					const progress = Math.min(1, stepIndex / steps);
-					const eased = easingFn(progress);
-					this.currentValue = roundToDecimals(startValue + remaining * eased);
-					this.updateDisplay();
-					if (progress >= 1) {
-						this.currentValue = roundToDecimals(targetNumber);
-						this.updateDisplay();
-						if (this.tickEvent) {
-							this.tickEvent.remove(false);
-							this.tickEvent = null;
-						}
-					}
-				}
-			});
-			return;
-		}
-
-		// Legacy linear/integer ticking path
-		const isIntegerTarget = Number.isInteger(targetNumber) && decimalPlaces === 0;
-		const maxTicks = 60; // ~1 second at 60fps
-
-		let steps: number;
-		let increment: number;
-
-		if (isIntegerTarget && remaining > 0 && remaining <= maxTicks) {
-			// Tick by 1 for small integers for a satisfying count-up
-			steps = Math.ceil(remaining);
-			increment = Math.sign(remaining) * 1;
-		} else {
-			// Smoothly animate in fixed number of steps
-			steps = maxTicks;
-			increment = remaining / steps;
-		}
-
-		let stepIndex = 0;
-
+		// Calculate animation duration based on the difference
+		// Larger differences take longer, but with a reasonable cap
+		const baseDuration = 500; // Base duration in milliseconds
+		const maxDuration = 1500; // Maximum duration in milliseconds
+		const duration = Math.min(baseDuration + Math.abs(difference) * 10, maxDuration);
+		
+		// Calculate update interval (how often to update the display)
+		// More frequent updates for smoother animation
+		const updateInterval = 16; // ~60fps updates
+		const totalSteps = Math.ceil(duration / updateInterval);
+		
+		// Calculate increment per step
+		const incrementPerStep = difference / totalSteps;
+		
+		// Track animation progress
+		let currentStep = 0;
+		const startTime = this.scene.time.now;
+		
+		// Create timer event that updates every frame
 		this.tickEvent = this.scene.time.addEvent({
-			delay: 16, // ~60fps
-			repeat: Math.max(0, steps - 1),
+			delay: updateInterval,
 			callback: () => {
-				stepIndex++;
-				if (stepIndex >= steps) {
-					// Ensure exact target at the end
-					this.currentValue = roundToDecimals(targetNumber);
+				currentStep++;
+				
+				// Calculate current value using linear interpolation
+				const progress = Math.min(currentStep / totalSteps, 1);
+				this.currentValue = startValue + (difference * progress);
+				
+				// Update the display
+				this.updateDisplay();
+				
+				// Check if animation is complete
+				if (progress >= 1) {
+					// Ensure we end exactly at target value
+					this.currentValue = targetNumber;
 					this.updateDisplay();
+					
+					// Clean up the timer event
 					if (this.tickEvent) {
 						this.tickEvent.remove(false);
 						this.tickEvent = null;
 					}
-					return;
 				}
-
-				const nextValue = roundToDecimals(Math.min(targetNumber, this.currentValue + increment));
-				this.currentValue = nextValue;
-				this.updateDisplay();
-			}
+			},
+			repeat: totalSteps - 1
 		});
-	}
-
-	private resolveEasing(easing: NumberDisplayConfig['tickEasing']): (t: number) => number {
-		// Normalize function input
-		if (typeof easing === 'function') return (t: number) => this.clamp01(easing(this.clamp01(t)));
-
-		// Presets
-		const preset = easing ?? 'easeOut';
-		switch (preset) {
-			case 'linear':
-				return (t: number) => this.clamp01(t);
-			case 'easeIn':
-				// cubic ease-in
-				return (t: number) => {
-					t = this.clamp01(t);
-					return t * t * t;
-				};
-			case 'easeInOut':
-				// cubic ease-in-out
-				return (t: number) => {
-					t = this.clamp01(t);
-					return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-				};
-			case 'easeOut':
-			default:
-				// cubic ease-out (fast to slow)
-				return (t: number) => {
-					t = this.clamp01(t);
-					return 1 - Math.pow(1 - t, 3);
-				};
-		}
-	}
-
-	private clamp01(value: number): number {
-		if (value < 0) return 0;
-		if (value > 1) return 1;
-		return value;
 	}
 
 	private updateNumberBorder(totalWidth: number): void {

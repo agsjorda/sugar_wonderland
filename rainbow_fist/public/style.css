@@ -4,7 +4,6 @@ body {
     color: rgba(255, 255, 255, 0);
     background-color: #000000; 
     font-family: Arial, Helvetica, sans-serif;
-    /* LOW END MOBILE OPTIMIZATION: Mobile performance optimizations */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     /* Prevent text selection on mobile */
@@ -29,7 +28,6 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    /* LOW END MOBILE OPTIMIZATION: Mobile performance optimizations */
     transform: translateZ(0);
     -webkit-transform: translateZ(0);
     /* Prevent scrolling on mobile */

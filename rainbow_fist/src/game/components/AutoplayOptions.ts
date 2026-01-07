@@ -171,7 +171,10 @@ export class AutoplayOptions {
 		balanceContainer.add(balanceLabel);
 		
 		// Balance amount - using the current balance from game data
-		const balanceAmount = scene.add.text(150, 1, `$${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, {
+		// Check if demo mode is active - if so, use blank currency symbol
+		const isDemo = localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const currencySymbol = isDemo ? '' : '$';
+		const balanceAmount = scene.add.text(150, 1, `${currencySymbol}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, {
 			fontSize: '24px',
 			color: '#00ff00',
 			fontFamily: 'Poppins-Bold'
@@ -295,7 +298,10 @@ export class AutoplayOptions {
 		this.container.add(this.minusButton);
 		
 		// Bet display
-		this.autoplayDisplay = scene.add.text(x, y, `$${this.currentBet.toFixed(2)}` , {
+		// Check if demo mode is active - if so, use blank currency symbol
+		const isDemoInitial = localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const currencySymbolInitial = isDemoInitial ? '' : '$';
+		this.autoplayDisplay = scene.add.text(x, y, `${currencySymbolInitial}${this.currentBet.toFixed(2)}` , {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
@@ -473,7 +479,10 @@ export class AutoplayOptions {
 			// If enhanced bet is active, show enhanced bet amount (base bet * 1.25)
 			const displayBet = this.isEnhancedBet ? this.currentBet * 1.25 : this.currentBet;
 			console.log("[AutoplayOptions] Updating autoplay display to: $", displayBet, this.isEnhancedBet ? "(enhanced bet)" : "");
-			this.autoplayDisplay.setText(`$${displayBet.toFixed(2)}`);
+			// Check if demo mode is active - if so, use blank currency symbol
+			const isDemo = localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const currencySymbol = isDemo ? '' : '$';
+			this.autoplayDisplay.setText(`${currencySymbol}${displayBet.toFixed(2)}`);
 		}
 	}
 
@@ -532,7 +541,10 @@ export class AutoplayOptions {
 
 	private updateBalanceDisplay(): void {
 		if (this.balanceAmountText) {
-			this.balanceAmountText.setText(`$${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+			// Check if demo mode is active - if so, use blank currency symbol
+			const isDemo = localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const currencySymbol = isDemo ? '' : '$';
+			this.balanceAmountText.setText(`${currencySymbol}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 		}
 	}
 

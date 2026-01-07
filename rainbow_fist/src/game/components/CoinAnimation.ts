@@ -90,7 +90,7 @@ export class CoinAnimation {
 		const coin = this.scene.physics.add.sprite(centerX, centerY, 'coin');
 		
 		// Add to physics group
-		this.coins.add(coin);
+		this.coins?.add(coin);
 		
 		// Set up physics properties
 		coin.setBounce(0.6);

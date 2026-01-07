@@ -469,6 +469,9 @@ export class AssetConfig {
 				'symbol_nyet': 'assets/sounds/SFX/nyetnyet_RF.ogg',
 				'symbol_pau': 'assets/sounds/SFX/pau_RF.ogg',
 				'symbol_punch': 'assets/sounds/SFX/punch_RF.ogg',
+
+				// Note: actual folder in /public is "Wins" (case-sensitive on many hosts)
+				'win_dialog_intro': 'assets/sounds/Wins/win_intro_anim_RF.ogg',
 			}
 		};
 	}

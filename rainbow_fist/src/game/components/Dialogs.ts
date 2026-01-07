@@ -10,6 +10,8 @@ import { FlashTransition } from './FlashTransition';
 import { WinTracker } from './WinTracker';
 import { AUTO_SPIN_WIN_DIALOG_TIMEOUT } from '../../config/GameConfig';
 import { playUtilityButtonSfx } from '../../utils/audioHelpers';
+import { SoundEffectType } from '../../managers/AudioManager';
+import { RainbowTransition } from './RainbowTransition';
 
 export interface PreDialogSpineConfig {
 	spineKey: string;
@@ -93,8 +95,8 @@ export class Dialogs {
 		'MegaWin': { x: 0.52, y: 0.5 },
 		'EpicWin': { x: 0.5, y: 0.5 },
 		'SuperWin': { x: 0.5, y: 0.5075 },
-		'FreeSpinDialog': { x: 0.5, y: 0.35 },
-		'BonusFreeSpinDialog': { x: 0.5, y: 0.35 },
+		'FreeSpinDialog': { x: 0.5, y: 0.375 },
+		'BonusFreeSpinDialog': { x: 0.5, y: 0.375 },
 		'MaxWin': { x: 0.5, y: 0.5175 },
 		'Congratulations': { x: 0.5, y: 0.63 },
 	};
@@ -106,7 +108,6 @@ export class Dialogs {
 		'EpicWin': { x: 0.5, y: 0.525 },
 		'SuperWin': { x: 0.5, y: 0.525 },
 		'FreeSpinDialog': { x: 0.5, y: 0.625 },
-		'BonusFreeSpinDialog': { x: 0.5, y: 0.625 },
 		'MaxWin': { x: 0.5, y: 0.575 },
 		'Congratulations': { x: 0.5, y: 0.575 },
 	};
@@ -153,6 +154,7 @@ export class Dialogs {
 	private activePreDialogTweens: Phaser.Tweens.Tween[] = [];
 	private preDialogTweenSequenceId: number = 0;
 	private activePreDialogGraphics: Phaser.GameObjects.GameObject[] = [];
+	private punchVfxBackground: Phaser.GameObjects.Rectangle | null = null;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -245,22 +247,22 @@ export class Dialogs {
 
 		// Create a white rectangle that will slide across the screen before the punch VFX
 		const slideRect = scene.add.rectangle(
-			// scene.scale.width + (scene.scale.width * 0.6) / 2,
-			scene.scale.width / 2,
+			scene.scale.width * 0.5,
 			scene.scale.height * 0.5,
-			scene.scale.width * 0.2,
+			scene.scale.width * 0.5,
 			scene.scale.height,
 			0xffffff,
 			1
 		);
-		slideRect.setDepth(940);
+		slideRect.setDepth(99999); // Above win dialogs, below white background (1099) and punch VFX (1100)
 		this.activePreDialogGraphics.push(slideRect);
 
 		const tweenToEdge: PreDialogTweenConfig = {
 			tweenConfig: {
 				targets: slideRect,
-				x: -(scene.scale.width * 0.6) / 2,
-				duration: 500,
+				// x: -(scene.scale.width * 0.6) / 2,
+				x: scene.scale.width * 0.5,
+				duration: 50,
 				ease: 'Cubic.easeInOut',
 				onComplete: () => {
 					try { slideRect.destroy(); } catch {}
@@ -272,7 +274,7 @@ export class Dialogs {
 		const punchSpine: PreDialogSpineConfig = {
 			spineKey: 'punch_vfx',
 			animationSequence: [0],
-			depth: 950,
+			depth: 1100, // Higher than win dialogs (dialogOverlay is at 1000)
 			loopLastAnimation: false,
 			anchor: { x: 0.49, y: 0.5 },
 			origin: { x: 0.5, y: 0.5 },
@@ -330,6 +332,24 @@ export class Dialogs {
 	}
 
 	private startPreDialogSequence(scene: Scene, config: DialogConfig, onComplete: () => void): void {
+		// Play intro SFX exactly at the start of any pre-dialog animations for punch-win types.
+		// (Big/Mega/Epic/Super only; intentionally excluded MaxWin and non-win dialogs.)
+		const isPunchWin =
+			config.type === 'BigWin' ||
+			config.type === 'MegaWin' ||
+			config.type === 'EpicWin' ||
+			config.type === 'SuperWin';
+
+		if (isPunchWin && (this.shouldPlayPreDialogTweens(config) || this.shouldPlayPreDialogSpines(config))) {
+			try {
+				const audioManager = (window as any).audioManager;
+				if (audioManager && typeof audioManager.playSoundEffect === 'function') {
+					audioManager.playSoundEffect(SoundEffectType.WIN_DIALOG_INTRO);
+					console.log('[Dialogs] Played win dialog intro SFX');
+				}
+			} catch {}
+		}
+
 		const runSpines = () => {
 			if (!this.shouldPlayPreDialogSpines(config)) {
 				onComplete();
@@ -381,15 +401,71 @@ export class Dialogs {
 
 		for (const entry of entries) {
 			let spine: SpineGameObject | null = null;
+			let whiteBackground: Phaser.GameObjects.Rectangle | null = null;
 			let finished = false;
 			const finalize = () => {
 				if (finished) return;
 				finished = true;
 				this.destroyPreDialogSpine(spine);
+				// Fade out white background when punch spine finishes
+				if (whiteBackground && entry.spineKey === 'punch_vfx') {
+					scene.tweens.add({
+						targets: whiteBackground,
+						alpha: 0,
+						duration: 250,
+						ease: 'Power2',
+						onComplete: () => {
+							if (whiteBackground) {
+								whiteBackground.setVisible(false);
+								this.activePreDialogGraphics = this.activePreDialogGraphics.filter((g) => g !== whiteBackground);
+							}
+						}
+					});
+				}
 				finishEntry();
 			};
 
 			try {
+				// Create or reuse full white screen background just under the punch spine VFX
+				if (entry.spineKey === 'punch_vfx') {
+					if (this.punchVfxBackground) {
+						// Reuse existing white background
+						whiteBackground = this.punchVfxBackground;
+						whiteBackground.setVisible(true);
+						whiteBackground.setAlpha(0); // Start at 0 for fade-in
+						whiteBackground.setPosition(scene.scale.width / 2, scene.scale.height / 2);
+						whiteBackground.setSize(scene.scale.width, scene.scale.height);
+						// Fade in the white background
+						scene.tweens.add({
+							targets: whiteBackground,
+							alpha: 1,
+							duration: 250,
+							ease: 'Power2'
+						});
+					} else {
+						// Create new white background
+						whiteBackground = scene.add.rectangle(
+							scene.scale.width / 2,
+							scene.scale.height / 2,
+							scene.scale.width,
+							scene.scale.height,
+							0xffffff,
+							1
+						);
+						whiteBackground.setDepth(1099); // Just under punch spine depth (1100)
+						whiteBackground.setAlpha(0); // Start at 0 for fade-in
+						// Fade in the white background
+						scene.tweens.add({
+							targets: whiteBackground,
+							alpha: 1,
+							duration: 250,
+							ease: 'Power2'
+						});
+						this.punchVfxBackground = whiteBackground;
+					}
+					this.activePreDialogGraphics.push(whiteBackground);
+				}
+
 				const atlasKey = entry.atlasKey || `${entry.spineKey}-atlas`;
 				spine = scene.add.spine(0, 0, entry.spineKey, atlasKey);
 				this.activePreDialogSpines.push(spine);
@@ -552,7 +628,13 @@ export class Dialogs {
 	private cleanupPreDialogGraphics(): void {
 		for (const g of this.activePreDialogGraphics) {
 			try {
-				(g as any).destroy?.();
+				// Don't destroy the stored white background, just hide it
+				if (g === this.punchVfxBackground) {
+					(g as any).setVisible?.(false);
+					(g as any).setAlpha?.(0);
+				} else {
+					(g as any).destroy?.();
+				}
 			} catch {}
 		}
 		this.activePreDialogGraphics = [];
@@ -602,6 +684,7 @@ export class Dialogs {
 					console.log('[Dialogs] Black overlay fade-in complete');
 				}
 			});
+
 		} else {
 			console.log('[Dialogs] Win dialog - setting black overlay to semi-transparent background');
 			// For win dialogs, ensure black overlay is visible and set to semi-transparent background
@@ -695,7 +778,10 @@ export class Dialogs {
 		});
 		
 		// Create number display if win amount or free spins are provided (AFTER effects)
-		if (config.winAmount !== undefined || config.freeSpins !== undefined) {
+		// Skip number display for retrigger freespin dialogs (BonusFreeSpinDialog)
+		if (
+			(config.winAmount !== undefined || config.freeSpins !== undefined)
+		) {
 			this.createNumberDisplay(scene, config.winAmount || 0, config.freeSpins);
 		}
 		
@@ -756,6 +842,29 @@ export class Dialogs {
 			return null;
 		}
 
+		// Reset animation state for pooled spines
+		if (spine.animationState) {
+			try {
+				// Remove any lingering listeners from previous uses
+				const state: any = spine.animationState;
+				if (state?.clearListeners) {
+					state.clearListeners();
+				} else if (state?.listeners?.length) {
+					state.listeners.length = 0;
+				}
+
+				// Clear all animation tracks
+				spine.animationState.clearTracks();
+
+				// Reset skeleton to setup pose so animations start from the beginning
+				if (spine.skeleton) {
+					spine.skeleton.setToSetupPose();
+				}
+			} catch (error) {
+				console.warn('[Dialogs] Error resetting animation state when acquiring spine:', error);
+			}
+		}
+
 		try { spine.setVisible(true); } catch {}
 		try { spine.setActive(true); } catch {}
 		try { spine.setAlpha(1); } catch {}
@@ -767,8 +876,37 @@ export class Dialogs {
 
 		const spineKey: string | undefined = (spine as any).__dialogSpineKey || (spine as any).key || spine.name;
 
-		try { spine.animationState?.clearTracks?.(); } catch {}
+		// Clean up animation state completely
+		if (spine.animationState) {
+			try {
+				// Remove any listeners to prevent memory leaks
+				const state: any = spine.animationState;
+				if (state?.clearListeners) {
+					state.clearListeners();
+				} else if (state?.listeners?.length) {
+					state.listeners.length = 0;
+				}
+
+				// Clear all animation tracks
+				spine.animationState.clearTracks();
+			} catch (error) {
+				console.warn('[Dialogs] Error clearing animation state when releasing spine:', error);
+			}
+		}
+
+		// Reset skeleton to setup pose
+		try {
+			if (spine.skeleton) {
+				spine.skeleton.setToSetupPose();
+			}
+		} catch (error) {
+			console.warn('[Dialogs] Error resetting skeleton pose when releasing spine:', error);
+		}
+
+		// Remove from parent container
 		try { (spine as any).parentContainer?.remove?.(spine); } catch {}
+
+		// Reset visibility and state
 		try { spine.setVisible(false); } catch {}
 		try { spine.setActive(false); } catch {}
 		try { spine.setAlpha(0); } catch {}
@@ -1134,6 +1272,10 @@ export class Dialogs {
 		
 		// Create number display configuration
 		const position = this.getNumberDisplayPosition(scene);
+		if (!position) {
+			console.warn('[Dialogs] Number display position is null, cannot create number display');
+			return;
+		}
 		const numberConfig: NumberDisplayConfig = {
 			x: position.x,
 			y: position.y,
@@ -1145,8 +1287,8 @@ export class Dialogs {
 			prefix: '', // No prefix for any number display
 			suffix: '', // No suffix - only display numbers
 			commaYOffset: 15,
-			dotYOffset: 15
-
+			dotYOffset: 15,
+			shouldTickUp: freeSpins !== undefined ? false : true,
 		};
 
 		// Create the number display
@@ -1430,6 +1572,22 @@ export class Dialogs {
 			return;
 		}
 		
+		// Skip fade to black for retrigger freespin dialogs (BonusFreeSpinDialog)
+		if (this.currentDialogType === 'BonusFreeSpinDialog') {
+			console.log('[Dialogs] Bonus free spin dialog clicked - skipping fade transition');
+			// Stop all effect animations immediately
+			this.stopAllEffectAnimations();
+			// Hide dialog immediately without fade
+			this.dialogOverlay.setVisible(false);
+			this.isDialogActive = false;
+			// Perform cleanup
+			this.performDialogCleanup();
+			// Emit dialog animations complete event
+			scene.events.emit('dialogAnimationsComplete');
+			console.log('[Dialogs] Bonus free spin dialog hidden without fade');
+			return;
+		}
+		
 		// Check if this is a win dialog - handle differently than free spin dialog
 		if (this.isWinDialog()) {
 			console.log('[Dialogs] Win dialog clicked - starting direct fade-out sequence');
@@ -1444,6 +1602,12 @@ export class Dialogs {
 			console.log('[Dialogs] Free spin dialog clicked - starting transition');
 			// Don't disable dialog elements yet for free spin dialogs
 			this.startWinDialogFadeOut(scene);
+			return;
+		}
+
+		if(this.currentDialogType === 'Congratulations') {
+			console.log('[Dialogs] Congratulations dialog clicked - starting backwards rainbow transition');
+			this.startRainbowTransition(scene, this.currentDialogType);
 			return;
 		}
 		
@@ -1480,12 +1644,6 @@ export class Dialogs {
 		// Disable spinner immediately when transition starts
 		scene.events.emit('disableSpinner');
 		console.log('[Dialogs] Spinner disabled during transition');
-
-		const shouldUseWhiteFlash = dialogTypeBeforeCleanup === 'Congratulations' && this.flashTransition;
-		if (shouldUseWhiteFlash) {
-			this.startWhiteFlashTransition(scene, dialogTypeBeforeCleanup);
-			return;
-		}
 		
 		// Create centralized black screen overlay
 		const blackScreen = scene.add.graphics();
@@ -1532,40 +1690,29 @@ export class Dialogs {
 		});
 	}
 
-	private startWhiteFlashTransition(scene: Scene, dialogTypeBeforeCleanup: string | null): void {
-		if (!this.flashTransition) {
-			console.warn('[Dialogs] FlashTransition missing - falling back to black transition');
+	/**
+	 * Start backwards rainbow transition for Congratulations dialog
+	 */
+	private startRainbowTransition(scene: Scene, dialogTypeBeforeCleanup: string | null): boolean {
+		console.log('[Dialogs] Starting backwards rainbow transition for Congratulations dialog');
+
+		// Access rainbowTransition from the scene (cast to Game type)
+		const gameScene = scene as any;
+		const rainbowTransition: RainbowTransition | undefined = gameScene.rainbowTransition;
+
+		if (!rainbowTransition)
+			return false;
+
+		// Play backwards rainbow transition
+		rainbowTransition.playTransition();
+
+		// Hide dialog immediately when transition starts (during the transition)
+		// Use a small delay to ensure the transition has started
+		scene.time.delayedCall(500, () => {
 			this.finalizeDialogTransition(scene, dialogTypeBeforeCleanup);
-			return;
-		}
-
-		console.log('[Dialogs] Starting white flash transition for Congratulations dialog');
-
-		const flashDuration = 300;
-		const holdDuration = 700;
-
-		this.flashTransition.show();
-		this.flashTransition.setAlphaImmediate(0);
-		this.flashTransition.flashOverlay(1, flashDuration, 'In');
-
-		scene.time.delayedCall(flashDuration, () => {
-			this.finalizeDialogTransition(scene, dialogTypeBeforeCleanup);
-
-			scene.time.delayedCall(holdDuration, () => {
-				this.flashTransition?.flashOverlay(0, flashDuration, 'Out');
-
-				scene.time.delayedCall(flashDuration, () => {
-					this.flashTransition?.hide();
-
-					if (dialogTypeBeforeCleanup === 'Congratulations') {
-						scene.events.emit('hideBonusBackground');
-						scene.events.emit('hideBonusHeader');
-					}
-
-					console.log('[Dialogs] White flash transition complete');
-				});
-			});
 		});
+
+		return true;
 	}
 
 	private finalizeDialogTransition(scene: Scene, dialogTypeBeforeCleanup: string | null): void {
@@ -1999,6 +2146,31 @@ export class Dialogs {
 	hideDialog(): void {
 		if (!this.isDialogActive) return;
 		
+		// Skip fade to black for retrigger freespin dialogs
+		const isRetriggerDialog = this.currentDialogType === 'BonusFreeSpinDialog';
+		
+		if (isRetriggerDialog) {
+			console.log('[Dialogs] Hiding retrigger freespin dialog without fade transition');
+			this.cancelPreDialogSpines();
+			this.cancelPreDialogTweens();
+			this.cleanupPreDialogGraphics();
+			
+			if (this.currentScene) {
+				// Stop all effect animations immediately
+				this.stopAllEffectAnimations();
+			}
+			
+			// Hide dialog immediately without fade
+			this.dialogOverlay.setVisible(false);
+			this.isDialogActive = false;
+			
+			// Perform cleanup
+			this.performDialogCleanup();
+			
+			console.log('[Dialogs] Retrigger dialog hidden without fade');
+			return;
+		}
+		
 		console.log('[Dialogs] Hiding dialog with black overlay transition');
 		this.cancelPreDialogSpines();
 		this.cancelPreDialogTweens();
@@ -2052,6 +2224,32 @@ export class Dialogs {
 		this.performDialogCleanup();
 		
 		console.log('[Dialogs] Dialog hidden and cleaned up');
+	}
+
+	/**
+	 * Hide the dialog without fade transition (for retrigger dialogs)
+	 */
+	hideDialogWithoutFade(): void {
+		if (!this.isDialogActive) return;
+		
+		console.log('[Dialogs] Hiding dialog without fade transition');
+		this.cancelPreDialogSpines();
+		this.cancelPreDialogTweens();
+		this.cleanupPreDialogGraphics();
+		
+		if (this.currentScene) {
+			// Stop all effect animations immediately
+			this.stopAllEffectAnimations();
+		}
+		
+		// Hide dialog immediately without fade
+		this.dialogOverlay.setVisible(false);
+		this.isDialogActive = false;
+		
+		// Perform cleanup
+		this.performDialogCleanup();
+		
+		console.log('[Dialogs] Dialog hidden without fade');
 	}
 
 	/**
@@ -2117,19 +2315,19 @@ export class Dialogs {
 		return { x: scene.scale.width / 2, y: scene.scale.height / 2 };
 	}
 
-	private getNumberDisplayPosition(scene: Scene): { x: number; y: number } {
+	private getNumberDisplayPosition(scene: Scene): { x: number; y: number } | null {
 		const type = this.currentDialogType || '';
 		const relativePosition = this.numberDisplayPositions[type];
 
 		if (relativePosition) {
 			return {
 				x: relativePosition.x * scene.scale.width,
-				y: relativePosition.y * scene.scale.height,
+				y: relativePosition.y * scene.scale.height
 			};
 		}
 
 		// Fallback to legacy placement slightly below center for non-win dialogs
-		return { x: scene.scale.width / 2, y: scene.scale.height / 2 + 110 };
+		return null;
 	}
 
 	private getDialogLoop(dialogType: string): boolean {

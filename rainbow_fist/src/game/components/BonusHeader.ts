@@ -145,6 +145,7 @@ export class BonusHeader {
 			decimalPlaces: 0,
 			showCommas: true,
 			prefix: 'x',
+			shouldTickUp: false,
 		};
 
 		this.multiplierDisplay = new NumberDisplay(multiplierConfig, this.networkManager, this.screenModeManager);
@@ -193,7 +194,10 @@ export class BonusHeader {
 		this.bonusHeaderContainer.add(this.youWonText);
 
 		// Line 2: "$ 0.00" with bold formatting
-		this.amountText = scene.add.text(x + this.winningsValueTextOffset.x, y + this.winningsValueTextOffset.y, '$ 999,999,999,999.00', {
+		// Check if demo mode is active - if so, use blank currency symbol
+		const isDemoInitial = this.scene?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const currencySymbolInitial = isDemoInitial ? '' : '$';
+		this.amountText = scene.add.text(x + this.winningsValueTextOffset.x, y + this.winningsValueTextOffset.y, `${currencySymbolInitial}${currencySymbolInitial ? ' ' : ''}999,999,999,999.00`, {
 			fontSize: '20px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold',
@@ -360,19 +364,21 @@ export class BonusHeader {
 	 * Format currency value for display
 	 */
 	private formatCurrency(amount: number): string {
+		// Check if demo mode is active - if so, use blank currency symbol
+		const isDemo = this.scene?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const currencySymbol = isDemo ? '' : '$';
+		
 		if (amount === 0) {
-			return '$ 0.00';
+			return `${currencySymbol} 0.00`;
 		}
 		
 		// Format with commas for thousands and 2 decimal places
 		const formatted = new Intl.NumberFormat('en-US', {
-			style: 'currency',
-			currency: 'USD',
 			minimumFractionDigits: 2,
 			maximumFractionDigits: 2
 		}).format(amount);
 		
-		return formatted;
+		return `${currencySymbol}${formatted}`;
 	}
 
 	private getCachedPreBonusWins(): number {
@@ -465,12 +471,11 @@ export class BonusHeader {
 				this.currentWinnings = cachedPreBonusWins;
 			}
 
-			const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
-			const spinData = symbolsComponent?.currentSpinData;
+			const spinData = this.scene.gameAPI.getCurrentSpinData();
 			if(spinData) {
-				const freeSpin = spinData.slot?.freeSpin || spinData.slot?.freespin;
+				const freeSpin = spinData.slot?.freeSpin;
 				// add all tumble item wins
-				const tumbleItems = spinData.slot.tumbles?.items;
+				const tumbleItems = spinData.slot?.tumbles?.items;
 				const tumbleWins = tumbleItems !== undefined && tumbleItems.length > 0 ? tumbleItems.reduce((sum, item) => sum + item.win, 0) : 0;
 				if(freeSpin && this.currentWinnings <= 0) {
 					this.currentWinnings += freeSpin.multiplierValue ?? 0;
@@ -527,10 +532,9 @@ export class BonusHeader {
 				return;
 			}
 
-			const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
-			const spinData = symbolsComponent?.currentSpinData;
+			const spinData = this.scene.gameAPI.getCurrentSpinData();
 
-			if (!symbolsComponent || !spinData) {
+			if (!spinData) {
 				return;
 			}
 			
@@ -538,10 +542,10 @@ export class BonusHeader {
 			this.didMultiplierUpdateForCurrentTumble = false;
 
 			const fsIndex = this.scene.gameAPI.getCurrentFreeSpinIndex() - 1;
-			const freespinItem = spinData?.slot?.freespin?.items?.[fsIndex];
+			const freespinItem = spinData?.slot?.freeSpin?.items?.[fsIndex];
 
 			// Base winnings for the CURRENT tumble (before multiplier is applied)
-			const baseWinnings = freespinItem?.tumble?.items[this.scene.gameAPI.getCurrentTumbleIndex()].win ?? 0;
+			const baseWinnings = freespinItem?.tumble?.items[this.scene.gameAPI.getCurrentTumbleIndex()]?.win ?? 0;
 
 			// On win start, track just the current tumble's base winnings
 			this.currentBaseWinnings += baseWinnings;
@@ -565,12 +569,10 @@ export class BonusHeader {
 			// Reference shape: see BONUS_FREE_SPIN_TEST_DATA in TestSpinData.ts
 			// slot.freeSpin/freespin.items[freeSpinIndex].tumble.multiplier
 			let currentTumbleMultiplier = 0;
-			const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
-			const spinData = symbolsComponent?.currentSpinData;
-
-			if (symbolsComponent && spinData?.slot?.freespin?.items) {
+			const spinData = this.scene.gameAPI.getCurrentSpinData();
+			if (spinData?.slot?.freeSpin?.items && spinData.slot.freeSpin.items.length > 0) {
 				const fsIndex = this.scene.gameAPI.getCurrentFreeSpinIndex() - 1;
-				const freespinItem = spinData.slot.freespin.items[fsIndex];
+				const freespinItem = spinData.slot.freeSpin.items[fsIndex];
 				currentTumbleMultiplier = freespinItem?.tumble?.multiplier ?? 0;
 			}
 
