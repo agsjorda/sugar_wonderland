@@ -1506,7 +1506,12 @@ export class SlotController {
 		const containerWidth = 125;
 		const containerHeight = 55;
 		const cornerRadius = 10;
-		const balanceValueOffset = 5;
+		// Demo mode: hide currency symbol and keep the value centered
+		const isDemoBalance =
+			this.gameAPI?.getDemoState() ||
+			localStorage.getItem('demo') === 'true' ||
+			sessionStorage.getItem('demo') === 'true';
+		const balanceValueOffset = isDemoBalance ? 0 : 5;
 
 		// Create rounded rectangle background
 		const balanceBg = scene.add.graphics();
@@ -1551,13 +1556,17 @@ export class SlotController {
 		this.balanceDollarText = scene.add.text(
 			balanceX - (this.balanceAmountText.width / 2) - 3.5,
 			balanceY + 8,
-			'$',
+			isDemoBalance ? '' : '$',
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color
 				fontFamily: 'poppins-regular'
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
+		// In demo mode, keep the number centered and hide the currency glyph
+		if (isDemoBalance) {
+			this.balanceDollarText.setVisible(false);
+		}
 		this.controllerContainer.add(this.balanceDollarText);
 	}
 
@@ -1568,7 +1577,12 @@ export class SlotController {
 		const containerWidth = 125;
 		const containerHeight = 55;
 		const cornerRadius = 10;
-		const  betValueOffset = 3;
+		// Demo mode: hide currency symbol and keep the value centered
+		const isDemoBet =
+			this.gameAPI?.getDemoState() ||
+			localStorage.getItem('demo') === 'true' ||
+			sessionStorage.getItem('demo') === 'true';
+		const  betValueOffset = isDemoBet ? 0 : 3;
 
 
 		// Create amplify bet spine animation (behind bet background)
@@ -1672,13 +1686,16 @@ export class SlotController {
 		this.betDollarText = scene.add.text(
 			betX - (this.betAmountText.width / 2) - 3.5,
 			betY + 8,
-			'$',
+			isDemoBet ? '' : '$',
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color
 				fontFamily: 'poppins-regular'
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
+		if (isDemoBet) {
+			this.betDollarText.setVisible(false);
+		}
 		this.controllerContainer.add(this.betDollarText);
 
 		// Decrease bet button (left side within container)
@@ -1895,8 +1912,12 @@ export class SlotController {
 		this.featureLabelText = featureLabel1;
 
 		// Amount (2nd line, right part) - bound to current bet x100
+		const isDemoFeature =
+			this.gameAPI?.getDemoState() ||
+			localStorage.getItem('demo') === 'true' ||
+			sessionStorage.getItem('demo') === 'true';
 		this.featureAmountText = scene.add.text(
-			featureX + 5,
+			featureX + (isDemoFeature ? 0 : 5),
 			featureY + 8,
 			'0',
 			{
@@ -1911,13 +1932,16 @@ export class SlotController {
 		this.featureDollarText = scene.add.text(
 			featureX - (this.featureAmountText.width / 2) - 3,
 			featureY + 8,
-			'$',
+			isDemoFeature ? '' : '$',
 			{
 				fontSize: '14px',
 				color: '#ffffff',
 				fontFamily: 'poppins-regular'
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
+		if (isDemoFeature) {
+			this.featureDollarText.setVisible(false);
+		}
 		this.controllerContainer.add(this.featureDollarText);
 
 		// Initialize amount from current bet
@@ -2145,11 +2169,24 @@ export class SlotController {
 				const increasedBet = betAmount * 1.25;
 				this.betAmountText.setText(increasedBet.toFixed(2));
 
-				// Update dollar sign position based on new bet amount width
+				// Update currency display (demo mode removes currency symbol)
 				if (this.betDollarText) {
+					const isDemo =
+						this.gameAPI?.getDemoState() ||
+						localStorage.getItem('demo') === 'true' ||
+						sessionStorage.getItem('demo') === 'true';
 					const betX = this.betAmountText.x;
 					const betY = this.betAmountText.y;
-					this.betDollarText.setPosition(betX - (this.betAmountText.width / 2) - 5, betY);
+					if (isDemo) {
+						this.betDollarText.setText('');
+						this.betDollarText.setVisible(false);
+						// Value is already centered in demo mode via initial layout
+					} else {
+						this.betDollarText.setText('$');
+						this.betDollarText.setVisible(true);
+						this.betAmountText.setPosition(betX, betY);
+						this.betDollarText.setPosition(betX - (this.betAmountText.width / 2) - 5, betY);
+					}
 				}
 			}
 		} finally {
@@ -2161,11 +2198,24 @@ export class SlotController {
 		if (this.betAmountText) {
 			this.betAmountText.setText(betAmount.toFixed(2));
 
-			// Update dollar sign position based on new bet amount width
+			// Update currency display (demo mode removes currency symbol)
 			if (this.betDollarText) {
+				const isDemo =
+					this.gameAPI?.getDemoState() ||
+					localStorage.getItem('demo') === 'true' ||
+					sessionStorage.getItem('demo') === 'true';
 				const betX = this.betAmountText.x;
 				const betY = this.betAmountText.y;
-				this.betDollarText.setPosition(betX - (this.betAmountText.width / 2) - 5, betY);
+				if (isDemo) {
+					this.betDollarText.setText('');
+					this.betDollarText.setVisible(false);
+					// Value is already centered in demo mode via initial layout
+				} else {
+					this.betDollarText.setText('$');
+					this.betDollarText.setVisible(true);
+					this.betAmountText.setPosition(betX, betY);
+					this.betDollarText.setPosition(betX - (this.betAmountText.width / 2) - 5, betY);
+				}
 			}
 		}
 
@@ -2195,10 +2245,23 @@ export class SlotController {
 		const price = baseBet * 100;
 		// Format with thousands separators and 2 decimals
 		this.featureAmountText.setText(price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-		// Reposition dollar sign based on updated width
+		// Demo mode: hide currency symbol and keep centered
+		const isDemo =
+			this.gameAPI?.getDemoState() ||
+			localStorage.getItem('demo') === 'true' ||
+			sessionStorage.getItem('demo') === 'true';
 		const x = this.featureAmountText.x;
 		const y = this.featureAmountText.y;
-		this.featureDollarText.setPosition(x - (this.featureAmountText.width / 2) - 3, y);
+		if (isDemo) {
+			this.featureDollarText.setText('');
+			this.featureDollarText.setVisible(false);
+			// Value is already centered in demo mode via initial layout
+		} else {
+			this.featureDollarText.setText('$');
+			this.featureDollarText.setVisible(true);
+			this.featureAmountText.setPosition(x, y);
+			this.featureDollarText.setPosition(x - (this.featureAmountText.width / 2) - 3, y);
+		}
 	}
 
 	getBetAmountText(): string | null {
@@ -2215,12 +2278,24 @@ export class SlotController {
 	updateBalanceAmount(balanceAmount: number): void {
 		if (this.balanceAmountText) {
 			this.balanceAmountText.setText(balanceAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-			
-			// Update dollar sign position based on new balance amount width
+
 			if (this.balanceDollarText) {
+				const isDemo =
+					this.gameAPI?.getDemoState() ||
+					localStorage.getItem('demo') === 'true' ||
+					sessionStorage.getItem('demo') === 'true';
 				const balanceX = this.balanceAmountText.x;
 				const balanceY = this.balanceAmountText.y;
-				this.balanceDollarText.setPosition(balanceX - (this.balanceAmountText.width / 2) - 5, balanceY);
+				if (isDemo) {
+					this.balanceDollarText.setText('');
+					this.balanceDollarText.setVisible(false);
+					// Value is already centered in demo mode via initial layout
+				} else {
+					this.balanceDollarText.setText('$');
+					this.balanceDollarText.setVisible(true);
+					this.balanceAmountText.setPosition(balanceX, balanceY);
+					this.balanceDollarText.setPosition(balanceX - (this.balanceAmountText.width / 2) - 5, balanceY);
+				}
 			}
 		}
 	}
@@ -2247,6 +2322,15 @@ export class SlotController {
 			
 			// Update balance display immediately
 			this.updateBalanceAmount(newBalance);
+
+			// Demo mode: keep in-memory demo balance synced with UI
+			const isDemo =
+				this.gameAPI?.getDemoState() ||
+				localStorage.getItem('demo') === 'true' ||
+				sessionStorage.getItem('demo') === 'true';
+			if (isDemo) {
+				this.gameAPI.updateDemoBalance(newBalance);
+			}
 			
 			console.log(`[SlotController] Balance decremented: $${currentBalance} -> $${newBalance} (bet charged: $${totalBetToCharge})`);
 			
@@ -4154,6 +4238,16 @@ public updateAutoplayButtonState(): void {
 			// Deduct the calculated price from balance (frontend only)
 			const newBalance = currentBalance - calculatedPrice;
 			this.updateBalanceAmount(newBalance);
+
+			// Demo mode: keep in-memory demo balance synced with UI
+			const isDemo =
+				this.gameAPI?.getDemoState() ||
+				localStorage.getItem('demo') === 'true' ||
+				sessionStorage.getItem('demo') === 'true';
+			if (isDemo) {
+				this.gameAPI.updateDemoBalance(newBalance);
+			}
+
 			console.log(`[SlotController] Balance deducted: $${currentBalance.toFixed(2)} -> $${newBalance.toFixed(2)}`);
 			
 			// Trigger pre-spin symbol drop so previous symbols are cleared before
@@ -4235,6 +4329,15 @@ public updateAutoplayButtonState(): void {
 	 * Update balance from server using getBalance API
 	 */
 	private async updateBalanceFromServer(): Promise<void> {
+		// Demo mode: balance is managed locally; skip server refresh.
+		const isDemo =
+			this.gameAPI?.getDemoState() ||
+			localStorage.getItem('demo') === 'true' ||
+			sessionStorage.getItem('demo') === 'true';
+		if (isDemo) {
+			console.log('[SlotController] Demo mode active - skipping balance update from server');
+			return;
+		}
 		try {
 			console.log('[SlotController] 💰 Updating balance from server after reels stopped...');
 			

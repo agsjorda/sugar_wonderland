@@ -164,7 +164,10 @@ export class AutoplayOptions {
 		balanceContainer.add(balanceLabel);
 		
 		// Balance amount - using the current balance from game data
-		const balanceAmount = scene.add.text(150, 1, `$${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, {
+		// Check if demo mode is active - if so, use blank currency symbol
+		const isDemo = (scene as any).gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const currencySymbol = isDemo ? '' : '$';
+		const balanceAmount = scene.add.text(150, 1, `${currencySymbol}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, {
 			fontSize: '24px',
 			color: '#00ff00',
 			fontFamily: 'Poppins-Bold'
@@ -398,13 +401,17 @@ export class AutoplayOptions {
 
 	private updateAutoplayDisplay(): void {
 		if (this.autoplayDisplay) {
-			this.autoplayDisplay.setText(`$${this.currentBet.toFixed(2)}`);
+			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const currencySymbol = isDemo ? '' : '$';
+			this.autoplayDisplay.setText(`${currencySymbol}${this.currentBet.toFixed(2)}`);
 		}
 	}
 
 	private updateBalanceDisplay(): void {
 		if (this.balanceAmountText) {
-			this.balanceAmountText.setText(`$${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const currencySymbol = isDemo ? '' : '$';
+			this.balanceAmountText.setText(`${currencySymbol}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 		}
 	}
 

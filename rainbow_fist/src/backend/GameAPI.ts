@@ -125,10 +125,8 @@ export class GameAPI {
      */
     public async initializeGame(): Promise<string> {
         const isDemo = this.getDemoState();
-        if (isDemo) {
-            localStorage.setItem('demo', isDemo);
-            sessionStorage.setItem('demo', isDemo);
-        }
+        localStorage.setItem('demo', isDemo ? 'true' : 'false');
+        sessionStorage.setItem('demo', isDemo ? 'true' : 'false');
         
         if(isDemo){
             return '';
@@ -219,7 +217,7 @@ export class GameAPI {
     }
     public async getBalance(): Promise<any> {
         // Check if demo mode is active
-        const isDemo = this.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const isDemo = this.getDemoState() || localStorage.getItem('demo') === 'true' || sessionStorage.getItem('demo') === 'true';
         
         // Return mock balance for demo mode
         if (isDemo) {
@@ -258,7 +256,7 @@ export class GameAPI {
      */
     public async doSpin(bet: number, isBuyFs: boolean, isEnhancedBet: boolean): Promise<SpinData> {
         // Check if demo mode is active
-        const isDemo = this.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const isDemo = this.getDemoState() || localStorage.getItem('demo') === 'true' || sessionStorage.getItem('demo') === 'true';
         
         // Only require token if not in demo mode
         if (!isDemo && !localStorage.getItem('token')) {
@@ -525,7 +523,7 @@ export class GameAPI {
      * This method calls getBalance and updates the GameData with the current balance
      */
     public async initializeBalance(): Promise<number> {
-        const isDemo = this.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const isDemo = this.getDemoState() || localStorage.getItem('demo') === 'true' || sessionStorage.getItem('demo') === 'true';
         if(isDemo) {
             return GameAPI.DEMO_BALANCE;
         }
@@ -561,6 +559,21 @@ export class GameAPI {
     }
 
     public async getHistory(page: number, limit: number): Promise<any> {
+        // Check if demo mode is active - don't make API call in demo mode
+        const isDemo = this.getDemoState() || localStorage.getItem('demo') === 'true' || sessionStorage.getItem('demo') === 'true';
+        if (isDemo) {
+            // Return empty history data for demo mode
+            return {
+                data: [],
+                meta: {
+                    page: 1,
+                    pageCount: 1,
+                    totalPages: 1,
+                    total: 0
+                }
+            };
+        }
+
         const apiUrl = `${getApiBaseUrl()}/api/v1/games/me/histories`;
         const token = localStorage.getItem('token')
             || localStorage.getItem('token')
@@ -583,9 +596,9 @@ export class GameAPI {
      * Get the demo state from URL parameters
      * @returns The value of the 'demo' URL parameter, or false if not found
      */
-    public getDemoState(): string | false {
-        const demoValue = getUrlParameter('demo');
-        return demoValue ? demoValue : false;
+    public getDemoState(): boolean | false {
+        const demoValue = getUrlParameter('demo') === 'true';
+        return demoValue;
     }
 
     /**

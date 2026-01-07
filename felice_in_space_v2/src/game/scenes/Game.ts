@@ -187,7 +187,7 @@ export class Game extends Scene
 			alpha: 0.5,
 			depth: 30000,
 			scale: 0.7,
-			suffixText: ' | Felice in Space',
+			suffixText: ` | Felice in Space${this.gameAPI.getDemoState() ? ' | DEMO' : ''}`,
 			additionalText: 'DiJoker',
 			additionalTextOffsetX: 185,
 			additionalTextOffsetY: 0,
@@ -528,6 +528,27 @@ export class Game extends Scene
 				}
 			} else {
 				console.log('[Game] WIN_STOP: No current spin data available');
+			}
+
+			// Demo mode: sync in-memory demo balance with base-game wins (no scatter/bonus)
+			try {
+				const isDemo =
+					this.gameAPI.getDemoState() ||
+					localStorage.getItem('demo') === 'true' ||
+					sessionStorage.getItem('demo') === 'true';
+				if (isDemo && !gameStateManager.isScatter && !gameStateManager.isBonus) {
+					// If we had spin data, totalWin was computed above; otherwise treat as 0
+					const symbolsAny: any = this.symbols as any;
+					const spinData = symbolsAny?.currentSpinData;
+					const tumbleResult = spinData ? this.calculateTotalWinFromTumbles(spinData.slot?.tumbles || []) : { totalWin: 0, hasCluster: false };
+					const winForDemo = tumbleResult.totalWin || 0;
+					if (winForDemo > 0) {
+						this.gameAPI.updateDemoBalance(this.gameAPI.getDemoBalance() + winForDemo);
+					}
+				}
+			} catch (e) {
+				// Non-fatal: demo sync should never break the win flow
+				console.warn('[Game] Demo balance sync failed:', e);
 			}
 			
 			// Update balance from server after WIN_STOP (skip during scatter/bonus)

@@ -380,7 +380,10 @@ export class HelpScreen {
             // Right column: payout value, right-aligned
             const value = payoutData[row] ?? 0;
             const adjustedValue = this.applyBetToPayout(value);
-            const valueText = '$ ' + this.formatPayout(adjustedValue);
+            // Check if demo mode is active - if so, use blank currency symbol
+            const isDemo = localStorage.getItem('demo') || sessionStorage.getItem('demo');
+            const currencySymbol = isDemo ? '' : '$';
+            const valueText = currencySymbol + (currencySymbol ? ' ' : '') + this.formatPayout(adjustedValue);
             const payoutText = scene.add.text(0, y, valueText, {
                 fontSize: this.payoutTextFontSize + 'px',
                 color: '#FFFFFF',
@@ -473,7 +476,10 @@ export class HelpScreen {
             // Right column: payout value, right-aligned
             const value = SCATTER_PAYOUTS[row] ?? 0;
             const adjustedValue = this.applyBetToPayout(value);
-            const valueText = '$ ' + this.formatPayout(adjustedValue);
+            // Check if demo mode is active - if so, use blank currency symbol
+            const isDemo = localStorage.getItem('demo') || sessionStorage.getItem('demo');
+            const currencySymbol = isDemo ? '' : '$';
+            const valueText = currencySymbol + (currencySymbol ? ' ' : '') + this.formatPayout(adjustedValue);
             const payoutTextX = baseTextX + this.scatterPayoutTextColumnSpacing / 2;
             const payoutText = scene.add.text(payoutTextX, adjustedTextY, valueText, {
                 fontSize: this.scatterPayoutTextFontSize + 'px',
@@ -754,7 +760,10 @@ export class HelpScreen {
         buyFeatContainer.add(buyLabel);
 
         // Static price text $10,000 centered on the button
-        const buyPrice = scene.add.text(btnCenterX, btnCenterY + 14, '$10,000', {
+        // Check if demo mode is active - if so, use blank currency symbol
+        const isDemoBuyPrice = localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const currencySymbolBuyPrice = isDemoBuyPrice ? '' : '$';
+        const buyPrice = scene.add.text(btnCenterX, btnCenterY + 14, `${currencySymbolBuyPrice}10,000`, {
             fontSize: '18px',
             color: '#FFFFFF',
             fontFamily: 'Poppins-Bold',
@@ -989,10 +998,13 @@ export class HelpScreen {
         balanceCardContainer.add(balanceTitle);
 
         // Main value text layer below the title.
+        // Check if demo mode is active - if so, use blank currency symbol
+        const isDemoBalance = localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const currencySymbolBalance = isDemoBalance ? '' : '$';
         const balanceValue = scene.add.text(
             cardLeft + cardWidth / 2,
             cardHeight / 2 + this.padding * 0.8,
-            '$ 200,000.00',
+            `${currencySymbolBalance}${currencySymbolBalance ? ' ' : ''}200,000.00`,
             {
                 ...this.titleStyle,
                 color: '#ffffff',

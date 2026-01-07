@@ -112,7 +112,10 @@ export class BonusHeader {
 		// Don't add to container - add directly to scene so depth works correctly
 
 		// Line 2: amount value
-		this.amountText = scene.add.text(x, y + 18, '$ 0.00', {
+		// Check if demo mode is active - if so, use blank currency symbol
+		const isDemoInitial = this.scene?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const currencySymbolInitial = isDemoInitial ? '' : '$';
+		this.amountText = scene.add.text(x, y + 18, `${currencySymbolInitial}${currencySymbolInitial ? ' ' : ''}0.00`, {
 			fontSize: '24px',
 			color: '#FFB837',
 			fontFamily: 'Poppins-Bold',
@@ -360,19 +363,11 @@ export class BonusHeader {
 	 * Format currency value for display
 	 */
 	private formatCurrency(amount: number): string {
-		if (amount === 0) {
-			return '$ 0.00';
-		}
-		
-		// Format with commas for thousands and 2 decimal places
-		const formatted = new Intl.NumberFormat('en-US', {
-			style: 'currency',
-			currency: 'USD',
-			minimumFractionDigits: 2,
-			maximumFractionDigits: 2
-		}).format(amount);
-		
-		return formatted;
+		// Check if demo mode is active - if so, use blank currency symbol
+		const isDemo = this.scene?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const currencySymbol = isDemo ? '' : '$';
+		const formatted = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+		return `${currencySymbol}${currencySymbol ? ' ' : ''}${formatted}`;
 	}
 
 	/**

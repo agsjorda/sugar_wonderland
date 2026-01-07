@@ -859,6 +859,8 @@ export class FreeRoundManager {
 		this.panelContainer.add(spinsLabel);
 
 		// "With $X.XX" line
+		const isDemo = (scene as any).gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const currencySymbol = isDemo ? '' : '$';
 		const betValue =
 			this.initBet != null
 				? this.initBet
@@ -883,7 +885,7 @@ export class FreeRoundManager {
 		this.panelBetText = scene.add.text(
 			0,
 			0,
-			`$${betDisplay}`,
+			`${currencySymbol}${betDisplay}`,
 			{
 				fontSize: '20px',
 				color: '#379557',
@@ -1045,6 +1047,8 @@ export class FreeRoundManager {
 
 		// Line 1: "You won $XX.XX with"
 		const totalWinDisplay = totalWin.toFixed(2);
+		const isDemo = (scene as any).gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const currencySymbol = isDemo ? '' : '$';
 
 		const line1Y = -40;
 		const line1Parts = [
@@ -1053,7 +1057,7 @@ export class FreeRoundManager {
 				style: { fontSize: '24px', color: '#ffffff', fontFamily: 'poppins-bold' }
 			},
 			{
-				text: `$${totalWinDisplay}`,
+				text: `${currencySymbol}${totalWinDisplay}`,
 				style: { fontSize: '32px', color: '#00ff00', fontFamily: 'poppins-bold' }
 			},
 			{
@@ -1067,7 +1071,7 @@ export class FreeRoundManager {
 		for (const part of line1Parts) {
 			const t = scene.add.text(0, 0, part.text, part.style);
 			// Apply green gradient to the winnings value segment
-			if (part.text.startsWith('$')) {
+			if (!isDemo && part.text.startsWith('$')) {
 				this.applyBetValueGradientToText(t);
 			}
 			line1Width += t.width;
@@ -1129,7 +1133,7 @@ export class FreeRoundManager {
 		const betValueText = scene.add.text(
 			0,
 			0,
-			`$${betDisplay}`,
+			`${currencySymbol}${betDisplay}`,
 			{
 				fontSize: '22px',
 				color: '#379557',

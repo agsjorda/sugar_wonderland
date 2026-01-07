@@ -253,6 +253,12 @@ export class Preloader extends Scene
 
     async create ()
     {
+		try {
+			const demoState = this.gameAPI.getDemoState();
+			console.log('[Preloader] Demo state:', demoState);
+		} catch (error) {
+			console.error('[Preloader] Failed to get demo state:', error);
+		}
 		
         // Initialize GameAPI, generate token, and call backend initialize endpoint
         try {
@@ -393,7 +399,7 @@ export class Preloader extends Scene
 	private createClockDisplay()
 	{
 		this.clockDisplay = new ClockDisplay(this, {
-			gameTitle: 'War Freaks',
+			gameTitle: `War Freaks${this.gameAPI.getDemoState() ? ' | DEMO' : ''}`,
 		});
 		this.clockDisplay.create();
 	}

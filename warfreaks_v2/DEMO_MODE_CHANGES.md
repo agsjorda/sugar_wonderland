@@ -13,7 +13,7 @@ Demo mode allows the game to run without requiring authentication tokens or maki
 #### Constants Added
 
 - **`GAME_ID`**: Static readonly constant for the game ID
-  - Value: `'00060725'`
+  - Value: `'00050725'`
   - Used in API requests to identify the game
 
 - **`DEMO_BALANCE`**: Static readonly constant for demo mode balance
@@ -34,7 +34,7 @@ Demo mode allows the game to run without requiring authentication tokens or maki
 ##### `initializeBalance()`
 - **Demo Check**: Checks for demo mode using `getDemoState()`, `localStorage`, or `sessionStorage`
 - **Demo Behavior**: Returns the current `GameAPI.DEMO_BALANCE` without any API call when in demo mode
-- **Purpose**: Many flows use this method as the “balance refresh” path; in demo mode it effectively refreshes UI from the in-memory demo balance.
+- **Purpose**: Many flows use this method as the "balance refresh" path; in demo mode it effectively refreshes UI from the in-memory demo balance.
 
 ##### `getBalance()`
 - **Demo Check**: Checks for demo mode using `getDemoState()`, `localStorage`, or `sessionStorage`
@@ -121,7 +121,7 @@ Demo mode allows the game to run without requiring authentication tokens or maki
 - **Purpose**: Keeps the demo balance in sync with wins during gameplay
 
 #### UI Indicator
-- **Demo Title Marker**: Appends `| DEMO` to the game title when demo mode is active (via `getDemoState()`), e.g. `Rainbow Fist | DEMO`.
+- **Demo Title Marker**: Appends `| DEMO` to the game title when demo mode is active (via `getDemoState()`), e.g. `Warfreaks | DEMO`.
   - Implemented in `create()` method when creating `ClockDisplay`
 
 ### 3. SlotController.ts
@@ -166,7 +166,7 @@ Demo mode allows the game to run without requiring authentication tokens or maki
 - **Purpose**: Provides visibility into demo mode activation during the preloader phase
 
 #### UI Indicator
-- **Demo Title Marker**: Appends `| DEMO` to the game title when demo mode is active (via `getDemoState()`), e.g. `Rainbow Fist | DEMO`.
+- **Demo Title Marker**: Appends `| DEMO` to the game title when demo mode is active (via `getDemoState()`), e.g. `Warfreaks | DEMO`.
   - Implemented in `createClockDisplay()` method when creating `ClockDisplay`
 
 ### 5. UI Currency Display
@@ -334,7 +334,7 @@ https://your-game-url.com/?demo=true
 
 | Constant | Type | Value | Usage |
 |----------|------|-------|-------|
-| `GAME_ID` | `string` | `'00060725'` | Game identifier in API requests |
+| `GAME_ID` | `string` | `'00050725'` | Game identifier in API requests |
 | `DEMO_BALANCE` | `number` | `10000` | Default balance in demo mode |
 
 ## Methods Reference

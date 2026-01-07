@@ -108,7 +108,7 @@ export class Preloader extends Scene
 			alpha: 0.5,
 			depth: 30000,
 			scale: 0.7,
-			suffixText: ' | Sugar Wonderland',
+			suffixText: ` | Sugar Wonderland${this.gameAPI.getDemoState() ? ' | DEMO' : ''}`,
 			additionalText: 'DiJoker',
 			additionalTextOffsetX: 185,
 			additionalTextOffsetY: 0,
@@ -341,15 +341,27 @@ export class Preloader extends Scene
 
     async create ()
     {
-        // Initialize GameAPI, generate token, and call backend initialize endpoint
+		try {
+			const demoState = this.gameAPI.getDemoState();
+			console.log('[Preloader] Demo state:', demoState);
+		} catch (error) {
+			console.error('[Preloader] Failed to get demo state:', error);
+		}
+
+		// Initialize GameAPI, generate token, and call backend initialize endpoint (skip slot init in demo)
         try {
             console.log('[Preloader] Initializing GameAPI...');
             const gameToken = await this.gameAPI.initializeGame();
             console.log('[Preloader] Game URL Token:', gameToken);
 
-            console.log('[Preloader] Calling backend slot initialization...');
-            const slotInitData = await this.gameAPI.initializeSlotSession();
-            console.log('[Preloader] Slot initialization data:', slotInitData);
+			const isDemo = this.gameAPI.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			if (!isDemo) {
+				console.log('[Preloader] Calling backend slot initialization...');
+				const slotInitData = await this.gameAPI.initializeSlotSession();
+				console.log('[Preloader] Slot initialization data:', slotInitData);
+			} else {
+				console.log('[Preloader] Demo mode active - skipping backend slot initialization');
+			}
 
             console.log('[Preloader] GameAPI and slot session initialized successfully!');
         } catch (error) {

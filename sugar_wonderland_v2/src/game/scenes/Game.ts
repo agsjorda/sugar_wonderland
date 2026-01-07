@@ -189,7 +189,7 @@ export class Game extends Scene
 			alpha: 0.5,
 			depth: 30000,
 			scale: 0.7,
-			suffixText: ' | Sugar Wonderland',
+			suffixText: ` | Sugar Wonderland${this.gameAPI.getDemoState() ? ' | DEMO' : ''}`,
 			additionalText: 'DiJoker',
 			additionalTextOffsetX: 185,
 			additionalTextOffsetY: 0,
@@ -523,6 +523,11 @@ export class Game extends Scene
 					this.checkAndShowWinDialog(totalWin, betAmount);
 				} else {
 					console.log('[Game] WIN_STOP: No qualifying cluster wins (>=8) detected');
+				}
+
+				const isDemo = this.gameAPI.getDemoState();
+				if (isDemo && !gameStateManager.isScatter && !gameStateManager.isBonus) {
+					this.gameAPI.updateDemoBalance(this.gameAPI.getDemoBalance() + totalWin);
 				}
 			} else {
 				console.log('[Game] WIN_STOP: No current spin data available');

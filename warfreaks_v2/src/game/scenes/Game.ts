@@ -169,7 +169,7 @@ export class Game extends Scene
 	create ()
 	{
 		this.clockDisplay = new ClockDisplay(this, {
-			gameTitle: 'War Freaks',
+			gameTitle: `War Freaks${this.gameAPI.getDemoState() ? ' | DEMO' : ''}`,
 		});
 		this.clockDisplay.create();
 
@@ -549,6 +549,11 @@ export class Game extends Scene
 					console.log('[Game] WIN_STOP: Win dialog shown');
 				} else {
 					console.log('[Game] WIN_STOP: No wins detected from paylines');
+				}
+
+				const isDemo = this.gameAPI.getDemoState();
+				if(isDemo && !gameStateManager.isScatter && !gameStateManager.isBonus) {
+					this.gameAPI.updateDemoBalance(this.gameAPI.getDemoBalance() + totalWin);
 				}
 			} else {
 				console.log('[Game] WIN_STOP: No current spin data available');
@@ -1132,6 +1137,11 @@ export class Game extends Scene
 				}
 			} else {
 				console.log('[Game] Bonus mode ended - enabling winningsDisplay');
+
+				const isDemo = this.gameAPI.getDemoState();
+				if (isDemo) {
+					this.gameAPI.updateDemoBalance(this.gameAPI.getDemoBalance() + this.symbols.cachedTotalWin);
+				}
 				// Ensure bonus-finished flag is cleared and bonus mode is turned off when leaving bonus
 				this.gameStateManager.isBonus = false;
 				this.gameStateManager.isBonusFinished = false;

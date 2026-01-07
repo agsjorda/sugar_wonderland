@@ -240,7 +240,11 @@ export class WinTracker {
     const valueLabel = this.scene.add.text(
       0,
       0,
-      `$${data.totalWin.toFixed(2)}`,
+      (() => {
+        const isDemo = (this.scene as any).gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const currencySymbol = isDemo ? '' : '$';
+        return `${currencySymbol}${data.totalWin.toFixed(2)}`;
+      })(),
       {
         fontSize: `${this.labelFontSize}px`,
         color: '#ffffff',

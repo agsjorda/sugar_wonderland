@@ -670,6 +670,7 @@ export class Dialogs {
 		
 		// Determine if this is the Congrats dialog showing a total win amount
 		const isCongratsTotalWin = this.currentDialogType === 'Congrats_KA' && freeSpins === undefined;
+		const isDemo = (scene as any).gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
 
 		// Create number display configuration
 		const numberConfig: NumberDisplayConfig = {
@@ -682,7 +683,7 @@ export class Dialogs {
 			showCommas: freeSpins !== undefined ? false : true, // No commas for free spins
 			// For Congrats dialog totals, show a dollar sign prefix.
 			// Other dialogs remain unchanged.
-			prefix: isCongratsTotalWin ? '$ ' : '',
+			prefix: isCongratsTotalWin ? (isDemo ? '' : '$ ') : '',
 			suffix: '', // No suffix - only display numbers
 			commaYOffset: 12,
 			dotYOffset: 10

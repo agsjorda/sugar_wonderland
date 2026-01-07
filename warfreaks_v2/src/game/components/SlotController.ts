@@ -1365,7 +1365,11 @@ export class SlotController {
 		const containerWidth = 125;
 		const containerHeight = 55;
 		const cornerRadius = 10;
-		const balanceValueOffset = 5;
+		
+		// Check if demo mode is active - if so, use blank currency symbol and center the text
+		const isDemoBalance = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const balanceCurrencySymbol = isDemoBalance ? '' : '$';
+		const balanceValueOffset = isDemoBalance ? 0 : 5; // Center in demo mode, offset right when currency symbol exists
 
 		// Create rounded rectangle background
 		const balanceBg = scene.add.graphics();
@@ -1410,7 +1414,7 @@ export class SlotController {
 		this.balanceDollarText = scene.add.text(
 			balanceX - (this.balanceAmountText.width / 2) - 3.5,
 			balanceY + 8,
-			'$',
+			balanceCurrencySymbol,
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color
@@ -1427,8 +1431,10 @@ export class SlotController {
 		const containerWidth = 125;
 		const containerHeight = 55;
 		const cornerRadius = 10;
-		const betValueOffset = 3;
-
+		
+		// Check if demo mode is active - if so, center the text (no currency symbol)
+		const isDemoBet = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const betValueOffset = isDemoBet ? 0 : 3; // Center in demo mode, offset right when currency symbol exists
 
 		// Create amplify bet spine animation (behind bet background)
 		this.createAmplifyBetAnimation(scene, betX, betY, containerWidth, containerHeight);
@@ -1509,10 +1515,12 @@ export class SlotController {
 		this.baseBetAmount = 0.20;
 
 		// "$" symbol (2nd line, left part) - positioned dynamically
+		// Check if demo mode is active - if so, use blank currency symbol
+		const betCurrencySymbol = isDemoBet ? '' : '$';
 		this.betDollarText = scene.add.text(
 			betX - (this.betAmountText.width / 2) - 3.5,
 			betY + 8,
-			'$',
+			betCurrencySymbol,
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color
@@ -1692,6 +1700,10 @@ export class SlotController {
 		const featureX = scene.scale.width * 0.5; // Center between balance and bet
 		const featureY = scene.scale.height * 0.724; // Same Y as balance and bet containers
 
+		// Check if demo mode is active - if so, center the text (no currency symbol)
+		const isDemoFeature = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const featureXOffset = isDemoFeature ? 0 : 5; // Center in demo mode, offset right when currency symbol exists
+
 		// Feature button image (serves as background)
 		const featureButton = scene.add.image(
 			featureX,
@@ -1721,7 +1733,7 @@ export class SlotController {
 
 		// Amount (2nd line, right part) - bound to current bet x100
 		this.featureAmountText = scene.add.text(
-			featureX + 5,
+			featureX + featureXOffset,
 			featureY + 8,
 			'0',
 			{
@@ -1733,10 +1745,12 @@ export class SlotController {
 		this.controllerContainer.add(this.featureAmountText);
 
 		// "$" symbol (2nd line, left part) - positioned dynamically
+		// Check if demo mode is active - if so, use blank currency symbol
+		const featureCurrencySymbol = isDemoFeature ? '' : '$';
 		this.featureDollarText = scene.add.text(
 			featureX - (this.featureAmountText.width / 2) - 3,
 			featureY + 8,
-			'$',
+			featureCurrencySymbol,
 			{
 				fontSize: '14px',
 				color: '#ffffff',
@@ -2046,6 +2060,10 @@ export class SlotController {
 
 			// Update balance display immediately
 			this.updateBalanceAmount(newBalance);
+
+			if(this.gameAPI?.getDemoState()) {
+				this.gameAPI.updateDemoBalance(newBalance);
+			}
 
 			console.log(`[SlotController] Balance decremented: $${currentBalance} -> $${newBalance} (bet charged: $${totalBetToCharge})`);
 
@@ -3990,6 +4008,11 @@ export class SlotController {
 
 			// Deduct the calculated price from balance (frontend only)
 			const newBalance = currentBalance - calculatedPrice;
+			
+			if(this.gameAPI?.getDemoState()) {
+				this.gameAPI.updateDemoBalance(newBalance);
+			}
+
 			this.updateBalanceAmount(newBalance);
 			console.log(`[SlotController] Balance deducted: $${currentBalance.toFixed(2)} -> $${newBalance.toFixed(2)}`);
 
@@ -4059,6 +4082,12 @@ export class SlotController {
 	 * Update balance from server using getBalance API
 	 */
 	private async updateBalanceFromServer(): Promise<void> {
+		// Check if demo mode is active
+		if (this.gameAPI?.getDemoState()) {
+			console.log('[SlotController] Demo mode active - skipping balance update from server');
+			return;
+		}
+
 		try {
 			console.log('[SlotController] 💰 Updating balance from server after reels stopped...');
 

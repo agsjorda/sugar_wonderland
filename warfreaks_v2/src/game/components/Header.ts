@@ -182,7 +182,10 @@ export class Header {
 		this.headerContainer.add(this.youWonText);
 
 		// Line 2: "$ 0.00" with bold formatting (base winnings / expression prefix)
-		this.amountText = scene.add.text(x, y + 6, '$ 0.00', {
+		// Check if demo mode is active - if so, use blank currency symbol
+		const isDemoInitial = this.scene?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const currencySymbolInitial = isDemoInitial ? '' : '$';
+		this.amountText = scene.add.text(x, y + 6, `${currencySymbolInitial}${currencySymbolInitial ? ' ' : ''}0.00`, {
 			fontSize: '20px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
@@ -488,19 +491,21 @@ export class Header {
 	 * Format currency value for display
 	 */
 	private formatCurrency(amount: number): string {
+		// Check if demo mode is active - if so, use blank currency symbol
+		const isDemo = this.scene?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const currencySymbol = isDemo ? '' : '$';
+		
 		if (amount === 0) {
-			return '$ 0.00';
+			return `${currencySymbol}${currencySymbol ? ' ' : ''}0.00`;
 		}
 		
 		// Format with commas for thousands and 2 decimal places
 		const formatted = new Intl.NumberFormat('en-US', {
-			style: 'currency',
-			currency: 'USD',
 			minimumFractionDigits: 2,
 			maximumFractionDigits: 2
 		}).format(amount);
 		
-		return formatted;
+		return `${currencySymbol}${currencySymbol ? ' ' : ''}${formatted}`;
 	}
 
 	/**

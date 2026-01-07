@@ -108,7 +108,7 @@ export class Preloader extends Scene
 			alpha: 0.5,
 			depth: 30000,
 			scale: 0.7,
-			suffixText: ' | Felice in Space',
+			suffixText: ` | Felice in Space${this.gameAPI.getDemoState() ? ' | DEMO' : ''}`,
 			additionalText: 'DiJoker',
 			additionalTextOffsetX: 185,
 			additionalTextOffsetY: 0,
@@ -344,6 +344,14 @@ export class Preloader extends Scene
 
     async create ()
     {
+		// Log demo state early for debugging/QA parity with rainbow_fist
+		try {
+			const demoState = this.gameAPI.getDemoState();
+			console.log('[Preloader] Demo state:', demoState);
+		} catch (error) {
+			console.error('[Preloader] Failed to get demo state:', error);
+		}
+
         // Initialize GameAPI, generate token, and call backend initialize endpoint
         try {
             console.log('[Preloader] Initializing GameAPI...');

@@ -359,6 +359,10 @@ export class HelpScreen {
         const payoutTexts: Array<{ text: GameObjects.Text; row: number }> = [];
         const rangeTexts: Array<{ text: GameObjects.Text; row: number }> = [];
 
+        // Check if demo mode is active - if so, use blank currency symbol
+        const isDemo = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const currencySymbol = isDemo ? '' : '$';
+
         for (let row = 0; row < 3; row++) {
             const y = 0;
             // Left column: range label (bold)
@@ -376,7 +380,7 @@ export class HelpScreen {
             // Right column: payout value, right-aligned
             const value = payoutData[row] ?? 0;
             const adjustedValue = this.applyBetToPayout(value);
-            const valueText = '$ ' + this.formatPayout(adjustedValue);
+            const valueText = currencySymbol + (currencySymbol ? ' ' : '') + this.formatPayout(adjustedValue);
             const payoutText = scene.add.text(0, y, valueText, {
                 fontSize: this.payoutTextFontSize + 'px',
                 color: '#FFFFFF',
@@ -450,6 +454,10 @@ export class HelpScreen {
         const payoutTexts: Array<{ text: GameObjects.Text; row: number }> = [];
         const rangeTexts: Array<{ text: GameObjects.Text; row: number }> = [];
 
+        // Check if demo mode is active - if so, use blank currency symbol
+        const isDemo = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const currencySymbol = isDemo ? '' : '$';
+
         for (let row = 0; row < 3; row++) {
             const adjustedTextY = baseTextY + row * this.scatterPayoutTextRowSpacing;
             
@@ -469,7 +477,7 @@ export class HelpScreen {
             // Right column: payout value, right-aligned
             const value = SCATTER_PAYOUTS[row] ?? 0;
             const adjustedValue = this.applyBetToPayout(value);
-            const valueText = '$ ' + this.formatPayout(adjustedValue);
+            const valueText = currencySymbol + (currencySymbol ? ' ' : '') + this.formatPayout(adjustedValue);
             const payoutTextX = baseTextX + this.scatterPayoutTextColumnSpacing / 2;
             const payoutText = scene.add.text(payoutTextX, adjustedTextY, valueText, {
                 fontSize: this.scatterPayoutTextFontSize + 'px',
@@ -749,8 +757,10 @@ export class HelpScreen {
         buyLabel.setOrigin(0.5, 0.5);
         buyFeatContainer.add(buyLabel);
 
-        // Static price text $10,000 centered on the button
-        const buyPrice = scene.add.text(btnCenterX, btnCenterY + 14, '$10,000', {
+        // Static price text centered on the button (hide currency in demo)
+        const isDemoBuyPrice = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const currencySymbolBuyPrice = isDemoBuyPrice ? '' : '$';
+        const buyPrice = scene.add.text(btnCenterX, btnCenterY + 14, `${currencySymbolBuyPrice}10,000`, {
             fontSize: '18px',
             color: '#FFFFFF',
             fontFamily: 'Poppins-Bold',
@@ -988,7 +998,11 @@ export class HelpScreen {
         const balanceValue = scene.add.text(
             cardLeft + cardWidth / 2,
             cardHeight / 2 + this.padding * 0.8,
-            '$ 200,000.00',
+            (() => {
+                const isDemoBalance = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+                const currencySymbolBalance = isDemoBalance ? '' : '$';
+                return `${currencySymbolBalance}${currencySymbolBalance ? ' ' : ''}200,000.00`;
+            })(),
             {
                 ...this.titleStyle,
                 color: '#ffffff',

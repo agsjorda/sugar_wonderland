@@ -300,11 +300,22 @@ export class Menu {
                 Geom.Rectangle.Contains
             ).isButton = true;
 
-            // Tab click handler
-            tabContainer.on('pointerup', () => {
-                scene.audioManager.playSoundEffect(SoundEffectType.MENU_CLICK);
-                this.switchTab(scene, tabContainers, index, tabConfigs);
-            });
+            // Tab click handler - disable history tab in demo mode
+            const isDemo = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+            const isHistoryTab = tabConfig.icon === 'history';
+            
+            if (isHistoryTab && isDemo) {
+                // Disable interaction for history tab in demo mode
+                tabContainer.disableInteractive();
+                // Make it visually appear disabled (reduce opacity)
+                tabContainer.setAlpha(0.5);
+            } else {
+                // Normal tab click handler
+                tabContainer.on('pointerup', () => {
+                    scene.audioManager.playSoundEffect(SoundEffectType.MENU_CLICK);
+                    this.switchTab(scene, tabContainers, index, tabConfigs);
+                });
+            }
 
             tabContainers.push(tabContainer);
             this.panel.add(tabContainer);
@@ -421,6 +432,18 @@ export class Menu {
     }
 
     private switchTab(scene: GameScene, tabContainers: ButtonContainer[], activeIndex: number, tabConfigs: any[]): void {
+        // Check if demo mode is active and prevent switching to history tab
+        const isDemo = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const tabKey: string = tabConfigs[activeIndex].icon;
+        
+        if (isDemo && tabKey === 'history') {
+            // Don't switch to history tab in demo mode - stay on current tab or switch to first available tab
+            const firstNonHistoryIndex = tabConfigs.findIndex((config, idx) => config.icon !== 'history' && config.icon !== 'close');
+            if (firstNonHistoryIndex !== -1) {
+                activeIndex = firstNonHistoryIndex;
+            }
+        }
+        
         // Update tab highlighting
         tabContainers.forEach((tabContainer, index) => {
             const tabBg = tabContainer.getAt(0) as GameObjects.Graphics;
@@ -441,8 +464,8 @@ export class Menu {
         });
 
         // Show content for active tab
-        const tabKey: string = tabConfigs[activeIndex].icon;
-        this.showTabContent(scene, tabKey);
+        const finalTabKey: string = tabConfigs[activeIndex].icon;
+        this.showTabContent(scene, finalTabKey);
     }
 
     private showTabContent(scene: GameScene, tabKey: string): void {
@@ -472,6 +495,10 @@ export class Menu {
         const contentArea = this.historyContent;
         // Keep old rows until new data is ready; build containers on first run
         const historyHeaders : string[] = ['Spin', 'Currency', 'Bet', 'Win'];
+        
+        // Check if demo mode is active
+        const isDemo = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        
         // Recreate or reparent containers if needed (handles menu reopen)
         if (!this.historyHeaderContainer || !this.historyHeaderContainer.scene) {
             this.historyHeaderContainer = scene.add.container(0, 0);
@@ -497,6 +524,43 @@ export class Menu {
         }
         if ((this.historyHeaderContainer as any).parentContainer !== contentArea) {
             contentArea.add(this.historyHeaderContainer);
+        }
+
+        // In demo mode, show empty history without making API call
+        if (isDemo) {
+            // Display headers
+            const columnCenters = this.getHistoryColumnCenters(scene);
+            const headerContainer = this.historyHeaderContainer as GameObjects.Container;
+            if (headerContainer.length <= 1) {
+                const headerY = 60;
+                historyHeaders.forEach((header, idx) => {
+                    const headerText = scene.add.text(columnCenters[idx], headerY, header, {
+                        fontSize: '14px',
+                        color: '#FFFFFF',
+                        fontFamily: 'Poppins-Regular',
+                        fontStyle: 'bold',
+                    }) as ButtonText;
+                    headerText.setOrigin(0.5, 0);
+                    headerContainer.add(headerText);
+                });
+            }
+            
+            // Show empty state message
+            const emptyMessage = scene.add.text(
+                scene.scale.width / 2,
+                scene.scale.height * 0.3,
+                'History is not available in demo mode',
+                {
+                    fontSize: '16px',
+                    color: '#888888',
+                    fontFamily: 'Poppins-Regular',
+                }
+            ) as ButtonText;
+            emptyMessage.setOrigin(0.5, 0.5);
+            this.historyRowsContainer.add(emptyMessage);
+            
+            // No pagination in demo mode
+            return;
         }
 
         // Prevent stacking requests

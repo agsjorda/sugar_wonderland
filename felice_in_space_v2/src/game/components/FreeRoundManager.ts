@@ -883,7 +883,14 @@ export class FreeRoundManager {
 		this.panelBetText = scene.add.text(
 			0,
 			0,
-			`$${betDisplay}`,
+			(() => {
+				const isDemo =
+					(this.sceneRef as any)?.gameAPI?.getDemoState?.() ||
+					localStorage.getItem('demo') === 'true' ||
+					sessionStorage.getItem('demo') === 'true';
+				const currencySymbol = isDemo ? '' : '$';
+				return `${currencySymbol}${betDisplay}`;
+			})(),
 			{
 				fontSize: '20px',
 				color: '#379557',
@@ -1047,13 +1054,18 @@ export class FreeRoundManager {
 		const totalWinDisplay = totalWin.toFixed(2);
 
 		const line1Y = -40;
+		const isDemoCurrency =
+			(this.sceneRef as any)?.gameAPI?.getDemoState?.() ||
+			localStorage.getItem('demo') === 'true' ||
+			sessionStorage.getItem('demo') === 'true';
+		const currencySymbol = isDemoCurrency ? '' : '$';
 		const line1Parts = [
 			{
 				text: 'You won ',
 				style: { fontSize: '24px', color: '#ffffff', fontFamily: 'poppins-bold' }
 			},
 			{
-				text: `$${totalWinDisplay}`,
+				text: `${currencySymbol}${totalWinDisplay}`,
 				style: { fontSize: '32px', color: '#00ff00', fontFamily: 'poppins-bold' }
 			},
 			{
@@ -1129,7 +1141,7 @@ export class FreeRoundManager {
 		const betValueText = scene.add.text(
 			0,
 			0,
-			`$${betDisplay}`,
+			`${currencySymbol}${betDisplay}`,
 			{
 				fontSize: '22px',
 				color: '#379557',
@@ -1288,7 +1300,14 @@ export class FreeRoundManager {
 		const winningsText = scene.add.text(
 			0,
 			winningsY,
-			`$${totalWinDisplay}`,
+			(() => {
+				const isDemo =
+					(this.sceneRef as any)?.gameAPI?.getDemoState?.() ||
+					localStorage.getItem('demo') === 'true' ||
+					sessionStorage.getItem('demo') === 'true';
+				const currencySymbol = isDemo ? '' : '$';
+				return `${currencySymbol}${totalWinDisplay}`;
+			})(),
 			{
 				fontSize: '32px',
 				color: '#00ff00',

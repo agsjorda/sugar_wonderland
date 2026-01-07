@@ -146,7 +146,12 @@ export class Header {
 		this.youWonText.setVisible(false);
 
 		// Line 2: amount value
-		this.amountText = scene.add.text(x, y + 16, '$ 0.00', {
+		const isDemoInitial =
+			(scene as any)?.gameAPI?.getDemoState?.() ||
+			localStorage.getItem('demo') === 'true' ||
+			sessionStorage.getItem('demo') === 'true';
+		const currencySymbolInitial = isDemoInitial ? '' : '$';
+		this.amountText = scene.add.text(x, y + 16, `${currencySymbolInitial}${currencySymbolInitial ? ' ' : ''}0.00`, {
 			fontSize: '22px',
 			color: '#04fd46',
 			fontFamily: 'Poppins-Bold',
@@ -505,19 +510,28 @@ export class Header {
 	 * Format currency value for display
 	 */
 	private formatCurrency(amount: number): string {
+		const isDemo =
+			(this.scene as any)?.gameAPI?.getDemoState?.() ||
+			localStorage.getItem('demo') === 'true' ||
+			sessionStorage.getItem('demo') === 'true';
+		if (isDemo) {
+			const formatted = new Intl.NumberFormat('en-US', {
+				minimumFractionDigits: 2,
+				maximumFractionDigits: 2
+			}).format(amount || 0);
+			return formatted;
+		}
+
 		if (amount === 0) {
 			return '$ 0.00';
 		}
-		
-		// Format with commas for thousands and 2 decimal places
-		const formatted = new Intl.NumberFormat('en-US', {
+
+		return new Intl.NumberFormat('en-US', {
 			style: 'currency',
 			currency: 'USD',
 			minimumFractionDigits: 2,
 			maximumFractionDigits: 2
 		}).format(amount);
-		
-		return formatted;
 	}
 
 	/**
