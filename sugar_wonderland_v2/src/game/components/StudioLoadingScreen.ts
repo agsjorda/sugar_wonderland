@@ -481,8 +481,7 @@ export class StudioLoadingScreen {
         assetLoader.loadNumberAssets(this.scene);
         // Optional groups not present in this game have been omitted
         assetLoader.loadDialogAssets(this.scene);
-        assetLoader.loadAudioAssets(this.scene);
-        console.log('[StudioLoadingScreen] Queued game assets (optimized)');
+        console.log('[StudioLoadingScreen] Queued game assets (optimized, audio handled separately)');
     }
 }
 
@@ -500,7 +499,6 @@ export function queueGameAssetLoading(scene: Scene, assetLoader: AssetLoader): v
     assetLoader.loadSymbolAssets(scene);
     assetLoader.loadNumberAssets(scene);
     assetLoader.loadDialogAssets(scene);
-    assetLoader.loadAudioAssets(scene);
     // Optional groups not present in this game have been omitted
-    console.log('[StudioLoadingScreen] Queued game asset loading (optimized)');
+    console.log('[StudioLoadingScreen] Queued game asset loading (optimized, audio handled separately)');
 }

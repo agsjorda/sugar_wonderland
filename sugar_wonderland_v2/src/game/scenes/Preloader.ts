@@ -21,6 +21,7 @@ export class Preloader extends Scene
 	private studio?: StudioLoadingScreen;
 	private clockDisplay?: ClockDisplay;
 	private preloaderVerticalOffsetModifier: number = 10;
+	private bootProgressHandler?: (progress: number) => void;
 
 	// Loading bar graphics
 	private progressBarBg?: Phaser.GameObjects.Graphics;
@@ -295,16 +296,24 @@ export class Preloader extends Scene
 		} catch {}
 
 		// Set up progress event listener (forward only to external listeners; studio/studio React handle bars)
-		this.load.on('progress', (progress: number) => {
+		this.bootProgressHandler = (progress: number) => {
 			EventBus.emit('progress', progress);
 			try {
 				(window as any).setBootLoaderProgress?.(0.25 + progress * 0.75);
 			} catch {}
-		});
+		};
+		this.load.on('progress', this.bootProgressHandler as any);
 
 		this.load.once('complete', () => {
 			try {
 				(window as any).setBootLoaderProgress?.(1);
+			} catch {}
+			// Detach this handler so subsequent background loads (audio) don't drive the boot progress UI.
+			try {
+				if (this.bootProgressHandler) {
+					this.load.off('progress', this.bootProgressHandler as any);
+					this.bootProgressHandler = undefined;
+				}
 			} catch {}
 		});
 		
@@ -337,6 +346,40 @@ export class Preloader extends Scene
 		this.assetLoader.loadHelpScreenAssets(this);
 		
 		console.log(`[Preloader] Loading assets for Preloader and Game scenes`);
+	}
+
+	private startBackgroundAudioLoad(): void {
+		try {
+			const audioAssets = this.assetConfig.getAudioAssets();
+			const audioMap = audioAssets.audio || {};
+			const entries = Object.entries(audioMap);
+			if (entries.length === 0) return;
+
+			let queued = 0;
+			for (const [key, path] of entries) {
+				try {
+					if ((this.cache.audio as any)?.exists?.(key)) continue;
+				} catch {
+					// If we can't check the cache, still attempt to queue.
+				}
+				try {
+					this.load.audio(key, path);
+					queued++;
+				} catch {}
+			}
+
+			if (queued <= 0) return;
+
+			console.log(`[Preloader] Background-loading ${queued} audio files (non-blocking for StudioLoading)`);
+
+			this.load.once('complete', () => {
+				console.log('[Preloader] Background audio load complete');
+			});
+
+			this.load.start();
+		} catch (e) {
+			console.warn('[Preloader] Failed to start background audio load:', e);
+		}
 	}
 
     async create ()
@@ -428,6 +471,10 @@ export class Preloader extends Scene
                 }
             });
         });
+
+		// Start loading audio in the background now that the main visual load is complete.
+		// If the user clicks early and this scene stops, Game scene will fall back to loading audio again.
+		this.startBackgroundAudioLoad();
 
 		// Ensure web fonts are applied after they are ready
 		const fontsObj: any = (document as any).fonts;

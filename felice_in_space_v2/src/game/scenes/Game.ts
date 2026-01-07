@@ -227,24 +227,48 @@ export class Game extends Scene
 		this.audioManager = new AudioManager(this);
 		console.log('[Game] AudioManager initialized');
 
-		// Audio is already loaded in Preloader, so try to use it when ready
+		// Defer audio: it may still be downloading (started in Preloader), so initialize when ready.
 		this.time.delayedCall(0, () => {
-			console.log('[Game] Initializing audio (loaded in Preloader)...');
-			
-			// Try to create audio instances - they may already be in cache from Preloader
-			const tryCreateAudio = () => {
+			const tryInitAudio = () => {
 				try {
 					this.audioManager.createMusicInstances();
 					this.audioManager.playBackgroundMusic(MusicType.MAIN);
 					console.log('[Game] Audio instances created and background music started');
-				} catch (e) {
-					// Audio might still be loading, retry after a short delay
-					console.log('[Game] Audio not ready yet, retrying...');
-					this.time.delayedCall(100, tryCreateAudio);
+					return true;
+				} catch (_e) {
+					return false;
 				}
 			};
-			
-			tryCreateAudio();
+
+			// If audio is already in cache, init immediately.
+			if (tryInitAudio()) return;
+
+			// Otherwise, background-load audio on this scene as a fallback (e.g., user clicked early).
+			try {
+				const audioAssets = new AssetConfig(this.networkManager, this.screenModeManager).getAudioAssets();
+				const audioMap = audioAssets.audio || {};
+				let queued = 0;
+				for (const [key, path] of Object.entries(audioMap)) {
+					try {
+						if ((this.cache.audio as any)?.exists?.(key)) continue;
+					} catch {}
+					try { this.load.audio(key, path as string); queued++; } catch {}
+				}
+				if (queued > 0) {
+					console.log(`[Game] Background-loading ${queued} audio files (fallback)`);
+					this.load.once('complete', () => {
+						tryInitAudio();
+					});
+					this.load.start();
+				} else {
+					// Nothing to load; just keep retrying briefly in case of timing/decode.
+					this.time.delayedCall(150, tryInitAudio);
+				}
+			} catch (e) {
+				console.warn('[Game] Failed to queue background audio load:', e);
+				// Last resort: retry creation periodically.
+				this.time.delayedCall(250, tryInitAudio);
+			}
 		});
 
 		// Make AudioManager available globally for other components

@@ -1,7 +1,6 @@
 import { Scene } from 'phaser';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { AssetLoader } from '../../utils/AssetLoader';
-import { AssetConfig } from '../../config/AssetConfig';
 
 export interface StudioLoadingScreenOptions {
     loadingFrameOffsetX?: number;
@@ -367,88 +366,8 @@ export class StudioLoadingScreen {
             this.onProgressHandler = (p: number) => updateFill(p);
             this.scene.load.on('progress', this.onProgressHandler as any);
 
-            // Track audio file keys to exclude them from completion check
-            const audioKeys = new Set<string>();
-            try {
-                // Get audio keys from AssetConfig
-                const networkManager = (this.scene as any).networkManager;
-                const screenModeManager = (this.scene as any).screenModeManager;
-                if (networkManager && screenModeManager) {
-                    const audioAssets = new AssetConfig(networkManager, screenModeManager).getAudioAssets();
-                    if (audioAssets.audio) {
-                        Object.keys(audioAssets.audio).forEach(key => audioKeys.add(key));
-                        console.log(`[StudioLoadingScreen] Tracking ${audioKeys.size} audio files to exclude from completion`);
-                    }
-                }
-            } catch (e) {
-                console.warn('[StudioLoadingScreen] Could not get audio keys, will wait for all files:', e);
-            }
-
-            // Custom completion check that ignores audio files
-            const checkCompletion = () => {
-                try {
-                    const loader = this.scene.load as any;
-                    const list = loader.list;
-                    
-                    // Phaser loader.list is an object, not an array - convert to array
-                    if (!list) {
-                        return; // No files to check
-                    }
-                    
-                    // Convert list object to array of file entries
-                    const fileArray = Array.isArray(list) ? list : Object.values(list);
-                    
-                    // Check if all remaining files are audio files
-                    const pendingFiles = fileArray.filter((file: any) => {
-                        if (!file || typeof file.state === 'undefined') {
-                            return false;
-                        }
-                        const state = file.state;
-                        // Phaser Loader file states: 0=PENDING, 1=LOADING, 2=LOADED, 3=FAILED, 4=PROCESSING
-                        return state === 0 || state === 1 || state === 4;
-                    });
-                    
-                    // Filter out audio files from pending
-                    const nonAudioPending = pendingFiles.filter((file: any) => {
-                        return file && file.key && !audioKeys.has(file.key);
-                    });
-                    
-                    if (nonAudioPending.length === 0) {
-                        // All non-audio files are done (audio may still be loading, but we don't wait)
-                        console.log('[StudioLoadingScreen] All non-audio files complete, fading out (audio may still be loading)');
-                        // Clean up listeners and interval
-                        this.scene.load.off('filecomplete', checkCompletion as any);
-                        if ((this as any).completionCheckInterval) {
-                            (this as any).completionCheckInterval.destroy();
-                            (this as any).completionCheckInterval = undefined;
-                        }
-                        this.fadeOutAndDestroy(3000, 500);
-                    }
-                } catch (e) {
-                    console.warn('[StudioLoadingScreen] Error in completion check:', e);
-                }
-            };
-
-            // Listen for file completion to check if non-audio files are done
-            this.scene.load.on('filecomplete', checkCompletion as any);
-            
-            // Also set up a periodic check in case filecomplete doesn't fire for all files
-            const checkInterval = this.scene.time.addEvent({
-                delay: 100,
-                callback: checkCompletion,
-                loop: true
-            });
-            
-            // Store interval reference to clean up
-            (this as any).completionCheckInterval = checkInterval;
-            
-            // Also listen for standard complete as fallback
+            // Wait for the real Phaser loader completion signal (all queued assets, including audio).
             this.scene.load.once('complete', () => {
-                if ((this as any).completionCheckInterval) {
-                    (this as any).completionCheckInterval.destroy();
-                    (this as any).completionCheckInterval = undefined;
-                }
-                this.scene.load.off('filecomplete', checkCompletion as any);
                 this.fadeOutAndDestroy(3000, 500);
             });
         } catch (e) {
@@ -465,11 +384,6 @@ export class StudioLoadingScreen {
 				if (this.onProgressHandler) {
 					this.scene.load.off('progress', this.onProgressHandler as any);
 					this.onProgressHandler = undefined;
-				}
-				// Clean up completion check interval
-				if ((this as any).completionCheckInterval) {
-					(this as any).completionCheckInterval.destroy();
-					(this as any).completionCheckInterval = undefined;
 				}
 				this.progressBarFill?.setVisible(false);
 				this.progressBarBg?.setVisible(false);
@@ -574,8 +488,7 @@ export class StudioLoadingScreen {
         assetLoader.loadNumberAssets(this.scene);
         // Optional groups not present in this game have been omitted
         assetLoader.loadDialogAssets(this.scene);
-        // Audio is loaded in Preloader, don't queue it here so we don't wait for it
-        console.log('[StudioLoadingScreen] Queued game assets (optimized, audio excluded)');
+        console.log('[StudioLoadingScreen] Queued game assets (optimized, audio handled separately)');
     }
 }
 
@@ -593,7 +506,6 @@ export function queueGameAssetLoading(scene: Scene, assetLoader: AssetLoader): v
     assetLoader.loadSymbolAssets(scene);
     assetLoader.loadNumberAssets(scene);
     assetLoader.loadDialogAssets(scene);
-    // Audio is loaded in Preloader, don't queue it here so we don't wait for it
     // Optional groups not present in this game have been omitted
-    console.log('[StudioLoadingScreen] Queued game asset loading (optimized, audio excluded)');
+    console.log('[StudioLoadingScreen] Queued game asset loading (optimized, audio handled separately)');
 }
