@@ -88,6 +88,71 @@ function findCollectors(area: any[][]): Cell[] {
 	return out;
 }
 
+function areAreasEqual(a: any[][], b: any[][]): boolean {
+	try {
+		if (!Array.isArray(a) || !Array.isArray(b)) return false;
+		if (a.length !== b.length) return false;
+		for (let c = 0; c < a.length; c++) {
+			const ac = a[c];
+			const bc = b[c];
+			if (!Array.isArray(ac) || !Array.isArray(bc)) return false;
+			if (ac.length !== bc.length) return false;
+			for (let r = 0; r < ac.length; r++) {
+				if (Number(ac[r]) !== Number(bc[r])) return false;
+			}
+		}
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function getBackendTotalWinForSlot(spinData: any): number {
+	let base = 0;
+	try {
+		const slot: any = spinData?.slot;
+		const fs: any = slot?.freespin || slot?.freeSpin;
+		try {
+			const v = Number(fs?.totalWin);
+			if (isFinite(v) && v >= 0) base = Math.max(base, v);
+		} catch {}
+		try {
+			const v = Number(slot?.totalWin);
+			if (isFinite(v) && v >= 0) base = Math.max(base, v);
+		} catch {}
+		try {
+			const v = Number(slot?.__backendTotalWin);
+			if (isFinite(v) && v >= 0) base = Math.max(base, v);
+		} catch {}
+		try {
+			const v = Number(fs?.__backendTotalWin);
+			if (isFinite(v) && v >= 0) base = Math.max(base, v);
+		} catch {}
+		try {
+			const itCur: any = getCurrentFreeSpinItemForSlot(spinData);
+			const vRun = Number(itCur?.runningWin);
+			if (isFinite(vRun) && vRun >= 0) base = Math.max(base, vRun);
+		} catch {}
+	} catch {}
+	return base;
+}
+
+function getCurrentFreeSpinItemForSlot(spinData: any): any {
+	try {
+		const fs: any = spinData?.slot?.freespin || spinData?.slot?.freeSpin;
+		const items: any[] | undefined = fs?.items;
+		if (!Array.isArray(items) || items.length === 0) return null;
+		const slotArea = spinData?.slot?.area;
+		if (Array.isArray(slotArea) && Array.isArray(slotArea[0])) {
+			const match = items.find((it: any) => areAreasEqual(it?.area, slotArea));
+			if (match) return match;
+		}
+		return items[0] ?? null;
+	} catch {
+		return null;
+	}
+}
+
 function getMoneyCells(area: any[][], spinData: any): Array<{ col: number; row: number; value: number }> {
 	const out: Array<{ col: number; row: number; value: number }> = [];
 	try {
@@ -172,12 +237,22 @@ function addDeltaToSpinTotals(spinData: any, delta: number): number {
 		try {
 			const items: any[] | undefined = fs?.items;
 			if (Array.isArray(items) && items.length > 0) {
+				// Keep the area-matched "current" free spin item in sync with updated totals.
+				const itCur: any = getCurrentFreeSpinItemForSlot(spinData);
+				try {
+					const prevCur = Number(itCur?.runningWin);
+					if (itCur && (!(isFinite(prevCur) && prevCur >= 0) || next > prevCur)) {
+						itCur.runningWin = next;
+					}
+				} catch {}
+
+				// Also update any legacy first-runningWin item so older readers don't see a stale value.
 				const it0: any = (items.find((it: any) => {
 					const v = Number(it?.runningWin);
 					return isFinite(v) && v >= 0;
 				}) ?? items[0]);
-				const prev = Number(it0?.runningWin);
-				if (!(isFinite(prev) && prev >= 0) || next > prev) {
+				const prev0 = Number(it0?.runningWin);
+				if (it0 && (!(isFinite(prev0) && prev0 >= 0) || next > prev0)) {
 					it0.runningWin = next;
 				}
 			}
@@ -384,10 +459,11 @@ export async function runCollectorMoneySequence(host: any, spinData: any): Promi
 			return;
 		}
 
-		let canAffectTotals = true;
 		try {
-			canAffectTotals = !((spinData as any)?.__collectorMoneyApplied);
-		} catch { canAffectTotals = true; }
+			if ((spinData as any)?.__collectorMoneyApplied) {
+				return;
+			}
+		} catch {}
 
 		try {
 			const sp: any = scene?.scene;
@@ -422,28 +498,114 @@ export async function runCollectorMoneySequence(host: any, spinData: any): Promi
 			return;
 		}
 		const moneyCells = getMoneyCells(area, spinData);
-		if (!moneyCells.length) {
-			return;
-		}
+		const collectorOnly = !moneyCells.length;
+		const baseMoneySum = (() => {
+			let sum = 0;
+			try {
+				for (const c of moneyCells) {
+					const v = Number((c as any)?.value);
+					if (isFinite(v) && v > 0) sum += v;
+				}
+			} catch {}
+			return sum;
+		})();
 
 		const networkManager = scene?.networkManager;
 		const screenModeManager = scene?.screenModeManager;
-		if (!networkManager || !screenModeManager) {
-			return;
-		}
 		const spacing = typeof host?.moneyValueSpacing === 'number' ? host.moneyValueSpacing : 1;
 		let useDecimalsTotal = false;
-		try {
-			useDecimalsTotal = moneyCells.some(c => typeof c.value === 'number' && c.value > 0 && c.value < 1);
-		} catch {}
+		if (!collectorOnly) {
+			if (!networkManager || !screenModeManager) {
+				return;
+			}
+			try {
+				useDecimalsTotal = moneyCells.some(c => typeof c.value === 'number' && c.value > 0 && c.value < 1);
+			} catch {}
+		}
 		let turboParallelPerCollector = false;
 		try {
 			turboParallelPerCollector = !!(gameStateManager.isBonus && gameStateManager.isTurbo);
 		} catch {}
 
+		const maybeApplyCollectorCountFallback = (delta: number) => {
+			try {
+				if (!(delta > 0)) return;
+				const item: any = getCurrentFreeSpinItemForSlot(spinData);
+				if (!item) return;
+				const current = Number(item?.collectorCount);
+				const prevHost = Number((host as any)?.lastBackendCollectorCount);
+				const prev = (isFinite(prevHost) && prevHost >= 0) ? prevHost : null;
+				if (isFinite(current) && current >= 0) {
+					if (prev !== null) {
+						if (current > prev) {
+							try { (host as any).lastBackendCollectorCount = current; } catch {}
+							return;
+						}
+						// Backend value present but stale; force an increment for collector-only events.
+						const next = Math.max(current, prev) + delta;
+						try { item.collectorCount = next; } catch {}
+						try { (host as any).lastBackendCollectorCount = next; } catch {}
+						return;
+					}
+					// No baseline; accept backend value and store it.
+					try { (host as any).lastBackendCollectorCount = current; } catch {}
+					return;
+				}
+				const base = prev !== null ? prev : 0;
+				const next = base + delta;
+				try { item.collectorCount = next; } catch {}
+				try { (host as any).lastBackendCollectorCount = next; } catch {}
+			} catch {}
+		};
+
+		if (collectorOnly) {
+			for (let collectorIndex = 0; collectorIndex < collectors.length; collectorIndex++) {
+				const collectorCell = collectors[collectorIndex];
+				let cPos: WorldPoint | null = null;
+				let collectorObj: any = null;
+				try {
+					collectorObj = host?.symbols?.[collectorCell.col]?.[collectorCell.row];
+					if (collectorObj) {
+						cPos = getWorldPos(collectorObj);
+					}
+				} catch {}
+				if (!cPos) {
+					cPos = getCellCenterFallback(host, collectorCell.col, collectorCell.row);
+				}
+
+				try {
+					if (collectorObj) {
+						try { clearNonWinningSymbolDim(scene, collectorObj); } catch {}
+						try { clearImageSymbolWinRipple(scene, collectorObj); } catch {}
+						try { applyImageSymbolWinRipple(scene, collectorObj); } catch {}
+					}
+				} catch {}
+
+				let waitPromise: Promise<void> | null = null;
+				try {
+					waitPromise = waitForSceneEvent(scene, 'hook-collector-complete', 6000);
+				} catch {}
+				try {
+					scene?.events?.emit?.('hook-collector', cPos.x, cPos.y, collectorCell.col, collectorCell.row);
+				} catch {}
+				if (waitPromise) {
+					await waitPromise;
+				}
+				try {
+					if (collectorObj) {
+						try { clearImageSymbolWinRipple(scene, collectorObj); } catch {}
+					}
+				} catch {}
+			}
+
+			maybeApplyCollectorCountFallback(collectors.length);
+			try { (spinData as any).__collectorMoneyApplied = true; } catch {}
+			return;
+		}
+
 		for (let collectorIndex = 0; collectorIndex < collectors.length; collectorIndex++) {
 			const collectorCell = collectors[collectorIndex];
-			const affectTotalsThisCollector = canAffectTotals && collectorIndex === (collectors.length - 1);
+			const shouldAnimateMoneyCells = collectorIndex === 0;
 			let totalValue = 0;
 			let collectorPos: WorldPoint | null = null;
 			let collectorObj: any = null;
@@ -626,6 +788,14 @@ export async function runCollectorMoneySequence(host: any, spinData: any): Promi
 					});
 				} catch {}
 
+				try {
+					if (gameStateManager.isBonus) {
+						const audio = (window as any)?.audioManager;
+						if (audio && typeof audio.playSoundEffect === 'function') {
+							audio.playSoundEffect('multi_fly_TB');
+						}
+					}
+				} catch {}
 				await tweenTo(scene, flyCont, {
 					x: collectorTextX,
 					y: collectorTextY,
@@ -658,20 +828,47 @@ export async function runCollectorMoneySequence(host: any, spinData: any): Promi
 				try { flyDisplay.destroy(); } catch {}
 			};
 
-			if (turboParallelPerCollector) {
-				const promises: Array<Promise<void>> = [];
-				for (const cell of moneyCells) {
-					try {
-						promises.push(animateCell(cell));
-					} catch {}
-				}
+			const tryPlayMultiAdd1OnLastValue = (isLast: boolean) => {
+				if (!isLast) return;
 				try {
-					await Promise.all(promises);
+					if (!gameStateManager.isBonus) return;
+					const audio = (window as any)?.audioManager;
+					if (audio && typeof audio.playSoundEffect === 'function') {
+						audio.playSoundEffect('multi_add_1_TB');
+					}
 				} catch {}
-			} else {
-				for (const cell of moneyCells) {
-					await animateCell(cell);
+			};
+
+			if (shouldAnimateMoneyCells) {
+				if (turboParallelPerCollector) {
+					const promises: Array<Promise<void>> = [];
+					for (let i = 0; i < moneyCells.length; i++) {
+						const cell = moneyCells[i];
+						try {
+							const isLast = i === moneyCells.length - 1;
+							promises.push((async () => {
+								await animateCell(cell);
+								tryPlayMultiAdd1OnLastValue(isLast);
+							})());
+						} catch {}
+					}
+					try {
+						await Promise.all(promises);
+					} catch {}
+				} else {
+					for (let i = 0; i < moneyCells.length; i++) {
+						const cell = moneyCells[i];
+						await animateCell(cell);
+						tryPlayMultiAdd1OnLastValue(i === moneyCells.length - 1);
+					}
 				}
+			} else {
+				try {
+					totalValue = Number(baseMoneySum) || 0;
+					try { totalDisplay.displayValue(totalValue); } catch {}
+					try { totalCont.setAlpha(1); } catch {}
+					try { await playCollectorValueHighlight(scene, totalCont); } catch {}
+				} catch {}
 			}
 
 			try {
@@ -719,24 +916,26 @@ export async function runCollectorMoneySequence(host: any, spinData: any): Promi
 				if (didApplyAward) return;
 				didApplyAward = true;
 				try {
-					if (gameStateManager.isBonus && affectTotalsThisCollector) {
-						const nextTotal = addDeltaToSpinTotals(spinData, pendingAwardDelta);
+					if (gameStateManager.isBonus) {
+						const backendTotal = getBackendTotalWinForSlot(spinData);
 						try {
 							const prev = Number((host as any)?.lastBonusTotalWin);
-							if (!(isFinite(prev) && prev >= 0) || nextTotal > prev) {
-								(host as any).lastBonusTotalWin = nextTotal;
+							if (isFinite(backendTotal) && backendTotal >= 0 && (!(isFinite(prev) && prev >= 0) || backendTotal > prev)) {
+								(host as any).lastBonusTotalWin = backendTotal;
 							}
 						} catch {}
 						try { scene?.events?.emit?.('bonus-win-delta', pendingAwardDelta); } catch {}
-						try { scene?.events?.emit?.('bonus-total-win-updated', nextTotal); } catch {}
-						try { (spinData as any).__collectorMoneyApplied = true; } catch {}
+						try { scene?.events?.emit?.('bonus-total-win-updated', backendTotal); } catch {}
 					}
 				} catch {}
 			};
 
 			try {
-				scene?.events?.once?.('hook-collector-disintegrate-start', applyAwardOnce);
-				scene?.events?.once?.('hook-collector-complete', applyAwardOnce);
+				// Prefer disintegration-start (happens once at the intended visual moment).
+				if (scene?.events?.once) {
+					scene.events.once('hook-collector-disintegrate-start', applyAwardOnce);
+					scene.events.once('hook-collector-complete', applyAwardOnce);
+				}
 			} catch {
 				applyAwardOnce();
 			}
@@ -766,8 +965,8 @@ export async function runCollectorMoneySequence(host: any, spinData: any): Promi
 				}
 			} catch {}
 			try { totalDisplay.destroy(); } catch {}
-			// __collectorMoneyApplied is set when the award is actually applied.
 		}
+		try { (spinData as any).__collectorMoneyApplied = true; } catch {}
 	} catch {} finally {
 		try { (gameStateManager as any).releaseCriticalSequenceLock?.(); } catch {}
 	}

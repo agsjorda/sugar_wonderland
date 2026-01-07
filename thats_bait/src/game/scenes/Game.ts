@@ -323,6 +323,7 @@ export class Game extends Phaser.Scene {
 			scatterManager.initialize(this, symbolsContainer, dummySpinner, undefined, undefined, undefined, this.freeSpinOverlay);
 		} catch {}
 
+		
 		// Create rope and draggable handles after the main UI so they sit on top visually.
 		if (this.enableRope) {
 			this.setupRopeCable();
@@ -365,6 +366,7 @@ export class Game extends Phaser.Scene {
 		gameEventManager.emit(GameEventType.START);
 	}
 
+	
 	private registerBonusUiEventListeners(): void {
 		this.events.on('showBonusBackground', () => {
 			try { this.bonusBackground?.setVisible(true); } catch {}
@@ -402,6 +404,61 @@ export class Game extends Phaser.Scene {
 				}
 			} catch {}
 			try {
+				const levels = Number((this.symbols as any)?.bonusLevelsCompleted) || 0;
+				const consumed = Number((this.symbols as any)?.bonusRetriggersConsumed) || 0;
+				if (levels <= 0 && consumed <= 0) {
+					const sc: any = this as any;
+					if (!sc.__multiAdd1PlayedOnBonusEntry) {
+						const hasCollectorNow = (() => {
+							try {
+								const grid: any[][] = ((this.symbols as any)?.currentSymbolData as any[][]) ?? (((this.symbols as any)?.currentSpinData as any)?.slot?.area as any[][]);
+								if (!Array.isArray(grid)) return false;
+								for (let c = 0; c < grid.length; c++) {
+									const colArr = grid[c];
+									if (!Array.isArray(colArr)) continue;
+									for (let r = 0; r < colArr.length; r++) {
+										if (Number(colArr[r]) === 11) return true;
+									}
+								}
+								return false;
+							} catch {
+								return false;
+							}
+						})();
+						if (hasCollectorNow) {
+							sc.__multiAdd1PlayedOnBonusEntry = true;
+							try { this.audioManager?.playSoundEffect?.(SoundEffectType.MULTI_ADD_1); } catch {}
+						} else {
+							let retries = 0;
+							const tryLater = () => {
+								retries++;
+								try {
+									if (sc.__multiAdd1PlayedOnBonusEntry) return;
+									const grid: any[][] = ((this.symbols as any)?.currentSymbolData as any[][]) ?? (((this.symbols as any)?.currentSpinData as any)?.slot?.area as any[][]);
+									if (Array.isArray(grid)) {
+										for (let c = 0; c < grid.length; c++) {
+											const colArr = grid[c];
+											if (!Array.isArray(colArr)) continue;
+											for (let r = 0; r < colArr.length; r++) {
+												if (Number(colArr[r]) === 11) {
+													sc.__multiAdd1PlayedOnBonusEntry = true;
+													try { this.audioManager?.playSoundEffect?.(SoundEffectType.MULTI_ADD_1); } catch {}
+													return;
+												}
+											}
+										}
+									}
+								} catch {}
+								if (retries < 40) {
+									try { this.time.delayedCall(100, tryLater); } catch {}
+								}
+							};
+							try { this.time.delayedCall(100, tryLater); } catch {}
+						}
+					}
+				}
+			} catch {}
+			try {
 				(this.audioManager as any)?.createMusicInstances?.();
 				(this.audioManager as any)?.crossfadeTo?.(MusicType.BONUS, 320);
 			} catch {}
@@ -411,6 +468,7 @@ export class Game extends Phaser.Scene {
 			try { this.events.emit('hideBonusBackground'); } catch {}
 			try { this.events.emit('hideBonusHeader'); } catch {}
 			try { delete (this as any).__helloTbPlayedOnBonusEntry; } catch {}
+			try { delete (this as any).__multiAdd1PlayedOnBonusEntry; } catch {}
 			try {
 				(this.audioManager as any)?.createMusicInstances?.();
 				(this.audioManager as any)?.crossfadeTo?.(MusicType.MAIN, 320);
@@ -1221,6 +1279,50 @@ export class Game extends Phaser.Scene {
 			}
 		} catch {}
 
+		let cellWorldX = NaN;
+		let cellWorldY = NaN;
+		let cellLocalX = NaN;
+		let cellLocalY = NaN;
+		let cellW = NaN;
+		let cellH = NaN;
+		let bubbleTriggered = false;
+		try {
+			const col = this.hookScatterCol;
+			const row = this.hookScatterRow;
+			const host: any = (this.symbols as any) ?? {};
+			const displayWidth = Number(host?.displayWidth ?? 68);
+			const displayHeight = Number(host?.displayHeight ?? 68);
+			const horizontalSpacing = Number(host?.horizontalSpacing ?? 10);
+			const verticalSpacing = Number(host?.verticalSpacing ?? 5);
+			const symbolTotalWidth = displayWidth + horizontalSpacing;
+			const symbolTotalHeight = displayHeight + verticalSpacing;
+			const totalGridWidth = Number(host?.totalGridWidth ?? (symbolTotalWidth * 5));
+			const totalGridHeight = Number(host?.totalGridHeight ?? (symbolTotalHeight * 3));
+			const slotX = Number(host?.slotX ?? this.scale.width * 0.5);
+			const slotY = Number(host?.slotY ?? this.scale.height * 0.5);
+			const startX = slotX - totalGridWidth * 0.5;
+			const startY = slotY - totalGridHeight * 0.5;
+			cellWorldX = startX + col * symbolTotalWidth + symbolTotalWidth * 0.5;
+			cellWorldY = startY + row * symbolTotalHeight + symbolTotalHeight * 0.5;
+			cellW = (collectorObj?.displayWidth ?? host?.displayWidth ?? 68) as number;
+			cellH = (collectorObj?.displayHeight ?? host?.displayHeight ?? 68) as number;
+			if (!isFinite(cellW) || cellW <= 0) cellW = displayWidth;
+			if (!isFinite(cellH) || cellH <= 0) cellH = displayHeight;
+			const symbolsContainer: any = host?.container;
+			if (symbolsContainer && typeof symbolsContainer.getWorldTransformMatrix === 'function') {
+				const m: any = symbolsContainer.getWorldTransformMatrix();
+				if (m && typeof m.applyInverse === 'function') {
+					const pt: any = m.applyInverse(cellWorldX, cellWorldY);
+					cellLocalX = pt.x;
+					cellLocalY = pt.y;
+				} else {
+					cellLocalX = cellWorldX - (symbolsContainer.x ?? 0);
+					cellLocalY = cellWorldY - (symbolsContainer.y ?? 0);
+				}
+			}
+			try { (collectorObj as any).__collectorCellBubbleEmitted = false; } catch {}
+		} catch {}
+
 		const setCollectorWorldPos = (wx: number, wy: number) => {
 			if (!collectorObj) return;
 			try {
@@ -1274,6 +1376,26 @@ export class Game extends Phaser.Scene {
 						setCollectorWorldPos(this.hookScatterTarget.x, this.hookScatterTarget.y);
 					}
 				} catch {}
+				try {
+					if (bubbleTriggered) return;
+					if (!collectorObj || !(typeof cellWorldX === 'number' && isFinite(cellWorldX) && typeof cellWorldY === 'number' && isFinite(cellWorldY))) return;
+					if (!(typeof cellLocalX === 'number' && isFinite(cellLocalX) && typeof cellLocalY === 'number' && isFinite(cellLocalY))) return;
+					const wx = (this.hookScatterTarget?.x ?? NaN) as number;
+					const wy = (this.hookScatterTarget?.y ?? NaN) as number;
+					if (!isFinite(wx) || !isFinite(wy)) return;
+					const dx = wx - cellWorldX;
+					const dy = wy - cellWorldY;
+					const distSq = dx * dx + dy * dy;
+					const thr = Math.max(18, Math.min(140, Math.max(Number(cellW) || 68, Number(cellH) || 68) * 0.55));
+					if (distSq >= thr * thr) {
+						bubbleTriggered = true;
+						try {
+							(this.symbols as any)?.container;
+							this.playCollectorCellBubbleEffect((this.symbols as any)?.container, cellLocalX, cellLocalY, cellW, cellH);
+							try { (collectorObj as any).__collectorCellBubbleEmitted = true; } catch {}
+						} catch {}
+					}
+				} catch {}
 			},
 			onComplete: () => {
 				try {
@@ -1304,6 +1426,11 @@ export class Game extends Phaser.Scene {
 			try {
 				bonusVisible = !!(this.bonusBackground as any)?.getContainer?.()?.visible;
 			} catch {}
+			let cellLocalX: number = NaN;
+			let cellLocalY: number = NaN;
+			let cellLocalW: number = NaN;
+			let cellLocalH: number = NaN;
+			let cellSymbolsContainer: any = null;
 			if (!bonusVisible) {
 				resolve();
 				return;
@@ -1377,29 +1504,50 @@ export class Game extends Phaser.Scene {
 					let h = (collectorObj?.displayHeight ?? (this.symbols as any)?.displayHeight ?? 1) as number;
 					if (!isFinite(w) || w <= 0) w = 1;
 					if (!isFinite(h) || h <= 0) h = 1;
-					let lx = (collectorObj?.x ?? 0) as number;
-					let ly = (collectorObj?.y ?? 0) as number;
+					let wx = (collectorObj?.x ?? 0) as number;
+					let wy = (collectorObj?.y ?? 0) as number;
 					try {
-						if (typeof collectorObj.getBounds === 'function') {
-							const b = collectorObj.getBounds();
-							lx = b.centerX;
-							ly = b.centerY;
+						const host: any = (this.symbols as any) ?? {};
+						const displayWidth = Number(host?.displayWidth ?? 68);
+						const displayHeight = Number(host?.displayHeight ?? 68);
+						const horizontalSpacing = Number(host?.horizontalSpacing ?? 10);
+						const verticalSpacing = Number(host?.verticalSpacing ?? 5);
+						const symbolTotalWidth = displayWidth + horizontalSpacing;
+						const symbolTotalHeight = displayHeight + verticalSpacing;
+						const totalGridWidth = Number(host?.totalGridWidth ?? (symbolTotalWidth * 5));
+						const totalGridHeight = Number(host?.totalGridHeight ?? (symbolTotalHeight * 3));
+						const slotX = Number(host?.slotX ?? this.scale.width * 0.5);
+						const slotY = Number(host?.slotY ?? this.scale.height * 0.5);
+						const startX = slotX - totalGridWidth * 0.5;
+						const startY = slotY - totalGridHeight * 0.5;
+						const candX = startX + col * symbolTotalWidth + symbolTotalWidth * 0.5;
+						const candY = startY + row * symbolTotalHeight + symbolTotalHeight * 0.5;
+						if (isFinite(candX) && isFinite(candY)) {
+							wx = candX;
+							wy = candY;
 						}
 					} catch {}
-					let px = lx;
-					let py = ly;
+					let px = wx;
+					let py = wy;
 					try {
 						if (symbolsContainer && typeof symbolsContainer.getWorldTransformMatrix === 'function') {
 							const m: any = symbolsContainer.getWorldTransformMatrix();
 							if (m && typeof m.applyInverse === 'function') {
-								const pt: any = m.applyInverse(lx, ly);
+								const pt: any = m.applyInverse(wx, wy);
 								px = pt.x;
 								py = pt.y;
 							} else {
-								px = lx - (symbolsContainer.x ?? 0);
-								py = ly - (symbolsContainer.y ?? 0);
+								px = wx - (symbolsContainer.x ?? 0);
+								py = wy - (symbolsContainer.y ?? 0);
 							}
 						}
+					} catch {}
+					try {
+						cellLocalX = px;
+						cellLocalY = py;
+						cellLocalW = w;
+						cellLocalH = h;
+						cellSymbolsContainer = symbolsContainer;
 					} catch {}
 					const placeholder: any = this.add.zone(px, py, w, h);
 					try { placeholder.setVisible(false); } catch {}
@@ -1409,6 +1557,13 @@ export class Game extends Phaser.Scene {
 					try { symbolsContainer?.add?.(placeholder); } catch {}
 					grid[col][row] = placeholder;
 					try { (collectorObj as any).__collectedByHook = true; } catch {}
+					try {
+						const already = !!(collectorObj as any)?.__collectorCellBubbleEmitted;
+						if (!already) {
+							this.playCollectorCellBubbleEffect(cellSymbolsContainer, cellLocalX, cellLocalY, cellLocalW, cellLocalH);
+							try { (collectorObj as any).__collectorCellBubbleEmitted = true; } catch {}
+						}
+					} catch {}
 				}
 			} catch {}
 			let sx = 0;
@@ -1505,6 +1660,409 @@ export class Game extends Phaser.Scene {
 				});
 			} catch {}
 		});
+	}
+
+	private playCollectorCellBubbleEffect(symbolsContainer: any, x: number, y: number, w: number, h: number): void {
+		let bubbleKey: string | null = null;
+		try {
+			if (!symbolsContainer || typeof x !== 'number' || typeof y !== 'number' || !isFinite(x) || !isFinite(y)) return;
+			if (!this.textures || typeof this.textures.exists !== 'function') return;
+			if (this.textures.exists('anticipation-bubble')) bubbleKey = 'anticipation-bubble';
+			else if (this.textures.exists('bubble')) bubbleKey = 'bubble';
+		} catch {
+			bubbleKey = null;
+		}
+
+		let scaleModifier: number = 0.65;
+		try {
+			const v: any = (this as any).__collectorCellBubbleScaleModifier;
+			const n = Number(v);
+			if (isFinite(n) && n > 0) scaleModifier = n;
+		} catch {}
+
+		let scaleModifierMin: number | null = null;
+		let scaleModifierMax: number | null = null;
+		try {
+			const vMin: any = (this as any).__collectorCellBubbleScaleModifierMin;
+			const nMin = Number(vMin);
+			if (isFinite(nMin) && nMin > 0) scaleModifierMin = nMin;
+		} catch {}
+		try {
+			const vMax: any = (this as any).__collectorCellBubbleScaleModifierMax;
+			const nMax = Number(vMax);
+			if (isFinite(nMax) && nMax > 0) scaleModifierMax = nMax;
+		} catch {}
+		const resolveScaleModifier = (): number => {
+			const min = scaleModifierMin;
+			const max = scaleModifierMax;
+			if (typeof min === 'number' && typeof max === 'number') {
+				const lo = Math.min(min, max);
+				const hi = Math.max(min, max);
+				return lo + Math.random() * (hi - lo);
+			}
+			if (typeof min === 'number') return min;
+			if (typeof max === 'number') return max;
+			return scaleModifier;
+		};
+
+		let worldX = x;
+		let worldY = y;
+		try {
+			if (symbolsContainer && typeof symbolsContainer.getWorldTransformMatrix === 'function') {
+				const m: any = symbolsContainer.getWorldTransformMatrix();
+				if (m && typeof m.transformPoint === 'function') {
+					const pt: any = m.transformPoint(x, y);
+					if (pt && typeof pt.x === 'number' && typeof pt.y === 'number') {
+						worldX = pt.x;
+						worldY = pt.y;
+					}
+				} else {
+					worldX = x + (symbolsContainer.x ?? 0);
+					worldY = y + (symbolsContainer.y ?? 0);
+				}
+			}
+		} catch {}
+
+		const layerKey = '__collectorCellBubbleLayer';
+		let bubbleLayer: any = null;
+		try { bubbleLayer = (this as any)[layerKey]; } catch { bubbleLayer = null; }
+		try {
+			if (!bubbleLayer || bubbleLayer.destroyed) {
+				bubbleLayer = this.add.container(0, 0);
+				try { bubbleLayer.setScrollFactor(0); } catch {}
+				try {
+					const sc: any = (this.symbols as any)?.container ?? symbolsContainer;
+					const sd = Number(sc?.depth);
+					const desiredDepth = (isFinite(sd) ? (sd - 1) : 879);
+					bubbleLayer.setDepth(desiredDepth);
+				} catch {
+					try { bubbleLayer.setDepth(879); } catch {}
+				}
+				try { bubbleLayer.setVisible(true); } catch {}
+				try { (this as any)[layerKey] = bubbleLayer; } catch {}
+				try {
+					this.events.once('shutdown', () => {
+						try { bubbleLayer?.destroy?.(true); } catch {}
+						try { delete (this as any)[layerKey]; } catch {}
+					});
+				} catch {}
+			}
+		} catch {}
+		try {
+			const sc: any = (this.symbols as any)?.container ?? symbolsContainer;
+			const sd = Number(sc?.depth);
+			const desiredDepth = (isFinite(sd) ? (sd - 1) : 879);
+			bubbleLayer?.setDepth?.(desiredDepth);
+		} catch {}
+
+		const idleManagerKey = '__collectorCellBubbleIdleManager';
+		let idleManager: any = null;
+		try { idleManager = (this as any)[idleManagerKey]; } catch { idleManager = null; }
+		try {
+			if (!idleManager || typeof idleManager !== 'object') {
+				idleManager = { stops: new Set<() => void>(), offReelsStart: null as any, offSpin: null as any, offAuto: null as any };
+				const stopAll = () => {
+					try {
+						const arr = Array.from((idleManager as any).stops ?? []) as Array<() => void>;
+						for (const fn of arr) {
+							try { fn(); } catch {}
+						}
+						try { (idleManager as any).stops?.clear?.(); } catch {}
+					} catch {}
+				};
+				const onSpinStart = () => {
+					stopAll();
+				};
+				try { idleManager.offReelsStart = gameEventManager.on(GameEventType.REELS_START, onSpinStart); } catch {}
+				try { idleManager.offSpin = gameEventManager.on(GameEventType.SPIN, onSpinStart); } catch {}
+				try { idleManager.offAuto = gameEventManager.on(GameEventType.AUTO_START, onSpinStart); } catch {}
+				try {
+					this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+						try { stopAll(); } catch {}
+						try { idleManager.offReelsStart?.(); } catch {}
+						try { idleManager.offSpin?.(); } catch {}
+						try { idleManager.offAuto?.(); } catch {}
+						try { delete (this as any)[idleManagerKey]; } catch {}
+					});
+				} catch {}
+				try { (this as any)[idleManagerKey] = idleManager; } catch {}
+			}
+		} catch {}
+
+		if (!bubbleKey) {
+			let marker: any;
+			try {
+				marker = this.add.circle(worldX, worldY, Math.max(10, Math.min(28, ((w || 60) + (h || 60)) * 0.12)), 0x00ffff, 0.85);
+				try { marker.setDepth(30010); } catch {}
+				try { marker.setScrollFactor(0); } catch {}
+				try { bubbleLayer?.add?.(marker); } catch {}
+				try {
+					this.tweens.add({
+						targets: marker,
+						scale: 1.8,
+						alpha: 0,
+						duration: 600,
+						ease: 'Sine.easeOut',
+						onComplete: () => { try { marker?.destroy?.(); } catch {} }
+					});
+				} catch {
+					try { marker?.destroy?.(); } catch {}
+				}
+			} catch {
+				try { marker?.destroy?.(); } catch {}
+			}
+			return;
+		}
+
+		const pop = (img: Phaser.GameObjects.Image | undefined, baseScale?: number, onDone?: () => void) => {
+			if (!img) return;
+			try {
+				this.tweens.killTweensOf(img);
+			} catch {}
+			const s = (typeof baseScale === 'number' && isFinite(baseScale) && baseScale > 0) ? baseScale : (img.scaleX ?? 1);
+			try {
+				this.tweens.add({
+					targets: img,
+					scale: s * (1.25 + Math.random() * 0.25),
+					alpha: 0,
+					duration: 220 + Math.floor(Math.random() * 140),
+					ease: 'Cubic.easeIn',
+					onComplete: () => {
+						try { img.destroy(); } catch {}
+						try { onDone?.(); } catch {}
+					}
+				});
+			} catch {
+				try { img.destroy(); } catch {}
+				try { onDone?.(); } catch {}
+			}
+		};
+
+		const tryAdd = (img: Phaser.GameObjects.Image | undefined) => {
+			if (!img) return;
+			try {
+				img.setScrollFactor(0);
+			} catch {}
+			try { bubbleLayer?.add?.(img); } catch {}
+		};
+
+		const sizeBase = Math.max(1, Math.min(isFinite(w) ? w : 1, isFinite(h) ? h : 1));
+		const driftBase = Math.max(18, Math.min(120, sizeBase * 1.15));
+		const startJitter = Math.max(2, Math.min(14, sizeBase * 0.15));
+		const burstCount = 12;
+
+		for (let i = 0; i < burstCount; i++) {
+			let img: Phaser.GameObjects.Image | undefined;
+			try {
+				const ox = (Math.random() * 2 - 1) * startJitter;
+				const oy = (Math.random() * 2 - 1) * startJitter;
+				img = this.add.image(worldX + ox, worldY + oy, bubbleKey);
+				img.setOrigin(0.5, 0.5);
+				img.setRotation((Math.random() * 2 - 1) * 0.6);
+				const sizeFactor = Math.max(0.65, Math.min(1.35, sizeBase / 68));
+				const baseScale = 0.06 * sizeFactor * resolveScaleModifier();
+				img.setScale(baseScale);
+				img.setAlpha(0.85 + Math.random() * 0.15);
+				tryAdd(img);
+
+				const stay = Math.random() < 0.28;
+				const angle = Math.random() * Math.PI * 2;
+				const dist = stay ? (Math.random() * startJitter * 0.8) : (driftBase * (0.35 + Math.random() * 0.65));
+				const tx = worldX + Math.cos(angle) * dist;
+				const ty = worldY + Math.sin(angle) * dist;
+
+				const travelMs = stay ? (90 + Math.floor(Math.random() * 120)) : (240 + Math.floor(Math.random() * 260));
+				const lifeMs = stay ? (1100 + Math.floor(Math.random() * 900)) : (650 + Math.floor(Math.random() * 900));
+				try {
+					this.tweens.add({
+						targets: img,
+						x: tx,
+						y: ty,
+						duration: travelMs,
+						ease: stay ? 'Sine.easeOut' : 'Sine.easeOut',
+						onComplete: () => {
+							try {
+								this.time.delayedCall(lifeMs, () => {
+									pop(img, baseScale);
+								});
+							} catch {
+								pop(img, baseScale);
+							}
+						}
+					});
+				} catch {
+					try {
+						this.time.delayedCall(lifeMs, () => {
+							pop(img, baseScale);
+						});
+					} catch {
+						pop(img, baseScale);
+					}
+				}
+			} catch {
+				try { img?.destroy(); } catch {}
+			}
+		}
+
+		let linger: Phaser.GameObjects.Image | undefined;
+		try {
+			linger = this.add.image(worldX, worldY, bubbleKey);
+			linger.setOrigin(0.5, 0.5);
+			const lingerSizeFactor = Math.max(0.65, Math.min(1.35, sizeBase / 68));
+			const lingerScale = 0.08 * lingerSizeFactor * resolveScaleModifier();
+			linger.setScale(lingerScale);
+			linger.setAlpha(0.95);
+			linger.setRotation((Math.random() * 2 - 1) * 0.25);
+			tryAdd(linger);
+			try {
+				this.tweens.add({
+					targets: linger,
+					scale: lingerScale * 1.08,
+					y: worldY - Math.max(2, Math.min(10, sizeBase * 0.08)),
+					duration: 260,
+					ease: 'Sine.easeInOut',
+					yoyo: true,
+					repeat: 5,
+				});
+			} catch {}
+			try {
+				this.time.delayedCall(2100 + Math.floor(Math.random() * 800), () => {
+					pop(linger, lingerScale);
+				});
+			} catch {
+				pop(linger, lingerScale);
+			}
+		} catch {
+			try { linger?.destroy(); } catch {}
+		}
+
+		try {
+			let active = true;
+			const idleContainer: any = this.add.container(0, 0);
+			try { idleContainer.setScrollFactor(0); } catch {}
+			try { bubbleLayer?.add?.(idleContainer); } catch {}
+			const stop = () => {
+				if (!active) return;
+				active = false;
+				try { idleContainer?.destroy?.(true); } catch {}
+				try { idleManager?.stops?.delete?.(stop); } catch {}
+			};
+			try { idleManager?.stops?.add?.(stop); } catch {}
+			try { this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => stop()); } catch {}
+
+			const bubbleRadiusX = Math.max(10, Math.min(60, (Number(w) || 68) * 0.46));
+			const bubbleRadiusY = Math.max(10, Math.min(56, (Number(h) || 68) * 0.46));
+			const idleSizeFactor = Math.max(.8, Math.min(4, sizeBase / 68));
+			let activeBubbles = 0;
+			const maxActiveBubbles = 30;
+
+			let aura: Phaser.GameObjects.Image | undefined;
+			try {
+				aura = this.add.image(worldX, worldY, bubbleKey);
+				aura.setOrigin(0.5, 0.5);
+				const auraScale = 0.065 * idleSizeFactor * resolveScaleModifier();
+				aura.setScale(auraScale);
+				aura.setAlpha(0.22);
+				try { (aura as any).setBlendMode?.(Phaser.BlendModes.SCREEN); } catch {}
+				try { idleContainer.add(aura); } catch {}
+				try {
+					this.tweens.add({
+						targets: aura,
+						scale: auraScale * 1.18,
+						alpha: 0.34,
+						duration: 520,
+						ease: 'Sine.easeInOut',
+						yoyo: true,
+						repeat: -1,
+					});
+				} catch {}
+			} catch {
+				try { aura?.destroy(); } catch {}
+			}
+
+			const spawnOne = () => {
+				if (!active) return;
+				if (activeBubbles >= maxActiveBubbles) return;
+				let img: Phaser.GameObjects.Image | undefined;
+				try {
+					const ox = (Math.random() * 2 - 1) * bubbleRadiusX;
+					const oy = (Math.random() * 2 - 1) * bubbleRadiusY;
+					img = this.add.image(worldX + ox, worldY + oy, bubbleKey);
+					img.setOrigin(0.5, 0.5);
+					img.setRotation((Math.random() * 2 - 1) * 0.35);
+					const baseScale = 0.055 * idleSizeFactor * resolveScaleModifier();
+					img.setScale(baseScale * 0.7);
+					img.setAlpha(0);
+					try { idleContainer.add(img); } catch {}
+					activeBubbles += 1;
+
+					const escape = Math.random() < 0.32;
+					const rise = Math.max(4, Math.min(26, sizeBase * (escape ? 0.24 : 0.16)));
+					const drift = Math.max(4, Math.min(22, sizeBase * (escape ? 0.22 : 0.12)));
+					const lifeMs = (escape ? 640 : 520) + Math.floor(Math.random() * (escape ? 720 : 520));
+					const angle = Math.random() * Math.PI * 2;
+					const escapeOut = escape ? Math.max(bubbleRadiusX, bubbleRadiusY) * (0.55 + Math.random() * 0.85) : 0;
+					const targetX = (img.x as number) + Math.cos(angle) * escapeOut + (Math.random() * 2 - 1) * drift;
+					const targetY = (img.y as number) + Math.sin(angle) * escapeOut - (rise * (0.65 + Math.random() * 0.85));
+					try {
+						this.tweens.add({
+							targets: img,
+							alpha: 0.78 + Math.random() * 0.18,
+							scale: baseScale,
+							duration: 120 + Math.floor(Math.random() * 80),
+							ease: 'Sine.easeOut',
+						});
+					} catch {}
+					try {
+						this.tweens.add({
+							targets: img,
+							x: targetX,
+							y: targetY,
+							duration: lifeMs,
+							ease: 'Sine.easeOut',
+						});
+					} catch {}
+					try {
+						this.time.delayedCall(lifeMs, () => {
+							pop(img, baseScale, () => {
+								activeBubbles = Math.max(0, activeBubbles - 1);
+							});
+						});
+					} catch {
+						pop(img, baseScale, () => {
+							activeBubbles = Math.max(0, activeBubbles - 1);
+						});
+					}
+				} catch {
+					try { img?.destroy(); } catch {}
+					activeBubbles = Math.max(0, activeBubbles - 1);
+				}
+			};
+
+			const scheduleNext = () => {
+				if (!active) return;
+				const delay = 60 + Math.floor(Math.random() * 80);
+				try {
+					this.time.delayedCall(delay, () => {
+						const n = 3 + Math.floor(Math.random() * 4);
+						for (let i = 0; i < n; i++) spawnOne();
+						scheduleNext();
+					});
+				} catch {
+					// If timers fail for any reason, stop so we don't leave half-initialized state.
+					stop();
+				}
+			};
+
+			try {
+				const prefill = Math.max(10, Math.min(24, Math.floor((maxActiveBubbles || 50) * 0.45)));
+				for (let i = 0; i < prefill; i++) spawnOne();
+				scheduleNext();
+			} catch {
+				try { spawnOne(); } catch {}
+				try { scheduleNext(); } catch {}
+			}
+		} catch {}
 	}
 
 	private completeHookCollectorEvent(): void {

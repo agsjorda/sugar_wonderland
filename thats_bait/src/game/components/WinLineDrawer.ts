@@ -3,7 +3,7 @@ import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { TurboConfig } from '../../config/TurboConfig';
 import { SpinData, PaylineData } from '../../backend/SpinData';
-import { WINLINES } from '../../config/GameConfig';
+import { SCATTER_SYMBOL, WINLINES } from '../../config/GameConfig';
 
 interface Grid {
   x: number;
@@ -19,6 +19,7 @@ export class WinLineDrawer {
   private symbolsReference: any;
   private currentWinPatterns: [number, Grid[]][] = [];
   private currentPaylinesByKey: Map<number, PaylineData> = new Map();
+  private currentCompleteGridsByKey: Map<number, Grid[]> = new Map();
   private isLooping: boolean = false;
   private loopTimer?: Phaser.Time.TimerEvent;
   private hasEmittedFirstLoopWinStop: boolean = false;
@@ -83,6 +84,11 @@ export class WinLineDrawer {
     }
 
     this.currentWinPatterns = this.convertPaylinesToWinPatterns(spinData);
+    if (this.currentWinPatterns.length === 0) {
+      console.log('[WinLineDrawer] No win patterns stored (looping), emitting WIN_STOP immediately');
+      gameEventManager.emit(GameEventType.WIN_STOP);
+      return;
+    }
     this.isLooping = true;
     this.hasEmittedFirstLoopWinStop = false;
     this.wasInterruptedByManualSpin = false;
@@ -166,7 +172,7 @@ export class WinLineDrawer {
       } catch {}
     } catch {}
 
-    const completeWinlineGrids = this.getCompleteWinlineGrids(winlineIndex);
+    const completeWinlineGrids = this.currentCompleteGridsByKey.get(winlineIndex) || this.getCompleteWinlineGrids(winlineIndex);
 
     this.drawWinLineWithCallbackAndBrightness(completeWinlineGrids, winningGrids, winlineIndex, () => {
       const nextIndex = currentIndex + 1;
@@ -221,7 +227,7 @@ export class WinLineDrawer {
       } catch {}
     } catch {}
 
-    const completeWinlineGrids = this.getCompleteWinlineGrids(winlineIndex);
+    const completeWinlineGrids = this.currentCompleteGridsByKey.get(winlineIndex) || this.getCompleteWinlineGrids(winlineIndex);
 
     this.drawWinLineWithCallbackAndBrightness(completeWinlineGrids, winningGrids, winlineIndex, () => {
       const nextIndex = (currentIndex + 1) % this.currentWinPatterns.length;
@@ -558,13 +564,59 @@ export class WinLineDrawer {
   private convertPaylinesToWinPatterns(spinData: SpinData): [number, Grid[]][] {
     const winPatterns: [number, Grid[]][] = [];
     this.currentPaylinesByKey.clear();
+    this.currentCompleteGridsByKey.clear();
+
+    let syntheticKey = 1000;
 
     for (const payline of spinData.slot.paylines) {
-      const resolvedLineKey = this.resolveBestWinlineIndex(spinData, payline);
-      const winningGrids = this.getWinningGridsForResolvedWinline(spinData, payline, resolvedLineKey);
-      this.currentPaylinesByKey.set(resolvedLineKey, payline);
-      if (winningGrids.length > 0) {
-        winPatterns.push([resolvedLineKey, winningGrids]);
+      const desiredKey = this.resolveBestWinlineIndex(spinData, payline);
+      let key = desiredKey;
+      let winningGrids = this.getWinningGridsForResolvedWinline(spinData, payline, desiredKey);
+      let completeGrids: Grid[] | null = null;
+
+      // Fallback: if our configured WINLINES can't reproduce the backend payline,
+      // but the backend provides explicit winning positions, draw based on those.
+      if (!winningGrids || winningGrids.length === 0) {
+        try {
+          const positions: any[] | undefined = (payline as any)?.positions;
+          if (Array.isArray(positions) && positions.length > 0) {
+            const derived: Grid[] = [];
+            for (const p of positions) {
+              const x = Number((p as any)?.x);
+              const y = Number((p as any)?.y);
+              if (!isFinite(x) || !isFinite(y)) continue;
+              const sx = Math.floor(x);
+              const sy = Math.floor(y);
+              const sym = Number(spinData?.slot?.area?.[sx]?.[sy] ?? 0);
+              derived.push({ x: sx, y: sy, symbol: isFinite(sym) ? sym : 0 });
+            }
+            derived.sort((a, b) => a.x - b.x);
+            if (derived.length > 0) {
+              key = syntheticKey++;
+              winningGrids = derived;
+              completeGrids = derived;
+              try {
+                console.warn(`[WinLineDrawer] Payline could not be matched to configured WINLINES (count=${WINLINES.length}). Drawing by backend positions instead. lineKey=${(payline as any)?.lineKey}`);
+              } catch {}
+            }
+          }
+        } catch {}
+      }
+
+      if (winningGrids && winningGrids.length > 0) {
+        this.currentPaylinesByKey.set(key, payline);
+        if (!completeGrids) {
+          completeGrids = this.getCompleteWinlineGrids(desiredKey);
+        }
+        this.currentCompleteGridsByKey.set(key, completeGrids);
+        winPatterns.push([key, winningGrids]);
+      } else {
+        try {
+          const w = Number((payline as any)?.win);
+          if (isFinite(w) && w > 0) {
+            console.warn('[WinLineDrawer] Backend payline has win>0 but no drawable win pattern could be resolved', payline);
+          }
+        } catch {}
       }
     }
 
@@ -633,7 +685,7 @@ export class WinLineDrawer {
 
     winlinePositions.sort((a, b) => a.x - b.x);
 
-    const requiredMin = 3;
+    const requiredMin = (Number(targetSymbol) === 1) ? 2 : 3;
     const requiredCount = Math.max(0, Number(count) || 0);
     if (requiredCount > 0 && requiredCount < requiredMin) {
       return [];
@@ -645,7 +697,13 @@ export class WinLineDrawer {
     }
 
     const firstSymbol = spinData.slot.area?.[firstPos.x]?.[firstPos.y];
-    if (firstSymbol !== targetSymbol) {
+    const scatterVal = Number((SCATTER_SYMBOL as any)?.[0] ?? 0);
+    const collectorVal = 11;
+    const matchesTarget = (sym: any): boolean => {
+      const v = Number(sym);
+      return v === targetSymbol || (v === collectorVal && targetSymbol !== scatterVal);
+    };
+    if (!matchesTarget(firstSymbol)) {
       return [];
     }
 
@@ -659,7 +717,7 @@ export class WinLineDrawer {
       }
 
       const symbolAtPosition = spinData.slot.area?.[pos.x]?.[pos.y];
-      if (symbolAtPosition === targetSymbol) {
+      if (matchesTarget(symbolAtPosition)) {
         streak.push({ x: pos.x, y: pos.y, symbol: symbolAtPosition });
         if (requiredCount > 0 && streak.length === requiredCount) {
           break;

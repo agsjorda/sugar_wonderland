@@ -650,6 +650,12 @@ export class GaugeMeter {
 				this.stage2MultiplierImage.setAngle(-18);
 				this.stage2MultiplierImage.setScale(baseScale * 1.35);
 				this.stage2MultiplierImage.setPosition(0, -6);
+				try {
+					const audio = (window as any)?.audioManager;
+					if (audio && typeof audio.playSoundEffect === 'function') {
+						audio.playSoundEffect('multi_add_3_TB');
+					}
+				} catch {}
 				this.stage2MultiplierIntroTween = this.scene.tweens.add({
 					targets: this.stage2MultiplierImage,
 					alpha: 1,
@@ -1012,6 +1018,12 @@ export class GaugeMeter {
 				this.stage1MultiplierImage.setAngle(-18);
 				this.stage1MultiplierImage.setScale(baseScale * 1.35);
 				this.stage1MultiplierImage.setPosition(0, -6);
+				try {
+					const audio = (window as any)?.audioManager;
+					if (audio && typeof audio.playSoundEffect === 'function') {
+						audio.playSoundEffect('multi_add_2_TB');
+					}
+				} catch {}
 				this.stage1MultiplierIntroTween = this.scene.tweens.add({
 					targets: this.stage1MultiplierImage,
 					alpha: 1,
@@ -1759,6 +1771,12 @@ export class GaugeMeter {
 				this.stage3MultiplierImage.setAngle(-18);
 				this.stage3MultiplierImage.setScale(baseScale * 1.35);
 				this.stage3MultiplierImage.setPosition(0, -6);
+				try {
+					const audio = (window as any)?.audioManager;
+					if (audio && typeof audio.playSoundEffect === 'function') {
+						audio.playSoundEffect('multi_add_4_TB');
+					}
+				} catch {}
 				this.stage3MultiplierIntroTween = this.scene.tweens.add({
 					targets: this.stage3MultiplierImage,
 					alpha: 1,

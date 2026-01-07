@@ -361,12 +361,32 @@ export class Dialogs {
 				try {
 					const fs: any = sd?.slot?.freespin || sd?.slot?.freeSpin;
 					const items: any[] | undefined = fs?.items;
-					const it0: any = Array.isArray(items) && items.length > 0
-						? (items.find((it: any) => {
-							const v = Number(it?.runningWin);
-							return isFinite(v) && v >= 0;
-						}) ?? items[0])
-						: null;
+					const slotArea = sd?.slot?.area;
+					let it0: any = null;
+					if (Array.isArray(items) && items.length > 0) {
+						if (Array.isArray(slotArea) && Array.isArray(slotArea[0])) {
+							it0 = items.find((it: any) => {
+								try {
+									const a = it?.area;
+									if (!Array.isArray(a) || a.length !== slotArea.length) return false;
+									for (let i = 0; i < a.length; i++) {
+										const ac = a[i];
+										const bc = slotArea[i];
+										if (!Array.isArray(ac) || !Array.isArray(bc) || ac.length !== bc.length) return false;
+										for (let j = 0; j < ac.length; j++) {
+											if (Number(ac[j]) !== Number(bc[j])) return false;
+										}
+									}
+									return true;
+								} catch {
+									return false;
+								}
+							});
+						}
+						if (!it0) {
+							it0 = items.find((it: any) => (Number(it?.spinsLeft) || 0) > 0) ?? items[0];
+						}
+					}
 					const vRun = Number(it0?.runningWin);
 					if (isFinite(vRun) && vRun >= 0) resolved = vRun;
 				} catch {}
@@ -518,20 +538,39 @@ export class Dialogs {
 					const sd: any = symbols?.currentSpinData;
 					let backendTotal: number | null = null;
 					try {
-						const fs: any = sd?.slot?.freespin || sd?.slot?.freeSpin;
-						const items: any[] | undefined = fs?.items;
-						const it0: any = Array.isArray(items) && items.length > 0
-							? (items.find((it: any) => {
-								const v = Number(it?.runningWin);
-								return isFinite(v) && v >= 0;
-							}) ?? items[0])
-							: null;
+						const items: any[] | undefined = sd?.slot?.freespin?.items || sd?.slot?.freeSpin?.items;
+						const slotArea = sd?.slot?.area;
+						let it0: any = null;
+						if (Array.isArray(items) && items.length > 0) {
+							if (Array.isArray(slotArea) && Array.isArray(slotArea[0])) {
+								it0 = items.find((it: any) => {
+									try {
+										const a = it?.area;
+										if (!Array.isArray(a) || a.length !== slotArea.length) return false;
+										for (let i = 0; i < a.length; i++) {
+											const ac = a[i];
+											const bc = slotArea[i];
+											if (!Array.isArray(ac) || !Array.isArray(bc) || ac.length !== bc.length) return false;
+											for (let j = 0; j < ac.length; j++) {
+												if (Number(ac[j]) !== Number(bc[j])) return false;
+											}
+										}
+										return true;
+									} catch {
+										return false;
+									}
+								});
+							}
+							if (!it0) {
+								it0 = items.find((it: any) => (Number(it?.spinsLeft) || 0) > 0) ?? items[0];
+							}
+						}
 						const vRun = Number(it0?.runningWin);
 						if (isFinite(vRun) && vRun >= 0) backendTotal = vRun;
 					} catch {}
 					try {
 						const v0 = Number(sd?.slot?.__backendTotalWin);
-						if (isFinite(v0) && v0 >= 0) backendTotal = v0;
+						if (isFinite(v0) && v0 >= 0) backendTotal = backendTotal == null ? v0 : Math.max(backendTotal, v0);
 					} catch {}
 					if (backendTotal == null) {
 						try {
@@ -557,11 +596,7 @@ export class Dialogs {
 						if (backendTotal != null) {
 							const bt = Number(backendTotal);
 							if (isFinite(bt) && bt >= 0) {
-								if (resolved > 0 && bt < resolved) {
-									resolved = resolved;
-								} else {
-									resolved = bt;
-								}
+								resolved = (resolved > 0) ? Math.max(resolved, bt) : bt;
 							}
 						}
 					} catch {}
@@ -759,7 +794,7 @@ export class Dialogs {
 			this.showStage(0, false);
 		} else {
 			this.createSpine(type);
-			this.ensureNumberDisplay(winAmount);
+			this.ensureNumberDisplay(0);
 			this.animateNumber(0, winAmount, 1500, false);
 			this.playTierSfx(type);
 		}
@@ -952,7 +987,7 @@ export class Dialogs {
 		const stage = this.stages[index];
 		this.currentDialogType = stage.type;
 		this.createSpine(stage.type as any);
-		this.ensureNumberDisplay(stage.target);
+		this.ensureNumberDisplay(Number(this.numberAnimObj.value) || 0);
 		this.playTierSfx(stage.type);
 
 		const duration = fastFromSkip ? 450 : 1500;

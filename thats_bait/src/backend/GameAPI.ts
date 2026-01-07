@@ -273,6 +273,7 @@ export class GameAPI {
     private currentSpinData: SpinData | null = null;
     private isFirstSpin: boolean = false;
     private currentFreeSpinIndex: number = 0;
+    private freeSpinItemsCache: any[] | null = null;
 
     private isAbortError(error: any): boolean {
         try {
@@ -571,6 +572,8 @@ export class GameAPI {
         if (normalizedData.slot && normalizedData.slot.freespin &&
             Array.isArray(normalizedData.slot.freespin.items) && normalizedData.slot.freespin.items.length > 0) {
             this.currentSpinData = normalizedData;
+            try { this.freeSpinItemsCache = (normalizedData.slot.freespin as any).items || null; } catch { this.freeSpinItemsCache = null; }
+            try { this.currentFreeSpinIndex = 0; } catch {}
         } else if (
             gameStateManager.isBonus &&
             this.currentSpinData &&
@@ -618,7 +621,7 @@ export class GameAPI {
             }
         }
 
-        // Fall back to original implementation
+        // Fall back to backend simulation using the currently cached free spin payload
         if (!this.currentSpinData || (!this.currentSpinData.slot?.freespin?.items && !this.currentSpinData.slot?.freeSpin?.items)) {
             console.error('No free spin data available. Current spin data:', this.currentSpinData);
             console.error('Available freespin data:', this.currentSpinData?.slot?.freespin);
@@ -626,15 +629,18 @@ export class GameAPI {
         }
 
         const freespinData = this.currentSpinData.slot.freespin || this.currentSpinData.slot.freeSpin;
-        const items = freespinData.items;
+        const itemsFromSpinData = Array.isArray((freespinData as any)?.items) ? (freespinData as any).items : [];
+        if (!this.freeSpinItemsCache) {
+            this.freeSpinItemsCache = itemsFromSpinData;
+        }
+        const items = this.freeSpinItemsCache || [];
 
         if (this.currentFreeSpinIndex >= items.length) {
             throw new Error('No more free spins available');
         }
 
         const currentItem: any = items[this.currentFreeSpinIndex];
-
-        if (!currentItem || currentItem.spinsLeft <= 0) {
+        if (!currentItem) {
             throw new Error('No more free spins available');
         }
 
@@ -645,69 +651,81 @@ export class GameAPI {
             }
         } catch {}
 
-        console.log(' ===== SIMULATING FREE SPIN =====');
-        console.log(' Using pre-determined free spin data');
-        console.log(' Current free spin index:', this.currentFreeSpinIndex);
-        console.log(' Spins left:', currentItem.spinsLeft);
-        console.log(' Sub total win:', currentItem.subTotalWin);
-        console.log(' Area:', currentItem.area);
-        console.log(' Paylines:', currentItem.payline);
-        console.log(' Collector count:', currentItem.collectorCount);
-        console.log(' Money:', currentItem.money);
+        const remainingItems = items.slice(this.currentFreeSpinIndex);
+        const remainingCount = Number((currentItem as any)?.spinsLeft) || 0;
 
-        const normalizedArea = normalizeArea(currentItem.area);
-        const normalizedMoney = normalizeMoney(currentItem.money);
-
+        let cumulativeTotal = 0;
         try {
-            const has11 = Array.isArray(normalizedArea)
-                && normalizedArea.some((col: any) => Array.isArray(col) && col.some((v: any) => v === 11));
-            if (has11) {
-                console.log('[GameAPI] Free spin area contains symbol 11.');
+            const rw = Number((currentItem as any)?.runningWin);
+            if (isFinite(rw) && rw >= 0) {
+                cumulativeTotal = rw;
+            }
+        } catch {}
+        if (!(cumulativeTotal >= 0)) {
+            cumulativeTotal = 0;
+        }
+        if (cumulativeTotal === 0) {
+            try {
+                const prevItem: any = this.currentFreeSpinIndex > 0 ? items[this.currentFreeSpinIndex - 1] : null;
+                const prevRw = Number(prevItem?.runningWin);
+                const prevBase = (isFinite(prevRw) && prevRw >= 0) ? prevRw : 0;
+                cumulativeTotal = prevBase + (Number((currentItem as any)?.subTotalWin) || 0);
+            } catch {}
+        }
+
+        let preAwardTotal = cumulativeTotal;
+        try {
+            const st = Number((currentItem as any)?.subTotalWin);
+            if (isFinite(st) && st > 0) {
+                preAwardTotal = Math.max(0, cumulativeTotal - st);
             }
         } catch {}
 
+        const resolvedTotalWin = (isFinite(Number(preAwardTotal)) && Number(preAwardTotal) >= 0) ? Number(preAwardTotal) : 0;
+
         let slotSpecial: any = undefined;
         try {
-            if (currentItem?.special && currentItem.special.action) {
+            if ((currentItem as any)?.special && (currentItem as any).special.action) {
                 slotSpecial = {
-                    action: String(currentItem.special.action),
-                    position: currentItem.special.position,
-                    items: normalizeMoney(currentItem.special.items) || currentItem.special.items
+                    action: String((currentItem as any).special.action),
+                    position: (currentItem as any).special.position,
+                    items: normalizeMoney((currentItem as any).special.items) || (currentItem as any).special.items
                 };
             }
         } catch {}
 
-        const freeSpinData: SpinData = {
+        const normalizedArea = normalizeArea((currentItem as any).area);
+        const normalizedMoney = normalizeMoney((currentItem as any).money);
+
+        const spinDataOut: SpinData = {
             playerId: this.currentSpinData.playerId,
             bet: this.currentSpinData.bet,
+            baseBet: (this.currentSpinData as any).baseBet,
             slot: {
                 area: normalizedArea,
-                paylines: Array.isArray(currentItem.payline) ? currentItem.payline : [],
+                paylines: Array.isArray((currentItem as any).payline) ? (currentItem as any).payline : [],
                 money: normalizedMoney,
                 special: slotSpecial,
+                totalWin: resolvedTotalWin,
                 freespin: {
-                    count: freespinData.count,
-                    totalWin: freespinData.totalWin,
-                    items
+                    count: remainingCount,
+                    totalWin: resolvedTotalWin,
+                    items: remainingItems
                 },
                 freeSpin: {
-                    count: freespinData.count,
-                    totalWin: freespinData.totalWin,
-                    items
+                    count: remainingCount,
+                    totalWin: resolvedTotalWin,
+                    items: remainingItems
                 }
             }
         };
 
-        this.currentSpinData = freeSpinData;
+        try { (spinDataOut.slot as any).__backendTotalWin = resolvedTotalWin; } catch {}
+
+        this.currentSpinData = spinDataOut;
         this.currentFreeSpinIndex++;
 
-        console.log(' ===== FREE SPIN SIMULATION COMPLETE =====');
-        console.log(' New SpinData:', freeSpinData);
-        console.log(' Remaining free spins:', freeSpinData.slot.freespin.count);
-        console.log(' Next free spin will use index:', this.currentFreeSpinIndex);
-        console.log(' ===== END FREE SPIN SIMULATION =====');
-
-        return freeSpinData;
+        return spinDataOut;
     }
 
     public getCurrentSpinData(): SpinData | null {
@@ -721,12 +739,19 @@ export class GameAPI {
 
     public clearCurrentSpinData(): void {
         this.currentSpinData = null;
+        this.freeSpinItemsCache = null;
     }
 
     public setFreeSpinData(spinData: SpinData): void {
         console.log('Setting free spin data for simulation:', spinData);
         this.currentSpinData = spinData;
-        this.resetFreeSpinIndex();
+        try {
+            const fs: any = (spinData as any)?.slot?.freespin || (spinData as any)?.slot?.freeSpin;
+            this.freeSpinItemsCache = Array.isArray(fs?.items) ? fs.items : null;
+        } catch {
+            this.freeSpinItemsCache = null;
+        }
+        this.currentFreeSpinIndex = 0;
     }
 
     /**
@@ -764,8 +789,8 @@ export class GameAPI {
             let balance = 0;
             if (balanceResponse && balanceResponse.data && balanceResponse.data.balance !== undefined) {
                 balance = parseFloat(balanceResponse.data.balance);
-            } else if (balanceResponse && balanceResponse.balance !== undefined) {
-                balance = parseFloat(balanceResponse.balance);
+            } else if (balanceResponse && (balanceResponse as any).balance !== undefined) {
+                balance = parseFloat((balanceResponse as any).balance);
             } else {
                 console.warn('Unexpected balance response structure:', balanceResponse);
                 balance = 0;

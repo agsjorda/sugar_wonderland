@@ -18,8 +18,15 @@ export enum SoundEffectType {
 	FISHREEL = 'fishreel_TB',
 	EXPLOSION = 'explosion_TB',
 	HELLO = 'hello_TB',
+	SPLASH = 'splash_TB',
+	MULTI_ADD_1 = 'multi_add_1_TB',
+	MULTI_ADD_2 = 'multi_add_2_TB',
+	MULTI_ADD_3 = 'multi_add_3_TB',
+	MULTI_ADD_4 = 'multi_add_4_TB',
+	MULTI_FLY = 'multi_fly_TB',
 	HIT_WIN = 'hit_win_TB',
 	SCATTER = 'scatter_TB',
+	SCATTER_HIT = 'scatter_hit_TB',
 	WIN_BIG = 'bigw_TB',
 	WIN_MEGA = 'megaw_TB',
 	WIN_SUPER = 'superw_TB',
@@ -45,7 +52,7 @@ export class AudioManager {
 	private boundSoundManager: AnySoundManager | null = null;
 
 	private musicVolume = 1;
-	private sfxVolume = 0.40;
+	private sfxVolume = 0.5;
 	private duckFactor = 1;
 
 	private currentMusicType: MusicType | null = null;

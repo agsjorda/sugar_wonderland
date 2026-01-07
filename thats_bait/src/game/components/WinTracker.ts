@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { SpinData, PaylineData } from '../../backend/SpinData';
-import { WINLINES } from '../../config/GameConfig';
+import { SCATTER_SYMBOL, WINLINES } from '../../config/GameConfig';
+import { getMoneyValueForCell } from './Symbol5VariantHelper';
 
 interface WinTrackerLayoutOptions {
   offsetX?: number;
@@ -72,7 +73,6 @@ export class WinTracker {
         this.container.removeAll(true);
         this.container.destroy();
       }
-
     } catch {}
 
     this.container = scene.add.container(0, 0);
@@ -114,16 +114,113 @@ export class WinTracker {
     } catch {}
   }
 
+  private areAreasEqual(a: any, b: any): boolean {
+    try {
+      if (!Array.isArray(a) || !Array.isArray(b)) return false;
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        const ac = a[i];
+        const bc = b[i];
+        if (!Array.isArray(ac) || !Array.isArray(bc)) return false;
+        if (ac.length !== bc.length) return false;
+        for (let j = 0; j < ac.length; j++) {
+          if (Number(ac[j]) !== Number(bc[j])) return false;
+        }
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private getCurrentFreeSpinItem(spinData: any): any | null {
+    try {
+      const items: any[] | undefined = spinData?.slot?.freespin?.items || spinData?.slot?.freeSpin?.items;
+      if (!Array.isArray(items) || items.length <= 0) return null;
+
+      const slotArea = spinData?.slot?.area;
+      if (Array.isArray(slotArea) && Array.isArray(slotArea[0])) {
+        const match = items.find((it: any) => this.areAreasEqual(it?.area, slotArea));
+        if (match) return match;
+      }
+
+      const withSpins = items.find((it: any) => (Number(it?.spinsLeft) || 0) > 0);
+      return withSpins ?? items[0];
+    } catch {
+      return null;
+    }
+  }
+
+  private isCollectorOnlyBonusSpin(spinData: SpinData): boolean {
+    try {
+      const slot: any = (spinData as any)?.slot;
+      const area: any[][] = slot?.area;
+      if (!Array.isArray(area) || area.length <= 0) return false;
+
+      const pls: any[] = slot?.paylines;
+      const hasPaylines = Array.isArray(pls) && pls.some((pl: any) => (Number(pl?.win) || 0) > 0);
+      if (hasPaylines) return false;
+
+      let hasCollector = false;
+      let hasMoneyValue = false;
+      for (let col = 0; col < area.length; col++) {
+        const colArr = area[col];
+        if (!Array.isArray(colArr)) continue;
+        for (let row = 0; row < colArr.length; row++) {
+          const id = Number(colArr[row]);
+          if (id === 11) {
+            hasCollector = true;
+            continue;
+          }
+          if (id === 5 || id === 12 || id === 13 || id === 14) {
+            const v = Number(getMoneyValueForCell(spinData as any, col, row));
+            if (isFinite(v) && v > 0) {
+              hasMoneyValue = true;
+              break;
+            }
+          }
+        }
+        if (hasMoneyValue) break;
+      }
+
+      return hasCollector && !hasMoneyValue;
+    } catch {
+      return false;
+    }
+  }
+
+  private hasCollectorInArea(spinData: SpinData): boolean {
+    try {
+      const slot: any = (spinData as any)?.slot;
+      const area: any[][] = slot?.area;
+      if (!Array.isArray(area) || area.length <= 0) return false;
+
+      for (let col = 0; col < area.length; col++) {
+        const colArr = area[col];
+        if (!Array.isArray(colArr)) continue;
+        for (let row = 0; row < colArr.length; row++) {
+          if (Number(colArr[row]) === 11) {
+            return true;
+          }
+        }
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
   private resolvePaylineToRegisteredWinlineIndex(spinData: SpinData, payline: PaylineData): number | null {
     try {
       const desired = typeof payline.lineKey === 'number' ? payline.lineKey : -1;
       const count = Math.max(0, Number(payline.count) || 0);
       const targetSymbol = Number(payline.symbol);
+      const requiredMin = (Number(targetSymbol) === 1) ? 2 : 3;
 
       const withinRange = isFinite(desired) && desired >= 0 && desired < WINLINES.length;
       if (withinRange) {
         const len = this.computeStreakLengthForWinline(spinData, desired, targetSymbol, count);
-        if (len >= 3) {
+        if (len >= requiredMin) {
           return desired;
         }
       }
@@ -134,7 +231,7 @@ export class WinTracker {
 
       for (let i = 0; i < WINLINES.length; i++) {
         const len = this.computeStreakLengthForWinline(spinData, i, targetSymbol, count);
-        const exact = count >= 3 && len === count;
+        const exact = count >= requiredMin && len === count;
 
         if (exact && !bestExact) {
           bestExact = true;
@@ -167,7 +264,7 @@ export class WinTracker {
         return null;
       }
 
-      return bestLen >= 3 ? bestIndex : null;
+      return bestLen >= requiredMin ? bestIndex : null;
     } catch {
       return null;
     }
@@ -200,12 +297,19 @@ export class WinTracker {
     }
 
     const required = Math.max(0, Number(requiredCount) || 0);
-    if (required > 0 && required < 3) {
+    const requiredMin = (Number(targetSymbol) === 1) ? 2 : 3;
+    if (required > 0 && required < requiredMin) {
       return 0;
     }
 
     const firstSymbol = spinData.slot.area?.[firstPos.x]?.[firstPos.y];
-    if (firstSymbol !== targetSymbol) {
+    const scatterVal = Number((SCATTER_SYMBOL as any)?.[0] ?? 0);
+    const collectorVal = 11;
+    const matchesTarget = (sym: any): boolean => {
+      const v = Number(sym);
+      return v === targetSymbol || (v === collectorVal && targetSymbol !== scatterVal);
+    };
+    if (!matchesTarget(firstSymbol)) {
       return 0;
     }
 
@@ -217,9 +321,9 @@ export class WinTracker {
         break;
       }
       const symbolAtPosition = spinData.slot.area?.[pos.x]?.[pos.y];
-      if (symbolAtPosition === targetSymbol) {
+      if (matchesTarget(symbolAtPosition)) {
         len++;
-        if (required >= 3 && len >= required) {
+        if (required >= requiredMin && len >= required) {
           return required;
         }
       } else {
@@ -318,7 +422,8 @@ export class WinTracker {
 
     const count = Number(payline.count) || 0;
     const win = Number(payline.win) || 0;
-    if (win <= 0 || count < 3) {
+    const requiredMin = (Number(payline.symbol) === 1) ? 2 : 3;
+    if (win <= 0 || count < requiredMin) {
       this.clear();
       return;
     }
@@ -334,7 +439,7 @@ export class WinTracker {
         return;
       }
       const streakLen = this.computeStreakLengthForWinline(spinData, resolvedLineKey, Number(payline.symbol), payline.count);
-      if (streakLen < 3) {
+      if (streakLen < requiredMin) {
         this.clear();
         return;
       }
@@ -535,6 +640,14 @@ export class WinTracker {
   }
 
   private buildSummary(spinData: SpinData | null): Map<number, SymbolSummary> | null {
+    try {
+      if (this.isBonusMode && spinData) {
+        if (this.isCollectorOnlyBonusSpin(spinData)) {
+          return null;
+        }
+      }
+    } catch {}
+
     if (!spinData || !spinData.slot || !Array.isArray(spinData.slot.paylines) || spinData.slot.paylines.length === 0) {
       return null;
     }
@@ -545,12 +658,13 @@ export class WinTracker {
       if (win <= 0) {
         continue;
       }
+      const requiredMin = (Number(payline.symbol) === 1) ? 2 : 3;
       const resolvedLineKey = this.resolvePaylineToRegisteredWinlineIndex(spinData, payline);
       if (resolvedLineKey === null) {
         continue;
       }
       const streakLen = this.computeStreakLengthForWinline(spinData, resolvedLineKey, Number(payline.symbol), payline.count);
-      if (streakLen < 3) {
+      if (streakLen < requiredMin) {
         continue;
       }
       const stats = this.getPaylineMultiplierStats(payline);

@@ -530,7 +530,7 @@ function dropFillers(
     const y = getYPos(self, i + START_INDEX_Y);
 
     // Restrict filler symbols to those that have dedicated WEBP icons in assets/portrait/high/symbols
-    const fillerPool: number[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,];
+    const fillerPool: number[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     const randIndex = Math.floor(Math.random() * fillerPool.length);
     const symbolId = fillerPool[randIndex];
     let symbol: any;
@@ -1263,7 +1263,7 @@ function createHeldSpinnerFillerSprite(self: any, x: number, y: number): any {
 
 function pickRandomHeldSpinnerSpritePick(self: any): any {
   try {
-    const fillerPool: number[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+    const fillerPool: number[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     const symbolId = fillerPool[Math.floor(Math.random() * fillerPool.length)];
     let spriteKey: string | null = null;
     const visual = symbolId;

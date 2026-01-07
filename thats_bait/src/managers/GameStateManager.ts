@@ -172,6 +172,64 @@ export class GameStateManager {
 		} catch {}
 	}
 
+	public waitForWinlinesStop(timeoutMs: number = 8000): Promise<void> {
+		if (!this.isShowingWinlines) {
+			return Promise.resolve();
+		}
+		const t = Number(timeoutMs);
+		const safeTimeout = isFinite(t) && t > 0 ? t : 0;
+		return new Promise<void>((resolve) => {
+			let done = false;
+			const finish = () => {
+				if (done) return;
+				done = true;
+				try { gameEventManager.off(GameEventType.WIN_STOP, onStop as any); } catch {}
+				resolve();
+			};
+			const onStop = () => finish();
+			try { gameEventManager.on(GameEventType.WIN_STOP, onStop as any); } catch {}
+			if (safeTimeout > 0) {
+				try { setTimeout(() => finish(), safeTimeout); } catch {}
+			}
+		});
+	}
+
+	public async waitForSpinPipelineIdle(opts?: { timeoutMs?: number; pollIntervalMs?: number }): Promise<void> {
+		const t = Number(opts?.timeoutMs);
+		const timeoutMs = isFinite(t) && t > 0 ? t : 15000;
+		const p = Number(opts?.pollIntervalMs);
+		const pollIntervalMs = isFinite(p) && p > 0 ? Math.max(10, p) : 50;
+		const start = Date.now();
+
+		const isIdle = () => {
+			try {
+				return !this.isReelSpinning && !this.isShowingWinlines && !this.isCriticalSequenceLocked && !this.isOverlayLocked;
+			} catch {
+				return false;
+			}
+		};
+
+		while (true) {
+			if (isIdle()) return;
+			const elapsed = Date.now() - start;
+			const remaining = timeoutMs - elapsed;
+			if (remaining <= 0) return;
+
+			try { await this.waitForOverlaySafeState({ timeoutMs: remaining, pollIntervalMs }); } catch {}
+			if (isIdle()) return;
+			const rem2 = timeoutMs - (Date.now() - start);
+			if (rem2 <= 0) return;
+			try { await this.waitUntilOverlaysClosed(rem2); } catch {}
+			if (isIdle()) return;
+			const rem3 = timeoutMs - (Date.now() - start);
+			if (rem3 <= 0) return;
+			try { await this.waitForWinlinesStop(rem3); } catch {}
+			if (isIdle()) return;
+
+			try { await new Promise<void>((resolve) => setTimeout(resolve, pollIntervalMs)); } catch { return; }
+		}
+	}
+
 	private waitForReelsStop(timeoutMs: number): Promise<void> {
 		if (!this.isReelSpinning) {
 			return Promise.resolve();

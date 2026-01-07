@@ -195,6 +195,12 @@ export class BonusBackground {
 			if (!img) {
 				return;
 			}
+			try {
+				const audio = (window as any)?.audioManager;
+				if (audio && typeof audio.playSoundEffect === 'function') {
+					audio.playSoundEffect('splash_TB');
+				}
+			} catch {}
 			img.setScrollFactor(0);
 			img.setAlpha(0);
 			const baseScale = (scene.scale.width / 1920) * this.hookSplashModifiers.scale;

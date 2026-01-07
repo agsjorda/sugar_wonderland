@@ -1,0 +1,24 @@
+{
+    "section1": {
+        "files": [
+            {
+                "url": "Sparkle_VFX.json",
+                "type": "spineJson",
+                "key": "Sparkle_VFX"
+            },
+            {
+                "url": "Sparkle_VFX.atlas",
+                "type": "spineAtlas",
+                "key": "Sparkle_VFX-atlas"
+            }
+        ]
+    },
+    "meta": {
+        "app": "Phaser Editor 2D - Asset Pack Editor",
+        "contentType": "phasereditor2d.pack.core.AssetContentType",
+        "url": "https://phasereditor2d.com",
+        "version": 2,
+        "showAllFilesInBlocks": false,
+        "visible": true
+    }
+}

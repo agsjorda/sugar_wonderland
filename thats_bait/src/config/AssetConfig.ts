@@ -381,7 +381,6 @@ export class AssetConfig {
 		numberImages['number_dot'] = `${prefix}/numbers/number_dot.webp`;
 		
 		console.log(`[AssetConfig] Number comma: ${prefix}/numbers/number_comma.webp`);
-		console.log(`[AssetConfig] Number dot: ${prefix}/numbers/number_dot.webp`);
 		
 		numberImages['number_x'] = `${prefix}/numbers/number_x.webp`;
 		console.log(`[AssetConfig] Number x: ${prefix}/numbers/number_x.webp`);
@@ -432,10 +431,18 @@ export class AssetConfig {
 				'fishreel_TB': 'assets/sounds/SFX/fishreel_TB.ogg',
 				'explosion_TB': 'assets/sounds/SFX/explosion_TB.ogg',
 				'hello_TB': 'assets/sounds/SFX/hello_TB.ogg',
+				'splash_TB': 'assets/sounds/SFX/splash_TB.ogg',
+				'multi_add_1_TB': 'assets/sounds/SFX/multi_add_1_TB.ogg',
+				'multi_add_2_TB': 'assets/sounds/SFX/multi_add_2_TB.ogg',
+				'multi_add_3_TB': 'assets/sounds/SFX/multi_add_3_TB.ogg',
+				'multi_add_4_TB': 'assets/sounds/SFX/multi_add_4_TB.ogg',
+				'multi_fly_TB': 'assets/sounds/SFX/multi_fly_TB.ogg',
 				// Hit win SFX
 				'hit_win_TB': 'assets/sounds/SFX/hit_win_TB.ogg',
 				// Wild multi SFX
 				'scatter_TB': 'assets/sounds/SFX/scatter_TB.ogg',
+				'scat_anti_TB': 'assets/sounds/SFX/scat_anti_TB.ogg',
+				'scatter_hit_TB': 'assets/sounds/SFX/scatter_hit_TB.ogg',
 				// Win dialog SFX
 				'bigw_TB': 'assets/sounds/Wins/bigw_TB.ogg',
 				'megaw_TB': 'assets/sounds/Wins/megaw_TB.ogg',
@@ -466,7 +473,8 @@ export class AssetConfig {
 		const forcedPortraitHighPrefix = `assets/portrait/high`;
 		return {
 			images: {
-				'dynamite': `${forcedPortraitHighPrefix}/dynamite/dynamite.webp`
+				'dynamite': `${forcedPortraitHighPrefix}/dynamite/dynamite.webp`,
+				'crosshair': `${forcedPortraitHighPrefix}/dynamite/crosshair.webp`
 			},
 			spine: {
 				'Water_Bomb_VFX': {

@@ -3451,7 +3451,16 @@ setBuyFeatureBetAmount(amount: number): void {
 				return;
 			}
 			console.log('[SlotController] Autoplay timer callback triggered - calling performAutoplaySpin');
-			this.performAutoplaySpin();
+			void (async () => {
+				try { await gameStateManager.waitForSpinPipelineIdle({ timeoutMs: 12000 }); } catch {}
+				if (this.autoplayRunId !== runId || this.isStoppingAutoplay || this.autoplaySpinsRemaining <= 0 || !gameStateManager.isAutoPlaying) {
+					return;
+				}
+				if (gameStateManager.isScatter || gameStateManager.isBonus || gameStateManager.isShowingWinDialog) {
+					return;
+				}
+				try { await this.performAutoplaySpin(); } catch {}
+			})();
 		}) || null;
 		
 		console.log('[SlotController] New autoplay timer created:', !!this.autoplayTimer);

@@ -17,6 +17,7 @@ export interface BoilingBubblesConfig {
 	scaleMax?: number;
 	alphaMin?: number;
 	alphaMax?: number;
+	antiSfxVolumeMultiplier?: number;
 }
 
 export class BoilingBubblesEffect {
@@ -24,6 +25,9 @@ export class BoilingBubblesEffect {
 	private container: Phaser.GameObjects.Container;
 	private timer?: Phaser.Time.TimerEvent;
 	private running: boolean = false;
+	private antiSfxSound: Phaser.Sound.BaseSound | null = null;
+	private antiSfxKey: string = 'scat_anti_TB';
+	private antiSfxVolumeMultiplier: number = 2.2;
 
 	private x: number;
 	private y: number;
@@ -62,6 +66,9 @@ export class BoilingBubblesEffect {
 		this.scaleMax = typeof config.scaleMax === 'number' ? Math.max(this.scaleMin, config.scaleMax) : 0.55;
 		this.alphaMin = typeof config.alphaMin === 'number' ? Math.max(0, Math.min(1, config.alphaMin)) : 0.25;
 		this.alphaMax = typeof config.alphaMax === 'number' ? Math.max(0, Math.min(1, config.alphaMax)) : 0.85;
+		this.antiSfxVolumeMultiplier = typeof config.antiSfxVolumeMultiplier === 'number' && isFinite(config.antiSfxVolumeMultiplier)
+			? Math.max(0, config.antiSfxVolumeMultiplier)
+			: 1;
 
 		try { this.container.setDepth(this.depth); } catch {}
 	}
@@ -97,6 +104,7 @@ export class BoilingBubblesEffect {
 
 	stopSpawning(): void {
 		this.running = false;
+		this.stopAntiSfxLoop();
 		try { this.timer?.destroy(); } catch {}
 		this.timer = undefined;
 	}
@@ -173,9 +181,49 @@ export class BoilingBubblesEffect {
 		}
 	}
 
+	private startAntiSfxLoop(): void {
+		if (!this.scene) return;
+		const existing = this.antiSfxSound;
+		try {
+			if (existing && (existing as any).isPlaying) return;
+		} catch {}
+		try {
+			if (!this.scene.cache?.audio?.exists?.(this.antiSfxKey)) return;
+		} catch {}
+
+		let vol = 0.40;
+		try {
+			const mgr = (this.scene as any)?.audioManager ?? ((window as any)?.audioManager ?? null);
+			if (mgr && typeof mgr.getSfxVolume === 'function') {
+				const v = Number(mgr.getSfxVolume());
+				if (isFinite(v)) vol = Math.max(0, Math.min(1, v));
+			}
+		} catch {}
+		try {
+			vol = Math.max(0, vol * (this.antiSfxVolumeMultiplier || 0));
+		} catch {}
+
+		try {
+			const s = this.scene.sound.add(this.antiSfxKey, { loop: true, volume: vol });
+			this.antiSfxSound = s;
+			s.play();
+		} catch {
+			this.antiSfxSound = null;
+		}
+	}
+
+	private stopAntiSfxLoop(): void {
+		const s = this.antiSfxSound;
+		this.antiSfxSound = null;
+		if (!s) return;
+		try { s.stop(); } catch {}
+		try { s.destroy(); } catch {}
+	}
+
 	private startInternal(withBurst: boolean): void {
 		if (this.running) return;
 		this.running = true;
+		this.startAntiSfxLoop();
 
 		try { this.timer?.destroy(); } catch {}
 		this.timer = undefined;

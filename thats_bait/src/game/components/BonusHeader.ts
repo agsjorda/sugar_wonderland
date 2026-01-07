@@ -77,29 +77,13 @@ export class BonusHeader {
 					} catch {}
 				});
 			} catch {}
-			sceneAny?.events?.on?.('bonus-win-delta', (delta: number) => {
+			sceneAny?.events?.on?.('bonus-win-delta', (_delta: number) => {
 				try {
 					if (!gameStateManager.isBonus) return;
-					const d = Number(delta);
-					if (!isFinite(d) || d <= 0) return;
-
-					let cap: number | null = null;
-					try {
-						const symbolsComponent = sceneAny?.symbols;
-						const spinData = symbolsComponent?.currentSpinData;
-						const items: any[] | undefined = spinData?.slot?.freespin?.items || spinData?.slot?.freeSpin?.items;
-						if (Array.isArray(items) && items.length > 0) {
-							const v = Number(items[0]?.runningWin);
-							if (isFinite(v) && v >= 0) cap = v;
-						}
-					} catch {}
-
-					const from = Number(this.currentWinnings ?? 0) || 0;
-					let target = from + d;
-					if (cap != null && cap > from && target > cap) target = cap;
-					if (target > from) {
-						this.animateTotalWinTo(target);
-					}
+					const d = Number(_delta);
+					if (!isFinite(d) || d === 0) return;
+					const base = Number(this.cumulativeBonusWin ?? 0) || 0;
+					this.animateTotalWinTo(Math.max(0, base + d));
 				} catch {}
 			});
 			const onWinlineShown = (payline: any) => {
@@ -111,24 +95,8 @@ export class BonusHeader {
 					const k = `${Number(payline?.lineKey)}_${Number(payline?.symbol)}_${Number(payline?.count)}_${w}`;
 					if (this.spinSeenPaylineKeys.has(k)) return;
 					this.spinSeenPaylineKeys.add(k);
-
-					let cap: number | null = null;
-					try {
-						const symbolsComponent = sceneAny?.symbols;
-						const spinData = symbolsComponent?.currentSpinData;
-						const items: any[] | undefined = spinData?.slot?.freespin?.items || spinData?.slot?.freeSpin?.items;
-						if (Array.isArray(items) && items.length > 0) {
-							const v = Number(items[0]?.runningWin);
-							if (isFinite(v) && v >= 0) cap = v;
-						}
-					} catch {}
-
-					const from = Number(this.currentWinnings ?? 0) || 0;
-					let target = from + w;
-					if (cap != null && cap > from && target > cap) target = cap;
-					if (target > from) {
-						this.animateTotalWinTo(target);
-					}
+					const base = Number(this.cumulativeBonusWin ?? 0) || 0;
+					this.animateTotalWinTo(Math.max(0, base + w));
 				} catch {}
 			};
 			sceneAny?.events?.on?.('winline-shown', onWinlineShown);
@@ -191,6 +159,43 @@ export class BonusHeader {
 		}
 	}
 
+	private areAreasEqual(a: any, b: any): boolean {
+		try {
+			if (!Array.isArray(a) || !Array.isArray(b)) return false;
+			if (a.length !== b.length) return false;
+			for (let i = 0; i < a.length; i++) {
+				const ac = a[i];
+				const bc = b[i];
+				if (!Array.isArray(ac) || !Array.isArray(bc)) return false;
+				if (ac.length !== bc.length) return false;
+				for (let j = 0; j < ac.length; j++) {
+					if (Number(ac[j]) !== Number(bc[j])) return false;
+				}
+			}
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	private getCurrentFreeSpinItem(spinData: any): any | null {
+		try {
+			const items: any[] | undefined = spinData?.slot?.freespin?.items || spinData?.slot?.freeSpin?.items;
+			if (!Array.isArray(items) || items.length <= 0) return null;
+
+			const slotArea = spinData?.slot?.area;
+			if (Array.isArray(slotArea) && Array.isArray(slotArea[0])) {
+				const match = items.find((it: any) => this.areAreasEqual(it?.area, slotArea));
+				if (match) return match;
+			}
+
+			const withSpins = items.find((it: any) => (Number(it?.spinsLeft) || 0) > 0);
+			return withSpins ?? items[0];
+		} catch {
+			return null;
+		}
+	}
+
 	private getBackendTotalWin(spinData: any): number | null {
 		const currentTotal = Number(this.cumulativeBonusWin ?? 0) || 0;
 		const isBonus = !!gameStateManager.isBonus;
@@ -200,11 +205,9 @@ export class BonusHeader {
 		let running: number | null = null;
 
 		try {
-			const items: any[] | undefined = spinData?.slot?.freespin?.items || spinData?.slot?.freeSpin?.items;
-			if (Array.isArray(items) && items.length > 0) {
-				const v = Number(items[0]?.runningWin);
-				if (isFinite(v) && v >= 0) running = v;
-			}
+			const item: any = this.getCurrentFreeSpinItem(spinData);
+			const v = Number(item?.runningWin);
+			if (isFinite(v) && v >= 0) running = v;
 		} catch {}
 
 		try {
@@ -295,6 +298,13 @@ export class BonusHeader {
 			let speed = 1.0;
 			try { speed = gameStateManager.isTurbo ? 0.65 : 1.0; } catch {}
 			const duration = Math.max(220, Math.floor(520 * speed));
+
+			try {
+				const prevProxy: any = (this as any).__totalWinProxy;
+				if (prevProxy) {
+					scene.tweens.killTweensOf(prevProxy);
+				}
+			} catch {}
 
 			const proxy: any = { value: from };
 			try { (this as any).__totalWinProxy = proxy; } catch {}
@@ -567,12 +577,8 @@ export class BonusHeader {
 			}
 			try { this.spinIncrementalActive = false; } catch {}
 			try {
-				const symbolsComponent = (this.bonusHeaderContainer.scene as any).symbols;
-				const sd = symbolsComponent?.currentSpinData;
-				const backendTotal = this.getBackendTotalWin(sd);
-				if (backendTotal != null) {
-					this.animateTotalWinTo(backendTotal);
-				}
+				const total = Number(this.cumulativeBonusWin ?? 0) || 0;
+				this.animateTotalWinTo(Math.max(0, total));
 			} catch {}
 		});
 
