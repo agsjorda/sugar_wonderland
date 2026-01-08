@@ -98,6 +98,7 @@ export class Game extends Scene {
 	private winQueue: Array<{ payout: number; bet: number }> = [];
 	private suppressWinDialogsUntilNextSpin: boolean = false;
 	private winOverlayEnqueuedThisSpin: boolean = false;
+	private demoBalanceUpdatedThisSpin: boolean = false;
 
 	public gameData: GameData;
 	private symbols: Symbols;
@@ -228,7 +229,7 @@ export class Game extends Scene {
 			alpha: 0.5,
 			depth: 30000, // Very high depth to stay above all overlays and transitions
 			scale: 0.7,
-			suffixText: ' | Hustle The Blazing Horse',
+			suffixText: ` | Hustle The Blazing Horse${this.gameAPI.getDemoState() ? ' | DEMO' : ''}`,
 			additionalText: 'DiJoker',
 			additionalTextOffsetX: 185,
 			additionalTextOffsetY: 0,
@@ -679,6 +680,11 @@ export class Game extends Scene {
 			return;
 		});
 
+		// Listen for reel start to reset demo balance update flag
+		gameEventManager.on(GameEventType.REELS_START, () => {
+			this.demoBalanceUpdatedThisSpin = false;
+		});
+
 		// Listen for winline animations completion to show win dialogs
 		gameEventManager.on(GameEventType.WIN_STOP, (data: any) => {
 			console.log('[Game] WIN_STOP event received');
@@ -686,11 +692,11 @@ export class Game extends Scene {
 			// Get the current spin data from the Symbols component
 			if (this.symbols && this.symbols.currentSpinData) {
 				const spinData = this.symbols.currentSpinData;
-				console.log('[Game] WIN_STOP: Found current spin data, calculating total win from paylines');
+				console.log('[Game] WIN_STOP: Found current spin data, calculating total win from paylines', spinData);
 				
 				// Calculate total win from paylines
 				const totalWin = this.calculateTotalWinFromPaylines(spinData.slot.paylines);
-				const betAmount = parseFloat(spinData.bet);
+				const betAmount = parseFloat(spinData.bet || spinData.totalBet);
 				
 				console.log(`[Game] WIN_STOP: Total win calculated: $${totalWin}, bet: $${betAmount}`);
 				// Schedule win tracker auto-hide shortly after win animations complete
@@ -701,6 +707,13 @@ export class Game extends Scene {
 					this.checkAndShowWinDialog(totalWin, betAmount);
 				} else {
 					console.log('[Game] WIN_STOP: No wins detected from paylines');
+				}
+			
+				// Demo balance update for base game wins (only once per spin)
+				const isDemo = this.gameAPI.getDemoState();
+				if (isDemo && !gameStateManager.isScatter && !gameStateManager.isBonus && totalWin > 0 && !this.demoBalanceUpdatedThisSpin) {
+					this.gameAPI.updateDemoBalance(this.gameAPI.getDemoBalance() + totalWin);
+					this.demoBalanceUpdatedThisSpin = true;
 				}
 			} else {
 				console.log('[Game] WIN_STOP: No current spin data available');

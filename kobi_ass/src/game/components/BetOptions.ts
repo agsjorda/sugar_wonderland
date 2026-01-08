@@ -221,7 +221,11 @@ export class BetOptions {
 		this.container.add(this.minusButton);
 		
 		// Bet display
-		this.betDisplay = scene.add.text(x, y, `$${this.currentBet.toFixed(2)}`, {
+		// Check if demo mode is active - if so, remove currency symbol
+		const sceneAny: any = scene;
+		const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const currencySymbol = isDemo ? '' : '$';
+		this.betDisplay = scene.add.text(x, y, `${currencySymbol}${this.currentBet.toFixed(2)}`, {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
@@ -313,7 +317,11 @@ export class BetOptions {
 
 	private updateBetDisplay(): void {
 		if (this.betDisplay) {
-			this.betDisplay.setText(`$${this.currentBet.toFixed(2)}`);
+			// Check if demo mode is active - if so, remove currency symbol
+			const sceneAny: any = this.container?.scene;
+			const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const currencySymbol = isDemo ? '' : '$';
+			this.betDisplay.setText(`${currencySymbol}${this.currentBet.toFixed(2)}`);
 		}
 	}
 

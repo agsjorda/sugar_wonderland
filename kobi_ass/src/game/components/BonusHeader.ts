@@ -307,7 +307,12 @@ export class BonusHeader {
 		this.bonusHeaderContainer.add(this.youWonText);
 
 		// Line 2: "$ 0.00" with bold formatting
-		this.amountText = scene.add.text(x, y + 14, '$ 0.00', {
+		// Check if demo mode is active - if so, use blank currency symbol
+		const sceneAny: any = scene;
+		const isDemoInitial = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const currencySymbolInitial = isDemoInitial ? '' : '$';
+		const initialText = isDemoInitial ? '0.00' : `$ 0.00`;
+		this.amountText = scene.add.text(x, y + 14, initialText, {
 			fontSize: '20px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
@@ -390,19 +395,31 @@ export class BonusHeader {
 	 * Format currency value for display
 	 */
 	private formatCurrency(amount: number): string {
+		// Check if demo mode is active - if so, remove currency symbol
+		const sceneAny: any = this.bonusHeaderContainer?.scene;
+		const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		
 		if (amount === 0) {
-			return '$ 0.00';
+			return isDemo ? '0.00' : '$ 0.00';
 		}
 		
 		// Format with commas for thousands and 2 decimal places
-		const formatted = new Intl.NumberFormat('en-US', {
-			style: 'currency',
-			currency: 'USD',
-			minimumFractionDigits: 2,
-			maximumFractionDigits: 2
-		}).format(amount);
-		
-		return formatted;
+		if (isDemo) {
+			// In demo mode, format without currency symbol
+			return amount.toLocaleString('en-US', {
+				minimumFractionDigits: 2,
+				maximumFractionDigits: 2
+			});
+		} else {
+			const formatted = new Intl.NumberFormat('en-US', {
+				style: 'currency',
+				currency: 'USD',
+				minimumFractionDigits: 2,
+				maximumFractionDigits: 2
+			}).format(amount);
+			
+			return formatted;
+		}
 	}
 
 	/**
@@ -410,6 +427,13 @@ export class BonusHeader {
 	 */
 	public getCurrentWinnings(): number {
 		return this.currentWinnings;
+	}
+
+	/**
+	 * Get cumulative bonus win total
+	 */
+	public getCumulativeBonusWin(): number {
+		return this.cumulativeBonusWin;
 	}
 
 	/**

@@ -4768,7 +4768,7 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   mockData.wins = new Wins(convertedWins);
   
   mockData.balance = 0; // Not used in symbol processing
-  mockData.bet = parseFloat(spinData.bet);
+  mockData.bet = parseFloat(spinData.bet || spinData.totalBet);
   mockData.freeSpins = spinData.slot.freespin?.count || 0;
   
   // Set proper timing for animations
@@ -4897,7 +4897,7 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
   // Check if this win meets the dialog threshold and pause autoplay if so
   if (spinData.slot.paylines && spinData.slot.paylines.length > 0) {
     const totalWin = calculateTotalWinFromPaylines(spinData.slot.paylines);
-    const betAmount = parseFloat(spinData.bet);
+    const betAmount = parseFloat(spinData.bet || spinData.totalBet);
     const multiplier = totalWin / betAmount;
     
     if (multiplier >= 20) {

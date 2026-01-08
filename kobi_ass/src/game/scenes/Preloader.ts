@@ -104,6 +104,9 @@ export class Preloader extends Scene
 
 		// Create persistent clock display (stays visible during studio loading and preloader)
 		const clockY = this.scale.height * 0.009; // Slightly below top edge
+		// Check if demo mode is active for title marker
+		const isDemo = this.gameAPI.getDemoState();
+		const suffixText = isDemo ? ' | Kobo Ass | DEMO' : ' | Kobo Ass';
 		this.clockDisplay = new ClockDisplay(this, {
 			offsetX: -155,
 			offsetY: clockY,
@@ -112,7 +115,7 @@ export class Preloader extends Scene
 			alpha: 0.5,
 			depth: 30000, // Very high depth to stay above all overlays and transitions
 			scale: 0.7,
-			suffixText: ' | Kobo Ass',
+			suffixText: suffixText,
 			additionalText: 'DiJoker',
 			additionalTextOffsetX: 185,
 			additionalTextOffsetY: 0,
@@ -304,6 +307,14 @@ export class Preloader extends Scene
 
     async create ()
     {
+        // Log demo state for debugging
+        try {
+            const demoState = this.gameAPI.getDemoState();
+            console.log('[Preloader] Demo state:', demoState);
+        } catch (error) {
+            console.error('[Preloader] Failed to get demo state:', error);
+        }
+
         // Initialize GameAPI, generate token, and call backend initialize endpoint
         try {
             console.log('[Preloader] Initializing GameAPI...');

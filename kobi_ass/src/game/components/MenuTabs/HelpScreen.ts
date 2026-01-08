@@ -383,7 +383,10 @@ export class HelpScreen {
             // Right column: payout value, right-aligned
             const value = payoutData[row] ?? 0;
             const adjustedValue = this.applyBetToPayout(value);
-            const valueText = '$ ' + this.formatPayout(adjustedValue);
+            // Check if demo mode is active - if so, use blank currency symbol
+            const isDemo = (scene as any)?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+            const currencySymbol = isDemo ? '' : '$';
+            const valueText = currencySymbol + (currencySymbol ? ' ' : '') + this.formatPayout(adjustedValue);
             const payoutText = scene.add.text(0, y, valueText, {
                 fontSize: this.payoutTextFontSize + 'px',
                 color: '#FFFFFF',
@@ -476,7 +479,10 @@ export class HelpScreen {
             // Right column: payout value, right-aligned
             const value = SCATTER_PAYOUTS[row] ?? 0;
             const adjustedValue = this.applyBetToPayout(value);
-            const valueText = '$ ' + this.formatPayout(adjustedValue);
+            // Check if demo mode is active - if so, use blank currency symbol
+            const isDemo = (scene as any)?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+            const currencySymbol = isDemo ? '' : '$';
+            const valueText = currencySymbol + (currencySymbol ? ' ' : '') + this.formatPayout(adjustedValue);
             const payoutTextX = baseTextX + this.scatterPayoutTextColumnSpacing / 2;
             const payoutText = scene.add.text(payoutTextX, adjustedTextY, valueText, {
                 fontSize: this.scatterPayoutTextFontSize + 'px',
@@ -757,7 +763,10 @@ export class HelpScreen {
         buyFeatContainer.add(buyLabel);
 
         // Static price text $10,000 centered on the button
-        const buyPrice = scene.add.text(btnCenterX, btnCenterY + 14, '$10,000', {
+        // Check if demo mode is active - if so, remove currency symbol
+        const isDemo = (scene as any)?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const buyPriceText = isDemo ? '10,000' : '$10,000';
+        const buyPrice = scene.add.text(btnCenterX, btnCenterY + 14, buyPriceText, {
             fontSize: '18px',
             color: '#FFFFFF',
             fontFamily: 'Poppins-Bold',
@@ -992,10 +1001,14 @@ export class HelpScreen {
         balanceCardContainer.add(balanceTitle);
 
         // Main value text layer below the title.
+        // Check if demo mode is active - if so, remove currency symbol
+        const isDemo = (scene as any)?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const currencySymbol = isDemo ? '' : '$';
+        const balanceValueText = isDemo ? '200,000.00' : '$ 200,000.00';
         const balanceValue = scene.add.text(
             cardLeft + cardWidth / 2,
             cardHeight / 2 + this.padding * 0.8,
-            '$ 200,000.00',
+            balanceValueText,
             {
                 ...this.titleStyle,
                 color: '#ffffff',

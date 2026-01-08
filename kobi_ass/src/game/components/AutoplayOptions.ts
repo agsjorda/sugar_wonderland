@@ -163,7 +163,13 @@ export class AutoplayOptions {
 		balanceContainer.add(balanceLabel);
 		
 		// Balance amount - using the current balance from game data
-		const balanceAmount = scene.add.text(150, 1, `$${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, {
+		// Check if demo mode is active - if so, remove currency symbol and adjust position
+		const sceneAny: any = scene;
+		const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const currencySymbol = isDemo ? '' : '$';
+		// Adjust x position for right-aligned text when currency symbol is removed
+		const balanceX = isDemo ? 150 - 10 : 150; // Shift left by ~10px when symbol removed
+		const balanceAmount = scene.add.text(balanceX, 1, `${currencySymbol}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, {
 			fontSize: '24px',
 			color: '#00ff00',
 			fontFamily: 'Poppins-Bold'
@@ -285,7 +291,11 @@ export class AutoplayOptions {
 		this.container.add(this.minusButton);
 		
 		// Bet display
-		this.autoplayDisplay = scene.add.text(x, y, `$${this.currentBet.toFixed(2)}` , {
+		// Check if demo mode is active - if so, remove currency symbol
+		const sceneAny: any = scene;
+		const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const currencySymbol = isDemo ? '' : '$';
+		this.autoplayDisplay = scene.add.text(x, y, `${currencySymbol}${this.currentBet.toFixed(2)}` , {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
@@ -385,13 +395,23 @@ export class AutoplayOptions {
 
 	private updateAutoplayDisplay(): void {
 		if (this.autoplayDisplay) {
-			this.autoplayDisplay.setText(`$${this.currentBet.toFixed(2)}`);
+			// Check if demo mode is active - if so, remove currency symbol
+			const sceneAny: any = this.container?.scene;
+			const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const currencySymbol = isDemo ? '' : '$';
+			this.autoplayDisplay.setText(`${currencySymbol}${this.currentBet.toFixed(2)}`);
 		}
 	}
 
 	private updateBalanceDisplay(): void {
 		if (this.balanceAmountText) {
-			this.balanceAmountText.setText(`$${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+			// Check if demo mode is active - if so, remove currency symbol and adjust position
+			const sceneAny: any = this.container?.scene;
+			const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const currencySymbol = isDemo ? '' : '$';
+			const balanceX = isDemo ? 150 - 10 : 150; // Shift left by ~10px when symbol removed
+			this.balanceAmountText.setText(`${currencySymbol}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+			this.balanceAmountText.setX(balanceX);
 		}
 	}
 

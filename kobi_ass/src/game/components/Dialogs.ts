@@ -1045,11 +1045,11 @@ export class Dialogs {
 						// Reset symbols/winlines state for base game
 						scene.events.emit('resetSymbolsForBase');
 
-						// Ensure win sequence finalization when starting normal transition
-					try {
-						gameEventManager.emit(GameEventType.WIN_STOP);
-						console.log('[Dialogs] Emitted WIN_STOP at start of normal transition');
-					} catch {}
+					// // Ensure win sequence finalization when starting normal transition
+					// try {
+					// 	gameEventManager.emit(GameEventType.WIN_STOP);
+					// 	console.log('[Dialogs] Emitted WIN_STOP at start of normal transition');
+					// } catch {}
 
 					}
 					// Re-enable symbols after transition completes (normal flow)

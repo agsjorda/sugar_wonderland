@@ -94,7 +94,7 @@ export class Preloader extends Scene
 			alpha: 0.5,
 			depth: 30000, // Very high depth to stay above all overlays and transitions
 			scale: 0.7,
-			suffixText: ' | Hustle The Blazing Horse',
+			suffixText: ` | Hustle The Blazing Horse${this.gameAPI.getDemoState() ? ' | DEMO' : ''}`,
 			additionalText: 'DiJoker',
 			additionalTextOffsetX: 185,
 			additionalTextOffsetY: 0,
@@ -293,6 +293,14 @@ export class Preloader extends Scene
 
 	async create ()
 	{
+		// Log demo state for debugging
+		try {
+			const demoState = this.gameAPI.getDemoState();
+			console.log('[Preloader] Demo state:', demoState);
+		} catch (error) {
+			console.error('[Preloader] Failed to get demo state:', error);
+		}
+
 		// Initialize GameAPI, generate token, and call backend initialize endpoint
 		try {
 			console.log('[Preloader] Initializing GameAPI...');

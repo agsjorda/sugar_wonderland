@@ -83,6 +83,9 @@ export interface HistoryItem {
 }
 
 export class GameAPI {  
+    private static readonly GAME_ID: string = '00020525';
+    private static DEMO_BALANCE: number = 10000;
+    
     gameData: GameData;
     exitURL: string = '';
     private currentSpinData: SpinData | null = null;
@@ -95,6 +98,40 @@ export class GameAPI {
     
     constructor(gameData: GameData) {
         this.gameData = gameData;
+    }
+
+    /**
+     * Get demo state from URL parameters
+     * @returns true if demo mode is active, false otherwise
+     */
+    public getDemoState(): boolean {
+        const demoParam = getUrlParameter('demo');
+        return demoParam === 'true';
+    }
+
+    /**
+     * Get the game ID constant
+     * @returns The game ID
+     */
+    public getGameId(): string {
+        return GameAPI.GAME_ID;
+    }
+
+    /**
+     * Get the demo balance constant
+     * @returns The demo balance value
+     */
+    public getDemoBalance(): number {
+        return GameAPI.DEMO_BALANCE;
+    }
+
+    /**
+     * Update the demo balance constant
+     * @param newBalance - The new balance value
+     */
+    public updateDemoBalance(newBalance: number): void {
+        console.log(`[GameAPI] Updating demo balance: $${GameAPI.DEMO_BALANCE} -> $${newBalance}`);
+        GameAPI.DEMO_BALANCE = newBalance;
     }   
 
     /**
@@ -165,6 +202,17 @@ export class GameAPI {
      */
     public async initializeGame(): Promise<string> {
         try {
+            // Check for demo mode
+            const isDemo = this.getDemoState();
+            localStorage.setItem('demo', isDemo ? 'true' : 'false');
+            sessionStorage.setItem('demo', isDemo ? 'true' : 'false');
+            
+            if (isDemo) {
+                // Store demo state in localStorage and sessionStorage
+                console.log('Game initialized in demo mode');
+                return '';
+            }
+
             // Check if token is already in the URL parameters
             const existingToken = getUrlParameter('token');
             
@@ -276,10 +324,12 @@ export class GameAPI {
             localStorage.removeItem('token');
             localStorage.removeItem('exit_url');
             localStorage.removeItem('what_device');
+            localStorage.removeItem('demo');
 
             sessionStorage.removeItem('token');
             sessionStorage.removeItem('exit_url');
             sessionStorage.removeItem('what_device');
+            sessionStorage.removeItem('demo');
             
             console.log('Starting gameLauncher...');
             let token1 = '';
@@ -322,6 +372,17 @@ export class GameAPI {
     }
     public async getBalance(): Promise<any> {
         try{
+            // Check if demo mode is active
+            const isDemo = this.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+            if (isDemo) {
+                // Return mock balance data in demo mode
+                return {
+                    data: {
+                        balance: GameAPI.DEMO_BALANCE
+                    }
+                };
+            }
+
             const token = localStorage.getItem('token');
             if (!token) {
                 this.showTokenExpiredPopup();
@@ -360,10 +421,16 @@ export class GameAPI {
      * This method sends a spin request and returns the server response
      */
     public async doSpin(bet: number, isBuyFs: boolean, isEnhancedBet: boolean, isFs: boolean = false): Promise<SpinData> {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            this.showTokenExpiredPopup();
-            throw new Error('No game token available. Please initialize the game first.');
+        // Check if demo mode is active
+        const isDemo = this.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        
+        // Only require token if not in demo mode
+        if (!isDemo) {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                this.showTokenExpiredPopup();
+                throw new Error('No game token available. Please initialize the game first.');
+            }
         }
         
         try {
@@ -377,13 +444,20 @@ export class GameAPI {
                 console.log('[GameAPI] Marking spin as initialization free spin (isFs=true)');
             }
 
-            const response = await fetch(`${getApiBaseUrl()}/api/v1/slots/bet`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
-                body: JSON.stringify({
+            // Use different endpoint and body structure for demo mode
+            const apiUrl = isDemo 
+                ? `${getApiBaseUrl()}/api/v1/analytics/spin`
+                : `${getApiBaseUrl()}/api/v1/slots/bet`;
+            
+            const requestBody = isDemo
+                ? {
+                    bet: bet.toString(),
+                    gameId: GameAPI.GAME_ID,
+                    isEnhancedBet: isEnhancedBet,
+                    isBuyFs: isBuyFs,
+                    isFs: false,
+                }
+                : {
                     action: 'spin',
                     bet: bet.toString(),
                     line: 1,
@@ -391,7 +465,22 @@ export class GameAPI {
                     isEnhancedBet: isEnhancedBet,
                     // Mark whether this spin is using a free spin round granted at initialization
                     isFs: isFs
-                })
+                };
+
+            const headers: any = {
+                'Content-Type': 'application/json'
+            };
+
+            // Only include Authorization header if token exists
+            const token = localStorage.getItem('token');
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(requestBody)
             });
 
             if (!response.ok) {
@@ -645,6 +734,14 @@ export class GameAPI {
         try {
             console.log('[GameAPI] Initializing player balance...');
             
+            // Check if demo mode is active
+            const isDemo = this.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+            if (isDemo) {
+                // Return demo balance directly in demo mode
+                console.log(`[GameAPI] Demo mode active, using demo balance: $${GameAPI.DEMO_BALANCE}`);
+                return GameAPI.DEMO_BALANCE;
+            }
+            
             const balanceResponse = await this.getBalance();
             console.log('[GameAPI] Balance response received:', balanceResponse);
             
@@ -673,6 +770,21 @@ export class GameAPI {
     }
 
     public async getHistory(page: number, limit: number): Promise<any> {
+        // Check if demo mode is active
+        const isDemo = this.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        if (isDemo) {
+            // Return empty history data in demo mode
+            return {
+                data: [],
+                meta: {
+                    page: 1,
+                    pageCount: 1,
+                    totalPages: 1,
+                    total: 0
+                }
+            };
+        }
+
         const apiUrl = `${getApiBaseUrl()}/api/v1/games/me/histories`;
         const token = localStorage.getItem('token')
             || localStorage.getItem('token')

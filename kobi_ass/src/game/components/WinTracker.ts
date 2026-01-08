@@ -215,10 +215,14 @@ export class WinTracker {
     countLabel.setOrigin(0.5, 0.5);
     countLabel.setShadow(1, .5, '#FFFE48', 1, true, true);
 
+    // Check if demo mode is active - if so, remove currency symbol
+    const sceneAny: any = this.scene;
+    const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+    const currencySymbol = isDemo ? '' : '$';
     const baseValueLabel = this.scene.add.text(
       0,
       0,
-      `$${(data.baseValue ?? data.totalWin).toFixed(2)}`,
+      `${currencySymbol}${(data.baseValue ?? data.totalWin).toFixed(2)}`,
       {
         fontSize: `${this.labelFontSize}px`,
         color: '#ffffff',
@@ -283,7 +287,7 @@ export class WinTracker {
     const valueLabel = this.scene.add.text(
       0,
       0,
-      `$${data.totalWin.toFixed(2)}`,
+      `${currencySymbol}${data.totalWin.toFixed(2)}`,
       {
         fontSize: `${this.labelFontSize}px`,
         color: '#ffffff',

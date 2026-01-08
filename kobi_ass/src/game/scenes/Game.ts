@@ -82,6 +82,9 @@ export class Game extends Scene
 	// Queue for wins that occur while a dialog is already showing
 	private winQueue: Array<{ payout: number; bet: number }> = [];
 	private suppressWinDialogsUntilNextSpin: boolean = false;
+	
+	// Track whether demo balance has been updated this spin (to prevent multiple updates)
+	private demoBalanceUpdatedThisSpin: boolean = false;
 
 	public gameData: GameData;
 	private symbols: Symbols;
@@ -175,6 +178,9 @@ export class Game extends Scene
 
 		// Create persistent clock display (stays on screen above the game)
 		const clockY = this.scale.height * 0.009; // Slightly below top edge
+		// Check if demo mode is active for title marker
+		const isDemo = this.gameAPI.getDemoState();
+		const suffixText = isDemo ? ' | Kobo Ass | DEMO' : ' | Kobo Ass';
 		this.clockDisplay = new ClockDisplay(this, {
 			offsetX: -155,
 			offsetY: clockY,
@@ -183,7 +189,7 @@ export class Game extends Scene
 			alpha: 0.9,
 			depth: 30000, // Very high depth to stay above all overlays and transitions
 			scale: 0.7,
-			suffixText: ' | Kobo Ass',
+			suffixText: suffixText,
 			additionalText: 'DiJoker',
 			additionalTextOffsetX: 185,
 			additionalTextOffsetY: 0,
@@ -536,6 +542,13 @@ export class Game extends Scene
 				} else {
 					console.log('[Game] WIN_STOP: No wins detected from paylines');
 				}
+				
+				// Demo balance update for base game wins (only once per spin)
+				const isDemo = this.gameAPI.getDemoState();
+				if (isDemo && !gameStateManager.isScatter && !gameStateManager.isBonus && !this.demoBalanceUpdatedThisSpin) {
+					this.gameAPI.updateDemoBalance(this.gameAPI.getDemoBalance() + totalWin);
+					this.demoBalanceUpdatedThisSpin = true;
+				}
 			} else {
 				console.log('[Game] WIN_STOP: No current spin data available');
 			}
@@ -635,6 +648,11 @@ export class Game extends Scene
 				return;
 			}
 			console.log('[Game] AUTO_START allowed - no win dialog showing');
+		});
+
+		// Listen for reels start to reset demo balance update flag
+		gameEventManager.on(GameEventType.REELS_START, () => {
+			this.demoBalanceUpdatedThisSpin = false;
 		});
 	}
 
@@ -997,6 +1015,13 @@ export class Game extends Scene
 				}
 			} else {
 				console.log('[Game] Bonus mode ended - enabling winningsDisplay');
+
+				const totalBonusWin = this.bonusHeader.getCumulativeBonusWin();
+				console.log(`[Game] Updating demo balance for bonus wins: $${totalBonusWin}`);
+				if (totalBonusWin > 0) {
+					this.gameAPI.updateDemoBalance(this.gameAPI.getDemoBalance() + totalBonusWin);
+				}
+
 				// Ensure bonus-finished flag is cleared and bonus mode is turned off when leaving bonus
 				this.gameStateManager.isBonus = false;
 				this.gameStateManager.isBonusFinished = false;
