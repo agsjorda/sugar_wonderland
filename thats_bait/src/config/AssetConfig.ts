@@ -359,7 +359,12 @@ export class AssetConfig {
 		console.log('[AssetConfig] Loading Scatter Anticipation assets (forced portrait/high)');
 		return {
 			images: {},
-			spine: {}
+			spine: {
+				'Bubble_Sparkle_VFX': {
+					atlas: `${forcedPortraitHighPrefix}/overlays/Bubble_Sparkle_VFX.atlas`,
+					json: `${forcedPortraitHighPrefix}/overlays/Bubble_Sparkle_VFX.json`
+				}
+			}
 		};
 	}
 

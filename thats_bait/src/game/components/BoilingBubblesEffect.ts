@@ -1,4 +1,5 @@
 import { Scene } from "phaser";
+import { ensureSpineFactory } from "../../utils/SpineGuard";
 
 export interface BoilingBubblesConfig {
 	x: number;
@@ -18,11 +19,34 @@ export interface BoilingBubblesConfig {
 	alphaMin?: number;
 	alphaMax?: number;
 	antiSfxVolumeMultiplier?: number;
+	overlaySpineKey?: string | null;
+	overlaySpineAnimation?: string;
+	overlaySpineScale?: number;
+	overlaySpineScaleX?: number;
+	overlaySpineScaleY?: number;
+	overlaySpineDepthOffset?: number;
+	overlaySpineTimeScale?: number;
+	overlaySpineOffsetX?: number;
+	overlaySpineOffsetY?: number;
+	overlaySpineAlpha?: number;
 }
 
 export class BoilingBubblesEffect {
 	private scene: Scene;
 	private container: Phaser.GameObjects.Container;
+	private overlayContainer?: Phaser.GameObjects.Container;
+	private overlaySpine?: any;
+	private overlaySpineKey: string | null = null;
+	private overlaySpineAnimation: string = '';
+	private overlaySpineScale: number = 1;
+	private overlaySpineScaleX: number | null = null;
+	private overlaySpineScaleY: number | null = null;
+	private overlaySpineDepthOffset: number = 1;
+	private overlaySpineTimeScale: number = 1;
+	private overlaySpineOffsetX: number = 0;
+	private overlaySpineOffsetY: number = 0;
+	private overlaySpineAlpha: number = 1;
+	private mask?: Phaser.Display.Masks.GeometryMask | null;
 	private timer?: Phaser.Time.TimerEvent;
 	private running: boolean = false;
 	private antiSfxSound: Phaser.Sound.BaseSound | null = null;
@@ -70,31 +94,76 @@ export class BoilingBubblesEffect {
 			? Math.max(0, config.antiSfxVolumeMultiplier)
 			: 1;
 
+		this.overlaySpineKey = (typeof config.overlaySpineKey === 'string' && config.overlaySpineKey.trim().length > 0)
+			? config.overlaySpineKey.trim()
+			: null;
+		this.overlaySpineAnimation = (typeof config.overlaySpineAnimation === 'string' && config.overlaySpineAnimation.trim().length > 0)
+			? config.overlaySpineAnimation.trim()
+			: 'loop_Emitter 1';
+		this.overlaySpineScale = (typeof config.overlaySpineScale === 'number' && isFinite(config.overlaySpineScale))
+			? Math.max(0.01, config.overlaySpineScale)
+			: 0.35;
+		this.overlaySpineScaleX = (typeof config.overlaySpineScaleX === 'number' && isFinite(config.overlaySpineScaleX))
+			? Math.max(0.01, config.overlaySpineScaleX)
+			: null;
+		this.overlaySpineScaleY = (typeof config.overlaySpineScaleY === 'number' && isFinite(config.overlaySpineScaleY))
+			? Math.max(0.01, config.overlaySpineScaleY)
+			: null;
+		this.overlaySpineDepthOffset = (typeof config.overlaySpineDepthOffset === 'number' && isFinite(config.overlaySpineDepthOffset))
+			? Math.floor(config.overlaySpineDepthOffset)
+			: 1;
+		this.overlaySpineTimeScale = (typeof config.overlaySpineTimeScale === 'number' && isFinite(config.overlaySpineTimeScale))
+			? Math.max(0.01, config.overlaySpineTimeScale)
+			: 1;
+		this.overlaySpineOffsetX = (typeof config.overlaySpineOffsetX === 'number' && isFinite(config.overlaySpineOffsetX))
+			? config.overlaySpineOffsetX
+			: 0;
+		this.overlaySpineOffsetY = (typeof config.overlaySpineOffsetY === 'number' && isFinite(config.overlaySpineOffsetY))
+			? config.overlaySpineOffsetY
+			: 0;
+		this.overlaySpineAlpha = (typeof config.overlaySpineAlpha === 'number' && isFinite(config.overlaySpineAlpha))
+			? Math.max(0, Math.min(1, config.overlaySpineAlpha))
+			: 1;
+
 		try { this.container.setDepth(this.depth); } catch {}
+		if (this.overlaySpineKey) {
+			try {
+				this.overlayContainer = scene.add.container(config.x, config.y);
+				this.overlayContainer.setDepth(this.depth + this.overlaySpineDepthOffset);
+			} catch {
+				this.overlayContainer = undefined;
+			}
+		}
 	}
 
 	setPosition(x: number, y: number): void {
 		this.x = x;
 		this.y = y;
 		try { this.container.setPosition(x, y); } catch {}
+		try { this.overlayContainer?.setPosition(x, y); } catch {}
 	}
 
 	setEmitOffset(x: number, y: number): void {
 		this.emitOffsetX = (typeof x === 'number' && isFinite(x)) ? x : 0;
 		this.emitOffsetY = (typeof y === 'number' && isFinite(y)) ? y : 0;
+		try { this.syncOverlaySpineTransform(); } catch {}
 	}
 
 	setEmitOffsetY(y: number): void {
 		this.emitOffsetY = (typeof y === 'number' && isFinite(y)) ? y : 0;
+		try { this.syncOverlaySpineTransform(); } catch {}
 	}
 
 	setMask(mask: Phaser.Display.Masks.GeometryMask | null | undefined): void {
+		this.mask = mask ?? null;
 		try {
 			if (!mask) {
 				this.container.clearMask(true);
+				this.overlayContainer?.clearMask(true);
 				return;
 			}
 			this.container.setMask(mask);
+			this.overlayContainer?.setMask(mask);
 		} catch {}
 	}
 
@@ -107,6 +176,13 @@ export class BoilingBubblesEffect {
 		this.stopAntiSfxLoop();
 		try { this.timer?.destroy(); } catch {}
 		this.timer = undefined;
+		try {
+			const spine: any = this.overlaySpine;
+			if (spine) {
+				try { spine.animationState?.clearTracks?.(); } catch {}
+				try { spine.setVisible(false); } catch {}
+			}
+		} catch {}
 	}
 
 	resume(): void {
@@ -136,6 +212,56 @@ export class BoilingBubblesEffect {
 	destroy(): void {
 		this.stop();
 		try { this.container.destroy(true); } catch {}
+		try { this.overlayContainer?.destroy(true); } catch {}
+		this.overlayContainer = undefined;
+		this.overlaySpine = undefined;
+	}
+
+	private syncOverlaySpineTransform(): void {
+		const spine: any = this.overlaySpine;
+		if (!spine) return;
+		const sx = (typeof this.overlaySpineScaleX === 'number' ? this.overlaySpineScaleX : (this.overlaySpineScale || 1));
+		const sy = (typeof this.overlaySpineScaleY === 'number' ? this.overlaySpineScaleY : (this.overlaySpineScale || 1));
+		try {
+			spine.setPosition(
+				(this.emitOffsetX || 0) + (this.overlaySpineOffsetX || 0),
+				(this.emitOffsetY || 0) + (this.overlaySpineOffsetY || 0)
+			);
+		} catch {}
+		try { spine.setScale?.(sx, sy); } catch {}
+		try { spine.setAlpha?.(this.overlaySpineAlpha); } catch {}
+	}
+
+	private ensureOverlaySpine(): void {
+		if (this.overlaySpine) return;
+		if (!this.overlayContainer) return;
+		const key = this.overlaySpineKey;
+		if (!key) return;
+		try {
+			if (!ensureSpineFactory(this.scene, '[BoilingBubblesEffect] ensureOverlaySpine')) return;
+		} catch {
+			return;
+		}
+		try {
+			if (!(this.scene.cache?.json as any)?.has?.(key)) return;
+		} catch {
+			return;
+		}
+		let spine: any;
+		try {
+			spine = (this.scene.add as any).spine(0, 0, key, `${key}-atlas`);
+		} catch {
+			spine = null;
+		}
+		if (!spine) return;
+		try { spine.setOrigin?.(0.5, 0.5); } catch {}
+		try { spine.setVisible?.(false); } catch {}
+		try { spine.setAlpha?.(this.overlaySpineAlpha); } catch {}
+		try { spine.setScale?.(this.overlaySpineScale); } catch {}
+		try { this.overlayContainer.add(spine); } catch {}
+		this.overlaySpine = spine;
+		try { this.syncOverlaySpineTransform(); } catch {}
+		try { if (this.mask) this.overlayContainer.setMask(this.mask); } catch {}
 	}
 
 	private spawnOne(): void {
@@ -224,6 +350,19 @@ export class BoilingBubblesEffect {
 		if (this.running) return;
 		this.running = true;
 		this.startAntiSfxLoop();
+		try {
+			this.ensureOverlaySpine();
+			const spine: any = this.overlaySpine;
+			if (spine) {
+				try { spine.setVisible(true); } catch {}
+				try { spine.animationState.timeScale = this.overlaySpineTimeScale || 1; } catch {}
+				try {
+					if (this.overlaySpineAnimation && spine.animationState?.setAnimation) {
+						spine.animationState.setAnimation(0, this.overlaySpineAnimation, true);
+					}
+				} catch {}
+			}
+		} catch {}
 
 		try { this.timer?.destroy(); } catch {}
 		this.timer = undefined;
