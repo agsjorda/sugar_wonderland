@@ -99,40 +99,42 @@ export class Game extends Phaser.Scene {
   private reelsStopListener?: (data?: any) => void;
   private winStopListener?: (data?: any) => void;
   private winTrackerHideListener?: () => void;
+  private overlayShowListener?: (data?: any) => void;
+  private dialogStartListener?: (data?: any) => void;
   private bonusOverlayQueue: Array<() => Promise<void>> = [];
   private bonusOverlayQueueRunning: boolean = false;
   private freeSpinRetriggerOverlaySeq: number = 0;
   private shownBonusRetriggerStages: Set<number> = new Set<number>();
 
-	public readonly gameData: GameData;
-	public readonly gameAPI: GameAPI;
-	private background!: Background;
-	private bonusBackground!: BonusBackground;
-	private slotBackground?: Phaser.GameObjects.Image;
-	private fullscreenBtn?: Phaser.GameObjects.Image;
-	private clockDisplay?: ClockDisplay;
-	private symbols!: Symbols;
-	private header!: Header;
-	private bonusHeader!: BonusHeader;
-	private gaugeMeter!: GaugeMeter;
-	private winTracker!: WinTracker;
-	private dialogs?: Dialogs;
-	private freeSpinOverlay?: FreeSpinOverlay;
-	private audioManager?: AudioManager;
-	private menu?: Menu;
-	private readonly freeSpinRetriggerMultiplierDisplayOptions: Record<string, { offsetX?: number; offsetY?: number; scale?: number }> = {
-		'2x_multiplier': { offsetX: 0, offsetY: 0, scale: 1 },
-		'3x_Multiplier_TB': { offsetX: 0, offsetY: 0, scale: 1 },
-		'10x_Multiplier_TB': { offsetX: 0, offsetY: 0, scale: 1 }
-	};
-	private readonly slotBackgroundModifiers = {
-		offsetX: 0,
-		offsetY: 40,
-		scaleMultiplier: 1.,
-		scaleXMultiplier: 1.05,
-		scaleYMultiplier: 1.22,
-		anchorFromBottom: true
-	};
+  public readonly gameData: GameData;
+  public readonly gameAPI: GameAPI;
+  private background!: Background;
+  private bonusBackground!: BonusBackground;
+  private slotBackground?: Phaser.GameObjects.Image;
+  private fullscreenBtn?: Phaser.GameObjects.Image;
+  private clockDisplay?: ClockDisplay;
+  private symbols!: Symbols;
+  private header!: Header;
+  private bonusHeader!: BonusHeader;
+  private gaugeMeter!: GaugeMeter;
+  private winTracker!: WinTracker;
+  private dialogs?: Dialogs;
+  private freeSpinOverlay?: FreeSpinOverlay;
+  private audioManager?: AudioManager;
+  private menu?: Menu;
+  private readonly freeSpinRetriggerMultiplierDisplayOptions: Record<string, { offsetX?: number; offsetY?: number; scale?: number }> = {
+    '2x_multiplier': { offsetX: 0, offsetY: 0, scale: 1 },
+    '3x_Multiplier_TB': { offsetX: 0, offsetY: 0, scale: 1 },
+    '10x_Multiplier_TB': { offsetX: 0, offsetY: 0, scale: 1 }
+  };
+  private readonly slotBackgroundModifiers = {
+    offsetX: 0,
+    offsetY: 40,
+    scaleMultiplier: 1.,
+    scaleXMultiplier: 1.05,
+    scaleYMultiplier: 1.22,
+    anchorFromBottom: true
+  };
 
 	constructor() {
 		super('Game');
@@ -2607,6 +2609,23 @@ export class Game extends Phaser.Scene {
 		EventBus.on('menu', this.handleMenuRequest, this);
 		EventBus.on('show-bet-options', this.handleBetOptionsRequest, this);
 		EventBus.on('autoplay', this.handleAutoplayRequest, this);
+
+		this.overlayShowListener = () => {
+			try {
+				if (this.menu && (this.menu as any).isMenuVisible?.()) {
+					(this.menu as any).hideMenu?.(this as any, { instant: true });
+				}
+			} catch {}
+		};
+		this.dialogStartListener = () => {
+			try {
+				if (this.menu && (this.menu as any).isMenuVisible?.()) {
+					(this.menu as any).hideMenu?.(this as any, { instant: true });
+				}
+			} catch {}
+		};
+		gameEventManager.on(GameEventType.OVERLAY_SHOW, this.overlayShowListener);
+		gameEventManager.on(GameEventType.DIALOG_START, this.dialogStartListener);
 		this.reelsStopListener = (data?: any) => this.handleReelsStopForWinTracker(data);
 		gameEventManager.on(GameEventType.REELS_STOP, this.reelsStopListener);
 		this.winStopListener = () => {
@@ -2631,6 +2650,14 @@ export class Game extends Phaser.Scene {
 			try { this.betOptions?.destroy?.(); } catch {}
 			this.events.off('hook-scatter', this.handleHookScatter, this);
 			this.events.off('hook-collector', this.handleHookCollector, this);
+			if (this.overlayShowListener) {
+				try { gameEventManager.off(GameEventType.OVERLAY_SHOW, this.overlayShowListener); } catch {}
+				this.overlayShowListener = undefined;
+			}
+			if (this.dialogStartListener) {
+				try { gameEventManager.off(GameEventType.DIALOG_START, this.dialogStartListener); } catch {}
+				this.dialogStartListener = undefined;
+			}
 			if (this.reelsStopListener) {
 				gameEventManager.off(GameEventType.REELS_STOP, this.reelsStopListener);
 				this.reelsStopListener = undefined;
@@ -2649,6 +2676,36 @@ export class Game extends Phaser.Scene {
 	}
 
 	private handleMenuRequest(): void {
+		try {
+			let overlayActive = false;
+			try {
+				overlayActive = overlayActive || !!gameStateManager.isOverlayLocked;
+			} catch {}
+			try {
+				overlayActive = overlayActive || !!(gameStateManager as any).isShowingWinDialog;
+			} catch {}
+			try {
+				overlayActive = overlayActive || this.scene.isActive('BubbleOverlayTransition') || this.scene.isSleeping('BubbleOverlayTransition');
+			} catch {}
+			try {
+				const d: any = this.dialogs as any;
+				overlayActive = overlayActive || !!d?.isDialogActive || !!d?.isDialogShowing?.();
+			} catch {}
+			try {
+				const fs: any = this.freeSpinOverlay as any;
+				overlayActive = overlayActive || !!fs?.getIsShowing?.() || !!fs?.isShowing;
+			} catch {}
+
+			if (overlayActive) {
+				try {
+					if (this.menu && (this.menu as any).isMenuVisible?.()) {
+						(this.menu as any).hideMenu?.(this as any, { instant: true });
+					}
+				} catch {}
+				return;
+			}
+		} catch {}
+
 		try {
 			if (!this.menu) {
 				this.menu = new Menu(false);

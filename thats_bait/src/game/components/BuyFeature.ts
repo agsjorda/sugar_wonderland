@@ -88,8 +88,15 @@ export class BuyFeature {
 	 */
 	private initializeBetIndex(): void {
 		if (this.slotController) {
-			// Initialize from SlotController's independent Buy Feature bet (not main BET)
-			const currentBaseBet = (this.slotController as any).getBuyFeatureBetAmount ? (this.slotController as any).getBuyFeatureBetAmount() : this.slotController.getBaseBetAmount();
+			// Initialize from SlotController's main BET
+			let currentBaseBet = this.slotController.getBaseBetAmount();
+			if (!isFinite(currentBaseBet) || currentBaseBet <= 0) {
+				try {
+					const txt = (this.slotController as any).getBetAmountText?.();
+					const parsed = txt ? parseFloat(String(txt)) : NaN;
+					if (isFinite(parsed) && parsed > 0) currentBaseBet = parsed;
+				} catch {}
+			}
 			
 			// Find the closest bet option
 			let closestIndex = 0;

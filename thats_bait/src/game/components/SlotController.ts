@@ -20,6 +20,7 @@ import {
   AMPLIFY_OFFSET_X, AMPLIFY_OFFSET_Y,
   FEATURE_OFFSET_X, FEATURE_OFFSET_Y,
   FEATURE_HITBOX_SCALE_MODIFIER_X,
+  FEATURE_HITBOX_SCALE_MODIFIER_Y,
   BET_MINUS_OFFSET_X, BET_MINUS_OFFSET_Y,
   BET_PLUS_OFFSET_X, BET_PLUS_OFFSET_Y,
   TURBO_LABEL_OFFSET_X, TURBO_LABEL_OFFSET_Y,
@@ -150,6 +151,9 @@ export class SlotController {
 	
 	// Store pending balance updates until reels stop spinning
 	private pendingBalanceUpdate: { balance: number; bet: number; winnings?: number } | null = null;
+	private freezeBalanceUi: boolean = false;
+	private bonusStartBalanceSnapshot: number | null = null;
+	private deferredBalanceAfterBonus: number | null = null;
 	
 	// Spine animation for spin button
 	private spinButtonAnimation: any = null;
@@ -300,6 +304,8 @@ export class SlotController {
 		// Create buy feature component
 		if (this.buyFeature) {
 			this.buyFeature.create(scene);
+			// Provide SlotController reference so BuyFeature can read the current bet and stay in sync
+			try { this.setBuyFeatureReference(); } catch {}
 		}
 		
 		// Setup bonus mode event listener
@@ -702,19 +708,15 @@ export class SlotController {
 	private disableMenuButton(): void {
 		const menuButton = this.buttons.get('menu');
 		if (menuButton) {
-			try { menuButton.setTint(0x666666); } catch {}
-			try { menuButton.setAlpha(0.6); } catch {}
-			try { menuButton.disableInteractive(); } catch {}
+			try { menuButton.clearTint(); } catch {}
+			try { menuButton.setAlpha(1); } catch {}
+			try { menuButton.setInteractive(); } catch {}
 		}
 	}
 
 	private enableMenuButton(): void {
 		const menuButton = this.buttons.get('menu');
 		if (menuButton) {
-			if (this.externalControlLock || this.bonusUiLock || gameStateManager.isReelSpinning || this.isSpinLocked || gameStateManager.isAutoPlaying) {
-				this.disableMenuButton();
-				return;
-			}
 			try { menuButton.clearTint(); } catch {}
 			try { menuButton.setAlpha(1); } catch {}
 			try { menuButton.setInteractive(); } catch {}
@@ -1258,10 +1260,6 @@ export class SlotController {
 		this.attachPushEffect(menuButton);
 		menuButton.on('pointerdown', () => {
 			console.log('[SlotController] Menu button clicked');
-			if (gameStateManager.isAutoPlaying || this.autoplaySpinsRemaining > 0 || gameStateManager.isReelSpinning || this.isSpinLocked || this.externalControlLock || this.bonusUiLock) {
-				console.log('[SlotController] Menu click ignored - autoplay/spin/lock active');
-				return;
-			}
 			if ((window as any).audioManager) {
 				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
 			}
@@ -1872,7 +1870,10 @@ export class SlotController {
 			const rawHitboxScaleX: any = FEATURE_HITBOX_SCALE_MODIFIER_X;
 			const hitboxScaleXValue = (typeof rawHitboxScaleX === 'number' && isFinite(rawHitboxScaleX)) ? rawHitboxScaleX : 1;
 			const hitboxScaleX = Math.max(0.05, hitboxScaleXValue);
-			if (!trimLeftPx && !trimRightPx && hitboxScaleX === 1) return; // nothing to change
+			const rawHitboxScaleY: any = FEATURE_HITBOX_SCALE_MODIFIER_Y;
+			const hitboxScaleYValue = (typeof rawHitboxScaleY === 'number' && isFinite(rawHitboxScaleY)) ? rawHitboxScaleY : 1;
+			const hitboxScaleY = Math.max(0.05, hitboxScaleYValue);
+			if (!trimLeftPx && !trimRightPx && hitboxScaleX === 1 && hitboxScaleY === 1) return; // nothing to change
 
 			const localW = featureButton.width || 0;
 			const localH = featureButton.height || 0;
@@ -1891,13 +1892,21 @@ export class SlotController {
 			const baseLeft = leftEdge + (localW - targetLocalW) * 0.5;
 			let x = baseLeft + trimLeftLocal;
 			let w = targetLocalW - (trimLeftLocal + trimRightLocal);
+			const targetLocalH = localH * hitboxScaleY;
+			const baseTop = topEdge + (localH - targetLocalH) * 0.5;
+			let y = baseTop;
+			let h = targetLocalH;
 
 			const minX = leftEdge;
 			const maxX = leftEdge + localW;
 			x = Math.max(minX, Math.min(x, maxX));
 			w = Math.max(1, Math.min(w, maxX - x));
+			const minY = topEdge;
+			const maxY = topEdge + localH;
+			y = Math.max(minY, Math.min(y, maxY));
+			h = Math.max(1, Math.min(h, maxY - y));
 
-			featureButton.setInteractive(new Geom.Rectangle(x, topEdge, w, localH), Geom.Rectangle.Contains);
+			featureButton.setInteractive(new Geom.Rectangle(x, y, w, h), Geom.Rectangle.Contains);
 			this.enablePixelPerfectInput(featureButton, 200);
 			try {
 				if ((window as any).__UI_INPUT_DEBUG) {
@@ -1906,6 +1915,7 @@ export class SlotController {
 					console.log('[UI_INPUT_DEBUG] feature hitbox applied', {
 						name: (featureButton as any)?.name,
 						hitboxScaleX,
+						hitboxScaleY,
 						trimLeftPx,
 						trimRightPx,
 						pixelPerfect: input?.pixelPerfect,
@@ -1930,7 +1940,10 @@ export class SlotController {
 			const rawHitboxScaleX: any = FEATURE_HITBOX_SCALE_MODIFIER_X;
 			const hitboxScaleXValue = (typeof rawHitboxScaleX === 'number' && isFinite(rawHitboxScaleX)) ? rawHitboxScaleX : 1;
 			const hitboxScaleX = Math.max(0.05, hitboxScaleXValue);
-			if (!trimLeftPx && !trimRightPx && hitboxScaleX === 1) return true;
+			const rawHitboxScaleY: any = FEATURE_HITBOX_SCALE_MODIFIER_Y;
+			const hitboxScaleYValue = (typeof rawHitboxScaleY === 'number' && isFinite(rawHitboxScaleY)) ? rawHitboxScaleY : 1;
+			const hitboxScaleY = Math.max(0.05, hitboxScaleYValue);
+			if (!trimLeftPx && !trimRightPx && hitboxScaleX === 1 && hitboxScaleY === 1) return true;
 
 			const localW = featureButton.width || 0;
 			const localH = featureButton.height || 0;
@@ -1949,11 +1962,19 @@ export class SlotController {
 			const baseLeft = leftEdge + (localW - targetLocalW) * 0.5;
 			let x = baseLeft + trimLeftLocal;
 			let w = targetLocalW - (trimLeftLocal + trimRightLocal);
+			const targetLocalH = localH * hitboxScaleY;
+			const baseTop = topEdge + (localH - targetLocalH) * 0.5;
+			let y = baseTop;
+			let h = targetLocalH;
 
 			const minX = leftEdge;
 			const maxX = leftEdge + localW;
 			x = Math.max(minX, Math.min(x, maxX));
 			w = Math.max(1, Math.min(w, maxX - x));
+			const minY = topEdge;
+			const maxY = topEdge + localH;
+			y = Math.max(minY, Math.min(y, maxY));
+			h = Math.max(1, Math.min(h, maxY - y));
 
 			const wx = (pointer && typeof pointer.worldX === 'number') ? pointer.worldX : pointer?.x;
 			const wy = (pointer && typeof pointer.worldY === 'number') ? pointer.worldY : pointer?.y;
@@ -1964,7 +1985,7 @@ export class SlotController {
 			const p = new Phaser.Math.Vector2();
 			mat.applyInverse(wx, wy, p);
 
-			return (p.x >= x && p.x <= (x + w) && p.y >= topEdge && p.y <= (topEdge + localH));
+			return (p.x >= x && p.x <= (x + w) && p.y >= y && p.y <= (y + h));
 		} catch {
 			return true;
 		}
@@ -2216,10 +2237,6 @@ export class SlotController {
 		this.attachPushEffect(menuButton);
 		menuButton.on('pointerdown', () => {
 			console.log('[SlotController] Menu button clicked');
-			if (gameStateManager.isAutoPlaying || this.autoplaySpinsRemaining > 0 || gameStateManager.isReelSpinning || this.isSpinLocked || this.externalControlLock || this.bonusUiLock) {
-				console.log('[SlotController] Menu click ignored - autoplay/spin/lock active');
-				return;
-			}
 			if ((window as any).audioManager) {
 				(window as any).audioManager.playSoundEffect(SoundEffectType.BUTTON_FX);
 			}
@@ -2468,6 +2485,15 @@ setBuyFeatureBetAmount(amount: number): void {
 }
 
 	updateBalanceAmount(balanceAmount: number): void {
+		try {
+			if (this.freezeBalanceUi) {
+				const v = Number(balanceAmount);
+				if (isFinite(v) && v >= 0) {
+					this.deferredBalanceAfterBonus = v;
+				}
+				return;
+			}
+		} catch {}
 		if (this.balanceAmountText) {
 			this.balanceAmountText.setText(balanceAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 			
@@ -2478,6 +2504,78 @@ setBuyFeatureBetAmount(amount: number): void {
 				this.balanceDollarText.setPosition(balanceX - (this.balanceAmountText.width / 2) - 5, balanceY);
 			}
 		}
+	}
+
+	private resolveBonusTotalWinFromScene(): number {
+		let resolved = 0;
+		try {
+			const sceneAny: any = this.scene as any;
+			const symbols: any = sceneAny?.symbols;
+			const bonusHeader: any = sceneAny?.bonusHeader;
+			const sd: any = symbols?.currentSpinData;
+			const slot: any = sd?.slot;
+			const fs: any = slot?.freespin || slot?.freeSpin;
+
+			try {
+				const vCached = Number((symbols as any)?.lastBonusTotalWin);
+				if (isFinite(vCached) && vCached > 0) resolved = Math.max(resolved, vCached);
+			} catch {}
+			try {
+				const vHeader = Number(bonusHeader?.getCurrentWinnings?.());
+				if (isFinite(vHeader) && vHeader > 0) resolved = Math.max(resolved, vHeader);
+			} catch {}
+			try {
+				const v0 = Number(slot?.__backendTotalWin);
+				if (isFinite(v0) && v0 > 0) resolved = Math.max(resolved, v0);
+			} catch {}
+			try {
+				const v1 = Number(slot?.totalWin);
+				if (isFinite(v1) && v1 > 0) resolved = Math.max(resolved, v1);
+			} catch {}
+			try {
+				const v2 = Number(fs?.__backendTotalWin);
+				if (isFinite(v2) && v2 > 0) resolved = Math.max(resolved, v2);
+			} catch {}
+			try {
+				const v3 = Number(fs?.totalWin);
+				if (isFinite(v3) && v3 > 0) resolved = Math.max(resolved, v3);
+			} catch {}
+
+			try {
+				const items: any[] | undefined = fs?.items;
+				const slotArea: any = slot?.area;
+				let it0: any = null;
+				const areAreasEqual = (a: any, b: any): boolean => {
+					try {
+						if (!Array.isArray(a) || !Array.isArray(b)) return false;
+						if (a.length !== b.length) return false;
+						for (let i = 0; i < a.length; i++) {
+							const ac = a[i];
+							const bc = b[i];
+							if (!Array.isArray(ac) || !Array.isArray(bc)) return false;
+							if (ac.length !== bc.length) return false;
+							for (let j = 0; j < ac.length; j++) {
+								if (Number(ac[j]) !== Number(bc[j])) return false;
+							}
+						}
+						return true;
+					} catch {
+						return false;
+					}
+				};
+				if (Array.isArray(items) && items.length > 0) {
+					if (Array.isArray(slotArea) && Array.isArray(slotArea[0])) {
+						it0 = items.find((it: any) => areAreasEqual(it?.area, slotArea));
+					}
+					if (!it0) {
+						it0 = items.find((it: any) => (Number(it?.spinsLeft) || 0) > 0) ?? items[0];
+					}
+				}
+				const vRun = Number(it0?.runningWin);
+				if (isFinite(vRun) && vRun > 0) resolved = Math.max(resolved, vRun);
+			} catch {}
+		} catch {}
+		return resolved;
 	}
 
 	/**
@@ -2683,16 +2781,18 @@ setBuyFeatureBetAmount(amount: number): void {
 			// If we're in bonus mode, check if free spins are finishing now
 			if (gameStateManager.isBonus) {
 				try {
-					// Frontend-only: increment balance by the current free spin subtotal win
-					if (this.gameAPI) {
-						const currentSpin = this.gameAPI.getCurrentSpinData();
-						if (currentSpin && currentSpin.slot && Array.isArray(currentSpin.slot.paylines)) {
-							const spinSubtotalWin = SpinDataUtils.getTotalWin(currentSpin);
-							if (spinSubtotalWin && spinSubtotalWin > 0) {
-								const oldBalanceVal = this.getBalanceAmount();
-								const newBalanceVal = oldBalanceVal + spinSubtotalWin;
-								this.updateBalanceAmount(newBalanceVal);
-								console.log(`[SlotController] Bonus mode: incremented balance by subtotalWin ${spinSubtotalWin}. ${oldBalanceVal} -> ${newBalanceVal}`);
+					if (!this.freezeBalanceUi) {
+						// Frontend-only: increment balance by the current free spin subtotal win
+						if (this.gameAPI) {
+							const currentSpin = this.gameAPI.getCurrentSpinData();
+							if (currentSpin && currentSpin.slot && Array.isArray(currentSpin.slot.paylines)) {
+								const spinSubtotalWin = SpinDataUtils.getTotalWin(currentSpin);
+								if (spinSubtotalWin && spinSubtotalWin > 0) {
+									const oldBalanceVal = this.getBalanceAmount();
+									const newBalanceVal = oldBalanceVal + spinSubtotalWin;
+									this.updateBalanceAmount(newBalanceVal);
+									console.log(`[SlotController] Bonus mode: incremented balance by subtotalWin ${spinSubtotalWin}. ${oldBalanceVal} -> ${newBalanceVal}`);
+								}
 							}
 						}
 					}
@@ -4670,6 +4770,11 @@ public updateAutoplayButtonState(): void {
 		this.scene.events.on('setBonusMode', (isBonus: boolean) => {
 			if (isBonus) {
 				console.log('[SlotController] Bonus mode activated - hiding primary controller');
+				try {
+					this.freezeBalanceUi = true;
+					this.deferredBalanceAfterBonus = null;
+					this.bonusStartBalanceSnapshot = this.getBalanceAmount();
+				} catch {}
 				// If base autoplay was active, pause it for bonus (resume after bonus ends)
 				try {
 					if (this.autoplaySpinsRemaining > 0) {
@@ -4906,6 +5011,33 @@ public updateAutoplayButtonState(): void {
 					}
 				} catch {}
 			}
+		});
+
+		// Apply deferred balance update at the end of the TotalW_TB flow.
+		// finalizeBonusExit is emitted when the bonus exit transition completes.
+		this.scene.events.on('finalizeBonusExit', () => {
+			try {
+				if (!this.freezeBalanceUi) return;
+				const start = (this.bonusStartBalanceSnapshot != null)
+					? Number(this.bonusStartBalanceSnapshot)
+					: Number(this.getBalanceAmount());
+				const bonusWin = Number(this.resolveBonusTotalWinFromScene());
+				let target = (isFinite(start) && start >= 0) ? start : 0;
+				if (isFinite(bonusWin) && bonusWin > 0) {
+					target = target + bonusWin;
+				}
+				try {
+					const deferred = Number(this.deferredBalanceAfterBonus);
+					if (isFinite(deferred) && deferred >= 0) {
+						target = Math.max(target, deferred);
+					}
+				} catch {}
+
+				this.freezeBalanceUi = false;
+				this.bonusStartBalanceSnapshot = null;
+				this.deferredBalanceAfterBonus = null;
+				this.updateBalanceAmount(target);
+			} catch {}
 		});
 
 		// Listen for scatter bonus activation to reset free spin index

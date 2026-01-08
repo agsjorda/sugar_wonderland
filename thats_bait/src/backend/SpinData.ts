@@ -41,6 +41,8 @@ export interface PaylineData {
   count: number;
   
   win: number;
+
+  positions?: Array<{ x: number; y: number }>;
   
   multipliers?: MultiplierData[];
 }

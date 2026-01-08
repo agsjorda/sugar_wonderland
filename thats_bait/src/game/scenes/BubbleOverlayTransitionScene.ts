@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { gameStateManager } from '../../managers/GameStateManager';
+import { gameEventManager, GameEventType } from '../../event/EventManager';
 
  type TransitionPreset = 'default' | 'bonusEnter' | 'bonusExit';
 
@@ -75,6 +76,7 @@ export class BubbleOverlayTransitionScene extends Scene {
 
 	create(): void {
 		console.log('[BubbleOverlayTransitionScene] create');
+		try { gameEventManager.emit(GameEventType.OVERLAY_SHOW, { overlayType: 'BubbleOverlayTransition' } as any); } catch {}
 		try { this.hasStarted = false; } catch {}
 		try { this.hasFinished = false; } catch {}
 		try { this.toSceneKey = undefined; } catch {}
@@ -592,6 +594,7 @@ export class BubbleOverlayTransitionScene extends Scene {
 	private cleanupAndStop(): void {
 		try { this.ensureOnTopTimer?.destroy(); } catch {}
 		try { this.ensureOnTopTimer = undefined; } catch {}
+		try { gameEventManager.emit(GameEventType.OVERLAY_HIDE, { overlayType: 'BubbleOverlayTransition' } as any); } catch {}
 		try {
 			const toKey = this.toSceneKey || this.transitionData?.toSceneKey || 'Game';
 			const toScene: any = this.scene.get(toKey) as any;

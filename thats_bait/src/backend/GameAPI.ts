@@ -115,6 +115,24 @@ export function normalizeMoney(rawMoney: any): number[][] | undefined {
     return rawMoney;
 }
 
+function normalizePositions(rawPositions: any): Array<{ x: number; y: number }> | undefined {
+    if (!Array.isArray(rawPositions)) {
+        return undefined;
+    }
+
+    const out: Array<{ x: number; y: number }> = [];
+    for (const p of rawPositions) {
+        const x = Array.isArray(p) ? Number(p[0]) : Number((p as any)?.x);
+        const y = Array.isArray(p) ? Number(p[1]) : Number((p as any)?.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+            continue;
+        }
+        out.push({ x: Math.floor(x), y: Math.floor(y) });
+    }
+
+    return out.length > 0 ? out : undefined;
+}
+
 export function normalizeSpinResponse(raw: any, bet: number): SpinData {
     const rawSlot = raw && raw.slot ? raw.slot : {};
     const freespinSource = rawSlot.freespin || rawSlot.freeSpin || {};
@@ -156,6 +174,7 @@ export function normalizeSpinResponse(raw: any, bet: number): SpinData {
                 symbol: normalizeSymbolId(pl.symbol),
                 count: Number(pl.count) || 0,
                 win: Number(pl.win) || 0,
+                positions: normalizePositions((pl as any)?.positions),
                 multipliers: Array.isArray(pl.multipliers)
                     ? pl.multipliers.map((m: any) => ({
                         symbol: normalizeSymbolId(m.symbol),
@@ -201,6 +220,7 @@ export function normalizeSpinResponse(raw: any, bet: number): SpinData {
                     symbol: normalizeSymbolId(pl.symbol),
                     count: Number(pl.count) || 0,
                     win: Number(pl.win) || 0,
+                    positions: normalizePositions((pl as any)?.positions),
                     multipliers: Array.isArray(pl.multipliers)
                         ? pl.multipliers.map((m: any) => ({
                             symbol: normalizeSymbolId(m.symbol),

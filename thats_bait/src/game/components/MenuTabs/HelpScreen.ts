@@ -1,21 +1,22 @@
 import { Scene, GameObjects } from 'phaser';
+import { gameEventManager, GameEventType } from '../../../event/EventManager';
 
 type TextStyle = Phaser.Types.GameObjects.Text.TextStyle;
 
 const PAYOUT_RANGES = ['5', '4', '3'] as const;
+const PAYOUT_RANGES_SYMBOL1 = ['5', '4', '3', '2'] as const;
 
-const SYMBOL_PAYOUTS: Record<number, [number, number, number]> = {
-    1: [37.50, 7.50, 2.50],
-    2: [25.0, 5.0, 1.75],
-    3: [15.0, 3.0, 1.25],
-    4: [10.0, 2.0, 1.0],
-    5: [7.5, 1.25, 0.6],
-    6: [5.0, 1.0, 0.4],
-    7: [2.5, 0.5, 0.25],
-    8: [2.5, 0.5, 0.25],
-    9: [1.25, 0.25, 0.1],
-    10: [1.25, 0.25, 0.1],
-    11: [1.25, 0.25, 0.1],
+const SYMBOL_PAYOUTS: Record<number, readonly number[]> = {
+    1: [200.00, 20.00, 5.00, 0.50],
+    2: [100.00, 15.00, 3.00],
+    3: [50.00, 10.00, 2.00],
+    4: [50.00, 10.00, 2.00],
+    5: [20.00, 5.00, 1.00],
+    6: [10.00, 2.50, 0.50],
+    7: [10.00, 2.50, 0.50],
+    8: [10.00, 2.50, 0.50],
+    9: [10.00, 2.50, 0.50],
+    10: [10.00, 2.50, 0.50],
 };
 
 const SCATTER_PAYOUTS: [number, number, number] = [100.0, 10.0, 3.0];
@@ -93,6 +94,8 @@ export class HelpScreen {
 
     private readonly isMenuVisible: () => boolean;
     private readonly getBetAmount: () => number;
+    private betUpdateOff?: () => void;
+    private payoutValueBindings: Array<{ text: GameObjects.Text; baseValue: number; prefix: string }> = [];
     private tabInteractionBlocker?: Phaser.GameObjects.Zone;
     private tabInteractionHitArea?: Phaser.Geom.Rectangle;
     private isTabInteractionBlocked: boolean = false;
@@ -162,6 +165,8 @@ export class HelpScreen {
     }
 
     public build(): void {
+        this.payoutValueBindings = [];
+        this.attachBetUpdateListener();
         this.setupScrollableRulesContent(this.scene);
     }
 
@@ -172,6 +177,40 @@ export class HelpScreen {
             try { this.scene.input.off('wheel', handlers.wheel); } catch {}
         }
         this.scrollHandlers = undefined;
+
+        if (this.betUpdateOff) {
+            try { this.betUpdateOff(); } catch {}
+            this.betUpdateOff = undefined;
+        }
+        this.payoutValueBindings = [];
+    }
+
+    private attachBetUpdateListener(): void {
+        if (this.betUpdateOff) return;
+        try {
+            this.betUpdateOff = gameEventManager.on(GameEventType.BET_UPDATE, () => {
+                if (!this.isMenuVisible()) {
+                    return;
+                }
+                this.refreshPayoutValues();
+            });
+        } catch {}
+    }
+
+    private refreshPayoutValues(): void {
+        const betAmount = this.getResolvedBetAmount();
+        const aliveBindings: Array<{ text: GameObjects.Text; baseValue: number; prefix: string }> = [];
+        for (const binding of this.payoutValueBindings) {
+            const txt = binding.text;
+            if (!txt || !(txt as any).scene) {
+                continue;
+            }
+            aliveBindings.push(binding);
+            try {
+                txt.setText(`${binding.prefix}${this.formatPayout(binding.baseValue * betAmount)}`);
+            } catch {}
+        }
+        this.payoutValueBindings = aliveBindings;
     }
 
     private setupScrollableRulesContent(scene: GameScene): void {
@@ -333,7 +372,7 @@ export class HelpScreen {
 
     private createGameRulesSection(scene: GameScene, contentArea: GameObjects.Container): void {
         this.addTextBlock(scene, 'header1', 'Game Rules', { spacingAfter: 15 });
-        this.addTextBlock(scene, 'content1', 'All symbols pay left to right on adjacent reels, starting from the leftmost reel.', { wordWrapWidth: this.contentWidth, spacingAfter: 24 });
+        this.addTextBlock(scene, 'content1', 'Win by landing 8 or more matching symbols anywhere on the screen. The more matching symbols you get, the higher your payout.', { wordWrapWidth: this.contentWidth, spacingAfter: 24 });
     }
 
     private createRTPSection(scene: GameScene, contentArea: GameObjects.Container): void {
@@ -358,7 +397,8 @@ export class HelpScreen {
 
             if (!payoutData) continue;
 
-            this.createSinglePayoutContent(scene, contentArea, symbolIndex, payoutData, PAYOUT_RANGES);
+            const payoutRanges = symbolIndex === 1 ? PAYOUT_RANGES_SYMBOL1 : PAYOUT_RANGES;
+            this.createSinglePayoutContent(scene, contentArea, symbolIndex, payoutData, payoutRanges);
         }
     }
 
@@ -366,7 +406,7 @@ export class HelpScreen {
         scene: GameScene,
         container: GameObjects.Container,
         symbolIndex: number,
-        payoutData: [number, number, number],
+        payoutData: readonly number[],
         payoutRange: readonly string[],
     ): void {
         void container;
@@ -374,7 +414,10 @@ export class HelpScreen {
         this.contentContainer.add(symbolContainer);
 
         // Display symbol
-        const symbol = scene.add.image(0, 0, `${this.payoutSymbolKey}${symbolIndex}`);
+        const defaultKey = `${this.payoutSymbolKey}${symbolIndex}`;
+        const symbolKey = symbolIndex === 5 ? 'symbol_14' : defaultKey;
+        const resolvedKey = scene.textures.exists(symbolKey) ? symbolKey : defaultKey;
+        const symbol = scene.add.image(0, 0, resolvedKey);
         symbol.displayWidth = this.symbolSize * this.symbolScale;
         symbol.displayHeight = this.symbolSize * this.symbolScale;
         symbol.setOrigin(0, 0.5);
@@ -385,7 +428,8 @@ export class HelpScreen {
         const payoutTexts: Array<{ text: GameObjects.Text; row: number }> = [];
         const rangeTexts: Array<{ text: GameObjects.Text; row: number }> = [];
 
-        for (let row = 0; row < 3; row++) {
+        const rows = Math.max(payoutData.length, payoutRange.length);
+        for (let row = 0; row < rows; row++) {
             const y = 0;
             // Left column: range label (bold)
             const rangeText = scene.add.text(rangeTextX, y, payoutRange[row] ?? '', {
@@ -412,6 +456,7 @@ export class HelpScreen {
             payoutText.setOrigin(1, 0.5);
             symbolContainer.add(payoutText);
             payoutTexts.push({ text: payoutText, row });
+            this.payoutValueBindings.push({ text: payoutText, baseValue: value, prefix: '$ ' });
         }
 
         const sectionHeight = this.createDynamicBorder(scene, symbolContainer, {
@@ -506,6 +551,7 @@ export class HelpScreen {
             payoutText.setOrigin(1, 0.5);
             symbolContainer.add(payoutText);
             payoutTexts.push({ text: payoutText, row });
+            this.payoutValueBindings.push({ text: payoutText, baseValue: value, prefix: '$ ' });
         }
 
         const tableBottomLocalY = baseTextY;
@@ -1854,11 +1900,15 @@ export class HelpScreen {
         const cellHeight = 22.5;
         const cellPadding = 5;
 
-        const tableHeight = (cellHeight + cellPadding) * 4;
+        const isScatter = symbolIndex === 0;
+        const symbolRows = isScatter ? 3 : (SYMBOL_PAYOUTS[symbolIndex]?.length ?? 3);
+        const tableHeight = (cellHeight + cellPadding) * (symbolRows + 1);
         // Center the table vertically relative to the symbol
         const tableY = y - tableHeight / 2;
 
-        for (let row = 0; row < 3; row++) {
+        const payoutRanges = symbolIndex === 1 ? PAYOUT_RANGES_SYMBOL1 : PAYOUT_RANGES;
+
+        for (let row = 0; row < symbolRows; row++) {
             for (let col = 0; col < 3; col++) {
                 let cellWidth = 0;
                 if (col === 0) {
@@ -1871,7 +1921,6 @@ export class HelpScreen {
                 const cellX = x + (col === 2 ? cellWidth1 + cellWidth2 + cellPadding * 2 : col * (cellWidth + cellPadding));
                 const cellY = tableY + row * (cellHeight + cellPadding);
 
-                const isScatter = symbolIndex === 0;
                 let textValue: string | undefined;
                 let wrapWidth: number | undefined;
 
@@ -1886,7 +1935,7 @@ export class HelpScreen {
                     }
                 } else if (col < 2) {
                     if (col === 0) {
-                        textValue = PAYOUT_RANGES[row] ?? '';
+                        textValue = payoutRanges[row] ?? '';
                     } else {
                         const payoutValue = SYMBOL_PAYOUTS[symbolIndex]?.[row] ?? 0;
                         textValue = this.formatPayout(this.applyBetToPayout(payoutValue));
@@ -1906,6 +1955,11 @@ export class HelpScreen {
                 });
                 valueText.setOrigin(0.5, 0.5);
                 container.add(valueText);
+
+                if (col === 1) {
+                    const baseValue = isScatter ? (SCATTER_PAYOUTS[row] ?? 0) : (SYMBOL_PAYOUTS[symbolIndex]?.[row] ?? 0);
+                    this.payoutValueBindings.push({ text: valueText, baseValue, prefix: '' });
+                }
             }
         }
     }

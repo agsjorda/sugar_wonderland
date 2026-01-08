@@ -44,6 +44,7 @@ export const FEATURE_OFFSET_X = 0;
 export const FEATURE_OFFSET_Y = 0;
 
 export const FEATURE_HITBOX_SCALE_MODIFIER_X = 0.68;
+export const FEATURE_HITBOX_SCALE_MODIFIER_Y = 0.56;
 
 export const BET_MINUS_OFFSET_X = 0;
 export const BET_MINUS_OFFSET_Y = 0;

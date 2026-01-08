@@ -4475,11 +4475,11 @@ function createInitialSymbols(self: Symbols) {
 
   // Use fixed symbols for testing
   const symbols = [
-    [0, 1, 3],
+    [5, 1, 3],
     [1, 4, 2],
     [2, 6, 7],
     [1, 2, 1],
-    [0, 2, 8]
+    [5, 2, 8]
   ];
   console.log('[Symbols] Using fixed initial symbols:', symbols);
   
@@ -5193,18 +5193,47 @@ function computeStreakForWinline(spinData: any, lineKey: number, targetSymbol: n
     return [];
   }
 
-  const firstPos = winlinePositions[0];
-  if (!firstPos || firstPos.x !== 0) {
-    return [];
-  }
-
-  const firstSymbol = spinData.slot.area?.[firstPos.x]?.[firstPos.y];
   const scatterVal = Number((SCATTER_SYMBOL as any)?.[0] ?? 0);
   const collectorVal = 11;
   const matchesTarget = (sym: any): boolean => {
     const v = Number(sym);
     return v === targetSymbol || (v === collectorVal && targetSymbol !== scatterVal);
   };
+
+  if (Number(targetSymbol) === 1) {
+    let current: { x: number; y: number; symbol: number }[] = [];
+    let prevX: number | null = null;
+
+    for (let i = 0; i < winlinePositions.length; i++) {
+      const pos = winlinePositions[i];
+      const symbolAtPosition = spinData.slot.area?.[pos.x]?.[pos.y];
+
+      const contiguous = prevX === null ? true : (pos.x === prevX + 1);
+      if (!contiguous) {
+        current = [];
+      }
+
+      if (matchesTarget(symbolAtPosition)) {
+        current.push({ x: pos.x, y: pos.y, symbol: symbolAtPosition });
+        if (requiredCount >= requiredMin && current.length >= requiredCount) {
+          return current.slice(0, requiredCount);
+        }
+      } else {
+        current = [];
+      }
+
+      prevX = pos.x;
+    }
+
+    return [];
+  }
+
+  const firstPos = winlinePositions[0];
+  if (!firstPos || firstPos.x !== 0) {
+    return [];
+  }
+
+  const firstSymbol = spinData.slot.area?.[firstPos.x]?.[firstPos.y];
   if (!matchesTarget(firstSymbol)) {
     return [];
   }

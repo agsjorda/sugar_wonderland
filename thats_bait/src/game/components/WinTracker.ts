@@ -291,10 +291,6 @@ export class WinTracker {
     }
 
     positions.sort((a, b) => a.x - b.x);
-    const firstPos = positions[0];
-    if (!firstPos || firstPos.x !== 0) {
-      return 0;
-    }
 
     const required = Math.max(0, Number(requiredCount) || 0);
     const requiredMin = (Number(targetSymbol) === 1) ? 2 : 3;
@@ -302,13 +298,51 @@ export class WinTracker {
       return 0;
     }
 
-    const firstSymbol = spinData.slot.area?.[firstPos.x]?.[firstPos.y];
     const scatterVal = Number((SCATTER_SYMBOL as any)?.[0] ?? 0);
     const collectorVal = 11;
     const matchesTarget = (sym: any): boolean => {
       const v = Number(sym);
       return v === targetSymbol || (v === collectorVal && targetSymbol !== scatterVal);
     };
+
+    if (Number(targetSymbol) === 1) {
+      let best = 0;
+      let cur = 0;
+      let prevX: number | null = null;
+
+      for (let i = 0; i < positions.length; i++) {
+        const pos = positions[i];
+        const contiguous = prevX === null ? true : (pos.x === prevX + 1);
+        if (!contiguous) {
+          cur = 0;
+        }
+
+        const symbolAtPosition = spinData.slot.area?.[pos.x]?.[pos.y];
+        if (matchesTarget(symbolAtPosition)) {
+          cur += 1;
+          if (cur > best) best = cur;
+          if (required >= requiredMin && cur >= required) {
+            return required;
+          }
+        } else {
+          cur = 0;
+        }
+
+        prevX = pos.x;
+      }
+
+      if (required >= requiredMin && best >= required) {
+        return required;
+      }
+      return best;
+    }
+
+    const firstPos = positions[0];
+    if (!firstPos || firstPos.x !== 0) {
+      return 0;
+    }
+
+    const firstSymbol = spinData.slot.area?.[firstPos.x]?.[firstPos.y];
     if (!matchesTarget(firstSymbol)) {
       return 0;
     }

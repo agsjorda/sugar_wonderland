@@ -4,6 +4,7 @@ import { NumberDisplay, NumberDisplayConfig } from './NumberDisplay';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { AudioManager, MusicType } from '../../managers/AudioManager';
+import { gameEventManager, GameEventType } from '../../event/EventManager';
 
 export class FreeSpinOverlay {
 	private scene: Scene | null = null;
@@ -19,6 +20,10 @@ export class FreeSpinOverlay {
 	private valueOffsetY: number = -95;
 	private valueOffsetModifierX: number = 1;
 	private valueOffsetModifierY: number = 1;
+	private pressToContinueOffsetX: number = 0;
+	private pressToContinueOffsetY: number = 0;
+	private pressToContinueOffsetModifierX: number = 0;
+	private pressToContinueOffsetModifierY: number = 0;
 	private valueScaleModifier: number = 2.5;
 	private multiplierOffsetX: number = 0;
 	private multiplierOffsetY: number = 0;
@@ -49,6 +54,18 @@ export class FreeSpinOverlay {
 	public setValueOffsetModifier(modifierX: number, modifierY: number): void {
 		this.valueOffsetModifierX = isFinite(modifierX) && modifierX !== 0 ? modifierX : 1;
 		this.valueOffsetModifierY = isFinite(modifierY) && modifierY !== 0 ? modifierY : 1;
+	}
+
+	public setPressToContinuePositionOffset(offsetX: number, offsetY: number): void {
+		this.pressToContinueOffsetX = offsetX;
+		this.pressToContinueOffsetY = offsetY;
+		this.updatePressToContinueLabelPosition();
+	}
+
+	public setPressToContinueOffsetModifier(modifierX: number, modifierY: number): void {
+		this.pressToContinueOffsetModifierX = isFinite(modifierX) ? modifierX : 0;
+		this.pressToContinueOffsetModifierY = isFinite(modifierY) ? modifierY : 0;
+		this.updatePressToContinueLabelPosition();
 	}
 
 	public setValueScaleModifier(modifier: number): void {
@@ -127,6 +144,7 @@ export class FreeSpinOverlay {
 			if (onComplete) onComplete();
 			return;
 		}
+		try { gameEventManager.emit(GameEventType.OVERLAY_SHOW, { overlayType: 'FreeSpinOverlay' } as any); } catch {}
 		this.dismissRequested = false;
 		this.dismissResolver = undefined;
 		this.didBeginTempMusic = false;
@@ -207,34 +225,53 @@ export class FreeSpinOverlay {
 		try {
 			if (!this.scene || !this.container) return;
 			const key = (this as any).spineKey || '';
-			if (key !== 'FreeSpinRetri_TB') return;
-			const cam = this.scene.cameras.main;
-			const assetScale = this.networkManager?.getAssetScale?.() ?? 1;
-			const fontSize = Math.max(12, Math.round(18 * assetScale));
+			if (key !== 'FreeSpinRetri_TB' && key !== 'FreeSpin_TB') return;
+			try { this.pressToContinueText?.destroy(); } catch {}
+			this.pressToContinueText = null;
 			const txt = this.scene.add.text(
-				cam.centerX,
-				cam.centerY + cam.height * 0.34,
+				0,
+				0,
 				'Press anywhere to continue',
 				{
 					fontFamily: 'Poppins-Bold',
-					fontSize: `${fontSize}px`,
-					color: '#ffffff'
+					fontSize: '18px',
+					color: '#FFFFFF'
 				}
 			);
 			try { txt.setOrigin(0.5, 0.5); } catch {}
+			try { txt.setDepth(10003); } catch {}
 			try { (txt as any).setScrollFactor?.(0); } catch {}
 			try { txt.setAlpha(0); } catch {}
 			this.container.add(txt);
 			this.pressToContinueText = txt;
+			this.updatePressToContinueLabelPosition();
 			try {
 				this.scene.tweens.add({
 					targets: txt,
 					alpha: 1,
-					duration: 260,
+					duration: 250,
 					ease: 'Sine.easeOut',
-					delay: 300
+					delay: 0
 				});
 			} catch {}
+		} catch {}
+	}
+
+	private updatePressToContinueLabelPosition(): void {
+		try {
+			if (!this.scene || !this.pressToContinueText) return;
+			const baseX = this.scene.scale.width * 0.5;
+			const baseY = this.scene.scale.height * 0.82;
+			const ox = (Number(this.pressToContinueOffsetX) || 0) + (Number(this.pressToContinueOffsetModifierX) || 0);
+			const oy = (Number(this.pressToContinueOffsetY) || 0) + (Number(this.pressToContinueOffsetModifierY) || 0);
+			let x = baseX + ox;
+			let y = baseY + oy;
+			const margin = 20;
+			const maxX = this.scene.scale.width;
+			const maxY = this.scene.scale.height;
+			x = Math.max(margin, Math.min(maxX - margin, x));
+			y = Math.max(margin, Math.min(maxY - margin, y));
+			(this.pressToContinueText as any).setPosition?.(x, y);
 		} catch {}
 	}
 
@@ -446,6 +483,7 @@ export class FreeSpinOverlay {
 					}
 				} catch {}
 				this.didBeginTempMusic = false;
+				try { gameEventManager.emit(GameEventType.OVERLAY_HIDE, { overlayType: 'FreeSpinOverlay' } as any); } catch {}
 				if (this.valueBobTween) {
 					try { this.valueBobTween.stop(); } catch {}
 					this.valueBobTween = null;

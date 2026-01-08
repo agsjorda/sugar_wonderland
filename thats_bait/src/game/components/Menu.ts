@@ -214,6 +214,10 @@ export class Menu {
         this.settingsOnly = settingsOnly;
     }
 
+	public isMenuVisible(): boolean {
+		return !!this.isVisible;
+	}
+
     preload(scene: Scene){
         // No-op: menu assets are loaded via AssetLoader in Preloader
     }
@@ -441,7 +445,16 @@ export class Menu {
         
         // Initialize content for each tab
         // Help / Rules content is delegated to HelpScreen
-        const resolveBetAmount = scene.getCurrentBetAmount?.bind(scene) ?? (() => 1);
+        const resolveBetAmount = scene.getCurrentBetAmount?.bind(scene) ?? (() => {
+            try {
+                const sc: any = (scene as any).slotController;
+                const base = sc?.getBaseBetAmount?.();
+                if (Number.isFinite(base) && base > 0) {
+                    return base;
+                }
+            } catch {}
+            return 1;
+        });
         this.helpScreen = new HelpScreen(
             scene,
             this.contentArea,
@@ -862,11 +875,7 @@ export class Menu {
          musicToggleCircle.setDepth(11);
          // Read current music volume (don't force it to 50%)
          let musicOn = scene.audioManager.getVolume() > 0;
-        if (!musicOn) {
-            // Default should be ON
-            musicOn = true;
-            scene.audioManager.setVolume(1);
-        }
+        // Default should be ON
         drawToggle(musicToggleBg, musicToggleCircle, toggleX, startY + 70, musicOn);
         const musicToggleArea = scene.add.zone(toggleX, startY + 70 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
         musicToggleArea.setInteractive();
@@ -889,11 +898,7 @@ export class Menu {
         sfxToggleBg.setDepth(10);
         sfxToggleCircle.setDepth(11);
         let sfxOn = scene.audioManager.getSfxVolume() > 0;
-        if (!sfxOn) {
-            // Default should be ON
-            sfxOn = true;
-            scene.audioManager.setSfxVolume(1);
-        }
+        // Default should be ON
         drawToggle(sfxToggleBg, sfxToggleCircle, toggleX, startY + 170, sfxOn);
         const sfxToggleArea = scene.add.zone(toggleX, startY + 170 - toggleHeight / 2, toggleWidth, toggleHeight).setOrigin(0, 0);
         sfxToggleArea.setInteractive();

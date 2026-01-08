@@ -574,6 +574,28 @@ export class WinLineDrawer {
       let winningGrids = this.getWinningGridsForResolvedWinline(spinData, payline, desiredKey);
       let completeGrids: Grid[] | null = null;
 
+      try {
+        const positions: any[] | undefined = (payline as any)?.positions;
+        if (Array.isArray(positions) && positions.length > 0) {
+          const derived: Grid[] = [];
+          for (const p of positions) {
+            const x = Number((p as any)?.x);
+            const y = Number((p as any)?.y);
+            if (!isFinite(x) || !isFinite(y)) continue;
+            const sx = Math.floor(x);
+            const sy = Math.floor(y);
+            const sym = Number(spinData?.slot?.area?.[sx]?.[sy] ?? 0);
+            derived.push({ x: sx, y: sy, symbol: isFinite(sym) ? sym : 0 });
+          }
+          derived.sort((a, b) => a.x - b.x);
+          if (derived.length > 0) {
+            key = syntheticKey++;
+            winningGrids = derived;
+            completeGrids = derived;
+          }
+        }
+      } catch {}
+
       // Fallback: if our configured WINLINES can't reproduce the backend payline,
       // but the backend provides explicit winning positions, draw based on those.
       if (!winningGrids || winningGrids.length === 0) {
@@ -595,9 +617,6 @@ export class WinLineDrawer {
               key = syntheticKey++;
               winningGrids = derived;
               completeGrids = derived;
-              try {
-                console.warn(`[WinLineDrawer] Payline could not be matched to configured WINLINES (count=${WINLINES.length}). Drawing by backend positions instead. lineKey=${(payline as any)?.lineKey}`);
-              } catch {}
             }
           }
         } catch {}
@@ -691,18 +710,46 @@ export class WinLineDrawer {
       return [];
     }
 
-    const firstPos = winlinePositions[0];
-    if (!firstPos || firstPos.x !== 0) {
-      return [];
-    }
-
-    const firstSymbol = spinData.slot.area?.[firstPos.x]?.[firstPos.y];
     const scatterVal = Number((SCATTER_SYMBOL as any)?.[0] ?? 0);
     const collectorVal = 11;
     const matchesTarget = (sym: any): boolean => {
       const v = Number(sym);
       return v === targetSymbol || (v === collectorVal && targetSymbol !== scatterVal);
     };
+
+    if (Number(targetSymbol) === 1) {
+      let current: Grid[] = [];
+      let prevX: number | null = null;
+      for (let i = 0; i < winlinePositions.length; i++) {
+        const pos = winlinePositions[i];
+        const symbolAtPosition = spinData.slot.area?.[pos.x]?.[pos.y];
+
+        const contiguous = prevX === null ? true : (pos.x === prevX + 1);
+        if (!contiguous) {
+          current = [];
+        }
+
+        if (matchesTarget(symbolAtPosition)) {
+          current.push({ x: pos.x, y: pos.y, symbol: symbolAtPosition });
+          if (requiredCount >= requiredMin && current.length >= requiredCount) {
+            return current.slice(0, requiredCount);
+          }
+        } else {
+          current = [];
+        }
+
+        prevX = pos.x;
+      }
+
+      return [];
+    }
+
+    const firstPos = winlinePositions[0];
+    if (!firstPos || firstPos.x !== 0) {
+      return [];
+    }
+
+    const firstSymbol = spinData.slot.area?.[firstPos.x]?.[firstPos.y];
     if (!matchesTarget(firstSymbol)) {
       return [];
     }
