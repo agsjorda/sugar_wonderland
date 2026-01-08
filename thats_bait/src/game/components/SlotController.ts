@@ -1072,6 +1072,12 @@ export class SlotController {
 		// Press animation
 		this.attachPushEffect(spinButton);
 		spinButton.on('pointerdown', async () => {
+			// If autoplay is active, clicking spin will stop autoplay instead
+			if (gameStateManager.isAutoPlaying || this.autoplaySpinsRemaining > 0 || this.gameData?.isAutoPlaying) {
+				console.log('[SlotController] Stopping autoplay via spin button click');
+				this.stopAutoplay();
+				return;
+			}
 			if (this.isSpinLocked) {
 				console.log('[SlotController] Spin click ignored - spin is locked');
 				return;
@@ -1087,12 +1093,6 @@ export class SlotController {
 			if (gameStateManager.isScatter) {
 				console.log('[SlotController] Spin blocked - scatter transition/animation in progress');
 				this.disableSpinButton();
-				return;
-			}
-			// If autoplay is active, clicking spin will stop autoplay instead
-			if (gameStateManager.isAutoPlaying) {
-				console.log('[SlotController] Stopping autoplay via spin button click');
-				this.stopAutoplay();
 				return;
 			}
 			if (gameStateManager.isReelSpinning) {
@@ -2097,6 +2097,11 @@ export class SlotController {
 		// Press animation
 		this.attachPushEffect(spinButton);
 		spinButton.on('pointerdown', async () => {
+			if (gameStateManager.isAutoPlaying || this.autoplaySpinsRemaining > 0 || this.gameData?.isAutoPlaying) {
+				console.log('[SlotController] Stopping autoplay via spin button click');
+				this.stopAutoplay();
+				return;
+			}
 			if (this.isSpinLocked) {
 				console.log('[SlotController] Spin click ignored - spin is locked');
 				return;
@@ -2112,12 +2117,6 @@ export class SlotController {
 			if (gameStateManager.isScatter) {
 				console.log('[SlotController] Spin blocked - scatter transition/animation in progress');
 				this.disableSpinButton();
-				return;
-			}
-			// If autoplay is active, clicking spin will stop autoplay instead
-			if (gameStateManager.isAutoPlaying) {
-				console.log('[SlotController] Stopping autoplay via spin button click');
-				this.stopAutoplay();
 				return;
 			}
 			if (gameStateManager.isReelSpinning) {
@@ -2890,6 +2889,20 @@ setBuyFeatureBetAmount(amount: number): void {
 				this.autoplayStopIcon.setVisible(true);
 				this.primaryControllers.bringToTop(this.autoplayStopIcon);
 			}
+			try {
+				const spinButton = this.buttons.get('spin');
+				if (spinButton) {
+					try { spinButton.clearTint(); } catch {}
+					try { spinButton.setInteractive(); } catch { try { (spinButton as any).setInteractive?.(); } catch {} }
+				}
+			} catch {}
+			try {
+				const autoplayButton = this.buttons.get('autoplay');
+				if (autoplayButton) {
+					try { autoplayButton.clearTint(); } catch {}
+					try { autoplayButton.setInteractive(); } catch { try { (autoplayButton as any).setInteractive?.(); } catch {} }
+				}
+			} catch {}
 			// Keep spins text above all
 			if (this.autoplaySpinsRemainingText && this.primaryControllers) {
 				this.primaryControllers.bringToTop(this.autoplaySpinsRemainingText);
@@ -3220,6 +3233,20 @@ setBuyFeatureBetAmount(amount: number): void {
 			this.autoplayStopIcon.setVisible(true);
 			if (this.primaryControllers) this.primaryControllers.bringToTop(this.autoplayStopIcon);
 		}
+		try {
+			const spinButton = this.buttons.get('spin');
+			if (spinButton) {
+				try { spinButton.clearTint(); } catch {}
+				try { spinButton.setInteractive(); } catch { try { (spinButton as any).setInteractive?.(); } catch {} }
+			}
+		} catch {}
+		try {
+			const autoplayButton = this.buttons.get('autoplay');
+			if (autoplayButton) {
+				try { autoplayButton.clearTint(); } catch {}
+				try { autoplayButton.setInteractive(); } catch { try { (autoplayButton as any).setInteractive?.(); } catch {} }
+			}
+		} catch {}
 		
 		// Keep spin button enabled during autoplay (allow stopping autoplay)
 		this.disableBetButtons();
@@ -3228,6 +3255,10 @@ setBuyFeatureBetAmount(amount: number): void {
 		this.disableMenuButton();
 		
 		// Start the first autoplay spin immediately
+		if (gameStateManager.isReelSpinning) {
+			this.scheduleNextAutoplaySpin(0);
+			return;
+		}
 		this.performAutoplaySpin();
 	}
 
@@ -3244,7 +3275,9 @@ setBuyFeatureBetAmount(amount: number): void {
 		this.isStoppingAutoplay = true;
 		this.autoplayRunId++;
 		try {
-			(this.scene as any)?.symbols?.ensureSymbolsVisibleAfterAutoplayStop?.();
+			if (!gameStateManager.isReelSpinning) {
+				(this.scene as any)?.symbols?.ensureSymbolsVisibleAfterAutoplayStop?.();
+			}
 		} catch {}
 		
 		try { this.clearAutoplayTimer(); } catch {}
@@ -3435,6 +3468,10 @@ setBuyFeatureBetAmount(amount: number): void {
 		}
 		if (!gameStateManager.isAutoPlaying) {
 			console.log('[SlotController] performAutoplaySpin aborted - autoplay flag is off');
+			return;
+		}
+		if (gameStateManager.isReelSpinning) {
+			this.scheduleNextAutoplaySpin(100);
 			return;
 		}
 
@@ -4293,7 +4330,11 @@ public updateAutoplayButtonState(): void {
     const autoplayButton = this.buttons.get('autoplay');
     if (!autoplayButton) return;
 
-    		// Disable autoplay button if spinning, enable otherwise
+		const isAutoplayActive = gameStateManager.isAutoPlaying || this.autoplaySpinsRemaining > 0 || !!gameData.isAutoPlaying;
+		if (isAutoplayActive) {
+			this.enableAutoplayButton();
+			return;
+		}
 		if (gameStateManager.isReelSpinning) {
 			console.log(`[SlotController] Disabling autoplay button - isReelSpinning: ${gameStateManager.isReelSpinning}`);
 			this.disableAutoplayButton();
@@ -4358,6 +4399,11 @@ public updateAutoplayButtonState(): void {
 	private async handleSpin(): Promise<void> {
 		try { gameStateManager.isBuyFeatureSpin = false; } catch {}
 		try { if ((gameStateManager as any).isCriticalSequenceLocked) return; } catch {}
+		try {
+			if (gameStateManager.isReelSpinning) {
+				return;
+			}
+		} catch {}
 		// Mark reels as spinning immediately to prevent autoplay-cancel from re-enabling manual spin
 		// while the spin request/reel animations are still in-flight.
 		try { gameStateManager.isReelSpinning = true; } catch {}
@@ -5143,8 +5189,13 @@ public updateAutoplayButtonState(): void {
 		const spinButton = this.buttons.get('spin');
 		if (!spinButton) return;
 
-		if(gameData.isAutoPlaying){
-			this.disableSpinButton();
+		const isAutoplayActive = gameStateManager.isAutoPlaying || this.autoplaySpinsRemaining > 0 || !!gameData.isAutoPlaying;
+		if (isAutoplayActive) {
+			try {
+				spinButton.clearTint();
+				spinButton.setInteractive();
+				if (this.spinIcon) this.spinIcon.setAlpha(1);
+			} catch {}
 			return;
 		}
 

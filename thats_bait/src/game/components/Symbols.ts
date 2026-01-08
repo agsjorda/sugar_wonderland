@@ -3472,6 +3472,17 @@ export class Symbols {
    */
   public ensureSymbolsVisibleAfterAutoplayStop(): void {
     console.log('[Symbols] Ensuring symbols remain visible after autoplay stop');
+
+		try {
+			if (gameStateManager.isReelSpinning) {
+				try {
+					gameEventManager.once(GameEventType.REELS_STOP, () => {
+						try { this.ensureSymbolsVisibleAfterAutoplayStop(); } catch {}
+					});
+				} catch {}
+				return;
+			}
+		} catch {}
     
     // Ensure container is visible
     if (this.container) {
