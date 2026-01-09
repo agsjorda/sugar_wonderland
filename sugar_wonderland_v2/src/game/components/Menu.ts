@@ -274,7 +274,7 @@ export class Menu {
             ).isButton = true;
 
             // Tab click handler - disable history tab in demo mode
-            const isDemo = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+            const isDemo = scene.gameAPI?.getDemoState();
             const isHistoryTab = tabConfig.icon === 'history';
             if (isHistoryTab && isDemo) {
                 // Disable interaction for history tab in demo mode
@@ -379,7 +379,7 @@ export class Menu {
 
     private switchTab(scene: GameScene, tabContainers: ButtonContainer[], activeIndex: number, tabConfigs: any[]): void {
         // Check if demo mode is active and prevent switching to history tab
-        const isDemo = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const isDemo = scene.gameAPI?.getDemoState();
         const tabKey: string = tabConfigs[activeIndex].icon;
 
         if (isDemo && tabKey === 'history') {
@@ -442,7 +442,7 @@ export class Menu {
         // Keep old rows until new data is ready; build containers on first run
         const historyHeaders : string[] = ['Spin', 'Currency', 'Bet', 'Win'];
         // Check if demo mode is active
-        const isDemo = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const isDemo = scene.gameAPI?.getDemoState();
         // Recreate or reparent containers if needed (handles menu reopen)
         if (!this.historyHeaderContainer || !this.historyHeaderContainer.scene) {
             this.historyHeaderContainer = scene.add.container(0, 0);
@@ -1331,7 +1331,7 @@ export class Menu {
             buyFeatContainer.add(buyLabel);
 
             // Static price text centered on the button (hide currency in demo)
-            const isDemoBuyPrice = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+            const isDemoBuyPrice = scene.gameAPI?.getDemoState();
             const currencySymbolBuyPrice = isDemoBuyPrice ? '' : '$';
             const buyPrice = scene.add.text(btnCenterX, btnCenterY + 14, `${currencySymbolBuyPrice}10,000`, {
                 fontSize: '18px',
@@ -2021,7 +2021,7 @@ export class Menu {
                         let text : string;  
                         const repeatTimes = payoutAdjustments[0] - text2.length;
 
-                        const isDemoPayout = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+                        const isDemoPayout = scene.gameAPI?.getDemoState();
                         const currencySymbolPayout = isDemoPayout ? '' : '$';
                         const currencyPrefixPayout = currencySymbolPayout + (currencySymbolPayout ? ' ' : '');
 
@@ -2065,7 +2065,7 @@ export class Menu {
                         let text : string;  
                         const repeatTimes = payoutAdjustments[0] - text2.length;
 
-                        const isDemoPayout = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+                        const isDemoPayout = scene.gameAPI?.getDemoState();
                         const currencySymbolPayout = isDemoPayout ? '' : '$';
                         const currencyPrefixPayout = currencySymbolPayout + (currencySymbolPayout ? ' ' : '');
 

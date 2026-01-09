@@ -360,7 +360,7 @@ export class HelpScreen {
         const rangeTexts: Array<{ text: GameObjects.Text; row: number }> = [];
 
         // Check if demo mode is active - if so, use blank currency symbol
-        const isDemo = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const isDemo = (scene as any)?.gameAPI?.getDemoState();
         const currencySymbol = isDemo ? '' : '$';
 
         for (let row = 0; row < 3; row++) {
@@ -455,7 +455,7 @@ export class HelpScreen {
         const rangeTexts: Array<{ text: GameObjects.Text; row: number }> = [];
 
         // Check if demo mode is active - if so, use blank currency symbol
-        const isDemo = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const isDemo = (scene as any)?.gameAPI?.getDemoState();
         const currencySymbol = isDemo ? '' : '$';
 
         for (let row = 0; row < 3; row++) {
@@ -758,7 +758,7 @@ export class HelpScreen {
         buyFeatContainer.add(buyLabel);
 
         // Static price text centered on the button (hide currency in demo)
-        const isDemoBuyPrice = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const isDemoBuyPrice = (scene as any)?.gameAPI?.getDemoState();
         const currencySymbolBuyPrice = isDemoBuyPrice ? '' : '$';
         const buyPrice = scene.add.text(btnCenterX, btnCenterY + 14, `${currencySymbolBuyPrice}10,000`, {
             fontSize: '18px',
@@ -999,7 +999,7 @@ export class HelpScreen {
             cardLeft + cardWidth / 2,
             cardHeight / 2 + this.padding * 0.8,
             (() => {
-                const isDemoBalance = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+                const isDemoBalance = (scene as any)?.gameAPI?.getDemoState();
                 const currencySymbolBalance = isDemoBalance ? '' : '$';
                 return `${currencySymbolBalance}${currencySymbolBalance ? ' ' : ''}200,000.00`;
             })(),

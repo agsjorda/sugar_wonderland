@@ -241,7 +241,7 @@ export class WinTracker {
       0,
       0,
       (() => {
-        const isDemo = (this.scene as any).gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const isDemo = (this.scene as any).gameAPI?.getDemoState();
         const currencySymbol = isDemo ? '' : '$';
         return `${currencySymbol}${data.totalWin.toFixed(2)}`;
       })(),

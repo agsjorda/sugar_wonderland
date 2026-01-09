@@ -6,7 +6,6 @@ import { IrisTransition } from './IrisTransition';
 import { SymbolExplosionTransition } from './SymbolExplosionTransition';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
-import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 
 export interface DialogConfig {
 	type: 'Congrats_KA' | 'FreeSpinDialog_KA' | 'largeW_KA' | 'LargeW_KA' | 'MediumW_KA' | 'SmallW_KA' | 'SuperW_KA';
@@ -670,7 +669,7 @@ export class Dialogs {
 		
 		// Determine if this is the Congrats dialog showing a total win amount
 		const isCongratsTotalWin = this.currentDialogType === 'Congrats_KA' && freeSpins === undefined;
-		const isDemo = (scene as any).gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemo = (scene as any).gameAPI?.getDemoState();
 
 		// Create number display configuration
 		const numberConfig: NumberDisplayConfig = {

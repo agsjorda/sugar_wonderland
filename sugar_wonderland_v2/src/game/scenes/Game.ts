@@ -178,11 +178,10 @@ export class Game extends Scene
 		this.header.create(this);
 
 		// Create persistent clock display (stays on screen)
-		// Match positioning + formatting with Preloader scene for consistency
-		const clockY = this.scale.height * 0.015;
+		// Clock on top-left, DiJoker on top-right
 		this.clockDisplay = new ClockDisplay(this, {
-			offsetX: -130,
-			offsetY: clockY,
+			offsetX: 5,
+			offsetY: 5,
 			fontSize: 16,
 			fontFamily: 'poppins-regular',
 			color: '#000000',
@@ -191,7 +190,7 @@ export class Game extends Scene
 			scale: 0.7,
 			suffixText: ` | Sugar Wonderland${this.gameAPI.getDemoState() ? ' | DEMO' : ''}`,
 			additionalText: 'DiJoker',
-			additionalTextOffsetX: 185,
+			additionalTextOffsetX: 5,
 			additionalTextOffsetY: 0,
 			additionalTextScale: 0.7,
 			additionalTextColor: '#000000',

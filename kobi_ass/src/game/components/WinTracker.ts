@@ -217,7 +217,7 @@ export class WinTracker {
 
     // Check if demo mode is active - if so, remove currency symbol
     const sceneAny: any = this.scene;
-    const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+    const isDemo = sceneAny?.gameAPI?.getDemoState();
     const currencySymbol = isDemo ? '' : '$';
     const baseValueLabel = this.scene.add.text(
       0,

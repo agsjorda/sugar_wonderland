@@ -859,7 +859,7 @@ export class FreeRoundManager {
 		this.panelContainer.add(spinsLabel);
 
 		// "With $X.XX" line
-		const isDemo = (scene as any).gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemo = (scene as any).gameAPI?.getDemoState();
 		const currencySymbol = isDemo ? '' : '$';
 		const betValue =
 			this.initBet != null
@@ -1047,7 +1047,7 @@ export class FreeRoundManager {
 
 		// Line 1: "You won $XX.XX with"
 		const totalWinDisplay = totalWin.toFixed(2);
-		const isDemo = (scene as any).gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemo = (scene as any).gameAPI?.getDemoState();
 		const currencySymbol = isDemo ? '' : '$';
 
 		const line1Y = -40;

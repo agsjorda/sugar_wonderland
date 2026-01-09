@@ -381,7 +381,7 @@ export class HelpScreen {
             const value = payoutData[row] ?? 0;
             const adjustedValue = this.applyBetToPayout(value);
             // Check if demo mode is active - if so, use blank currency symbol
-            const isDemo = localStorage.getItem('demo') || sessionStorage.getItem('demo');
+            const isDemo = (this.scene as any)?.gameAPI?.getDemoState();
             const currencySymbol = isDemo ? '' : '$';
             const valueText = currencySymbol + (currencySymbol ? ' ' : '') + this.formatPayout(adjustedValue);
             const payoutText = scene.add.text(0, y, valueText, {
@@ -477,7 +477,7 @@ export class HelpScreen {
             const value = SCATTER_PAYOUTS[row] ?? 0;
             const adjustedValue = this.applyBetToPayout(value);
             // Check if demo mode is active - if so, use blank currency symbol
-            const isDemo = localStorage.getItem('demo') || sessionStorage.getItem('demo');
+            const isDemo = (this.scene as any)?.gameAPI?.getDemoState();
             const currencySymbol = isDemo ? '' : '$';
             const valueText = currencySymbol + (currencySymbol ? ' ' : '') + this.formatPayout(adjustedValue);
             const payoutTextX = baseTextX + this.scatterPayoutTextColumnSpacing / 2;
@@ -761,7 +761,7 @@ export class HelpScreen {
 
         // Static price text $10,000 centered on the button
         // Check if demo mode is active - if so, use blank currency symbol
-        const isDemoBuyPrice = localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const isDemoBuyPrice = (this.scene as any)?.gameAPI?.getDemoState();
         const currencySymbolBuyPrice = isDemoBuyPrice ? '' : '$';
         const buyPrice = scene.add.text(btnCenterX, btnCenterY + 14, `${currencySymbolBuyPrice}10,000`, {
             fontSize: '18px',
@@ -999,7 +999,7 @@ export class HelpScreen {
 
         // Main value text layer below the title.
         // Check if demo mode is active - if so, use blank currency symbol
-        const isDemoBalance = localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const isDemoBalance = (this.scene as any)?.gameAPI?.getDemoState();
         const currencySymbolBalance = isDemoBalance ? '' : '$';
         const balanceValue = scene.add.text(
             cardLeft + cardWidth / 2,

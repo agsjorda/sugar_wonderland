@@ -252,7 +252,7 @@ export class BuyFeature {
 		
 		// Check if demo mode is active - if so, remove currency symbol
 		const sceneAny: any = scene;
-		const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemo = sceneAny?.gameAPI?.getDemoState();
 		const currencySymbol = isDemo ? '' : '$';
 		this.priceDisplay = scene.add.text(screenWidth / 2, backgroundTop + 340, `${currencySymbol}${this.formatNumberWithCommas(calculatedPrice)}`, {
 			fontSize: '42px',
@@ -323,7 +323,7 @@ export class BuyFeature {
 			const calculatedPrice = this.getCurrentBetValue();
 			// Check if demo mode is active - if so, remove currency symbol
 			const sceneAny: any = this.container?.scene;
-			const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const isDemo = sceneAny?.gameAPI?.getDemoState();
 			const currencySymbol = isDemo ? '' : '$';
 			this.priceDisplay.setText(`${currencySymbol}${this.formatNumberWithCommas(calculatedPrice)}`);
 		}
@@ -427,7 +427,7 @@ export class BuyFeature {
 		// Bet display - show current bet value
 		// Check if demo mode is active - if so, remove currency symbol
 		const sceneAny: any = scene;
-		const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemo = sceneAny?.gameAPI?.getDemoState();
 		const currencySymbol = isDemo ? '' : '$';
 		this.betDisplay = scene.add.text(x, y, `${currencySymbol}${this.getCurrentBet().toFixed(2)}`, {
 			fontSize: '24px',
@@ -557,7 +557,7 @@ export class BuyFeature {
 		if (this.betDisplay) {
 			// Check if demo mode is active - if so, remove currency symbol
 			const sceneAny: any = this.container?.scene;
-			const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const isDemo = sceneAny?.gameAPI?.getDemoState();
 			const currencySymbol = isDemo ? '' : '$';
 			this.betDisplay.setText(`${currencySymbol}${this.getCurrentBet().toFixed(2)}`);
 		}

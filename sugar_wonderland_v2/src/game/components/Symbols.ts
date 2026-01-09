@@ -3369,11 +3369,13 @@ function getMultiplierOverlayKey(value: number): string | null {
 function createWinText(self: Symbols, amount: number, x: number, y: number): Phaser.GameObjects.Text {
   const px = Math.max(40, Math.round(self.displayHeight * 0.5));
   let textValue = '';
+  const isDemo = (self.scene as any).gameAPI?.getDemoState();
+  const currencySymbol = isDemo ? '' : '$';
   try {
-    if (Number.isInteger(amount)) textValue = `$${amount}`;
-    else textValue = `$${Number(amount).toFixed(2)}`;
+    if (Number.isInteger(amount)) textValue = `${currencySymbol}${amount}`;
+    else textValue = `${currencySymbol}${Number(amount).toFixed(2)}`;
   } catch {
-    textValue = `$${amount}`;
+    textValue = `${currencySymbol}${amount}`;
   }
   const txt = self.scene.add.text(x, y, textValue, {
     fontFamily: 'Poppins-Bold',

@@ -223,7 +223,7 @@ export class BetOptions {
 		// Bet display
 		// Check if demo mode is active - if so, remove currency symbol
 		const sceneAny: any = scene;
-		const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemo = sceneAny?.gameAPI?.getDemoState();
 		const currencySymbol = isDemo ? '' : '$';
 		this.betDisplay = scene.add.text(x, y, `${currencySymbol}${this.currentBet.toFixed(2)}`, {
 			fontSize: '24px',
@@ -319,7 +319,7 @@ export class BetOptions {
 		if (this.betDisplay) {
 			// Check if demo mode is active - if so, remove currency symbol
 			const sceneAny: any = this.container?.scene;
-			const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const isDemo = sceneAny?.gameAPI?.getDemoState();
 			const currencySymbol = isDemo ? '' : '$';
 			this.betDisplay.setText(`${currencySymbol}${this.currentBet.toFixed(2)}`);
 		}

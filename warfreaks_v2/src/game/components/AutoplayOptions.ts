@@ -249,7 +249,7 @@ export class AutoplayOptions {
 		
 		// Balance amount - using the current balance from game data
 		// Check if demo mode is active - if so, use blank currency symbol
-		const isDemoBalance = (scene as any).gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemoBalance = (scene as any).gameAPI?.getDemoState();
 		const balanceCurrencySymbol = isDemoBalance ? '' : '$';
 		const balanceAmount = scene.add.text(150, 1, `${balanceCurrencySymbol}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, {
 			fontSize: '24px',
@@ -374,7 +374,7 @@ export class AutoplayOptions {
 		
 		// Bet display
 		// Check if demo mode is active - if so, use blank currency symbol
-		const isDemoBet = (scene as any).gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemoBet = (scene as any).gameAPI?.getDemoState();
 		const betCurrencySymbol = isDemoBet ? '' : '$';
 		this.autoplayDisplay = scene.add.text(x, y, `${betCurrencySymbol}${this.currentBet.toFixed(2)}` , {
 			fontSize: '24px',
@@ -479,7 +479,7 @@ export class AutoplayOptions {
 		if (this.autoplayDisplay) {
 			const displayBet = this.currentBet * this.betDisplayMultiplier;
 			// Check if demo mode is active - if so, use blank currency symbol
-			const isDemo = localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState();
 			const currencySymbol = isDemo ? '' : '$';
 			this.autoplayDisplay.setText(`${currencySymbol}${displayBet.toFixed(2)}`);
 		}
@@ -488,7 +488,7 @@ export class AutoplayOptions {
 	private updateBalanceDisplay(): void {
 		if (this.balanceAmountText) {
 			// Check if demo mode is active - if so, use blank currency symbol
-			const isDemo = localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState();
 			const currencySymbol = isDemo ? '' : '$';
 			this.balanceAmountText.setText(`${currencySymbol}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 		}

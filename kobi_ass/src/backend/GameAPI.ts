@@ -373,7 +373,7 @@ export class GameAPI {
     public async getBalance(): Promise<any> {
         try{
             // Check if demo mode is active
-            const isDemo = this.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+            const isDemo = this.getDemoState();
             if (isDemo) {
                 // Return mock balance data in demo mode
                 return {
@@ -422,7 +422,7 @@ export class GameAPI {
      */
     public async doSpin(bet: number, isBuyFs: boolean, isEnhancedBet: boolean, isFs: boolean = false): Promise<SpinData> {
         // Check if demo mode is active
-        const isDemo = this.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const isDemo = this.getDemoState();
         
         // Only require token if not in demo mode
         if (!isDemo) {
@@ -735,7 +735,7 @@ export class GameAPI {
             console.log('[GameAPI] Initializing player balance...');
             
             // Check if demo mode is active
-            const isDemo = this.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+            const isDemo = this.getDemoState();
             if (isDemo) {
                 // Return demo balance directly in demo mode
                 console.log(`[GameAPI] Demo mode active, using demo balance: $${GameAPI.DEMO_BALANCE}`);
@@ -771,7 +771,7 @@ export class GameAPI {
 
     public async getHistory(page: number, limit: number): Promise<any> {
         // Check if demo mode is active
-        const isDemo = this.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const isDemo = this.getDemoState();
         if (isDemo) {
             // Return empty history data in demo mode
             return {

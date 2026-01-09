@@ -110,7 +110,7 @@ export class BonusHeader {
 		// Line 2: "$ 0.00" with bold formatting
 		// Check if demo mode is active - if so, use blank currency symbol
 		const sceneAny: any = scene;
-		const isDemoInitial = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') === 'true' || sessionStorage.getItem('demo') === 'true';
+		const isDemoInitial = sceneAny?.gameAPI?.getDemoState();
 		const currencySymbolInitial = isDemoInitial ? '' : '$';
 		const initialText = isDemoInitial ? '0.00' : '$ 0.00';
 		this.amountText = scene.add.text(x + HEADER_AMOUNT_OFFSET_X, y + 14 + HEADER_AMOUNT_OFFSET_Y, initialText, {
@@ -186,7 +186,7 @@ export class BonusHeader {
 	private formatCurrency(amount: number): string {
 		// Check if demo mode is active - if so, remove currency symbol
 		const sceneAny: any = this.bonusHeaderContainer?.scene;
-		const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') === 'true' || sessionStorage.getItem('demo') === 'true';
+		const isDemo = sceneAny?.gameAPI?.getDemoState();
 		
 		if (amount === 0) {
 			return isDemo ? '0.00' : '$ 0.00';

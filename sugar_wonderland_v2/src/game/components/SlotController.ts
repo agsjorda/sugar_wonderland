@@ -11,7 +11,6 @@ import { SpinData, SpinDataUtils } from '../../backend/SpinData';
 import { BuyFeature } from './BuyFeature';
 import { Symbols } from './Symbols';
 import { SoundEffectType } from '../../managers/AudioManager';
-import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { LoadingSpinner } from './LoadingSpinner';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 
@@ -1494,7 +1493,7 @@ export class SlotController {
 		const containerHeight = 55;
 		const cornerRadius = 10;
 		// Check if demo mode is active - if so, use blank currency symbol and center the text
-		const isDemoBalance = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemoBalance = this.gameAPI?.getDemoState();
 		const balanceValueOffset = isDemoBalance ? 0 : 5; // Center in demo mode, offset right when currency symbol exists
 
 		// Create rounded rectangle background
@@ -1560,7 +1559,7 @@ export class SlotController {
 		const containerHeight = 55;
 		const cornerRadius = 10;
 		// Check if demo mode is active - if so, center the text (no currency symbol)
-		const isDemoBet = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemoBet = this.gameAPI?.getDemoState();
 		const betValueOffset = isDemoBet ? 0 : 3; // Center in demo mode, offset right when currency symbol exists
 
 
@@ -1853,7 +1852,7 @@ export class SlotController {
 		const featureX = scene.scale.width * 0.5; // Center between balance and bet
 		const featureY = scene.scale.height * 0.724; // Same Y as balance and bet containers
 		// Check if demo mode is active - if so, center the text (no currency symbol)
-		const isDemoFeature = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemoFeature = this.gameAPI?.getDemoState();
 		const featureXOffset = isDemoFeature ? 0 : 5; // Center in demo mode, offset right when currency symbol exists
 
 		// Feature button image (serves as background)
@@ -2138,7 +2137,7 @@ export class SlotController {
 				this.betAmountText.setText(increasedBet.toFixed(2));
 
 				// Update currency symbol position based on new bet amount width
-				const isDemo = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+				const isDemo = this.gameAPI?.getDemoState();
 				if (this.betDollarText && this.scene) {
 					const betX = this.scene.scale.width * 0.81;
 					const betY = this.betAmountText.y;
@@ -2162,7 +2161,7 @@ export class SlotController {
 		if (this.betAmountText) {
 			this.betAmountText.setText(betAmount.toFixed(2));
 
-			const isDemo = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const isDemo = this.gameAPI?.getDemoState();
 			if (this.scene) {
 				const betX = this.scene.scale.width * 0.81;
 				const betY = this.betAmountText.y;
@@ -2210,7 +2209,7 @@ export class SlotController {
 		const price = baseBet * 100;
 		// Format with thousands separators and 2 decimals
 		this.featureAmountText.setText(price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-		const isDemo = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemo = this.gameAPI?.getDemoState();
 		if (this.scene) {
 			const featureX = this.scene.scale.width * 0.5;
 			const y = this.featureAmountText.y;
@@ -2241,12 +2240,12 @@ export class SlotController {
 		if (this.balanceAmountText) {
 			this.balanceAmountText.setText(balanceAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 			
-			const isDemo = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const isDemo = this.gameAPI?.getDemoState();
 			if (this.scene) {
 				const balanceX = this.scene.scale.width * 0.19;
 				const balanceY = this.balanceAmountText.y;
 				// Center amount text in demo mode; maintain offset when currency symbol exists
-				this.balanceAmountText.setPosition(balanceX + (isDemo ? 0 : 5), balanceY);
+				this.balanceAmountText.setPosition(balanceX + (isDemo ? 0 : 2.5), balanceY);
 
 				if (this.balanceDollarText) {
 					if (isDemo) {
@@ -2255,7 +2254,7 @@ export class SlotController {
 					} else {
 						this.balanceDollarText.setVisible(true);
 						this.balanceDollarText.setText('$');
-						this.balanceDollarText.setPosition(balanceX - (this.balanceAmountText.width / 2) - 5, balanceY);
+						this.balanceDollarText.setPosition(balanceX - (this.balanceAmountText.width / 2) - 2.5, balanceY);
 					}
 				}
 			}

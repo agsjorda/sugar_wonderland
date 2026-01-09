@@ -359,7 +359,7 @@ export class Menu {
             tabContainer.add(text);
 
             // Tab click handler - disable history tab in demo mode
-            const isDemo = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') === 'true' || sessionStorage.getItem('demo') === 'true';
+            const isDemo = scene.gameAPI?.getDemoState();
             const isHistoryTab = tabConfig.icon === 'history';
 
             if (isHistoryTab && isDemo) {
@@ -471,7 +471,7 @@ export class Menu {
 
     private switchTab(scene: GameScene, tabContainers: ButtonContainer[], activeIndex: number, tabConfigs: any[]): void {
         // Check if demo mode is active and prevent switching to history tab
-        const isDemo = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') === 'true' || sessionStorage.getItem('demo') === 'true';
+        const isDemo = scene.gameAPI?.getDemoState();
         const tabKey: string = tabConfigs[activeIndex].icon;
 
         if (isDemo && tabKey === 'history') {
@@ -534,7 +534,7 @@ export class Menu {
         // Keep old rows until new data is ready; build containers on first run
         const historyHeaders : string[] = ['Spin', 'Currency', 'Bet', 'Win'];
         // Check if demo mode is active
-        const isDemo = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') === 'true' || sessionStorage.getItem('demo') === 'true';
+        const isDemo = scene.gameAPI?.getDemoState();
         
         // Recreate or reparent containers if needed (handles menu reopen)
         if (!this.historyHeaderContainer || !this.historyHeaderContainer.scene) {

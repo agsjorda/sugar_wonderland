@@ -165,7 +165,7 @@ export class AutoplayOptions {
 		
 		// Balance amount - using the current balance from game data
 		// Check if demo mode is active - if so, use blank currency symbol
-		const isDemo = (scene as any).gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemo = (scene as any).gameAPI?.getDemoState();
 		const currencySymbol = isDemo ? '' : '$';
 		const balanceAmount = scene.add.text(150, 1, `${currencySymbol}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, {
 			fontSize: '24px',
@@ -401,7 +401,7 @@ export class AutoplayOptions {
 
 	private updateAutoplayDisplay(): void {
 		if (this.autoplayDisplay) {
-			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
 			const currencySymbol = isDemo ? '' : '$';
 			this.autoplayDisplay.setText(`${currencySymbol}${this.currentBet.toFixed(2)}`);
 		}
@@ -409,7 +409,7 @@ export class AutoplayOptions {
 
 	private updateBalanceDisplay(): void {
 		if (this.balanceAmountText) {
-			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
 			const currencySymbol = isDemo ? '' : '$';
 			this.balanceAmountText.setText(`${currencySymbol}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 		}

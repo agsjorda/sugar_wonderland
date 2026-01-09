@@ -98,11 +98,10 @@ export class Preloader extends Scene
 		console.log(`[Preloader] Background display size: ${this.scale.width}x${this.scale.height}`);
 		console.log(`[Preloader] Background position: (${this.scale.width * 0.5}, ${this.scale.height * 0.5})`);
 
-		// Persistent clock display in the top bar (matches Hustle Horse positioning), using poppins-regular
-		const clockY = this.scale.height * 0.015;
+		// Persistent clock display in the top bar - clock on top-left, DiJoker on top-right
 		this.clockDisplay = new ClockDisplay(this, {
-			offsetX: -130,
-			offsetY: clockY,
+			offsetX: 5,
+			offsetY: 5,
 			fontSize: 16,
 			fontFamily: 'poppins-regular',
 			color: '#FFFFFF',
@@ -111,7 +110,7 @@ export class Preloader extends Scene
 			scale: 0.7,
 			suffixText: ` | Sugar Wonderland${this.gameAPI.getDemoState() ? ' | DEMO' : ''}`,
 			additionalText: 'DiJoker',
-			additionalTextOffsetX: 185,
+			additionalTextOffsetX: 5,
 			additionalTextOffsetY: 0,
 			additionalTextScale: 0.7,
 			additionalTextColor: '#FFFFFF',
@@ -397,7 +396,7 @@ export class Preloader extends Scene
             const gameToken = await this.gameAPI.initializeGame();
             console.log('[Preloader] Game URL Token:', gameToken);
 
-			const isDemo = this.gameAPI.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const isDemo = this.gameAPI.getDemoState();
 			if (!isDemo) {
 				console.log('[Preloader] Calling backend slot initialization...');
 				const slotInitData = await this.gameAPI.initializeSlotSession();

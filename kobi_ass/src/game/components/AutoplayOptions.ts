@@ -165,7 +165,7 @@ export class AutoplayOptions {
 		// Balance amount - using the current balance from game data
 		// Check if demo mode is active - if so, remove currency symbol and adjust position
 		const sceneAny: any = scene;
-		const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemo = sceneAny?.gameAPI?.getDemoState();
 		const currencySymbol = isDemo ? '' : '$';
 		// Adjust x position for right-aligned text when currency symbol is removed
 		const balanceX = isDemo ? 150 - 10 : 150; // Shift left by ~10px when symbol removed
@@ -293,7 +293,7 @@ export class AutoplayOptions {
 		// Bet display
 		// Check if demo mode is active - if so, remove currency symbol
 		const sceneAny: any = scene;
-		const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemo = sceneAny?.gameAPI?.getDemoState();
 		const currencySymbol = isDemo ? '' : '$';
 		this.autoplayDisplay = scene.add.text(x, y, `${currencySymbol}${this.currentBet.toFixed(2)}` , {
 			fontSize: '24px',
@@ -397,7 +397,7 @@ export class AutoplayOptions {
 		if (this.autoplayDisplay) {
 			// Check if demo mode is active - if so, remove currency symbol
 			const sceneAny: any = this.container?.scene;
-			const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const isDemo = sceneAny?.gameAPI?.getDemoState();
 			const currencySymbol = isDemo ? '' : '$';
 			this.autoplayDisplay.setText(`${currencySymbol}${this.currentBet.toFixed(2)}`);
 		}
@@ -407,7 +407,7 @@ export class AutoplayOptions {
 		if (this.balanceAmountText) {
 			// Check if demo mode is active - if so, remove currency symbol and adjust position
 			const sceneAny: any = this.container?.scene;
-			const isDemo = sceneAny?.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const isDemo = sceneAny?.gameAPI?.getDemoState();
 			const currencySymbol = isDemo ? '' : '$';
 			const balanceX = isDemo ? 150 - 10 : 150; // Shift left by ~10px when symbol removed
 			this.balanceAmountText.setText(`${currencySymbol}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);

@@ -1389,7 +1389,7 @@ export class SlotController {
 
 		// "200,000.00" amount (2nd line, right part)
 		// Adjust position in demo mode to account for removed currency symbol
-		const isDemo = this.gameAPI?.getDemoState() || false;
+		const isDemo = this.gameAPI?.getDemoState();
 		const balanceTextOffset = isDemo ? balanceValueOffset - 4 : balanceValueOffset; // Shift left ~4px when dollar removed
 		this.balanceAmountText = scene.add.text(
 			balanceX + balanceTextOffset,
@@ -1483,7 +1483,7 @@ export class SlotController {
 
 		// "0.60" amount (2nd line, right part)
 		// Adjust position in demo mode to account for removed currency symbol
-		const isDemo = this.gameAPI?.getDemoState() || false;
+		const isDemo = this.gameAPI?.getDemoState();
 		const betTextOffset = isDemo ? betValueOffset - 4 : betValueOffset; // Shift left ~4px when dollar removed
 		this.betAmountText = scene.add.text(
 			betX + betTextOffset,
@@ -1728,7 +1728,7 @@ export class SlotController {
 
 		// "$" symbol (2nd line, left part) - positioned dynamically
 		// Hide dollar sign in demo mode
-		const isDemo = this.gameAPI?.getDemoState() || false;
+		const isDemo = this.gameAPI?.getDemoState();
 		this.featureDollarText = scene.add.text(
 			featureX - (this.featureAmountText.width / 2) - 3,
 			featureY + 8,
@@ -1965,7 +1965,7 @@ export class SlotController {
 			this.betAmountText.setText(displayBetAmount.toFixed(2));
 			
 			// Adjust position in demo mode to account for removed currency symbol
-			const isDemo = this.gameAPI?.getDemoState() || false;
+			const isDemo = this.gameAPI?.getDemoState();
 			const betX = this.scene.scale.width * 0.81;
 			const betValueOffset = 3;
 			const betTextOffset = isDemo ? betValueOffset - 4 : betValueOffset;
@@ -2010,7 +2010,7 @@ export class SlotController {
 		// Format with thousands separators and 2 decimals
 		this.featureAmountText.setText(price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 		// Adjust position in demo mode to account for removed currency symbol
-		const isDemo = this.gameAPI?.getDemoState() || false;
+		const isDemo = this.gameAPI?.getDemoState();
 		if (this.scene) {
 			const featureX = this.scene.scale.width * 0.5;
 			const featureTextOffset = isDemo ? 5 - 4 : 5;
@@ -2054,7 +2054,7 @@ export class SlotController {
 			this.balanceAmountText.setText(balanceAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 			
 			// Adjust position in demo mode to account for removed currency symbol
-			const isDemo = this.gameAPI?.getDemoState() || false;
+			const isDemo = this.gameAPI?.getDemoState();
 			const balanceX = this.scene.scale.width * 0.19;
 			const balanceValueOffset = 5;
 			const balanceTextOffset = isDemo ? balanceValueOffset - 4 : balanceValueOffset;
@@ -3189,7 +3189,7 @@ export class SlotController {
 			this.betAmountText.setText(increasedBet.toFixed(2));
 			
 			// Adjust position in demo mode to account for removed currency symbol
-			const isDemo = this.gameAPI?.getDemoState() || false;
+			const isDemo = this.gameAPI?.getDemoState();
 			if (this.scene) {
 				const betX = this.scene.scale.width * 0.81;
 				const betValueOffset = 3;
@@ -3221,7 +3221,7 @@ export class SlotController {
 			this.betAmountText.setText(this.baseBetAmount.toFixed(2));
 			
 			// Adjust position in demo mode to account for removed currency symbol
-			const isDemo = this.gameAPI?.getDemoState() || false;
+			const isDemo = this.gameAPI?.getDemoState();
 			const betX = this.scene.scale.width * 0.81;
 			const betValueOffset = 3;
 			const betTextOffset = isDemo ? betValueOffset - 4 : betValueOffset;
