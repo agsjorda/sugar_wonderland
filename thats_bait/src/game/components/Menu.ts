@@ -304,6 +304,9 @@ export class Menu {
 
         const tabContainers: ButtonContainer[] = [];
 
+        // Check for demo mode
+        const isDemo = scene.gameAPI?.getDemoState();
+
         tabConfigs.forEach((tabConfig, index) => {
             // Position tabs lower on screen to leave room for the clock at the top
             const tabContainer = scene.add.container(tabConfig.x, this.menuTopPadding) as ButtonContainer;
@@ -311,6 +314,7 @@ export class Menu {
             // Tab background
             const tabBg = scene.add.graphics();
             const isClose = tabConfig.icon === 'close';
+            const isHistoryTab = tabConfig.icon === 'history';
 
             tabBg.fillStyle(isClose ? 0x1F1F1F : 0x000000, 1); // Close has dark gray bg
             tabBg.fillRect(0, 0, tabConfig.width, tabHeight);
@@ -376,18 +380,23 @@ export class Menu {
             text.setOrigin(index < normalTabCount ? 0 : 0.5, 0.5);
             tabContainer.add(text);
 
-            // Make tab interactive
-            tabContainer.setInteractive(
-                new Geom.Rectangle(0, 0, tabConfig.width, tabHeight),
-                Geom.Rectangle.Contains
-            ).isButton = true;
-            try { if ((tabContainer as any).input) (tabContainer as any).input.priorityID = 10; } catch {}
+            // Make tab interactive (disable history tab in demo mode)
+            if (isHistoryTab && isDemo) {
+                tabContainer.disableInteractive();
+                tabContainer.setAlpha(0.5);
+            } else {
+                tabContainer.setInteractive(
+                    new Geom.Rectangle(0, 0, tabConfig.width, tabHeight),
+                    Geom.Rectangle.Contains
+                ).isButton = true;
+                try { if ((tabContainer as any).input) (tabContainer as any).input.priorityID = 10; } catch {}
 
-            // Tab click handler
-            tabContainer.on('pointerup', () => {
-                scene.audioManager.playSoundEffect(SoundEffectType.CLICK);
-                this.switchTab(scene, tabContainers, index, tabConfigs);
-            });
+                // Tab click handler
+                tabContainer.on('pointerup', () => {
+                    scene.audioManager.playSoundEffect(SoundEffectType.CLICK);
+                    this.switchTab(scene, tabContainers, index, tabConfigs);
+                });
+            }
 
             tabContainers.push(tabContainer);
             this.panel.add(tabContainer);
@@ -488,6 +497,20 @@ export class Menu {
     }
 
     private switchTab(scene: GameScene, tabContainers: ButtonContainer[], activeIndex: number, tabConfigs: any[]): void {
+        // Check for demo mode and prevent switching to history tab
+        const isDemo = scene.gameAPI?.getDemoState();
+        const tabKey: string = tabConfigs[activeIndex].icon;
+        
+        if (isDemo && tabKey === 'history') {
+            // Redirect to first available non-history tab
+            const firstNonHistoryIndex = tabConfigs.findIndex((config, idx) => 
+                config.icon !== 'history' && config.icon !== 'close'
+            );
+            if (firstNonHistoryIndex !== -1) {
+                activeIndex = firstNonHistoryIndex;
+            }
+        }
+        
         // Update tab highlighting
         tabContainers.forEach((tabContainer, index) => {
             const tabBg = tabContainer.getAt(0) as GameObjects.Graphics;
@@ -508,8 +531,8 @@ export class Menu {
         });
 
         // Show content for active tab
-        const tabKey: string = tabConfigs[activeIndex].icon;
-        this.showTabContent(scene, tabKey);
+        const finalTabKey: string = tabConfigs[activeIndex].icon;
+        this.showTabContent(scene, finalTabKey);
     }
 
     private showTabContent(scene: GameScene, tabKey: string): void {
@@ -536,6 +559,50 @@ export class Menu {
 
 
     private async showHistoryContent(scene: GameScene, page: number, limit: number): Promise<void> {
+        // Check for demo mode - show empty state instead of fetching history
+        const isDemo = scene.gameAPI?.getDemoState();
+        
+        if (isDemo) {
+            const contentArea = this.historyContent;
+            // Recreate or reparent containers if needed (handles menu reopen)
+            if (!this.historyHeaderContainer || !this.historyHeaderContainer.scene) {
+                this.historyHeaderContainer = scene.add.container(0, 0);
+                const historyText = scene.add.text(15, 15,'History', this.titleStyle) as ButtonText;
+                historyText.setOrigin(0, 0);
+                this.historyHeaderContainer.add(historyText);
+            }
+            
+            // Clear existing rows
+            if (this.historyRowsContainer && this.historyRowsContainer.scene) {
+                this.historyRowsContainer.destroy(true);
+            }
+            this.historyRowsContainer = scene.add.container(0, 0);
+            if ((this.historyRowsContainer as any).parentContainer !== contentArea) {
+                contentArea.add(this.historyRowsContainer);
+            }
+            
+            if ((this.historyHeaderContainer as any).parentContainer !== contentArea) {
+                contentArea.add(this.historyHeaderContainer);
+            }
+            
+            // Display empty state message
+            const emptyStateText = scene.add.text(
+                scene.scale.width * 0.5,
+                scene.scale.height * 0.3,
+                'History is not available in demo mode',
+                {
+                    fontSize: '18px',
+                    color: '#FFFFFF',
+                    fontFamily: 'Poppins-Regular',
+                    align: 'center'
+                }
+            ) as ButtonText;
+            emptyStateText.setOrigin(0.5, 0.5);
+            this.historyRowsContainer.add(emptyStateText);
+            
+            return;
+        }
+        
         const contentArea = this.historyContent;
         // Keep old rows until new data is ready; build containers on first run
         const historyHeaders : string[] = ['Spin', 'Currency', 'Bet', 'Win'];

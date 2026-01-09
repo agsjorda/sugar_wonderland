@@ -7,6 +7,7 @@ import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { GameData } from '../components/GameData';
 import { EventBus } from '../EventBus';
 import { GameAPI } from '../../backend/GameAPI';
+import { SpinDataUtils } from '../../backend/SpinData';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { AudioManager, MusicType, SoundEffectType } from '../../managers/AudioManager';
@@ -168,19 +169,23 @@ export class Game extends Phaser.Scene {
 			depth: Number.MAX_SAFE_INTEGER
 		});
 
-		const clockY = this.scale.height * 0.009;
+		const topMargin = 5;
+		const leftMargin = 5;
+		const rightMargin = -5;
+		const isDemo = this.gameAPI?.getDemoState();
+		const suffixText = isDemo ? ' | That\'s Bait | DEMO' : ' | That\'s Bait';
 		this.clockDisplay = new ClockDisplay(this, {
-			offsetX: -150,
-			offsetY: clockY,
+			offsetX: leftMargin,
+			offsetY: topMargin,
 			fontSize: 16,
 			color: '#FFFFFF',
 			alpha: 0.5,
 			depth: 30000,
 			scale: 0.7,
-			suffixText: ' | That\'s Bait',
+			suffixText: suffixText,
 			additionalText: 'DiJoker',
-			additionalTextOffsetX: 185,
-			additionalTextOffsetY: 0,
+			additionalTextOffsetX: rightMargin,
+			additionalTextOffsetY: topMargin,
 			additionalTextScale: 0.7,
 			additionalTextColor: '#FFFFFF',
 			additionalTextFontSize: 16
@@ -281,6 +286,8 @@ export class Game extends Phaser.Scene {
 				try { (this as any).isHookScatterEventActive = false; } catch {}
 				try { this.input.enabled = true; } catch {}
 				try { this.slotController?.setExternalControlLock(false); } catch {}
+				// Update demo balance when bonus mode ends
+				try { this.updateDemoBalanceFromSpinData('prepareBonusExit'); } catch {}
 			} catch {}
 		});
 		this.events.on('bonusRetrigger', (data: any) => {
@@ -2605,6 +2612,61 @@ export class Game extends Phaser.Scene {
 		}
 	}
 
+	private updateDemoBalanceFromSpinData(context: string = 'WIN_STOP'): void {
+		console.log('[Game] Updating demo balance from spin data:', context);
+		try {
+			const isDemo = this.gameAPI?.getDemoState();
+			if (!isDemo) {
+				console.log('[Game] Not in demo mode, skipping demo balance update');
+				return;
+			}
+
+			let totalWin = 0;
+
+			// For bonus mode, get the cumulative total from BonusHeader
+			if (context === 'finalizeBonusExit' || context === 'prepareBonusExit') {
+				try {
+					const bonusHeader = (this as any).bonusHeader;
+					if (bonusHeader && typeof bonusHeader.getCurrentWinnings === 'function') {
+						totalWin = bonusHeader.getCurrentWinnings();
+						console.log(`[Game] Got bonus total win from BonusHeader: $${totalWin}`);
+					}
+					// Fallback: try to get from slotController's resolve method
+					if (totalWin <= 0) {
+						try {
+							const slotController = this.slotController as any;
+							if (slotController && typeof slotController.resolveBonusTotalWinFromScene === 'function') {
+								totalWin = slotController.resolveBonusTotalWinFromScene();
+								console.log(`[Game] Got bonus total win from SlotController: $${totalWin}`);
+							}
+						} catch {}
+					}
+				} catch (error) {
+					console.warn('[Game] Error getting bonus total win:', error);
+				}
+			} else {
+				// For base game, get from spin data
+				const symbolsComponent = (this as any).symbols;
+				if (symbolsComponent && symbolsComponent.currentSpinData) {
+					totalWin = SpinDataUtils.getTotalWin(symbolsComponent.currentSpinData);
+					console.log(`[Game] Got base game total win from spin data: $${totalWin}`);
+				}
+			}
+
+			if (totalWin > 0) {
+				const currentDemoBalance = this.gameAPI.getDemoBalance();
+				this.gameAPI.updateDemoBalance(currentDemoBalance + totalWin);
+				console.log(`[Game] Demo balance updated on ${context}: $${currentDemoBalance} -> $${currentDemoBalance + totalWin} (win: $${totalWin})`);
+			} else {
+				console.log(`[Game] No win amount found (totalWin: $${totalWin}), skipping balance update`);
+			}
+
+			this.slotController.updateBalanceAmount(this.gameAPI.getDemoBalance());
+		} catch (error) {
+			console.warn(`[Game] Error updating demo balance on ${context}:`, error);
+		}
+	}
+
 	private registerUiEventListeners(): void {
 		EventBus.on('menu', this.handleMenuRequest, this);
 		EventBus.on('show-bet-options', this.handleBetOptionsRequest, this);
@@ -2632,6 +2694,11 @@ export class Game extends Phaser.Scene {
 			try {
 				this.winTracker?.hideWithFade(250);
 			} catch {}
+			
+			// Update demo balance on WIN_STOP for base game wins (not scatter/bonus)
+			if (!gameStateManager.isScatter && !gameStateManager.isBonus) {
+				this.updateDemoBalanceFromSpinData('WIN_STOP');
+			}
 		};
 		gameEventManager.on(GameEventType.WIN_STOP, this.winStopListener);
 		this.winTrackerHideListener = () => {

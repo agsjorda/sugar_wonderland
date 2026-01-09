@@ -86,19 +86,24 @@ export class Preloader extends Scene
 		console.log(`[Preloader] BG-loading size: ${bgLoading.width}x${bgLoading.height} scale=${loadScale}`);
 
 		// Create persistent clock display (stays on screen forever)
-		const clockY = this.scale.height * 0.009; // 2% from top
+		const topMargin = 5;
+		const leftMargin = 5;
+		const rightMargin = -5;
+		// Check demo state - will be updated after initializeGame() is called
+		const isDemo = this.gameAPI?.getDemoState();
+		const suffixText = isDemo ? ' | That\'s Bait | DEMO' : ' | That\'s Bait';
 		this.clockDisplay = new ClockDisplay(this, {
-			offsetX: -150,
-			offsetY: clockY,
+			offsetX: leftMargin,
+			offsetY: topMargin,
 			fontSize: 16,
 			color: '#FFFFFF',
 			alpha: 0.5,
 			depth: 30000, // Very high depth to stay above all overlays and transitions
 			scale: 0.7,
-			suffixText: ' | That\'s Bait',
+			suffixText: suffixText,
 			additionalText: 'DiJoker',
-			additionalTextOffsetX: 185,
-			additionalTextOffsetY: 0,
+			additionalTextOffsetX: rightMargin,
+			additionalTextOffsetY: topMargin,
 			additionalTextScale: 0.7,
 			additionalTextColor: '#FFFFFF',
 			additionalTextFontSize: 16

@@ -207,7 +207,11 @@ export class HelpScreen {
             }
             aliveBindings.push(binding);
             try {
-                txt.setText(`${binding.prefix}${this.formatPayout(binding.baseValue * betAmount)}`);
+                // Check demo mode to determine prefix
+                const scene = (txt as any).scene;
+                const isDemo = (scene as any)?.gameAPI?.getDemoState();
+                const prefix = isDemo ? '' : binding.prefix;
+                txt.setText(`${prefix}${this.formatPayout(binding.baseValue * betAmount)}`);
             } catch {}
         }
         this.payoutValueBindings = aliveBindings;
@@ -446,7 +450,9 @@ export class HelpScreen {
             // Right column: payout value, right-aligned
             const value = payoutData[row] ?? 0;
             const adjustedValue = this.applyBetToPayout(value);
-            const valueText = '$ ' + this.formatPayout(adjustedValue);
+            const isDemo = (scene as any).gameAPI?.getDemoState();
+            const prefix = isDemo ? '' : '$ ';
+            const valueText = prefix + this.formatPayout(adjustedValue);
             const payoutText = scene.add.text(0, y, valueText, {
                 fontSize: this.payoutTextFontSize + 'px',
                 color: '#FFFFFF',
@@ -456,7 +462,7 @@ export class HelpScreen {
             payoutText.setOrigin(1, 0.5);
             symbolContainer.add(payoutText);
             payoutTexts.push({ text: payoutText, row });
-            this.payoutValueBindings.push({ text: payoutText, baseValue: value, prefix: '$ ' });
+            this.payoutValueBindings.push({ text: payoutText, baseValue: value, prefix });
         }
 
         const sectionHeight = this.createDynamicBorder(scene, symbolContainer, {
@@ -540,7 +546,9 @@ export class HelpScreen {
             // Right column: payout value, right-aligned
             const value = SCATTER_PAYOUTS[row] ?? 0;
             const adjustedValue = this.applyBetToPayout(value);
-            const valueText = '$ ' + this.formatPayout(adjustedValue);
+            const isDemo = (scene as any).gameAPI?.getDemoState();
+            const prefix = isDemo ? '' : '$ ';
+            const valueText = prefix + this.formatPayout(adjustedValue);
             const payoutTextX = baseTextX + this.scatterPayoutTextColumnSpacing / 2;
             const payoutText = scene.add.text(payoutTextX, adjustedTextY, valueText, {
                 fontSize: this.scatterPayoutTextFontSize + 'px',
@@ -551,7 +559,7 @@ export class HelpScreen {
             payoutText.setOrigin(1, 0.5);
             symbolContainer.add(payoutText);
             payoutTexts.push({ text: payoutText, row });
-            this.payoutValueBindings.push({ text: payoutText, baseValue: value, prefix: '$ ' });
+            this.payoutValueBindings.push({ text: payoutText, baseValue: value, prefix });
         }
 
         const tableBottomLocalY = baseTextY;
@@ -823,7 +831,9 @@ export class HelpScreen {
         buyFeatContainer.add(buyLabel);
 
         // Static price text $10,000 centered on the button
-        const buyPrice = scene.add.text(btnCenterX, btnCenterY + 14, '$10,000', {
+        const isDemo = (scene as any).gameAPI?.getDemoState();
+        const buyPriceText = isDemo ? '10,000' : '$10,000';
+        const buyPrice = scene.add.text(btnCenterX, btnCenterY + 14, buyPriceText, {
             fontSize: '18px',
             color: '#FFFFFF',
             fontFamily: 'Poppins-Bold',
@@ -1058,10 +1068,12 @@ export class HelpScreen {
         balanceCardContainer.add(balanceTitle);
 
         // Main value text layer below the title.
+        const isDemo = (scene as any).gameAPI?.getDemoState();
+        const balanceValueText = isDemo ? '200,000.00' : '$ 200,000.00';
         const balanceValue = scene.add.text(
             cardLeft + cardWidth / 2,
             cardHeight / 2 + this.padding * 0.8,
-            '$ 200,000.00',
+            balanceValueText,
             {
                 ...this.titleStyle,
                 color: '#ffffff',
@@ -1924,11 +1936,14 @@ export class HelpScreen {
                 let textValue: string | undefined;
                 let wrapWidth: number | undefined;
 
+                const isDemo = (scene as any).gameAPI?.getDemoState();
+                const prefix = isDemo ? '' : '$ ';
+                
                 if (isScatter) {
                     if (col === 0) {
                         textValue = SCATTER_COUNTS[row];
                     } else if (col === 1) {
-                        textValue = this.formatPayout(this.applyBetToPayout(SCATTER_PAYOUTS[row]));
+                        textValue = prefix + this.formatPayout(this.applyBetToPayout(SCATTER_PAYOUTS[row]));
                     } else {
                         // Scatter descriptions are rendered below the table in the Scatter section
                         textValue = undefined;
@@ -1938,7 +1953,7 @@ export class HelpScreen {
                         textValue = payoutRanges[row] ?? '';
                     } else {
                         const payoutValue = SYMBOL_PAYOUTS[symbolIndex]?.[row] ?? 0;
-                        textValue = this.formatPayout(this.applyBetToPayout(payoutValue));
+                        textValue = prefix + this.formatPayout(this.applyBetToPayout(payoutValue));
                     }
                 }
 
@@ -1958,7 +1973,7 @@ export class HelpScreen {
 
                 if (col === 1) {
                     const baseValue = isScatter ? (SCATTER_PAYOUTS[row] ?? 0) : (SYMBOL_PAYOUTS[symbolIndex]?.[row] ?? 0);
-                    this.payoutValueBindings.push({ text: valueText, baseValue, prefix: '' });
+                    this.payoutValueBindings.push({ text: valueText, baseValue, prefix });
                 }
             }
         }

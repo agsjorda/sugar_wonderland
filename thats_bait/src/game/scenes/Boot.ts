@@ -53,18 +53,20 @@ export class Boot extends Scene
 	create ()
 	{
 		// Create persistent clock display (stays on screen forever)
-		const clockY = this.scale.height * 0.05; // 5% from top
+		const topMargin = 5;
+		const leftMargin = 5;
+		const rightMargin = -5;
 		this.clockDisplay = new ClockDisplay(this, {
-			offsetX: 0,
-			offsetY: clockY,
+			offsetX: leftMargin,
+			offsetY: topMargin,
 			fontSize: 16,
 			color: '#FFFFFF',
 			alpha: 0.80,
 			depth: 30000, // Very high depth to stay above all overlays and transitions
 			suffixText: ' | That\'s Bait',
 			additionalText: 'DiJoker',
-			additionalTextOffsetX: 0,
-			additionalTextOffsetY: 0,
+			additionalTextOffsetX: rightMargin,
+			additionalTextOffsetY: topMargin,
 			additionalTextScale: 1.0,
 			additionalTextColor: '#FFFFFF',
 			additionalTextFontSize: 16

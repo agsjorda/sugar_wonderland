@@ -10,11 +10,11 @@ const TOKEN_DISABLER = false;
 
 function getUrlParameter(name: string): string {
     const urlParams = new URLSearchParams(window.location.search);
-    let str : string = '';
-    if(urlParams.get('start_game')){
+    let str: string = '';
+    if (urlParams.get('start_game')) {
         str = 'start_game';
     }
-    else{
+    else {
         str = urlParams.get(name) || '';
     }
     return str;
@@ -287,7 +287,10 @@ export function normalizeSpinResponse(raw: any, bet: number): SpinData {
     };
 }
 
-export class GameAPI {  
+export class GameAPI {
+    private static readonly GAME_ID: string = '00070725';
+    private static DEMO_BALANCE: number = 10000;
+
     gameData: GameData;
     exitURL: string = '';
     private currentSpinData: SpinData | null = null;
@@ -314,11 +317,11 @@ export class GameAPI {
 
     constructor(gameData: GameData) {
         this.gameData = gameData;
-    }   
+    }
 
-    public async generateGameUrlToken(): Promise<{url: string, token: string}> {
+    public async generateGameUrlToken(): Promise<{ url: string, token: string }> {
         const apiUrl = `${getApiBaseUrl()}/api/v1/generate_url`;
-        
+
         const requestBody = {
             "operator_id": "18b03717-33a7-46d6-9c70-acee80c54d03",
             "bank_id": "1",
@@ -333,7 +336,7 @@ export class GameAPI {
             "session": "85eacaac-40c3-4f94-951f-2a0d3625bfd1",
             "player_name": "test",
             "modify_uid": "111"
-          };
+        };
 
         const headers = {
             'Content-Type': 'application/json',
@@ -345,7 +348,7 @@ export class GameAPI {
         };
 
         try {
-            
+
             const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: headers,
@@ -358,10 +361,10 @@ export class GameAPI {
             }
 
             const data = await response.json();
-            
+
             return {
                 url: data.data.url,
-                token: data.data.token 
+                token: data.data.token
             };
         } catch (error) {
             throw error;
@@ -369,28 +372,35 @@ export class GameAPI {
     }
 
     public async initializeGame(): Promise<string> {
+        const isDemo = this.getDemoState();
+        localStorage.setItem('demo', isDemo.toString());
+        sessionStorage.setItem('demo', isDemo.toString());
+
+        if (isDemo)
+            return '';
+
         try {
             const existingToken = getUrlParameter('token');
-            
+
             if (existingToken) {
                 console.log('Game token found in URL parameters:', existingToken);
-                
+
                 localStorage.setItem('token', existingToken);
                 sessionStorage.setItem('token', existingToken);
-                
+
                 console.log('Game initialized with existing token from URL');
                 return existingToken;
             } else {
                 console.log('No game token in URL, generating new token...');
                 const { token } = await this.generateGameUrlToken();
-                
+
                 localStorage.setItem('token', token);
                 sessionStorage.setItem('token', token);
-                
+
                 console.log('Game initialized successfully with new token:', token);
                 return token;
             }
-            
+
         } catch (error) {
             console.error('Error initializing game:', error);
             throw error;
@@ -402,38 +412,40 @@ export class GameAPI {
             localStorage.removeItem('token');
             localStorage.removeItem('exit_url');
             localStorage.removeItem('what_device');
+            localStorage.removeItem('demo');
 
             sessionStorage.removeItem('token');
             sessionStorage.removeItem('exit_url');
             sessionStorage.removeItem('what_device');
-            
+            sessionStorage.removeItem('demo');
+
             console.log('Starting gameLauncher...');
             let token1 = '';
             let tokenParam = getUrlParameter('token');
-            
-            if(tokenParam){
+
+            if (tokenParam) {
                 token1 = tokenParam;
                 localStorage.setItem('token', token1);
                 sessionStorage.setItem('token', token1);
             }
 
             let deviceUrl = getUrlParameter('device');
-            if(deviceUrl){
-                localStorage.setItem('what_device',deviceUrl);
-                sessionStorage.setItem('what_device',deviceUrl);
+            if (deviceUrl) {
+                localStorage.setItem('what_device', deviceUrl);
+                sessionStorage.setItem('what_device', deviceUrl);
             }
 
             let apiUrl = getUrlParameter('api_exit');
-            if(apiUrl){
+            if (apiUrl) {
                 this.exitURL = apiUrl;
-                localStorage.setItem('exit_url',apiUrl);
-                sessionStorage.setItem('exit_url',apiUrl);
+                localStorage.setItem('exit_url', apiUrl);
+                sessionStorage.setItem('exit_url', apiUrl);
             }
 
             let startGame = getUrlParameter('start_game');
-            if(startGame){
+            if (startGame) {
                 console.log('startGame');
-                let {token} = await this.generateGameUrlToken();
+                let { token } = await this.generateGameUrlToken();
                 token1 = token;
                 localStorage.setItem('token', token);
                 sessionStorage.setItem('token', token);
@@ -449,6 +461,18 @@ export class GameAPI {
     }
 
     public async getBalance(): Promise<any> {
+        // Check if demo mode is active
+        const isDemo = this.getDemoState();
+
+        // Return mock balance for demo mode
+        if (isDemo) {
+            return {
+                data: {
+                    balance: GameAPI.DEMO_BALANCE
+                }
+            };
+        }
+
         let timeout: any;
         try {
             const token = localStorage.getItem('token');
@@ -467,7 +491,7 @@ export class GameAPI {
                 },
                 signal: controller.signal
             });
-            try { clearTimeout(timeout); } catch {}
+            try { clearTimeout(timeout); } catch { }
 
             if (!response.ok) {
                 const error = new Error(`HTTP error! status: ${response.status}`);
@@ -491,12 +515,12 @@ export class GameAPI {
 
             throw error;
         } finally {
-            try { clearTimeout(timeout); } catch {}
+            try { clearTimeout(timeout); } catch { }
         }
     }
 
     private showTokenExpiredPopup(): void {
-        if(TOKEN_DISABLER)
+        if (TOKEN_DISABLER)
             return;
         const gameScene = (window as any).game?.scene?.getScene('Game') as Phaser.Scene;
         if (gameScene) {
@@ -522,6 +546,9 @@ export class GameAPI {
     }
 
     public async doSpin(bet: number, isBuyFs: boolean, isEnhancedBet: boolean): Promise<SpinData> {
+        // Check if demo mode is active
+        const isDemo = this.getDemoState();
+
         // Optional fake base-spin support (pre-bonus / scatter-trigger spin)
         // Only applies for normal spins (not buy-feature) and only when not already in bonus mode.
         try {
@@ -530,16 +557,19 @@ export class GameAPI {
                 if (maybeFake) {
                     try {
                         this.currentSpinData = maybeFake;
-                    } catch {}
+                    } catch { }
                     return maybeFake;
                 }
             }
-        } catch {}
+        } catch { }
 
-        const token = localStorage.getItem('token');
-        if (!token) {
-            this.showTokenExpiredPopup();
-            throw new Error('No game token available. Please refresh the page.');
+        // Only require token if not in demo mode
+        if (!isDemo) {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                this.showTokenExpiredPopup();
+                throw new Error('No game token available. Please refresh the page.');
+            }
         }
 
         let responseData: any;
@@ -548,28 +578,45 @@ export class GameAPI {
         let timeout: any = setTimeout(() => controller.abort(), 10000);
 
         try {
+            // Build headers - include Authorization only if token exists
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json'
+            };
 
-            const response = await fetch(`${getApiBaseUrl()}/api/v1/slots/bet`, {
+            const token = localStorage.getItem('token');
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const url = isDemo ? `${getApiBaseUrl()}/api/v1/analytics/spin` : `${getApiBaseUrl()}/api/v1/slots/bet`;
+
+            // Build request body based on demo mode
+            const requestBody = isDemo ? {
+                bet: bet.toString(),
+                gameId: GameAPI.GAME_ID,
+                isEnhancedBet: isEnhancedBet,
+                isBuyFs: isBuyFs,
+                isFs: false,
+            } : {
+                action: 'spin',
+                bet: bet.toString(),
+                line: 1,
+                isBuyFs,
+                isEnhancedBet
+            };
+
+            const response = await fetch(url, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    action: 'spin',
-                    bet: bet.toString(),
-                    line: 1,
-                    isBuyFs,
-                    isEnhancedBet
-                }),
+                headers: headers,
+                body: JSON.stringify(requestBody),
                 signal: controller.signal
             });
-            try { clearTimeout(timeout); } catch {}
+            try { clearTimeout(timeout); } catch { }
 
             if (!response.ok) {
                 const errorText = await response.text();
                 const error = new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
-                if (response.status === 401 || response.status === 400) {
+                if (!isDemo && (response.status === 401 || response.status === 400)) {
                     this.showTokenExpiredPopup();
                     localStorage.removeItem('token');
                 }
@@ -578,13 +625,13 @@ export class GameAPI {
 
             responseData = await response.json();
         } catch (error) {
-            try { clearTimeout(timeout); } catch {}
+            try { clearTimeout(timeout); } catch { }
             if (!this.isAbortError(error)) {
                 console.error('Error in doSpin:', error);
             }
             throw error;
         } finally {
-            try { clearTimeout(timeout); } catch {}
+            try { clearTimeout(timeout); } catch { }
         }
 
         const normalizedData = normalizeSpinResponse(responseData, bet);
@@ -593,7 +640,7 @@ export class GameAPI {
             Array.isArray(normalizedData.slot.freespin.items) && normalizedData.slot.freespin.items.length > 0) {
             this.currentSpinData = normalizedData;
             try { this.freeSpinItemsCache = (normalizedData.slot.freespin as any).items || null; } catch { this.freeSpinItemsCache = null; }
-            try { this.currentFreeSpinIndex = 0; } catch {}
+            try { this.currentFreeSpinIndex = 0; } catch { }
         } else if (
             gameStateManager.isBonus &&
             this.currentSpinData &&
@@ -620,12 +667,12 @@ export class GameAPI {
         // Check if fake API is enabled and we're in bonus mode
         if (gameStateManager.isBonus && fakeBonusAPI.isEnabled()) {
             console.log('Using Fake API for bonus free spins');
-            
+
             // Initialize fake data if not already done
             if (!fakeBonusAPI.getCurrentSpinData()) {
                 await fakeBonusAPI.initializeBonusData();
             }
-            
+
             // initializeBonusData() can disable the fake API; if so, fall through to backend handling
             if (fakeBonusAPI.isEnabled()) {
                 // Use fake API if available
@@ -633,7 +680,7 @@ export class GameAPI {
                     const data = await fakeBonusAPI.simulateFreeSpin();
                     try {
                         this.currentSpinData = data;
-                    } catch {}
+                    } catch { }
                     return data;
                 }
 
@@ -669,7 +716,7 @@ export class GameAPI {
                 (window as any).audioManager.playSoundEffect(SoundEffectType.SPIN);
                 console.log('Playing spin sound effect for free spin simulation');
             }
-        } catch {}
+        } catch { }
 
         const remainingItems = items.slice(this.currentFreeSpinIndex);
         const remainingCount = Number((currentItem as any)?.spinsLeft) || 0;
@@ -680,7 +727,7 @@ export class GameAPI {
             if (isFinite(rw) && rw >= 0) {
                 cumulativeTotal = rw;
             }
-        } catch {}
+        } catch { }
         if (!(cumulativeTotal >= 0)) {
             cumulativeTotal = 0;
         }
@@ -690,7 +737,7 @@ export class GameAPI {
                 const prevRw = Number(prevItem?.runningWin);
                 const prevBase = (isFinite(prevRw) && prevRw >= 0) ? prevRw : 0;
                 cumulativeTotal = prevBase + (Number((currentItem as any)?.subTotalWin) || 0);
-            } catch {}
+            } catch { }
         }
 
         let preAwardTotal = cumulativeTotal;
@@ -699,7 +746,7 @@ export class GameAPI {
             if (isFinite(st) && st > 0) {
                 preAwardTotal = Math.max(0, cumulativeTotal - st);
             }
-        } catch {}
+        } catch { }
 
         const resolvedTotalWin = (isFinite(Number(preAwardTotal)) && Number(preAwardTotal) >= 0) ? Number(preAwardTotal) : 0;
 
@@ -712,7 +759,7 @@ export class GameAPI {
                     items: normalizeMoney((currentItem as any).special.items) || (currentItem as any).special.items
                 };
             }
-        } catch {}
+        } catch { }
 
         const normalizedArea = normalizeArea((currentItem as any).area);
         const normalizedMoney = normalizeMoney((currentItem as any).money);
@@ -740,7 +787,7 @@ export class GameAPI {
             }
         };
 
-        try { (spinDataOut.slot as any).__backendTotalWin = resolvedTotalWin; } catch {}
+        try { (spinDataOut.slot as any).__backendTotalWin = resolvedTotalWin; } catch { }
 
         this.currentSpinData = spinDataOut;
         this.currentFreeSpinIndex++;
@@ -800,6 +847,12 @@ export class GameAPI {
     }
 
     public async initializeBalance(): Promise<number> {
+        const isDemo = this.getDemoState();
+        if (isDemo) {
+            console.log(`Initialized demo balance: $${GameAPI.DEMO_BALANCE}`);
+            return GameAPI.DEMO_BALANCE;
+        }
+
         try {
             console.log('Initializing player balance...');
 
@@ -830,6 +883,22 @@ export class GameAPI {
     }
 
     public async getHistory(page: number, limit: number): Promise<any> {
+        // Check if demo mode is active
+        const isDemo = this.getDemoState();
+
+        // Return empty history data for demo mode
+        if (isDemo) {
+            return {
+                data: [],
+                meta: {
+                    page: 1,
+                    pageCount: 1,
+                    totalPages: 1,
+                    total: 0
+                }
+            };
+        }
+
         const apiUrl = `${getApiBaseUrl()}/api/v1/games/me/histories`;
         const token = localStorage.getItem('token')
             || sessionStorage.getItem('token')
@@ -838,7 +907,7 @@ export class GameAPI {
         const controller = new AbortController();
         let timeout: any = setTimeout(() => controller.abort(), 10000);
         try {
-            const response = await fetch(`${apiUrl}?limit=${limit}&page=${page}`,{
+            const response = await fetch(`${apiUrl}?limit=${limit}&page=${page}`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -856,5 +925,39 @@ export class GameAPI {
             clearTimeout(timeout);
             throw e;
         }
+    }
+
+    /**
+     * Get the demo state from URL parameters
+     * @returns true if demo=true in URL, otherwise false
+     */
+    public getDemoState(): boolean {
+        const demoValue = getUrlParameter('demo') === 'true';
+        return demoValue;
+    }
+
+    /**
+     * Get the game ID constant
+     * @returns The game ID string
+     */
+    public getGameId(): string {
+        return GameAPI.GAME_ID;
+    }
+
+    /**
+     * Get the demo balance constant
+     * @returns The demo balance number
+     */
+    public getDemoBalance(): number {
+        return GameAPI.DEMO_BALANCE;
+    }
+
+    /**
+     * Update the demo balance value
+     * @param newBalance - The new balance value to set
+     */
+    public updateDemoBalance(newBalance: number): void {
+        console.log(`[GameAPI] Demo balance updated from $${GameAPI.DEMO_BALANCE} to: $${newBalance}`);
+        GameAPI.DEMO_BALANCE = newBalance;
     }
 }

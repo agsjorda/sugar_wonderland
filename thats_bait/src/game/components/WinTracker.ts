@@ -609,10 +609,12 @@ export class WinTracker {
     eqLabel.setOrigin(0.5, 0.5);
     eqLabel.setShadow(1 * s, .5 * s, this.accentShadowColor, 1 * s, true, true);
 
+    const isDemo = (this.scene as any).gameAPI?.getDemoState();
+    const valuePrefix = isDemo ? '' : '$';
     const valueLabel = this.scene.add.text(
       0,
       0,
-      `$${data.totalWin.toFixed(2)}`,
+      `${valuePrefix}${data.totalWin.toFixed(2)}`,
       {
         fontSize: `${fontPx}px`,
         color: '#ffffff',
@@ -834,10 +836,12 @@ export class WinTracker {
     eqLabel.setOrigin(0.5, 0.5);
     eqLabel.setShadow(1 * s, .5 * s, this.accentShadowColor, 1 * s, true, true);
 
+    const isDemo = (this.scene as any).gameAPI?.getDemoState();
+    const valuePrefix = isDemo ? '' : '$';
     const valueLabel = this.scene.add.text(
       0,
       0,
-      `$${data.totalWin.toFixed(2)}`,
+      `${valuePrefix}${data.totalWin.toFixed(2)}`,
       {
         fontSize: `${this.labelFontSize * s}px`,
         color: '#ffffff',

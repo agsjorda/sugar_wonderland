@@ -194,7 +194,9 @@ export class AutoplayOptions {
 		balanceContainer.add(balanceLabel);
 		
 		// Balance amount - using the current balance from game data
-		const balanceAmount = scene.add.text(150, 1, `$${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, {
+		const isDemo = (scene as any).gameAPI?.getDemoState();
+		const balancePrefix = isDemo ? '' : '$';
+		const balanceAmount = scene.add.text(150, 1, `${balancePrefix}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, {
 			fontSize: '24px',
 			color: '#00ff00',
 			fontFamily: 'Poppins-Bold'
@@ -325,7 +327,9 @@ export class AutoplayOptions {
 		this.container.add(this.minusButton);
 		
 		// Bet display
-		this.autoplayDisplay = scene.add.text(x, y, `$${this.currentBet.toFixed(2)}` , {
+		const isDemo = (scene as any).gameAPI?.getDemoState();
+		const betPrefix = isDemo ? '' : '$';
+		this.autoplayDisplay = scene.add.text(x, y, `${betPrefix}${this.currentBet.toFixed(2)}` , {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
@@ -523,13 +527,19 @@ export class AutoplayOptions {
 		if (this.autoplayDisplay) {
 			const baseBet = Number(this.currentBet);
 			const effectiveBet = this.isEnhancedBet ? baseBet * 1.25 : baseBet;
-			this.autoplayDisplay.setText(`$${effectiveBet.toFixed(2)}`);
+			const scene = this.autoplayDisplay.scene;
+			const isDemo = (scene as any)?.gameAPI?.getDemoState();
+			const betPrefix = isDemo ? '' : '$';
+			this.autoplayDisplay.setText(`${betPrefix}${effectiveBet.toFixed(2)}`);
 		}
 	}
 
 	private updateBalanceDisplay(): void {
 		if (this.balanceAmountText) {
-			this.balanceAmountText.setText(`$${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+			const scene = this.balanceAmountText.scene;
+			const isDemo = (scene as any)?.gameAPI?.getDemoState();
+			const balancePrefix = isDemo ? '' : '$';
+			this.balanceAmountText.setText(`${balancePrefix}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 		}
 	}
 

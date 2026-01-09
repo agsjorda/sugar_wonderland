@@ -228,7 +228,9 @@ export class BetOptions {
 		this.container.add(this.minusButton);
 		
 		// Bet display
-		this.betDisplay = scene.add.text(x, y, `$${this.currentBet.toFixed(2)}`, {
+		const isDemo = (scene as any).gameAPI?.getDemoState();
+		const betPrefix = isDemo ? '' : '$';
+		this.betDisplay = scene.add.text(x, y, `${betPrefix}${this.currentBet.toFixed(2)}`, {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
@@ -326,7 +328,10 @@ export class BetOptions {
 
 	private updateBetDisplay(): void {
 		if (this.betDisplay) {
-			this.betDisplay.setText(`$${this.currentBet.toFixed(2)}`);
+			const scene = this.betDisplay.scene;
+			const isDemo = (scene as any)?.gameAPI?.getDemoState();
+			const betPrefix = isDemo ? '' : '$';
+			this.betDisplay.setText(`${betPrefix}${this.currentBet.toFixed(2)}`);
 		}
 	}
 

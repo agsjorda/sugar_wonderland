@@ -382,8 +382,10 @@ export class BuyFeature {
 		
 		// Calculate price as 100 * current base bet
 		const calculatedPrice = this.getCurrentBetValue();
+		const isDemo = (scene as any).gameAPI?.getDemoState();
+		const pricePrefix = isDemo ? '' : '£';
 		
-		this.priceDisplay = scene.add.text(screenWidth / 2, backgroundTop + 340, `£${this.formatNumberWithCommas(calculatedPrice)}`, {
+		this.priceDisplay = scene.add.text(screenWidth / 2, backgroundTop + 340, `${pricePrefix}${this.formatNumberWithCommas(calculatedPrice)}`, {
 			fontSize: '42px',
 			fontFamily: 'Poppins-Regular',
 			color: '#ffffff',
@@ -478,7 +480,10 @@ export class BuyFeature {
 	private updatePriceDisplay(): void {
 		if (this.priceDisplay) {
 			const calculatedPrice = this.getCurrentBetValue();
-			this.priceDisplay.setText(`$${this.formatNumberWithCommas(calculatedPrice)}`);
+			const scene = this.priceDisplay.scene;
+			const isDemo = (scene as any)?.gameAPI?.getDemoState();
+			const pricePrefix = isDemo ? '' : '$';
+			this.priceDisplay.setText(`${pricePrefix}${this.formatNumberWithCommas(calculatedPrice)}`);
 		}
 	}
 
@@ -587,7 +592,9 @@ export class BuyFeature {
 		this.container.add(this.minusButton);
 		
 		// Bet display - show current bet value
-		this.betDisplay = scene.add.text(x, y, `$${this.getCurrentBet().toFixed(2)}`, {
+		const isDemo = (scene as any).gameAPI?.getDemoState();
+		const betPrefix = isDemo ? '' : '$';
+		this.betDisplay = scene.add.text(x, y, `${betPrefix}${this.getCurrentBet().toFixed(2)}`, {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
@@ -771,7 +778,10 @@ export class BuyFeature {
 
 	private updateBetDisplay(): void {
 		if (this.betDisplay) {
-			this.betDisplay.setText(`$${this.getCurrentBet().toFixed(2)}`);
+			const scene = this.betDisplay.scene;
+			const isDemo = (scene as any)?.gameAPI?.getDemoState();
+			const betPrefix = isDemo ? '' : '$';
+			this.betDisplay.setText(`${betPrefix}${this.getCurrentBet().toFixed(2)}`);
 		}
 	}
 
