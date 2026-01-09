@@ -14,6 +14,7 @@ export class Background {
 	private backgroundVisual?: Phaser.GameObjects.Image | SpineGameObject;
 	private rifleSpine: SpineGameObject;
 	private reelFrame?: Phaser.GameObjects.Image;
+	private reelFrameBackground?: Phaser.GameObjects.Rectangle;
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
 
@@ -63,6 +64,12 @@ export class Background {
 		// Fit reel frame to screen width while preserving aspect ratio
 		this.fitReelFrameToScreenWidth(scene);
 
+		// Create semi-transparent white rectangle background that follows reel frame
+		// (must be created before adding reelFrame to container to ensure proper z-order)
+		this.createReelFrameBackground(scene);
+
+		// Add background first, then reelFrame so reelFrame renders on top
+		this.bgContainer.add(this.reelFrameBackground!);
 		this.bgContainer.add(this.reelFrame);
 	}
 
@@ -132,6 +139,35 @@ export class Background {
 		const scale = screenWidth / imageWidth;
 
 		this.reelFrame.setScale(scale);
+		
+		// Update background to match reel frame position and size
+		this.updateReelFrameBackground(scene);
+	}
+
+	/**
+	 * Creates a semi-transparent white rectangle background that follows the reel frame position
+	 */
+	private createReelFrameBackground(scene: Scene): void {
+		if (!this.reelFrame) return;
+
+		const x = this.reelFrame.x;
+		const y = this.reelFrame.y;
+		const displayWidth = this.reelFrame.displayWidth;
+		const displayHeight = this.reelFrame.displayHeight - 10;
+
+		this.reelFrameBackground = scene.add.rectangle(x, y, displayWidth, displayHeight, 0xffffff, 0.15)
+			.setOrigin(0.5, 0.5)
+			.setDepth(this.reelFrameDepth - 1); // Place it behind the reel frame
+	}
+
+	/**
+	 * Updates the background rectangle to match the reel frame's position and size
+	 */
+	private updateReelFrameBackground(scene: Scene): void {
+		if (!this.reelFrame || !this.reelFrameBackground) return;
+
+		this.reelFrameBackground.setPosition(this.reelFrame.x, this.reelFrame.y);
+		this.reelFrameBackground.setSize(this.reelFrame.displayWidth, this.reelFrame.displayHeight);
 	}
 
 	resize(scene: Scene): void {
@@ -140,6 +176,8 @@ export class Background {
 		}
 		this.fitBackgroundToScreen(scene);
 		this.fitReelFrameToScreenWidth(scene);
+		// Update background position when resizing
+		this.updateReelFrameBackground(scene);
 	}
 
 	getContainer(): Phaser.GameObjects.Container {

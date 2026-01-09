@@ -172,7 +172,7 @@ export class AutoplayOptions {
 		
 		// Balance amount - using the current balance from game data
 		// Check if demo mode is active - if so, use blank currency symbol
-		const isDemo = localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemo = (scene as any).gameAPI?.getDemoState();
 		const currencySymbol = isDemo ? '' : '$';
 		const balanceAmount = scene.add.text(150, 1, `${currencySymbol}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, {
 			fontSize: '24px',
@@ -299,7 +299,7 @@ export class AutoplayOptions {
 		
 		// Bet display
 		// Check if demo mode is active - if so, use blank currency symbol
-		const isDemoInitial = localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemoInitial = (scene as any).gameAPI?.getDemoState();
 		const currencySymbolInitial = isDemoInitial ? '' : '$';
 		this.autoplayDisplay = scene.add.text(x, y, `${currencySymbolInitial}${this.currentBet.toFixed(2)}` , {
 			fontSize: '24px',
@@ -480,7 +480,7 @@ export class AutoplayOptions {
 			const displayBet = this.isEnhancedBet ? this.currentBet * 1.25 : this.currentBet;
 			console.log("[AutoplayOptions] Updating autoplay display to: $", displayBet, this.isEnhancedBet ? "(enhanced bet)" : "");
 			// Check if demo mode is active - if so, use blank currency symbol
-			const isDemo = localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState();
 			const currencySymbol = isDemo ? '' : '$';
 			this.autoplayDisplay.setText(`${currencySymbol}${displayBet.toFixed(2)}`);
 		}
@@ -542,7 +542,7 @@ export class AutoplayOptions {
 	private updateBalanceDisplay(): void {
 		if (this.balanceAmountText) {
 			// Check if demo mode is active - if so, use blank currency symbol
-			const isDemo = localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState();
 			const currencySymbol = isDemo ? '' : '$';
 			this.balanceAmountText.setText(`${currencySymbol}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 		}

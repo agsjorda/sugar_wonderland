@@ -1212,7 +1212,7 @@ export class SlotController {
 
 		// "$" symbol (2nd line, left part) - positioned dynamically
 		// Check if demo mode is active - if so, use blank currency symbol and center the text
-		const isDemoBalance = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemoBalance = this.gameAPI?.getDemoState();
 		const balanceCurrencySymbol = isDemoBalance ? '' : '$';
 		const balanceValueOffset = isDemoBalance ? 0 : 5; // Center in demo mode, offset right when currency symbol exists
 		
@@ -1250,7 +1250,7 @@ export class SlotController {
 		const cornerRadius = 10;
 		
 		// Check if demo mode is active - if so, center the text (no currency symbol)
-		const isDemoBet = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemoBet = this.gameAPI?.getDemoState();
 		const betValueOffset = isDemoBet ? 0 : 3; // Center in demo mode, offset right when currency symbol exists
 
 		// Create amplify bet spine animation (behind bet background)
@@ -1547,7 +1547,7 @@ export class SlotController {
 
 		// Amount (2nd line, right part) - bound to current bet x100
 		// Check if demo mode is active - if so, center the text (no currency symbol)
-		const isDemoFeature = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemoFeature = this.gameAPI?.getDemoState();
 		const featureXOffset = isDemoFeature ? 0 : 5; // Center in demo mode, offset right when currency symbol exists
 		this.featureAmountText = scene.add.text(
 			featureX + featureXOffset,
@@ -1887,7 +1887,7 @@ export class SlotController {
 			this.betAmountText.setText(displayBet.toFixed(2));
 
 			// Check if demo mode is active - if so, center the text (no currency symbol)
-			const isDemo = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const isDemo = this.gameAPI?.getDemoState();
 			const betY = this.betAmountText.y;
 			
 			// Get the original betX position (center of bet container)
@@ -1942,7 +1942,7 @@ export class SlotController {
 		this.featureAmountText.setText(price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 		
 		// Check if demo mode is active - if so, center the text (no currency symbol)
-		const isDemo = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemo = this.gameAPI?.getDemoState();
 		const featureY = this.featureAmountText.y;
 		
 		if (isDemo) {
@@ -1973,7 +1973,7 @@ export class SlotController {
 			this.balanceAmountText.setText(balanceAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
 			// Check if demo mode is active - if so, center the text (no currency symbol)
-			const isDemo = this.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+			const isDemo = this.gameAPI?.getDemoState();
 			const balanceY = this.balanceAmountText.y;
 			
 			// Get the original balanceX position (center of balance container)

@@ -278,7 +278,7 @@ export class Menu {
             ).isButton = true;
 
             // Tab click handler - disable history tab in demo mode
-            const isDemo = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+            const isDemo = scene.gameAPI?.getDemoState();
             const isHistoryTab = tabConfig.icon === 'history';
             
             if (isHistoryTab && isDemo) {
@@ -385,7 +385,7 @@ export class Menu {
 
     private switchTab(scene: GameScene, tabContainers: ButtonContainer[], activeIndex: number, tabConfigs: any[]): void {
         // Check if demo mode is active and prevent switching to history tab
-        const isDemo = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+        const isDemo = scene.gameAPI?.getDemoState();
         const tabKey: string = tabConfigs[activeIndex].icon;
         
         if (isDemo && tabKey === 'history') {
@@ -445,41 +445,43 @@ export class Menu {
 
     private async showHistoryContent(scene: GameScene, page: number, limit: number): Promise<void> {
         const contentArea = this.historyContent;
-        const historyHeaders: string[] = ['Spin', 'Currency', 'Bet', 'Win'];
-        
+        // Keep old rows until new data is ready; build containers on first run
+        const historyHeaders : string[] = ['Spin', 'Currency', 'Bet', 'Win'];
         // Check if demo mode is active
-        const isDemo = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
-
-        // Build or reuse containers so they persist across tab toggles
+        const isDemo = scene.gameAPI?.getDemoState();
+        // Recreate or reparent containers if needed (handles menu reopen)
         if (!this.historyHeaderContainer || !this.historyHeaderContainer.scene) {
             this.historyHeaderContainer = scene.add.container(0, 0);
-            const historyText = scene.add.text(15, 15, 'History', this.titleStyle) as ButtonText;
+            const historyText = scene.add.text(15, 15,'History', this.titleStyle) as ButtonText;
             historyText.setOrigin(0, 0);
             this.historyHeaderContainer.add(historyText);
         }
-        if (!this.historyRowsContainer || !this.historyRowsContainer.scene) {
-            this.historyRowsContainer = scene.add.container(0, 0);
+        // Recreate rows and pagination containers fresh to avoid recursive destroy issues
+        if (this.historyRowsContainer && this.historyRowsContainer.scene) {
+            this.historyRowsContainer.destroy(true);
         }
-        if (!this.historyPaginationContainer || !this.historyPaginationContainer.scene) {
-            this.historyPaginationContainer = scene.add.container(0, 0);
-        }
-
-        if ((this.historyHeaderContainer as any).parentContainer !== contentArea) {
-            contentArea.add(this.historyHeaderContainer);
-        }
+        this.historyRowsContainer = scene.add.container(0, 0);
         if ((this.historyRowsContainer as any).parentContainer !== contentArea) {
             contentArea.add(this.historyRowsContainer);
         }
+
+        if (this.historyPaginationContainer && this.historyPaginationContainer.scene) {
+            this.historyPaginationContainer.destroy(true);
+        }
+        this.historyPaginationContainer = scene.add.container(0, 0);
         if ((this.historyPaginationContainer as any).parentContainer !== contentArea) {
             contentArea.add(this.historyPaginationContainer);
+        }
+        if ((this.historyHeaderContainer as any).parentContainer !== contentArea) {
+            contentArea.add(this.historyHeaderContainer);
         }
 
         // In demo mode, show empty history without making API call
         if (isDemo) {
-            // Display headers
+            // Display headers centered per column (only once)
             const columnCenters = this.getHistoryColumnCenters(scene);
             const headerContainer = this.historyHeaderContainer as GameObjects.Container;
-            if (headerContainer.length <= 1) {
+            if (headerContainer.length <= 1) { // only title exists
                 const headerY = 60;
                 historyHeaders.forEach((header, idx) => {
                     const headerText = scene.add.text(columnCenters[idx], headerY, header, {
@@ -492,7 +494,7 @@ export class Menu {
                     headerContainer.add(headerText);
                 });
             }
-            
+
             // Show empty state message
             const emptyMessage = scene.add.text(
                 scene.scale.width / 2,
@@ -506,7 +508,7 @@ export class Menu {
             ) as ButtonText;
             emptyMessage.setOrigin(0.5, 0.5);
             this.historyRowsContainer.add(emptyMessage);
-            
+
             // No pagination in demo mode
             return;
         }
@@ -533,23 +535,31 @@ export class Menu {
         });
 
         let result: any;
-        try {
+        try{
             result = await scene.gameAPI.getHistory(page, limit);
         } finally {
             spinTween.stop();
             loader.destroy();
             this.historyIsLoading = false;
         }
-        console.log(result);
+        
+        console.log('History API Response:', result);
 
-        // Update pagination state
-        this.historyCurrentPage = result?.meta?.page ?? page;
-        this.historyTotalPages = result?.meta?.pageCount ?? 1;
+        // Update pagination state - check multiple possible metadata formats
+        this.historyCurrentPage = result?.meta?.page ?? result?.page ?? result?.meta?.currentPage ?? page;
+        this.historyTotalPages = result?.meta?.pageCount ?? result?.totalPages ?? result?.meta?.totalPages ?? result?.meta?.total ?? 1;
         this.historyPageLimit = limit;
+        
+        console.log('Pagination State:', {
+            currentPage: this.historyCurrentPage,
+            totalPages: this.historyTotalPages,
+            limit: this.historyPageLimit
+        });
         
         // Display headers centered per column (only once)
         const columnCenters = this.getHistoryColumnCenters(scene);
         const headerContainer = this.historyHeaderContainer as GameObjects.Container;
+        // When reopening, header could have been destroyed; rebuild if empty or missing headers
         if (headerContainer.length <= 1) { // only title exists
             const headerY = 60;
             historyHeaders.forEach((header, idx) => {
@@ -564,33 +574,28 @@ export class Menu {
             });
         }
 
-        // Clear previous rows and pagination so subsequent loads don't stack
-        const rowsContainer = this.historyRowsContainer as GameObjects.Container;
-        rowsContainer.removeAll(true);
+        let spinDate = '26/7/2025, 16:00';
+        let currency = 'usd';
+        let bet = '250.00';
+        let win = 250000000;
+
         let contentY = 100;
-        result.data?.forEach((v?: any) => {
-            const spinDate = this.formatISOToDMYHM(v.created_at);
-            const currency = v.currency == '' ? 'usd' : v.currency;
-            const bet = v.total_bet;
-            const win = v.total_win;
+        const rowsContainer = this.historyRowsContainer as GameObjects.Container;
+        result.data?.forEach((v?:any)=>{
+            spinDate = this.formatISOToDMYHM(v.createdAt);
+            currency = v.currency == ''?'usd':v.currency;
+            bet = v.bet;
+            win = v.win;
 
             contentY += 30;
-            this.createHistoryEntry(
-                contentY,
-                scene,
-                rowsContainer,
-                spinDate,
-                currency,
-                bet,
-                win.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                columnCenters
-            );
+            // Create row centered per column
+            this.createHistoryEntry(contentY, scene, rowsContainer, spinDate, currency, bet, win.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), columnCenters);
             this.addDividerHistory(scene, rowsContainer, contentY);
             contentY += 20;
         });
         
+        // Add pagination buttons at bottom-center
         const paginationContainer = this.historyPaginationContainer as GameObjects.Container;
-        paginationContainer.removeAll(true);
         this.addHistoryPagination(scene, paginationContainer, this.historyCurrentPage, this.historyTotalPages, this.historyPageLimit);
     }
 

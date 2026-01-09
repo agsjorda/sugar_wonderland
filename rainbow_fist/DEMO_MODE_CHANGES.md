@@ -6,6 +6,26 @@ This document outlines all changes made to support demo mode functionality in th
 
 Demo mode allows the game to run without requiring authentication tokens or making real API calls. When demo mode is active, the game uses mock data and simplified API interactions.
 
+## Refactoring: Centralized Demo Mode Detection
+
+**Recent Changes (Refactoring):**
+- All demo mode detection has been centralized through `GameAPI.getDemoState()`
+- Removed scattered `localStorage.getItem('demo')` and `sessionStorage.getItem('demo')` checks throughout the codebase
+- All components now use `gameAPI?.getDemoState()` or `scene.gameAPI?.getDemoState()` for consistent demo detection
+- This ensures a single source of truth for demo mode state and improves maintainability
+
+**Affected Files:**
+- `GameAPI.ts` - Centralized detection logic
+- `Menu.ts` - Updated to use `scene.gameAPI?.getDemoState()`
+- `Header.ts` - Updated to use `this.scene?.gameAPI?.getDemoState()`
+- `BonusHeader.ts` - Updated to use `this.scene?.gameAPI?.getDemoState()`
+- `SlotController.ts` - Updated to use `this.gameAPI?.getDemoState()`
+- `BuyFeature.ts` - Updated to use `scene.gameAPI?.getDemoState()`
+- `BetOptions.ts` - Updated to use `scene.gameAPI?.getDemoState()`
+- `AutoplayOptions.ts` - Updated to use `scene.gameAPI?.getDemoState()`
+- `WinTracker.ts` - Updated to use `scene.gameAPI?.getDemoState()`
+- `HelpScreen.ts` - Updated to use `scene.gameAPI?.getDemoState()`
+
 ## Changes Made
 
 ### 1. GameAPI.ts
@@ -23,21 +43,17 @@ Demo mode allows the game to run without requiring authentication tokens or maki
 #### Methods Modified
 
 ##### `initializeGame()`
-- **Demo Storage**: When demo parameter is detected in URL, it's stored in both `localStorage` and `sessionStorage` (similar to token storage pattern)
+- **Demo Detection**: Checks for demo mode using `getDemoState()` method
 - **Early Return**: If demo mode is detected, the method returns an empty string without generating a token
-- **Storage Pattern**: 
-  ```typescript
-  localStorage.setItem('demo', isDemo);
-  sessionStorage.setItem('demo', isDemo);
-  ```
+- **Note**: Demo state is stored in localStorage/sessionStorage for internal tracking, but detection throughout the codebase uses `getDemoState()` method
 
 ##### `initializeBalance()`
-- **Demo Check**: Checks for demo mode using `getDemoState()`, `localStorage`, or `sessionStorage`
+- **Demo Check**: Checks for demo mode using `getDemoState()`
 - **Demo Behavior**: Returns the current `GameAPI.DEMO_BALANCE` without any API call when in demo mode
-- **Purpose**: Many flows use this method as the “balance refresh” path; in demo mode it effectively refreshes UI from the in-memory demo balance.
+- **Purpose**: Many flows use this method as the "balance refresh" path; in demo mode it effectively refreshes UI from the in-memory demo balance.
 
 ##### `getBalance()`
-- **Demo Check**: Checks for demo mode using `getDemoState()`, `localStorage`, or `sessionStorage`
+- **Demo Check**: Checks for demo mode using `getDemoState()`
 - **Mock Response**: Returns a mock balance response when in demo mode:
   ```typescript
   {
@@ -49,7 +65,7 @@ Demo mode allows the game to run without requiring authentication tokens or maki
 - **No API Call**: Skips the actual API call when demo mode is active
 
 ##### `doSpin()`
-- **Demo Check**: Checks for demo mode using the same pattern as `getBalance()`
+- **Demo Check**: Checks for demo mode using `getDemoState()`
 - **Token Requirement**: Only requires token if NOT in demo mode
 - **Conditional Authorization Header**: Only includes Authorization header if token exists
 - **Different Endpoint**: Uses different API endpoint for demo mode:
@@ -103,8 +119,9 @@ Demo mode allows the game to run without requiring authentication tokens or maki
 - Used throughout the codebase to check if demo mode is active
 
 ##### `gameLauncher()`
-- **Demo Cleanup**: Removes demo from both `localStorage` and `sessionStorage` when cleaning up
+- **Demo Cleanup**: Removes demo from both `localStorage` and `sessionStorage` when cleaning up (if stored)
 - Part of the initialization cleanup process
+- Note: Demo detection no longer relies on storage, so cleanup is optional
 
 ### 2. Game.ts
 
@@ -199,14 +216,14 @@ Demo mode allows the game to run without requiring authentication tokens or maki
 #### Methods Modified
 
 ##### Tab Creation (`createMenu()`)
-- **Demo Check**: Checks for demo mode when creating tabs
+- **Demo Check**: Checks for demo mode when creating tabs using `scene.gameAPI?.getDemoState()`
 - **History Tab Disable**: If history tab is detected and demo mode is active:
   - Disables tab interaction using `disableInteractive()`
   - Sets tab opacity to 0.5 to visually indicate it's disabled
   - Skips adding the click handler for history tab
 - **Implementation**:
   ```typescript
-  const isDemo = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+  const isDemo = scene.gameAPI?.getDemoState();
   const isHistoryTab = tabConfig.icon === 'history';
   
   if (isHistoryTab && isDemo) {
@@ -234,14 +251,14 @@ Demo mode allows the game to run without requiring authentication tokens or maki
   ```
 
 ##### `showHistoryContent()`
-- **Demo Check**: Checks for demo mode before making API calls
+- **Demo Check**: Checks for demo mode before making API calls using `scene.gameAPI?.getDemoState()`
 - **Empty State**: In demo mode, displays empty state message instead of fetching history
 - **No API Call**: Skips the `getHistory()` API call entirely in demo mode
 - **Empty State Message**: Shows "History is not available in demo mode" message
 - **No Pagination**: Pagination controls are not created in demo mode
 - **Implementation**:
   ```typescript
-  const isDemo = scene.gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+  const isDemo = scene.gameAPI?.getDemoState();
   
   if (isDemo) {
       // Display headers and empty state message
@@ -274,24 +291,37 @@ Demo mode allows the game to run without requiring authentication tokens or maki
 
 ## Demo Mode Detection Pattern
 
-Throughout the codebase, demo mode is detected using this consistent pattern:
+Throughout the codebase, demo mode is detected using a centralized method via `GameAPI`:
 
+**In GameAPI methods:**
 ```typescript
-const isDemo = this.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+const isDemo = this.getDemoState();
 ```
 
-This checks:
-1. URL parameters via `getDemoState()`
-2. `localStorage` for stored demo value
-3. `sessionStorage` for stored demo value
+**In components with scene reference:**
+```typescript
+const isDemo = scene.gameAPI?.getDemoState();
+// or
+const isDemo = this.scene?.gameAPI?.getDemoState();
+```
+
+**In components with container reference:**
+```typescript
+const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState();
+// or
+const isDemo = (scene as any).gameAPI?.getDemoState();
+```
+
+**In SlotController (direct access):**
+```typescript
+const isDemo = this.gameAPI?.getDemoState();
+```
+
+The `getDemoState()` method checks URL parameters for the `demo` query parameter and returns `true` if `demo=true` is present, otherwise `false`.
 
 ## Storage Pattern
 
-Demo value is stored in the same pattern as tokens:
-- **Storage Locations**: Both `localStorage` and `sessionStorage`
-- **Key**: `'demo'`
-- **Initialization**: Stored in `initializeGame()` when demo parameter is detected
-- **Cleanup**: Removed in `gameLauncher()` during cleanup
+Demo state is determined dynamically from URL parameters via `getDemoState()`. While demo state may be stored in `localStorage`/`sessionStorage` during initialization for internal tracking, **all demo mode detection throughout the codebase uses `gameAPI.getDemoState()`** to ensure consistency and avoid relying on browser storage.
 
 ## API Behavior in Demo Mode
 
@@ -367,10 +397,11 @@ https://your-game-url.com/?demo=true
 
 ## Notes
 
-- Demo mode is detected at initialization and stored for the session
-- All demo-related checks use the same detection pattern for consistency
+- Demo mode is detected dynamically from URL parameters via `getDemoState()` method
+- All demo-related checks use `gameAPI.getDemoState()` for consistency and centralized logic
 - Demo mode bypasses authentication requirements
 - Balance updates are prevented in demo mode after initial fetch
 - Demo mode uses different API endpoints optimized for analytics/testing
 - Demo balance is updated dynamically during gameplay to reflect wins and bet deductions
+- Demo detection is centralized through `GameAPI.getDemoState()`, eliminating scattered `localStorage`/`sessionStorage` checks
 

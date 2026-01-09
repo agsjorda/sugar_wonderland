@@ -306,6 +306,7 @@ export class AssetConfig {
 		
 		return {
 			images: {
+				'eye_shot_transition': `${prefix}/transitions/eyes_placeholder_RF.png`,
 			},
 			spine: {
 				'big_win': {

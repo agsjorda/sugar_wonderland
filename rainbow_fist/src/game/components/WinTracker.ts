@@ -316,7 +316,7 @@ export class WinTracker {
 
 		// [currency][space][total win amount]
 		// Check if demo mode is active - if so, use blank currency symbol
-		const isDemo = (scene as any).gameAPI?.getDemoState() || localStorage.getItem('demo') || sessionStorage.getItem('demo');
+		const isDemo = (scene as any).gameAPI?.getDemoState();
 		const defaultCurrency = isDemo ? '' : '$';
 		const currency = this.config.currencyText ?? defaultCurrency;
 

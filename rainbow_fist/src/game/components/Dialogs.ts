@@ -23,10 +23,12 @@ export interface PreDialogSpineConfig {
 	offset?: { x: number; y: number };
 	depth?: number;
 	loopLastAnimation?: boolean;
+	delayAfter?: number; // Optional delay in milliseconds after this spine completes, before next spine
 }
 
 export interface PreDialogTweenConfig {
 	tweenConfig: Phaser.Types.Tweens.TweenBuilderConfig;
+	delayAfter?: number; // Optional delay in milliseconds after this tween completes, before next tween/spine
 }
 
 export interface DialogConfig {
@@ -245,32 +247,6 @@ export class Dialogs {
 			return config;
 		}
 
-		// Create a white rectangle that will slide across the screen before the punch VFX
-		const slideRect = scene.add.rectangle(
-			scene.scale.width * 0.5,
-			scene.scale.height * 0.5,
-			scene.scale.width * 0.5,
-			scene.scale.height,
-			0xffffff,
-			1
-		);
-		slideRect.setDepth(99999); // Above win dialogs, below white background (1099) and punch VFX (1100)
-		this.activePreDialogGraphics.push(slideRect);
-
-		const tweenToEdge: PreDialogTweenConfig = {
-			tweenConfig: {
-				targets: slideRect,
-				// x: -(scene.scale.width * 0.6) / 2,
-				x: scene.scale.width * 0.5,
-				duration: 50,
-				ease: 'Cubic.easeInOut',
-				onComplete: () => {
-					try { slideRect.destroy(); } catch {}
-					this.activePreDialogGraphics = this.activePreDialogGraphics.filter((g) => g !== slideRect);
-				}
-			}
-		};
-
 		const punchSpine: PreDialogSpineConfig = {
 			spineKey: 'punch_vfx',
 			animationSequence: [0],
@@ -282,9 +258,57 @@ export class Dialogs {
 			scale: 0.51
 		};
 
+		// Create eye shot transition image in the center of the screen
+		// NOTE: Do NOT add to activePreDialogGraphics here - it will be destroyed by cleanupPreDialogTweens()
+		// The image will be added to the array in playPreDialogTweens() after cleanup
+		
+		// Easily editable crop values (0 to 1, representing percentage of image height)
+		const topCrop = 0.275;    // Percentage (0-1) of image height to crop from top to bottom
+		const bottomCrop = 0.675;  // Percentage (0-1) of image height to crop from bottom to top
+		
+		const startX = scene.scale.width + 500;
+		const endX = scene.scale.width * 0.5;
+		const image = scene.add.image(
+			startX,
+			scene.scale.height * 0.7,
+			'eye_shot_transition'
+		);
+		image.setScale(1.8);
+		
+		// Apply cropping if crop values are specified
+		if (topCrop > 0 || bottomCrop > 0) {
+			const frame = image.frame;
+			const originalWidth = frame.cutWidth;
+			const originalHeight = frame.cutHeight;
+			
+			// Calculate pixel crop amounts based on percentage
+			const topCropPixels = originalHeight * topCrop;
+			const bottomCropPixels = originalHeight * bottomCrop;
+			const croppedHeight = originalHeight - topCropPixels - bottomCropPixels;
+			
+			// Set crop: x, y, width, height
+			image.setCrop(0, topCropPixels, originalWidth, croppedHeight);
+		}
+		
+		image.setDepth(1098); // Above white background (1099) and punch VFX (1100)
+		image.setOrigin(0.5, 0.5); // Center the image
+		image.setAlpha(1); 
+		image.setVisible(true); // Ensure it's visible
+
+		const imageTween: PreDialogTweenConfig = {
+			tweenConfig: {
+				targets: image,
+				x: endX,
+				duration: 100,
+				ease: 'Cubic.easeOut'
+				// Cleanup happens after delay, not in onComplete
+			},
+			delayAfter: 1200 // Wait 1200ms after eye shot transition tween completes before starting punch spine
+		};
+
 		return {
 			...config,
-			preDialogTweens: [tweenToEdge],
+			preDialogTweens: [imageTween],
 			preDialogSpines: [punchSpine]
 		};
 	}
@@ -387,19 +411,21 @@ export class Dialogs {
 		this.cleanupPreDialogSpines();
 		const sequenceId = ++this.preDialogSequenceId;
 
-		let remaining = entries.length;
-		const finishEntry = () => {
-			remaining -= 1;
-			if (remaining <= 0) {
+		// Play spines sequentially with delays between each
+		let currentIndex = 0;
+		
+		const playNextSpine = () => {
+			if (currentIndex >= entries.length) {
+				// All spines complete
 				this.cleanupPreDialogSpines();
 				if (sequenceId !== this.preDialogSequenceId) {
 					return;
 				}
 				onComplete();
+				return;
 			}
-		};
 
-		for (const entry of entries) {
+			const entry = entries[currentIndex];
 			let spine: SpineGameObject | null = null;
 			let whiteBackground: Phaser.GameObjects.Rectangle | null = null;
 			let finished = false;
@@ -407,12 +433,12 @@ export class Dialogs {
 				if (finished) return;
 				finished = true;
 				this.destroyPreDialogSpine(spine);
-				// Fade out white background when punch spine finishes
+				// Fade out white background when punch spine finishes (happens immediately, not after delay)
 				if (whiteBackground && entry.spineKey === 'punch_vfx') {
 					scene.tweens.add({
 						targets: whiteBackground,
 						alpha: 0,
-						duration: 250,
+						duration: 150,
 						ease: 'Power2',
 						onComplete: () => {
 							if (whiteBackground) {
@@ -422,7 +448,18 @@ export class Dialogs {
 						}
 					});
 				}
-				finishEntry();
+				
+				// Apply delay after this spine if configured
+				const delayAfter = entry.delayAfter || 0;
+				if (delayAfter > 0) {
+					scene.time.delayedCall(delayAfter, () => {
+						currentIndex++;
+						playNextSpine();
+					});
+				} else {
+					currentIndex++;
+					playNextSpine();
+				}
 			};
 
 			try {
@@ -470,6 +507,11 @@ export class Dialogs {
 				spine = scene.add.spine(0, 0, entry.spineKey, atlasKey);
 				this.activePreDialogSpines.push(spine);
 
+				// Reset skeleton to setup pose to ensure clean start
+				if (spine.skeleton) {
+					spine.skeleton.setToSetupPose();
+				}
+
 				const scale = this.normalizeSpineScale(entry.scale);
 				const durationMs = playSpineAnimationSequenceWithConfig(
 					scene,
@@ -483,6 +525,19 @@ export class Dialogs {
 					entry.loopLastAnimation ?? false,
 					finalize
 				);
+				
+				// For punch_vfx, hide initially and show after a small delay to prevent flash
+				// The helper function sets visible=true, so we hide it after and then show it
+				if (entry.spineKey === 'punch_vfx') {
+					spine.setVisible(false);
+					// Make spine visible after a small delay to ensure animation has started
+					// This prevents the flash of the default pose before animation begins
+					scene.time.delayedCall(16, () => {
+						if (spine && !finished) {
+							spine.setVisible(true);
+						}
+					});
+				}
 
 				// Fallback completion to avoid getting stuck if the animation never signals complete
 				const fallbackMs = durationMs > 0 ? durationMs + 100 : 600;
@@ -491,7 +546,9 @@ export class Dialogs {
 				console.warn('[Dialogs] Failed to play pre-dialog spine animation', error);
 				finalize();
 			}
-		}
+		};
+
+		playNextSpine();
 	}
 
 	private normalizeSpineScale(scale?: number | { x: number; y: number }): { x: number; y: number } {
@@ -546,19 +603,39 @@ export class Dialogs {
 		this.cleanupPreDialogTweens();
 		const sequenceId = ++this.preDialogTweenSequenceId;
 
-		let remaining = entries.length;
-		const finishEntry = () => {
-			remaining -= 1;
-			if (remaining <= 0) {
+		// After cleanup, add any graphics that are targets of tweens to activePreDialogGraphics
+		// This ensures they won't be destroyed by the cleanup that just ran
+		for (const entry of entries) {
+			if (entry.tweenConfig.targets) {
+				const targets = Array.isArray(entry.tweenConfig.targets) 
+					? entry.tweenConfig.targets 
+					: [entry.tweenConfig.targets];
+				for (const target of targets) {
+					if (target && typeof target === 'object' && 'setDepth' in target) {
+						// It's a Phaser GameObject - add to graphics array for cleanup tracking
+						if (!this.activePreDialogGraphics.includes(target as any)) {
+							this.activePreDialogGraphics.push(target as any);
+						}
+					}
+				}
+			}
+		}
+
+		// Play tweens sequentially with delays between each
+		let currentIndex = 0;
+		
+		const playNextTween = () => {
+			if (currentIndex >= entries.length) {
+				// All tweens complete
 				this.cleanupPreDialogTweens();
 				if (sequenceId !== this.preDialogTweenSequenceId) {
 					return;
 				}
 				onComplete();
+				return;
 			}
-		};
 
-		for (const entry of entries) {
+			const entry = entries[currentIndex];
 			let tween: Phaser.Tweens.Tween | null = null;
 			let finished = false;
 
@@ -566,7 +643,37 @@ export class Dialogs {
 				if (finished) return;
 				finished = true;
 				this.destroyPreDialogTween(tween);
-				finishEntry();
+				
+				// Cleanup function for graphics associated with this tween
+				const cleanupGraphics = () => {
+					if (entry.tweenConfig.targets) {
+						const targets = Array.isArray(entry.tweenConfig.targets) 
+							? entry.tweenConfig.targets 
+							: [entry.tweenConfig.targets];
+						for (const target of targets) {
+							if (target && typeof target === 'object' && 'destroy' in target) {
+								try {
+									(target as any).destroy?.();
+								} catch {}
+								this.activePreDialogGraphics = this.activePreDialogGraphics.filter((g) => g !== target);
+							}
+						}
+					}
+				};
+				
+				// Apply delay after this tween if configured
+				const delayAfter = entry.delayAfter || 0;
+				if (delayAfter > 0) {
+					scene.time.delayedCall(delayAfter, () => {
+						cleanupGraphics();
+						currentIndex++;
+						playNextTween();
+					});
+				} else {
+					cleanupGraphics();
+					currentIndex++;
+					playNextTween();
+				}
 			};
 
 			try {
@@ -598,7 +705,9 @@ export class Dialogs {
 				console.warn('[Dialogs] Failed to play pre-dialog tween', error);
 				finalize();
 			}
-		}
+		};
+
+		playNextTween();
 	}
 
 	private destroyPreDialogTween(tween: Phaser.Tweens.Tween | null): void {
