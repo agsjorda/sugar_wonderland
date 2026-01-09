@@ -44,6 +44,7 @@ export class Boot extends Scene
 		
 		// Load loading assets using AssetLoader
 		this.assetLoader.loadLoadingAssets(this);
+		this.assetLoader.loadFontAssets(this);
 		
 		console.log(`[Boot] Loading assets for Boot scene`);
 	}
@@ -52,13 +53,15 @@ export class Boot extends Scene
 	{
 		// Register custom pipelines once at boot (WebGL only).
 		// Safe to call repeatedly, but we keep it here so all scenes can use the pipeline by key.
-		this.game.renderer.pipelines.add(
-			IMAGE_SHINE_PIPELINE_KEY,
-			new ImageShinePipeline(this.game)
-		);
+		if (this.game.renderer instanceof Phaser.Renderer.WebGL.WebGLRenderer) {
+			this.game.renderer.pipelines.add(
+				IMAGE_SHINE_PIPELINE_KEY,
+				new ImageShinePipeline(this.game)
+			);
+		}
 
 		this.clockDisplay = new ClockDisplay(this, {
-			gameTitle: 'War Freaks',
+			gameTitle: 'The Shuten Doji',
 		});
 		this.clockDisplay.create();
 

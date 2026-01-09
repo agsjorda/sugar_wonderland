@@ -168,7 +168,7 @@ export class Game extends Scene
 	create ()
 	{
 		this.clockDisplay = new ClockDisplay(this, {
-			gameTitle: 'War Freaks',
+			gameTitle: 'The Shuten Doji',
 		});
 		this.clockDisplay.create();
 

@@ -244,7 +244,7 @@ export class Preloader extends Scene
 		this.assetLoader.loadSymbolAssets(this);
 		this.assetLoader.loadSymbolEffectsAssets(this);
 		this.assetLoader.loadButtonAssets(this);
-		this.assetLoader.loadFontAssets(this);
+		// this.assetLoader.loadFontAssets(this);
 		this.assetLoader.loadSpinnerAssets(this);
 		this.assetLoader.loadDialogAssets(this);
 		// Load Scatter Anticipation spine (portrait/high only asset paths)
@@ -390,7 +390,7 @@ export class Preloader extends Scene
 	private createClockDisplay()
 	{
 		this.clockDisplay = new ClockDisplay(this, {
-			gameTitle: 'War Freaks',
+			gameTitle: 'The Shuten Doji',
 		});
 		this.clockDisplay.create();
 	}
