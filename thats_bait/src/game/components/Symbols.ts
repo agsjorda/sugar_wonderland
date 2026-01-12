@@ -6,7 +6,7 @@ import { WinLineDrawer } from './WinLineDrawer';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { TurboConfig } from '../../config/TurboConfig';
-import { SLOT_ROWS, SLOT_COLUMNS, DELAY_BETWEEN_SPINS, SCATTER_SYMBOL, WINLINES } from '../../config/GameConfig';
+import { SLOT_ROWS, SLOT_COLUMNS, DELAY_BETWEEN_SPINS, SCATTER_SYMBOL, WINLINES, NORMAL_SYMBOLS } from '../../config/GameConfig';
 import { SoundEffectType } from '../../managers/AudioManager';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { runDropReels, applySkipReelTweaks } from './ReelDropScript';
@@ -4485,17 +4485,41 @@ function createInitialSymbols(self: Symbols) {
   const hasSpineFactory = ensureSpineFactory(scene as any, '[Symbols] createInitialSymbols');
 
   // Use fixed symbols for testing
-  const symbols = [
-    [5, 1, 3],
-    [1, 4, 2],
-    [2, 6, 7],
-    [1, 2, 1],
-    [5, 2, 8]
-  ];
-  console.log('[Symbols] Using fixed initial symbols:', symbols);
+  const excludedSymbolIds = new Set<number>([0, 5, 11, 12, 13, 14]);
+  const pickFrom: number[] = (NORMAL_SYMBOLS || [])
+    .filter((n) => !excludedSymbolIds.has(n))
+    .filter((n) => {
+      try {
+        // Symbol 5 may use variant keys; allow it even if a plain symbol_5 texture is not present.
+        if (n === 5) return true;
+        const spriteKey = `symbol_${n}`;
+        if (scene.textures.exists(spriteKey)) return true;
+        const spineKey = `symbol_${n}_spine`;
+        const hasSpineJson = (scene.cache.json as any)?.has?.(spineKey);
+        return !!(hasSpineJson && (scene.add as any)?.spine);
+      } catch {
+        return false;
+      }
+    });
+  if (pickFrom.length === 0) {
+    console.error('[Symbols] No usable base symbols found for initial grid');
+    return;
+  }
+
+  const symbols: number[][] = [];
+  for (let col = 0; col < SLOT_COLUMNS; col++) {
+    const colArr: number[] = [];
+    for (let row = 0; row < SLOT_ROWS; row++) {
+      const idx = Math.floor(Math.random() * pickFrom.length);
+      colArr.push(pickFrom[idx]);
+    }
+    symbols.push(colArr);
+  }
+  console.log('[Symbols] Using randomized initial symbols:', symbols);
   
   // Store current symbol data for reset purposes
   self.currentSymbolData = symbols;
+  try { (self.scene as any).currentSymbolData = symbols; } catch {}
   
   const symbolTotalWidth = self.displayWidth + self.horizontalSpacing;
   const symbolTotalHeight = self.displayHeight + self.verticalSpacing;

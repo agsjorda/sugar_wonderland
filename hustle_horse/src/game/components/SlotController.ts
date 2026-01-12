@@ -2652,7 +2652,7 @@ setBuyFeatureBetAmount(amount: number): void {
 			// Autoplay UI counter is now decremented before spin start in performAutoplaySpin
 
 			// Schedule next autoplay spin only once per spinId and only if no win dialog is showing
-			if (gameStateManager.isAutoPlaying && this.autoplaySpinsRemaining > 0 && !gameStateManager.isShowingWinDialog && !this.hasScheduledNextAutoplayForCurrentSpin && this.lastScheduleSpinId !== this.currentSpinId) {
+			if (gameStateManager.isAutoPlaying && this.autoplaySpinsRemaining > 0 && !this.hasScheduledNextAutoplayForCurrentSpin && this.lastScheduleSpinId !== this.currentSpinId) {
 				const baseDelay = 500;
 				const gameData = this.getGameData();
 				const isTurbo = gameData?.isTurbo || false;
@@ -3148,16 +3148,43 @@ setBuyFeatureBetAmount(amount: number): void {
 		// Guard: do not start a new autoplay spin while reels are already spinning
 		if (gameStateManager.isReelSpinning) {
 			console.log('[SlotController] performAutoplaySpin aborted - reels already spinning');
+			try {
+				const retryDelay = 250;
+				this.scheduleNextAutoplaySpin(retryDelay);
+			} catch {}
 			return;
 		}
 		// Guard: block autoplay spins when win dialog is showing
 		if (gameStateManager.isShowingWinDialog) {
 			console.log('[SlotController] performAutoplaySpin blocked - win dialog is showing');
+			try {
+				const sceneAny: any = this.scene as any;
+				const overlayMgr = sceneAny?.winOverlayManager;
+				const hasOverlayWork =
+					overlayMgr &&
+					typeof overlayMgr.hasActiveOrQueued === 'function' &&
+					overlayMgr.hasActiveOrQueued();
+				if (!hasOverlayWork) {
+					console.log('[SlotController] isShowingWinDialog=true but no active/queued overlays - clearing flag');
+					gameStateManager.isShowingWinDialog = false;
+				}
+			} catch {}
+			try {
+				const baseDelay = 500;
+				const gameData = this.getGameData();
+				const isTurbo = gameData?.isTurbo || false;
+				const turboDelay = isTurbo ? baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER : baseDelay;
+				this.scheduleNextAutoplaySpin(turboDelay);
+			} catch {}
 			return;
 		}
 		// Guard: skip autoplay during scatter/bonus transitions
 		if (gameStateManager.isScatter || gameStateManager.isBonus) {
 			console.log('[SlotController] performAutoplaySpin blocked - scatter or bonus active');
+			try {
+				const retryDelay = 500;
+				this.scheduleNextAutoplaySpin(retryDelay);
+			} catch {}
 			return;
 		}
 		// Decrement autoplay counter once per spin before starting
@@ -3226,6 +3253,7 @@ setBuyFeatureBetAmount(amount: number): void {
 			this.disableSpinButton();
 			this.disableAutoplayButton();
 			this.disableAmplifyButton();
+			this.isStoppingAutoplay = false;
 			return;
 		}
 		
@@ -3235,6 +3263,7 @@ setBuyFeatureBetAmount(amount: number): void {
 			this.disableBetButtons();
 			this.disableFeatureButton();
 			// Controls will be re-enabled on REELS_STOP
+			this.isStoppingAutoplay = false;
 			return;
 		}
 		// If not spinning anymore, it's safe to re-enable spin
@@ -3316,6 +3345,7 @@ setBuyFeatureBetAmount(amount: number): void {
 		// Create new timer
 		this.autoplayTimer = this.scene?.time.delayedCall(delay, () => {
 			console.log('[SlotController] Autoplay timer callback triggered - calling performAutoplaySpin');
+			this.autoplayTimer = null;
 			this.performAutoplaySpin();
 		}) || null;
 		

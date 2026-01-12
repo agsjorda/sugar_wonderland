@@ -4615,15 +4615,44 @@ function createInitialSymbols(self: Symbols) {
   console.log('[Symbols] Symbol textures are available');
 
   // Use fixed symbols for testing
-  const symbols = [
-    [0, 1, 3, 1, 0],  // Column 0: scatter, symbol1, symbol3, symbol1, scatter
-    [1, 5, 2, 5, 2],  // Column 1: symbol1, symbol5, symbol2, symbol5, symbol2
-    [2, 5, 5, 1, 5]   // Column 2: symbol2, symbol5, symbol5, symbol1, symbol5
-  ];
-  console.log('[Symbols] Using fixed initial symbols:', symbols);
+  const textureKeys: string[] =
+    ((scene.textures as any).getTextureKeys?.() as string[]) ||
+    Object.keys((scene.textures as any).list || {});
+  const excludedSymbolIds = new Set<number>([0, 12, 13, 14]);
+  const availableSymbolIds: number[] = Array.from(
+    new Set(
+      textureKeys
+        .map((k) => {
+          const m = /^symbol_(\d+)$/.exec(k);
+          return m ? Number(m[1]) : NaN;
+        })
+        .filter((n) => Number.isFinite(n) && !excludedSymbolIds.has(n))
+    )
+  ).sort((a: number, b: number) => a - b);
+
+  const fallbackIds = [0, 1, 2, 3, 4, 5]
+    .filter((n) => scene.textures.exists(`symbol_${n}`))
+    .filter((n) => !excludedSymbolIds.has(n));
+  const pickFrom = availableSymbolIds.length > 0 ? availableSymbolIds : fallbackIds;
+  if (pickFrom.length === 0) {
+    console.error('[Symbols] No usable symbol_<n> textures found for initial grid');
+    return;
+  }
+
+  const symbols: number[][] = [];
+  for (let col = 0; col < SLOT_COLUMNS; col++) {
+    const rows: number[] = [];
+    for (let row = 0; row < SLOT_ROWS; row++) {
+      const idx = Math.floor(Math.random() * pickFrom.length);
+      rows.push(pickFrom[idx]);
+    }
+    symbols.push(rows);
+  }
+  console.log('[Symbols] Using randomized initial symbols:', symbols);
   
   // Store current symbol data for reset purposes
   self.currentSymbolData = symbols;
+  try { (self.scene as any).currentSymbolData = symbols; } catch {}
   
   const symbolTotalWidth = self.displayWidth + self.horizontalSpacing;
   const symbolTotalHeight = self.displayHeight + self.verticalSpacing;
@@ -5122,6 +5151,7 @@ function onSpinDataReceived(self: Symbols) {
     
     if (!data.spinData || !data.spinData.slot || !data.spinData.slot.area) {
       console.error('[Symbols] Invalid SpinData received - missing slot.area');
+      try { gameStateManager.isReelSpinning = false; } catch {}
       return;
     }
     
@@ -5144,7 +5174,12 @@ function onSpinDataReceived(self: Symbols) {
     console.log('[Symbols] Using symbols from SpinData slot.area:', symbols);
     
     // Process the symbols using the same logic as before
-    await processSpinDataSymbols(self, symbols, data.spinData);
+    try {
+      await processSpinDataSymbols(self, symbols, data.spinData);
+    } catch (error) {
+      console.error('[Symbols] Error processing SpinData symbols:', error);
+      try { gameStateManager.isReelSpinning = false; } catch {}
+    }
   });
 
 
