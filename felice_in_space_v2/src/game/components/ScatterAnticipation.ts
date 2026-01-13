@@ -6,8 +6,19 @@ export class ScatterAnticipation {
 	private container: Phaser.GameObjects.Container | null = null;
 	private spineObject: any | null = null;
 	private ownsContainer: boolean = false;
+	private targetX: number = 0;
+	private targetY: number = 0;
 
 	private readonly spineKey: string = 'scatter_anticipation_spine';
+
+	private stopShowTweens(): void {
+		try {
+			if (this.scene && this.container) {
+				// Kill any in-flight entrance tweens immediately (show() can be called frequently).
+				this.scene.tweens.killTweensOf(this.container);
+			}
+		} catch {}
+	}
 
 	private playDefaultLoop(): void {
 		if (!this.spineObject) return;
@@ -47,6 +58,8 @@ export class ScatterAnticipation {
 		// affecting the parent container.
 		this.container = scene.add.container(0, 0);
 		this.ownsContainer = true;
+		this.targetX = 0;
+		this.targetY = 0;
 
 		try {
 			// Put it above the background art but (typically) behind symbols (symbols live in their own container).
@@ -87,6 +100,8 @@ export class ScatterAnticipation {
 
 	public setPosition(x: number, y: number): void {
 		if (!this.container) return;
+		this.targetX = x;
+		this.targetY = y;
 		try {
 			this.container.setPosition(x, y);
 		} catch {}
@@ -116,22 +131,102 @@ export class ScatterAnticipation {
 	}
 
 	public show(): void {
-		if (this.container) {
-			this.container.setVisible(true);
-			// Ensure animation is playing when shown
-			this.playDefaultLoop();
-			// Play anticipation loop SFX
+		if (!this.container) return;
+
+		// show() can be called more than once during the same anticipation phase (e.g. column changes).
+		// If it's already visible, do NOT restart the spine loop / SFX (that looks like "playing twice").
+		let wasVisible = false;
+		try { wasVisible = !!this.container.visible; } catch {}
+
+		// If it's already visible, avoid killing/resetting the in-flight entrance/expand tweens.
+		// Just move it to the latest requested position and keep the current animation smooth.
+		if (wasVisible) {
+			try { this.container.setPosition(this.targetX, this.targetY); } catch {}
+			return;
+		}
+
+		// Cancel any previous entrance animation (and snap to a clean state).
+		this.stopShowTweens();
+
+		this.container.setVisible(true);
+		try {
+			this.container.setPosition(this.targetX, this.targetY);
+		} catch {}
+
+		// Ensure animation is playing when shown (first time in this visibility window only)
+		this.playDefaultLoop();
+
+		// Entrance: start above the reel window, narrow in X, then drop + expand from center.
+		try {
+			const finalY = this.targetY;
+			const dropDistance = Math.max(180, Math.round((this.scene?.scale?.height || 720) * 0.65));
+			const startY = finalY - dropDistance;
+			const dropDurationMs = 220;
+			// User request: stay thin, then expand after ~0.5s total from the moment it shoots in.
+			const expandDelayMs = Math.max(0, 500 - dropDurationMs);
+
+			this.container.setY(startY);
+			this.container.setScale(0.06, 1);
+			this.container.setAlpha(1);
+
+			this.scene.tweens.add({
+				targets: this.container,
+				y: finalY,
+				// Keep it thin while it shoots down.
+				scaleX: 0.4,
+				duration: dropDurationMs,
+				ease: 'Cubic.Out',
+				onComplete: () => {
+					try {
+						if (!this.container) return;
+						this.scene.tweens.add({
+							targets: this.container,
+							delay: expandDelayMs,
+							scaleX: 1.08,
+							duration: 140,
+							ease: 'Sine.Out',
+							onComplete: () => {
+								try {
+									if (!this.container) return;
+									this.scene.tweens.add({
+										targets: this.container,
+										scaleX: 1,
+										duration: 70,
+										ease: 'Sine.Out',
+									});
+								} catch {}
+							},
+						});
+					} catch {}
+				},
+			});
+		} catch {
+			// Best effort; if tween creation fails, just show it as-is.
 			try {
-				const audio = (window as any)?.audioManager;
-				if (audio && typeof audio.playSoundEffect === 'function') {
-					audio.playSoundEffect('anticipation');
-				}
+				this.container.setAlpha(1);
+				this.container.setScale(1, 1);
+				this.container.setY(this.targetY);
 			} catch {}
 		}
+
+		// Play anticipation loop SFX (first time only)
+		try {
+			const audio = (window as any)?.audioManager;
+			if (audio && typeof audio.playSoundEffect === 'function') {
+				audio.playSoundEffect('anticipation');
+			}
+		} catch {}
 	}
 
 	public hide(): void {
 		if (!this.container) return;
+		// Stop entrance tween and reset transform so the next show() always starts cleanly.
+		this.stopShowTweens();
+		try {
+			this.container.setAlpha(1);
+			this.container.setScale(1, 1);
+			this.container.setPosition(this.targetX, this.targetY);
+		} catch {}
 		this.container.setVisible(false);
 		// Fade out anticipation SFX
 		try {
@@ -143,6 +238,7 @@ export class ScatterAnticipation {
 	}
 
 	public destroy(): void {
+		this.stopShowTweens();
 		if (this.spineObject) {
 			this.spineObject.destroy();
 			this.spineObject = null;
