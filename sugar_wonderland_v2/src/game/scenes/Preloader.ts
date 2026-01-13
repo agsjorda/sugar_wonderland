@@ -349,18 +349,40 @@ export class Preloader extends Scene
 
 	private startBackgroundAudioLoad(): void {
 		try {
+			const audioCacheHas = (key: string): boolean => {
+				try {
+					const c: any = (this.cache.audio as any);
+					if (c && typeof c.exists === 'function') return !!c.exists(key);
+					if (c && typeof c.has === 'function') return !!c.has(key);
+				} catch {}
+				return false;
+			};
+
+			const isLoaderBusy = (): boolean => {
+				try {
+					const l: any = this.load as any;
+					if (l && typeof l.isLoading === 'function') return !!l.isLoading();
+					if (l && typeof l.isLoading === 'boolean') return !!l.isLoading;
+					// Best-effort fallback for older Phaser builds
+					if (l && typeof l.state === 'number') return l.state !== 0;
+				} catch {}
+				return false;
+			};
+
 			const audioAssets = this.assetConfig.getAudioAssets();
 			const audioMap = audioAssets.audio || {};
 			const entries = Object.entries(audioMap);
 			if (entries.length === 0) return;
 
+			// If the loader is currently busy for any reason, wait and try again.
+			if (isLoaderBusy()) {
+				this.load.once('complete', () => this.startBackgroundAudioLoad());
+				return;
+			}
+
 			let queued = 0;
 			for (const [key, path] of entries) {
-				try {
-					if ((this.cache.audio as any)?.exists?.(key)) continue;
-				} catch {
-					// If we can't check the cache, still attempt to queue.
-				}
+				if (audioCacheHas(key)) continue;
 				try {
 					this.load.audio(key, path);
 					queued++;

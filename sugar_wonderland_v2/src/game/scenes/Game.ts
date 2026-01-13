@@ -230,7 +230,27 @@ export class Game extends Scene
 
 		// Defer audio: it may already be downloading (started in Preloader), so initialize when ready.
 		this.time.delayedCall(0, () => {
-			const tryInitAudio = () => {
+			const audioCacheHas = (key: string): boolean => {
+				try {
+					const c: any = (this.cache.audio as any);
+					if (c && typeof c.exists === 'function') return !!c.exists(key);
+					if (c && typeof c.has === 'function') return !!c.has(key);
+				} catch {}
+				return false;
+			};
+
+			const isLoaderBusy = (): boolean => {
+				try {
+					const l: any = this.load as any;
+					if (l && typeof l.isLoading === 'function') return !!l.isLoading();
+					if (l && typeof l.isLoading === 'boolean') return !!l.isLoading;
+					// Best-effort fallback for older Phaser builds
+					if (l && typeof l.state === 'number') return l.state !== 0;
+				} catch {}
+				return false;
+			};
+
+			const tryInitAudio = (): boolean => {
 				try {
 					this.audioManager.createMusicInstances();
 					this.audioManager.playBackgroundMusic(MusicType.MAIN);
@@ -241,33 +261,47 @@ export class Game extends Scene
 				}
 			};
 
-			// If audio is already in cache, init immediately.
-			if (tryInitAudio()) return;
+			// Keep retrying for a while: on mobile, audio download/decode (or in-flight loads) can lag behind scene start.
+			const maxAttempts = 40; // ~10-15s depending on backoff
+			const ensureAudioReady = (attempt: number) => {
+				if (tryInitAudio()) return;
+				if (attempt >= maxAttempts) {
+					console.warn('[Game] Audio not ready after retries; leaving muted until next user action');
+					return;
+				}
 
-			// Otherwise, background-load audio on this scene as a fallback (e.g., user clicked early).
-			try {
-				console.log('[Game] Background-loading audio assets (fallback)...');
-				const audioAssets = new AssetConfig(this.networkManager, this.screenModeManager).getAudioAssets();
-				const audioMap = audioAssets.audio || {};
-				let queued = 0;
-				for (const [key, path] of Object.entries(audioMap)) {
-					try {
-						if ((this.cache.audio as any)?.exists?.(key)) continue;
-					} catch {}
-					try { this.load.audio(key, path as string); queued++; } catch {}
+				// If this Scene loader is already busy, wait for it to finish then retry.
+				if (isLoaderBusy()) {
+					this.load.once('complete', () => ensureAudioReady(attempt + 1));
+					return;
 				}
-				if (queued > 0) {
-					this.load.once('complete', () => {
-						tryInitAudio();
-					}, this);
-					this.load.start();
-				} else {
-					this.time.delayedCall(150, tryInitAudio);
+
+				// Otherwise, background-load audio on this scene as a fallback (e.g., user clicked early).
+				try {
+					console.log('[Game] Background-loading audio assets (fallback)...');
+					const audioAssets = new AssetConfig(this.networkManager, this.screenModeManager).getAudioAssets();
+					const audioMap = audioAssets.audio || {};
+					let queued = 0;
+					for (const [key, path] of Object.entries(audioMap)) {
+						if (audioCacheHas(key)) continue;
+						try { this.load.audio(key, path as string); queued++; } catch {}
+					}
+
+					if (queued > 0) {
+						this.load.once('complete', () => ensureAudioReady(attempt + 1), this);
+						this.load.start();
+						return;
+					}
+				} catch (e) {
+					console.warn('[Game] Failed to queue background audio load:', e);
 				}
-			} catch (e) {
-				console.warn('[Game] Failed to queue background audio load:', e);
-				this.time.delayedCall(250, tryInitAudio);
-			}
+
+				// Nothing queued (or queue failed): retry with backoff to handle decode/in-flight timing.
+				const delay = Math.min(1200, 150 + attempt * 75);
+				this.time.delayedCall(delay, () => ensureAudioReady(attempt + 1));
+			};
+
+			ensureAudioReady(0);
 		});
 
 		// Make AudioManager available globally for other components
