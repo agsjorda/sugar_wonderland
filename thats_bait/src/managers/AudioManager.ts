@@ -47,16 +47,21 @@ type AnySoundManager = Phaser.Sound.BaseSoundManager & {
 export class AudioManager {
 	private static instances: Set<AudioManager> = new Set();
 	private static globalUnlockHandlersInstalled = false;
+	private static readonly AMBIENCE_KEY = 'ambience_TB';
 
 	private scene: Phaser.Scene;
 	private boundSoundManager: AnySoundManager | null = null;
 
 	private musicVolume = 1;
 	private sfxVolume = 0.5;
+	private reelDropVolumeMultiplier = 0.3;
 	private duckFactor = 1;
 
 	private currentMusicType: MusicType | null = null;
 	private currentMusicSound: Phaser.Sound.BaseSound | null = null;
+	private ambienceEnabled = false;
+	private ambienceSound: Phaser.Sound.BaseSound | null = null;
+	private ambienceLevel = 0.25;
 	private tempMusicStack: Array<{ temp: MusicType; prev: MusicType | null }> = [];
 	private musicChangeSeq = 0;
 	private pendingMusicTimer: Phaser.Time.TimerEvent | null = null;
@@ -79,19 +84,32 @@ export class AudioManager {
 
 	setScene(scene: Phaser.Scene): void {
 		const prevMgr = this.boundSoundManager;
+		const wasAmbienceEnabled = this.ambienceEnabled;
 		this.scene = scene;
 		this.bindSoundManagerFromScene(scene);
 		if (prevMgr && this.boundSoundManager && prevMgr !== this.boundSoundManager) {
 			try { this.stopCurrentMusic(); } catch {}
 			try { this.fadeOutCurrentWinSfx(0); } catch {}
+			try {
+				const amb = this.ambienceSound;
+				this.ambienceSound = null;
+				if (amb) {
+					try { amb.stop(); } catch {}
+					try { amb.destroy(); } catch {}
+				}
+			} catch {}
 		}
 		this.tryUnlockAudio();
+		if (wasAmbienceEnabled) {
+			try { this.playAmbience(0); } catch {}
+		}
 	}
 
 	createMusicInstances(): void {
 		try { this.scene.cache.audio.exists(String(MusicType.MAIN)); } catch {}
 		try { this.scene.cache.audio.exists(String(MusicType.BONUS)); } catch {}
 		try { this.scene.cache.audio.exists(String(MusicType.FREE_SPIN)); } catch {}
+		try { this.scene.cache.audio.exists(AudioManager.AMBIENCE_KEY); } catch {}
 	}
 
 	getVolume(): number {
@@ -110,6 +128,15 @@ export class AudioManager {
 
 	setSfxVolume(volume: number): void {
 		this.sfxVolume = Phaser.Math.Clamp(Number(volume) || 0, 0, 1);
+	}
+
+	getReelDropVolumeMultiplier(): number {
+		return this.reelDropVolumeMultiplier;
+	}
+
+	setReelDropVolumeMultiplier(multiplier: number): void {
+		const m = Number(multiplier);
+		this.reelDropVolumeMultiplier = (isFinite(m) && m >= 0) ? m : 1;
 	}
 
 	isAnyMusicPlaying(): boolean {
@@ -134,6 +161,41 @@ export class AudioManager {
 
 	crossfadeTo(music: MusicType, durationMs: number = 0): void {
 		this.playBackgroundMusic(music, durationMs);
+	}
+
+	playAmbience(fadeMs: number = 0): void {
+		this.ambienceEnabled = true;
+		const fade = Math.max(0, Number(fadeMs) || 0);
+		this.ensureUnlockedOrQueue(() => {
+			this.playAmbienceInternal(fade);
+		});
+	}
+
+	stopAmbience(durationMs: number = 0): void {
+		this.ambienceEnabled = false;
+		const s = this.ambienceSound;
+		this.ambienceSound = null;
+		if (!s) return;
+		const stopNow = () => {
+			try { s.stop(); } catch {}
+			try { s.destroy(); } catch {}
+		};
+		const fade = Math.max(0, Number(durationMs) || 0);
+		if (!(fade > 0) || !this.scene?.tweens) {
+			stopNow();
+			return;
+		}
+		try {
+			this.scene.tweens.add({
+				targets: s as any,
+				volume: 0,
+				duration: fade,
+				ease: 'Linear',
+				onComplete: () => stopNow()
+			});
+		} catch {
+			stopNow();
+		}
 	}
 
 	beginTemporaryMusic(music: MusicType, fadeMs: number = 0): void {
@@ -323,6 +385,59 @@ export class AudioManager {
 		this.startMusicNow(music, fade);
 	}
 
+	private playAmbienceInternal(fadeMs: number): void {
+		if (!this.boundSoundManager) return;
+		const key = AudioManager.AMBIENCE_KEY;
+		try {
+			if (!this.scene.cache.audio.exists(key)) {
+				return;
+			}
+		} catch {
+			return;
+		}
+
+		if (this.ambienceSound && this.ambienceSound.isPlaying) {
+			this.applyMusicVolume();
+			return;
+		}
+
+		try {
+			if (this.ambienceSound) {
+				try { this.ambienceSound.stop(); } catch {}
+				try { this.ambienceSound.destroy(); } catch {}
+			}
+		} catch {}
+		this.ambienceSound = null;
+
+		let next: Phaser.Sound.BaseSound | null = null;
+		try {
+			next = this.boundSoundManager.add(key, { loop: true, volume: 0 });
+		} catch {
+			next = null;
+		}
+		if (!next) return;
+		this.ambienceSound = next;
+		try { (next as any)?.setLoop?.(true); } catch {}
+		try { (next as any)?.setVolume?.(0); } catch {}
+		try { next.play(); } catch {}
+
+		const targetVol = this.getEffectiveAmbienceVolume();
+		const fade = Math.max(0, Number(fadeMs) || 0);
+		try { this.scene.tweens.killTweensOf(next as any); } catch {}
+		if (fade > 0) {
+			try {
+				(this.scene as any).tweens.add({
+					targets: next as any,
+					volume: targetVol,
+					duration: fade,
+					ease: 'Linear'
+				});
+				return;
+			} catch {}
+		}
+		try { (next as any)?.setVolume?.(targetVol); } catch {}
+	}
+
 	private startMusicNow(music: MusicType, fadeMs: number): void {
 		if (!this.boundSoundManager) return;
 		const next = this.getOrCreateMusic(music);
@@ -403,6 +518,11 @@ export class AudioManager {
 		try {
 			merged.volume = Phaser.Math.Clamp(Number(merged.volume) || 0, 0, 1);
 		} catch {}
+		if (key === SoundEffectType.REEL_DROP) {
+			try {
+				merged.volume = Phaser.Math.Clamp((Number(merged.volume) || 0) * (Number(this.reelDropVolumeMultiplier) || 0), 0, 1);
+			} catch {}
+		}
 		try { (this.boundSoundManager as any).mute = false; } catch {}
 
 		if (key === SoundEffectType.HIT_WIN) {
@@ -483,9 +603,14 @@ export class AudioManager {
 		return Phaser.Math.Clamp((this.musicVolume || 0) * (this.duckFactor || 0), 0, 1);
 	}
 
+	private getEffectiveAmbienceVolume(): number {
+		return Phaser.Math.Clamp(this.getEffectiveMusicVolume() * (Number(this.ambienceLevel) || 0), 0, 1);
+	}
+
 	private applyMusicVolume(): void {
 		const v = this.getEffectiveMusicVolume();
 		try { (this.currentMusicSound as any)?.setVolume?.(v); } catch {}
+		try { (this.ambienceSound as any)?.setVolume?.(this.getEffectiveAmbienceVolume()); } catch {}
 	}
 
 	private tryUnlockAudio(): void {

@@ -9,7 +9,7 @@ import { TurboConfig } from '../../config/TurboConfig';
 import { SLOT_ROWS, SLOT_COLUMNS, DELAY_BETWEEN_SPINS, SCATTER_SYMBOL, WINLINES, NORMAL_SYMBOLS } from '../../config/GameConfig';
 import { SoundEffectType } from '../../managers/AudioManager';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
-import { runDropReels, applySkipReelTweaks } from './ReelDropScript';
+import { runDropReels, destroyActiveFillerSymbols } from './ReelDropScript';
 import { handleHookScatterHighlight } from './HookScatterHighlighter';
 import { runCollectorMoneySequence } from './CollectorMoneySequence';
 import { flashAllSymbolsOverlay, flashRowSymbolsOverlay } from './SymbolFlash';
@@ -754,21 +754,7 @@ export class Symbols {
       // the drop timing is configured.
       this.skipReelDropsPending = true;
       this.skipReelDropsActive = true;
-      // Speed up only symbol-related tweens (avoid global tween timeScale to not affect logo breathing)
-      const gd = (this.scene as any)?.gameData as GameData | undefined;
-      if (gd) {
-				try {
-					if (!(this as any).__skipOriginalTiming) {
-						(this as any).__skipOriginalTiming = {
-							dropReelsDelay: gd.dropReelsDelay,
-							dropDuration: gd.dropDuration,
-							dropReelsDuration: gd.dropReelsDuration,
-							winUpDuration: gd.winUpDuration,
-						};
-					}
-				} catch {}
-        applySkipReelTweaks(this, gd, 60);
-      }
+      try { destroyActiveFillerSymbols(this); } catch {}
      
     } catch (e) {
  
@@ -784,17 +770,6 @@ export class Symbols {
       if (!this.skipReelDropsActive) return;
       this.skipReelDropsActive = false;
       this.skipReelDropsPending = false;
-			try {
-				const gd = (this.scene as any)?.gameData as GameData | undefined;
-				const orig: any = (this as any).__skipOriginalTiming;
-				if (gd && orig) {
-					try { gd.dropReelsDelay = orig.dropReelsDelay; } catch {}
-					try { gd.dropDuration = orig.dropDuration; } catch {}
-					try { gd.dropReelsDuration = orig.dropReelsDuration; } catch {}
-					try { gd.winUpDuration = orig.winUpDuration; } catch {}
-				}
-				try { (this as any).__skipOriginalTiming = null; } catch {}
-			} catch {}
       console.log('[Symbols] Skip cleared');
     } catch (e) {
       console.warn('[Symbols] Failed to clear skip state:', e);
@@ -4485,7 +4460,7 @@ function createInitialSymbols(self: Symbols) {
   const hasSpineFactory = ensureSpineFactory(scene as any, '[Symbols] createInitialSymbols');
 
   // Use fixed symbols for testing
-  const excludedSymbolIds = new Set<number>([0, 5, 11, 12, 13, 14]);
+  const excludedSymbolIds = new Set<number>([5, 11, 12, 13, 14]);
   const pickFrom: number[] = (NORMAL_SYMBOLS || [])
     .filter((n) => !excludedSymbolIds.has(n))
     .filter((n) => {
@@ -4796,7 +4771,7 @@ async function processSpinDataSymbols(self: Symbols, symbols: number[][], spinDa
       if (blockForAnticipation) {
 			try { (self as any).clearSkipReelDrops?.(); } catch {}
       } else {
-        applySkipReelTweaks(self, self.scene.gameData, 60);
+        try { destroyActiveFillerSymbols(self); } catch {}
         try { (self as any).skipReelDropsPending = false; } catch {}
       }
     }

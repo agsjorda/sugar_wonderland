@@ -428,7 +428,7 @@ export class AssetConfig {
 				'mainbg_TB': 'assets/sounds/BG/mainbg_TB.ogg',
 				'bonusbg_TB': 'assets/sounds/BG/bonusbg_TB.ogg',
 				'freespinbg_TB': 'assets/sounds/BG/freespinbg_TB.ogg',
-				'ambience_TB': 'assets/sounds/SFX/ambience_TB.ogg',
+				'ambience_TB': 'assets/sounds/BG/ambience_TB.ogg',
 				'spin_button_TB': 'assets/sounds/SFX/spin_button_TB.ogg',
 				'reel_drop_TB': 'assets/sounds/SFX/reel_drop_TB.ogg',
 				'turbo_drop_TB': 'assets/sounds/SFX/turbo_drop_TB.ogg',

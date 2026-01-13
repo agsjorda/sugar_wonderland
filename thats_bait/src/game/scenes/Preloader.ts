@@ -432,6 +432,7 @@ export class Preloader extends Scene
 
 						try { audio.createMusicInstances?.(); } catch {}
 						try { audio.playBackgroundMusic?.(MusicType.MAIN, 500); } catch {}
+						try { (audio as any)?.playAmbience?.(500); } catch {}
 
 						try {
 							const base = typeof audio.getSfxVolume === 'function' ? audio.getSfxVolume() : 0.4;

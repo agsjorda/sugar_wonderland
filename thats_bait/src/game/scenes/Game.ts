@@ -359,12 +359,16 @@ export class Game extends Phaser.Scene {
 				this.audioManager.playBackgroundMusic(MusicType.MAIN);
 			} catch {}
 			try {
+				(this.audioManager as any).playAmbience?.(0);
+			} catch {}
+			try {
 				this.time.delayedCall(250, () => {
 					try {
 						if (!this.audioManager) return;
 						if (this.audioManager.isAnyMusicPlaying()) return;
 						this.input.once('pointerdown', () => {
 							try { this.audioManager?.playBackgroundMusic(MusicType.MAIN); } catch {}
+							try { (this.audioManager as any)?.playAmbience?.(0); } catch {}
 						});
 					} catch {}
 				});
