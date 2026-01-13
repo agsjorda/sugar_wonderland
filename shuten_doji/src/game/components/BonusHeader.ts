@@ -412,8 +412,12 @@ export class BonusHeader {
 	 * Format currency value for display
 	 */
 	private formatCurrency(amount: number): string {
+		// Check if demo mode is active - if so, use blank currency symbol
+		const isDemo = this.scene?.gameAPI?.getDemoState();
+		const currencySymbol = isDemo ? '' : '$';
+		
 		if (amount === 0) {
-			return '$0.00';
+			return `${currencySymbol}0.00`;
 		}
 		
 		// Format with commas for thousands and 2 decimal places
@@ -423,6 +427,11 @@ export class BonusHeader {
 			minimumFractionDigits: 2,
 			maximumFractionDigits: 2
 		}).format(amount);
+		
+		// Remove currency symbol if in demo mode
+		if (isDemo) {
+			return formatted.replace(/^\$/, '').trim();
+		}
 		
 		return formatted;
 	}
@@ -733,7 +742,7 @@ export class BonusHeader {
 		}
 
 		// Fallback: calculate from aggregate SpinData if no subTotalWin available
-		const totalWin = this.calculateTotalWinFromPaylines(spinData as SpinData);
+		const totalWin = this.scene.gameAPI.getCurrentSpinData()?.slot.totalWin ?? 0;
 		console.log(`[BonusHeader] Calculated aggregate total win from SpinData: $${totalWin}`);
 
 		// Only show display if totalWin > 0, otherwise hide it
@@ -744,17 +753,6 @@ export class BonusHeader {
 			console.log(`[BonusHeader] No wins found in SpinData, hiding winnings display`);
 			this.hideWinningsDisplay();
 		}
-	}
-
-	/**
-	 * Calculate total win using SpinData (base paylines or all free spins)
-	 */
-	private calculateTotalWinFromPaylines(spinData: SpinData): number {
-		if (!spinData) {
-			return 0;
-		}
-
-		return SpinDataUtils.getAggregateTotalWin(spinData);
 	}
 
 	private hideMultiplierText(): void {

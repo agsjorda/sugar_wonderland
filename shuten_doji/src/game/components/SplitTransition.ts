@@ -17,13 +17,13 @@ const SPLIT_TRANSITION_SHINE_SHADER_CONFIG: Readonly<ImageShinePipelineData> = {
 	softnessPx: 100,
 
 	// Speed (px/sec)
-	speedPxPerSec: 22500,
+	speedPxPerSec: 17500,
 
 	// Make the shine effectively one-shot (sweep once, then wait "forever" so it doesn't loop).
 	repeatDelaySec: 999999,
 
 	// Start point (px) - X is fixed; Y is derived at call site
-	startXPx: -14000,
+	startXPx: -12000,
 
 	// Strength
 	intensity: 0.9,
@@ -470,7 +470,7 @@ export class SplitTransition {
 				const creepPartExtraTravelRatio = 0.005;
 				// Tune how short the "fast snap" phase is (as a ratio of total duration).
 				// Increasing this makes the FIRST phase end sooner (so it feels less slow).
-				const fastPartDurationRatio = 0.075;
+				const fastPartDurationRatio = 0.1;
 				const addTwoPartMove = (
 					half: Phaser.GameObjects.Image,
 					finalX: number,

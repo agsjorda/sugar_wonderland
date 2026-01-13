@@ -265,18 +265,13 @@ export class Preloader extends Scene
 
     async create ()
     {
-		
         // Initialize GameAPI, generate token, and call backend initialize endpoint
         try {
             console.log('[Preloader] Initializing GameAPI...');
             const gameToken = await this.gameAPI.initializeGame();
             console.log('[Preloader] Game URL Token:', gameToken);
 
-            console.log('[Preloader] Calling backend slot initialization...');
-            const slotInitData = await this.gameAPI.initializeSlotSession();
-            console.log('[Preloader] Slot initialization data:', slotInitData);
-
-            console.log('[Preloader] GameAPI and slot session initialized successfully!');
+            console.log('[Preloader] GameAPI initialized successfully!');
         } catch (error) {
             console.error('[Preloader] Failed to initialize GameAPI or slot session:', error);
         }
@@ -389,8 +384,12 @@ export class Preloader extends Scene
 
 	private createClockDisplay()
 	{
+		// Append | DEMO to title if in demo mode
+		const isDemo = this.gameAPI.getDemoState();
+		const gameTitle = isDemo ? 'The Shuten Doji | DEMO' : 'The Shuten Doji';
+		
 		this.clockDisplay = new ClockDisplay(this, {
-			gameTitle: 'The Shuten Doji',
+			gameTitle: gameTitle,
 		});
 		this.clockDisplay.create();
 	}

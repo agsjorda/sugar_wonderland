@@ -255,7 +255,10 @@ export class BuyFeature {
 		// Calculate price as 100 * current base bet
 		const calculatedPrice = this.getCurrentBetValue();
 		
-		this.priceDisplay = scene.add.text(screenWidth / 2, x, `£${this.formatNumberWithCommas(calculatedPrice)}`, {
+		// Check if demo mode is active - if so, use blank currency symbol
+		const isDemo = (scene as any).gameAPI?.getDemoState();
+		const currencySymbol = isDemo ? '' : '£';
+		this.priceDisplay = scene.add.text(screenWidth / 2, x, `${currencySymbol}${this.formatNumberWithCommas(calculatedPrice)}`, {
 			fontSize: '42px',
 			fontFamily: 'Poppins-Regular',
 			color: '#ffffff',
@@ -320,8 +323,11 @@ export class BuyFeature {
 
 	private updatePriceDisplay(): void {
 		if (this.priceDisplay) {
+			// Check if demo mode is active - if so, use blank currency symbol
+			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState();
+			const currencySymbol = isDemo ? '' : '$';
 			const calculatedPrice = this.getCurrentBetValue();
-			this.priceDisplay.setText(`$${this.formatNumberWithCommas(calculatedPrice)}`);
+			this.priceDisplay.setText(`${currencySymbol}${this.formatNumberWithCommas(calculatedPrice)}`);
 		}
 	}
 
@@ -422,7 +428,10 @@ export class BuyFeature {
 		this.container.add(this.minusButton);
 		
 		// Bet display - show current bet value
-		this.betDisplay = scene.add.text(x, y, `$${this.getCurrentBet().toFixed(2)}`, {
+		// Check if demo mode is active - if so, use blank currency symbol
+		const isDemoBet = (scene as any).gameAPI?.getDemoState();
+		const currencySymbol = isDemoBet ? '' : '$';
+		this.betDisplay = scene.add.text(x, y, `${currencySymbol}${this.getCurrentBet().toFixed(2)}`, {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
@@ -540,7 +549,10 @@ export class BuyFeature {
 
 	private updateBetDisplay(): void {
 		if (this.betDisplay) {
-			this.betDisplay.setText(`$${this.getCurrentBet().toFixed(2)}`);
+			// Check if demo mode is active - if so, use blank currency symbol
+			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState();
+			const currencySymbol = isDemo ? '' : '$';
+			this.betDisplay.setText(`${currencySymbol}${this.getCurrentBet().toFixed(2)}`);
 		}
 	}
 

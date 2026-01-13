@@ -18,7 +18,7 @@ import { SlotController } from '../components/SlotController';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { AssetConfig } from '../../config/AssetConfig';
-import { PaylineData, SpinData, SpinDataUtils } from '../../backend/SpinData';
+import { SpinData, SpinDataUtils } from '../../backend/SpinData';
 import { AssetLoader } from '../../utils/AssetLoader';
 import { Symbols } from '../components/Symbols';
 import { GameData } from '../components/GameData';
@@ -43,6 +43,7 @@ import { WinTracker } from '../components/WinTracker';
 import { GameEventData, SpinDataEventData } from '../../event/EventManager';
 import { BONUS_FREE_SPIN_TEST_DATA } from '../../testing/TestSpinData';
 import { FreeRoundManager } from '../components/FreeRoundManager';
+import { initializeConsoleDebugHelpers } from '../../utils/ConsoleDebugHelpers';
 
 export class Game extends Scene
 {
@@ -231,27 +232,27 @@ export class Game extends Scene
 		this.audioManager = new AudioManager(this);
 		console.log('[Game] AudioManager initialized');
 
-		// Defer audio loading: load audio assets in the background after visuals are ready
-		this.time.delayedCall(0, () => {
-			console.log('[Game] Background-loading audio assets...');
-			this.load.on('complete', () => {
-				try {
-					this.audioManager.createMusicInstances();
-					this.audioManager.playBackgroundMusic(MusicType.MAIN);
-					console.log('[Game] Audio assets loaded and background music started');
-				} catch (e) {
-					console.warn('[Game] Failed to initialize or start audio after load:', e);
-				}
-			}, this);
-			// Mirror AssetConfig audio definitions
-			const audioAssets = new AssetConfig(this.networkManager, this.screenModeManager).getAudioAssets();
-			if (audioAssets.audio) {
-				Object.entries(audioAssets.audio).forEach(([key, path]) => {
-					try { this.load.audio(key, path as string); } catch {}
-				});
-			}
-			this.load.start();
-		});
+		// // Defer audio loading: load audio assets in the background after visuals are ready
+		// this.time.delayedCall(0, () => {
+		// 	console.log('[Game] Background-loading audio assets...');
+		// 	this.load.on('complete', () => {
+		// 		try {
+		// 			this.audioManager.createMusicInstances();
+		// 			this.audioManager.playBackgroundMusic(MusicType.MAIN);
+		// 			console.log('[Game] Audio assets loaded and background music started');
+		// 		} catch (e) {
+		// 			console.warn('[Game] Failed to initialize or start audio after load:', e);
+		// 		}
+		// 	}, this);
+		// 	// Mirror AssetConfig audio definitions
+		// 	const audioAssets = new AssetConfig(this.networkManager, this.screenModeManager).getAudioAssets();
+		// 	if (audioAssets.audio) {
+		// 		Object.entries(audioAssets.audio).forEach(([key, path]) => {
+		// 			try { this.load.audio(key, path as string); } catch {}
+		// 		});
+		// 	}
+		// 	this.load.start();
+		// });
 
 		// Make AudioManager available globally for other components
 		(window as any).audioManager = this.audioManager;
@@ -259,6 +260,9 @@ export class Game extends Scene
 		// Create dialogs using the managers
 		this.dialogs = new Dialogs(this.networkManager, this.screenModeManager);
 		this.dialogs.create(this);
+
+		// Initialize console debug helpers (dialog functions and Q/E mode toggle keys)
+		initializeConsoleDebugHelpers(this);
 		
 		// Initialize scatter animation manager with both containers, spinner and dialogs components
 		const scatterAnimationManager = this.symbols.scatterAnimationManager;
@@ -540,6 +544,18 @@ export class Game extends Scene
 				const betAmount = parseFloat(data.spinData.bet);
 
 				console.log(`[Game] WIN_STOP: Total win calculated: $${totalWin}, bet: $${betAmount}`);
+
+				// Update balance from server after WIN_STOP (skip during scatter/bonus)
+				if (!gameStateManager.isScatter && !gameStateManager.isBonus) {
+					// Update demo balance if in demo mode
+					const isDemo = this.gameAPI.getDemoState();
+					if (isDemo && totalWin > 0) {
+						this.gameAPI.updateDemoBalance(this.gameAPI.getDemoBalance() + totalWin);
+					}
+					this.updateBalanceAfterWinStop();
+				} else {
+					console.log('[Game] Skipping balance update on WIN_STOP (scatter/bonus active)');
+				}
 				
 				if (totalWin > 0) {
 					// Note: Win dialog threshold check moved to Symbols component for earlier detection
@@ -551,13 +567,6 @@ export class Game extends Scene
 				}
 			} else {
 				console.log('[Game] WIN_STOP: No current spin data available');
-			}
-			
-			// Update balance from server after WIN_STOP (skip during scatter/bonus)
-			if (!gameStateManager.isScatter && !gameStateManager.isBonus) {
-				this.updateBalanceAfterWinStop();
-			} else {
-				console.log('[Game] Skipping balance update on WIN_STOP (scatter/bonus active)');
 			}
 		});
 
@@ -993,7 +1002,7 @@ export class Game extends Scene
 			return 0;
 		}
 
-		const totalWin = SpinDataUtils.getAggregateTotalWin(spinData);
+		const totalWin = SpinDataUtils.getTotalWin(spinData);
 		console.log(`[Game] Calculated aggregate total win from SpinData: ${totalWin}`);
 		return totalWin;
 	}

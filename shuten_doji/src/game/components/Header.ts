@@ -1,13 +1,8 @@
 import { Scene } from "phaser";
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
-import { Data } from "../../tmp_backend/Data";
 import { GameEventData, gameEventManager, GameEventType, UpdateMultiplierValueEventData } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
-import { PaylineData } from '../../backend/SpinData';
-import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
-import { ensureSpineFactory } from '../../utils/SpineGuard';
-import { hideSpineAttachmentsByKeywords, playSpineAnimationSequenceWithConfig } from "./SpineBehaviorHelper";
 import { Game } from "../scenes/Game";
 import { NumberDisplay, NumberDisplayConfig } from "./NumberDisplay";
 import { TurboConfig } from "../../config/TurboConfig";
@@ -510,29 +505,15 @@ export class Header {
 	}
 
 	/**
-	 * Calculate total winnings from paylines array
-	 */
-	private calculateTotalWinningsFromPaylines(paylines: PaylineData[]): number {
-		if (!paylines || paylines.length === 0) {
-			return 0;
-		}
-		
-		const totalWin = paylines.reduce((sum, payline) => {
-			const winAmount = payline.win || 0;
-			console.log(`[Header] Payline ${payline.lineKey}: ${winAmount} (symbol ${payline.symbol}, count ${payline.count})`);
-			return sum + winAmount;
-		}, 0);
-		
-		console.log(`[Header] Calculated total winnings: ${totalWin} from ${paylines.length} paylines`);
-		return totalWin;
-	}
-
-	/**
 	 * Format currency value for display
 	 */
 	private formatCurrency(amount: number): string {
+		// Check if demo mode is active - if so, use blank currency symbol
+		const isDemo = this.scene?.gameAPI?.getDemoState();
+		const currencySymbol = isDemo ? '' : '$ ';
+		
 		if (amount === 0) {
-			return '$ 0.00';
+			return `${currencySymbol}0.00`;
 		}
 		
 		// Format with commas for thousands and 2 decimal places
@@ -542,6 +523,11 @@ export class Header {
 			minimumFractionDigits: 2,
 			maximumFractionDigits: 2
 		}).format(amount);
+		
+		// Remove currency symbol if in demo mode
+		if (isDemo) {
+			return formatted.replace(/^\$/, '').trim();
+		}
 		
 		return formatted;
 	}

@@ -4426,16 +4426,16 @@ function playTumbleSfx(self: Symbols): void {
     let sfxType: SoundEffectType = SoundEffectType.TWIN1;
     switch (self.scene.gameAPI.getCurrentTumbleIndex() - 1) {
       case 0:
-        sfxType = gameStateManager.isBonus ? SoundEffectType.TWINHEAVEN1 : SoundEffectType.TWIN1;
+        sfxType = SoundEffectType.TWIN1;
         break;
       case 1:
-        sfxType = gameStateManager.isBonus ? SoundEffectType.TWINHEAVEN2 : SoundEffectType.TWIN2;
+        sfxType = SoundEffectType.TWIN2;
         break;
       case 2:
-        sfxType = gameStateManager.isBonus ? SoundEffectType.TWINHEAVEN3 : SoundEffectType.TWIN3;
+        sfxType = SoundEffectType.TWIN3;
         break;
       default:
-        sfxType = gameStateManager.isBonus ? SoundEffectType.TWINHEAVEN4 : SoundEffectType.TWIN4;
+        sfxType = SoundEffectType.TWIN4;
         break;
     }
     audio.playSoundEffect(sfxType);
@@ -5360,19 +5360,6 @@ function createMultiplierSymbol(self: Symbols, value: number, x: number, y: numb
     try { releaseSpineToPool(self, spine as any); } catch { }
     return createPngSymbol(self, adjustedIndex, x, y, alpha);
   }
-}
-
-/**
- * Calculate total win using SpinData (base paylines or all free spins)
- */
-function calculateTotalWinFromPaylines(spinData: SpinData): number {
-  if (!spinData) {
-    return 0;
-  }
-
-  const totalWin = SpinDataUtils.getAggregateTotalWin(spinData);
-  console.log(`[Symbols] Calculated aggregate total win from SpinData: ${totalWin}`);
-  return totalWin;
 }
 
 async function delay(duration: number) {

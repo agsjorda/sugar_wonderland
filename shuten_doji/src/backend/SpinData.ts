@@ -3,13 +3,7 @@
  * This matches the JSON structure returned by the game API
  */
 
-import { AnyMxRecord } from "dns";
-import { gameStateManager } from "../managers/GameStateManager";
-
 export interface SpinData {
-  /** Player ID for the current session */
-  playerId: string;
-  
   /** Bet amount for this spin */
   bet: string;
   
@@ -21,82 +15,117 @@ export interface SpinData {
  * Slot data containing the game grid and win information
  */
 export interface SlotData {
-  /** 3x5 grid of symbols (columns x rows) */
+  /** Grid of symbols (6 rows x 5 columns) */
   area: number[][];
   
-  /** Array of winning paylines */
-  paylines: PaylineData[];
+  /** Total win for this spin */
+  totalWin: number;
 
-  /** Optional tumble steps for cluster wins (array of steps with in/out and win) */
-  tumbles?: any[];
+  /** Tumble data containing items and multiplier information */
+  tumbles: TumblesData;
   
-  /** Free spin information (lowercase - matches TypeScript interface) */
-  freespin: FreespinData;
-  
-  /** Free spin information (camelCase - matches API response) */
-  freeSpin?: FreespinData;
+  /** Free spin information */
+  freeSpin: FreeSpinData;
 }
 
 /**
- * Individual payline win data
+ * Tumbles data structure
  */
-export interface PaylineData {
-  /** Payline identifier (line number) */
-  lineKey: number;
+export interface TumblesData {
+  /** Array of tumble items */
+  items: TumbleItem[];
   
-  /** Symbol that created the win */
-  symbol: number;
+  /** Multiplier information */
+  multiplier: TumbleMultiplier;
+}
+
+/**
+ * Tumble item containing symbol in/out information
+ */
+export interface TumbleItem {
+  /** Symbol positions and win information */
+  symbols: TumbleSymbols;
   
-  /** Number of matching symbols in the payline */
-  count: number;
-  
-  /** Win amount for this payline */
+  /** Win amount for this tumble */
   win: number;
-  
-  /** Multiplier symbols that affect this payline */
-  multipliers: MultiplierData[];
 }
 
 /**
- * Multiplier symbol data
+ * Tumble symbols data
  */
-export interface MultiplierData {
-  /** Symbol type that acts as multiplier */
+export interface TumbleSymbols {
+  /** Array of arrays representing symbols coming in per column */
+  in: number[][];
+  
+  /** Array of symbols going out with win information */
+  out: TumbleOutSymbol[];
+}
+
+/**
+ * Tumble out symbol data
+ */
+export interface TumbleOutSymbol {
+  /** Symbol identifier */
   symbol: number;
   
-  /** Number of multiplier symbols */
+  /** Count of symbols */
   count: number;
+  
+  /** Win amount */
+  win: number;
+}
+
+/**
+ * Tumble multiplier data
+ */
+export interface TumbleMultiplier {
+  /** Array of multiplier symbols */
+  symbols: any[];
+  
+  /** Total multiplier value */
+  total: number;
 }
 
 /**
  * Free spin bonus data
  */
-export interface FreespinData {
-  /** Number of free spins awarded */
-  count: number;
-  
-  /** Total win amount from free spins */
-  totalWin: number;
+export interface FreeSpinData {
+  /** Multiplier value for free spins */
+  multiplierValue: number;
   
   /** Array of individual free spin items */
-  items: FreespinItem[];
+  items: FreeSpinItem[];
 }
 
 /**
  * Individual free spin item data
  */
-export interface FreespinItem {
+export interface FreeSpinItem {
   /** Number of spins remaining after this spin */
   spinsLeft: number;
   
-  /** Win amount for this specific free spin */
-  subTotalWin: number;
+  /** Current multiplier value */
+  multiplier: number;
   
-  /** 3x5 grid of symbols for this free spin (columns x rows) */
+  /** Grid of symbols for this free spin (6 rows x 5 columns) */
   area: number[][];
   
-  /** Array of winning paylines for this free spin */
-  payline: PaylineData[];
+  /** Total win for this specific free spin */
+  totalWin: number;
+  
+  /** Tumble data for this free spin */
+  tumble: FreeSpinTumble;
+}
+
+/**
+ * Free spin tumble data
+ */
+export interface FreeSpinTumble {
+  /** Array of tumble items */
+  items: TumbleItem[];
+  
+  /** Multiplier value */
+  multiplier: number;
 }
 
 /**
@@ -104,61 +133,130 @@ export interface FreespinItem {
  */
 export class SpinDataUtils {
   /**
-   * Calculate total win amount from all paylines
+   * Multiplier symbol indices used by this game.
+   * (Matches the multiplier index mapping used in `Symbols.ts`: 11..25)
    */
-  static getTotalWin(spinData: SpinData): number {
-    const paylines = (spinData && spinData.slot && Array.isArray((spinData.slot as any).paylines))
-      ? (spinData.slot as any).paylines as PaylineData[]
-      : [];
-    return paylines.reduce((total, payline) => total + (payline?.win || 0), 0);
+  static isMultiplierSymbolIndex(symbol: unknown): boolean {
+    return typeof symbol === 'number' && Number.isFinite(symbol) && symbol >= 11 && symbol <= 25;
   }
 
   /**
-   * Get the effective total win for a spin.
+   * Get tumble items from a spin payload.
+   * Supports both base-game tumbles (`slot.tumbles`) and bonus/free-spin tumbles (`freespin.items[i].tumble`).
    *
-   * Priority:
-   * 1) If a `totalWin` field exists (on the spin, slot, or freespin), use it.
-   * 2) Otherwise, if free spins exist, sum all wins from their items.
-   * 3) Fallback to summing base-game paylines.
+   * The backend shape is handled defensively:
+   * - container could be `{ items: [...] }`
+   * - or directly an array `[...]`
    */
-  static getAggregateTotalWin(spinData: SpinData): number {
-    if (!spinData || !spinData.slot) {
-      return 0;
-    }
-
+  static getTumbleItems(spinData: any, freeSpinIndex?: number): any[] {
+    if (!spinData || !spinData.slot) return [];
     const slotAny = spinData.slot as any;
 
-    // 1) Direct totalWin fields (handle different API shapes defensively)
-    const directTotalWin =
-      (typeof (spinData as any).totalWin === 'number' ? (spinData as any).totalWin : undefined) ??
-      (typeof slotAny.totalWin === 'number' ? slotAny.totalWin : undefined) ??
-      (typeof slotAny.freespin?.totalWin === 'number' ? slotAny.freespin.totalWin : undefined) ??
-      (typeof slotAny.freeSpin?.totalWin === 'number' ? slotAny.freeSpin.totalWin : undefined);
+    const getContainerItems = (container: any): any[] => {
+      if (!container) return [];
+      if (Array.isArray(container?.items)) return container.items;
+      if (Array.isArray(container)) return container;
+      return [];
+    };
 
-    if (typeof directTotalWin === 'number') {
-      return directTotalWin;
+    // Prefer explicit free-spin tumble when a freeSpinIndex is provided
+    if (typeof freeSpinIndex === 'number' && freeSpinIndex >= 0) {
+      const fs = slotAny.freespin || slotAny.freeSpin;
+      const fsItem = fs?.items?.[freeSpinIndex];
+      const fsTumble = fsItem?.tumble;
+      const fsItems = getContainerItems(fsTumble);
+      if (fsItems.length > 0) return fsItems;
     }
 
-    // 2) Sum all free spin items if available
-    const freespin = slotAny.freespin || slotAny.freeSpin;
-    if (freespin && Array.isArray(freespin.items) && freespin.items.length > 0) {
-      const sumFs = freespin.items.reduce((sum: number, item: any) => {
-        const itemWin =
-          typeof item?.totalWin === 'number'
-            ? item.totalWin
-            : typeof item?.subTotalWin === 'number'
-            ? item.subTotalWin
-            : 0;
-        return sum + itemWin;
-      }, 0);
+    // Base-game tumbles
+    return getContainerItems(slotAny.tumbles);
+  }
 
-      if (sumFs > 0) {
-        return sumFs;
+  /**
+   * True if the spin has any symbol matches (either paylines, or tumble outs).
+   */
+  static hasAnyMatch(spinData: SpinData | any, freeSpinIndex?: number): boolean {
+    if (!spinData) return false;
+
+    // Tumble wins: any out entry with a positive count indicates a match occurred
+    const tumbleItems = this.getTumbleItems(spinData, freeSpinIndex);
+    for (const t of tumbleItems) {
+      const outs = t?.symbols?.out;
+      if (!Array.isArray(outs)) continue;
+      for (const outEntry of outs) {
+        const c = Number(outEntry?.count ?? 0);
+        if (Number.isFinite(c) && c > 0) return true;
       }
     }
 
-    // 3) Fallback: base-game paylines
-    return this.getTotalWin(spinData);
+    return false;
+  }
+
+  /**
+   * True if the spin/tumble chain contains any multiplier symbols (either via payline multipliers,
+   * or present in the visible grid / tumble ins/outs).
+   */
+  static hasAnyMultiplierSymbol(spinData: SpinData | any, freeSpinIndex?: number): boolean {
+    if (!spinData) return false;
+
+    // 1) Payline multiplier metadata (if present)
+    const paylines = (spinData && spinData.slot && Array.isArray((spinData.slot as any).paylines))
+      ? ((spinData.slot as any).paylines as any[])
+      : [];
+    for (const payline of paylines) {
+      const multipliers = Array.isArray(payline?.multipliers) ? payline.multipliers : [];
+      for (const m of multipliers) {
+        const cnt = Number(m?.count ?? 0);
+        if (Number.isFinite(cnt) && cnt > 0 && this.isMultiplierSymbolIndex(m?.symbol)) {
+          return true;
+        }
+      }
+    }
+
+    // Helper to scan a column-major numeric grid (area[col][row])
+    const scanArea = (area: any): boolean => {
+      if (!Array.isArray(area)) return false;
+      for (const col of area) {
+        if (!Array.isArray(col)) continue;
+        for (const v of col) {
+          if (this.isMultiplierSymbolIndex(v)) return true;
+        }
+      }
+      return false;
+    };
+
+    // 2) Visible grid
+    if (scanArea((spinData as any)?.slot?.area)) return true;
+
+    // 3) Tumble ins/outs can introduce/remove multipliers
+    const tumbleItems = this.getTumbleItems(spinData, freeSpinIndex);
+    for (const t of tumbleItems) {
+      // symbols.in is per-column arrays of new symbol indices
+      const ins = t?.symbols?.in;
+      if (Array.isArray(ins)) {
+        for (const colArr of ins) {
+          if (!Array.isArray(colArr)) continue;
+          for (const v of colArr) {
+            if (this.isMultiplierSymbolIndex(v)) return true;
+          }
+        }
+      }
+      const outs = t?.symbols?.out;
+      if (Array.isArray(outs)) {
+        for (const outEntry of outs) {
+          if (this.isMultiplierSymbolIndex(outEntry?.symbol)) return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Calculate total win amount from all paylines
+   */
+  static getTotalWin(spinData: SpinData): number {
+    return spinData?.slot?.totalWin ?? 0;
   }
   
   /**
@@ -166,11 +264,13 @@ export class SpinDataUtils {
    */
   static getWinningSymbols(spinData: SpinData): number[] {
     const winningSymbols = new Set<number>();
-    const paylines = (spinData && spinData.slot && Array.isArray((spinData.slot as any).paylines))
-      ? (spinData.slot as any).paylines as PaylineData[]
-      : [];
-    paylines.forEach(payline => {
-      if (payline && typeof payline.symbol === 'number') winningSymbols.add(payline.symbol);
+    const tumbles = spinData?.slot?.tumbles?.items ?? [];
+    tumbles.forEach(tumble => {
+      if (tumble?.symbols?.out) {
+        tumble.symbols.out.forEach(out => {
+          if (typeof out.symbol === 'number') winningSymbols.add(out.symbol);
+        });
+      }
     });
     return Array.from(winningSymbols);
   }
@@ -180,18 +280,9 @@ export class SpinDataUtils {
    */
   static getMultiplierSymbols(spinData: SpinData): number[] {
     const multiplierSymbols = new Set<number>();
-    const paylines = (spinData && spinData.slot && Array.isArray((spinData.slot as any).paylines))
-      ? (spinData.slot as any).paylines as PaylineData[]
-      : [];
-    paylines.forEach(payline => {
-      const multipliers = (payline && Array.isArray((payline as any).multipliers))
-        ? (payline as any).multipliers as MultiplierData[]
-        : [];
-      multipliers.forEach(multiplier => {
-        if (multiplier && typeof multiplier.symbol === 'number') {
-          multiplierSymbols.add(multiplier.symbol);
-        }
-      });
+    const multipliers = spinData?.slot?.tumbles?.multiplier?.symbols ?? [];
+    multipliers.forEach(symbol => {
+      if (typeof symbol === 'number') multiplierSymbols.add(symbol);
     });
     return Array.from(multiplierSymbols);
   }
@@ -200,76 +291,68 @@ export class SpinDataUtils {
    * Check if this spin has any wins
    */
   static hasWins(spinData: SpinData): boolean {
-    const paylines = (spinData && spinData.slot && Array.isArray((spinData.slot as any).paylines))
-      ? (spinData.slot as any).paylines as PaylineData[]
-      : [];
-    return paylines.length > 0;
+    return spinData?.slot?.tumbles?.items?.length > 0;
   }
   
   /**
    * Check if this spin triggered free spins
    */
   static hasFreeSpins(spinData: SpinData): boolean {
-    return spinData.slot.freespin?.count > 0;
+    return spinData.slot.freeSpin?.items?.length > 0;
   }
   
   /**
    * Get total win amount from all free spins
    */
-  static getFreespinTotalWin(spinData: SpinData): number {
-    return spinData.slot.freespin?.totalWin || 0;
+  static getFreeSpinTotalWin(spinData: SpinData): number {
+    let totalWin = 0;
+    for (const item of spinData.slot.freeSpin.items) {
+      totalWin += item.totalWin;
+    }
+    return totalWin;
   }
   
   /**
    * Get the number of free spins remaining
    */
-  static getFreespinCount(spinData: SpinData): number {
-    return spinData.slot.freespin?.count || 0;
+  static getFreeSpinCount(spinData: SpinData): number {
+    return spinData.slot.freeSpin?.items?.length || 0;
   }
   
   /**
    * Get all free spin items
    */
-  static getFreespinItems(spinData: SpinData): FreespinItem[] {
-    return spinData.slot.freespin?.items || [];
+  static getFreeSpinItems(spinData: SpinData): FreeSpinItem[] {
+    return spinData?.slot?.freeSpin?.items ?? [];
   }
   
   /**
    * Get a specific free spin item by index
    */
-  static getFreespinItem(spinData: SpinData, index: number): FreespinItem | null {
-    const items = spinData.slot.freespin?.items || [];
+  static getFreeSpinItem(spinData: SpinData, index: number): FreeSpinItem | null {
+    const items = spinData?.slot?.freeSpin?.items ?? [];
     return (index >= 0 && index < items.length) ? items[index] : null;
   }
   
   /**
    * Get the symbol at a specific grid position in a free spin item
    */
-  static getFreespinSymbolAt(spinData: SpinData, freespinIndex: number, column: number, row: number): number | null {
-    const freespinItem = this.getFreespinItem(spinData, freespinIndex);
-    if (!freespinItem) return null;
+  static getFreeSpinSymbolAt(spinData: SpinData, freespinIndex: number, column: number, row: number): number | null {
+    const freeSpinItem = this.getFreeSpinItem(spinData, freespinIndex);
+    if (!freeSpinItem) return null;
     
-    if (column >= 0 && column < freespinItem.area.length && 
-        row >= 0 && row < freespinItem.area[column].length) {
-      return freespinItem.area[column][row];
+    if (column >= 0 && column < freeSpinItem.area.length && 
+        row >= 0 && row < freeSpinItem.area[column].length) {
+      return freeSpinItem.area[column][row];
     }
     return null;
   }
   
   /**
-   * Get all winning paylines for a specific free spin item
-   */
-  static getFreespinPaylines(spinData: SpinData, freespinIndex: number): PaylineData[] {
-    const freespinItem = this.getFreespinItem(spinData, freespinIndex);
-    return freespinItem ? freespinItem.payline : [];
-  }
-  
-  /**
    * Check if a specific free spin item has any wins
    */
-  static hasFreespinWins(spinData: SpinData, freespinIndex: number): boolean {
-    const paylines = this.getFreespinPaylines(spinData, freespinIndex);
-    return paylines.length > 0;
+  static hasFreeSpinWins(spinData: SpinData, freespinIndex: number): boolean {
+    return false;
   }
   
   /**
@@ -301,16 +384,6 @@ export class SpinDataUtils {
   }
   
   /**
-   * Get paylines for a specific symbol
-   */
-  static getPaylinesForSymbol(spinData: SpinData, symbol: number): PaylineData[] {
-    const paylines = (spinData && spinData.slot && Array.isArray((spinData.slot as any).paylines))
-      ? (spinData.slot as any).paylines as PaylineData[]
-      : [];
-    return paylines.filter(payline => payline && payline.symbol === symbol);
-  }
-  
-  /**
    * Calculate win multiplier (total win / bet)
    */
   static getWinMultiplier(spinData: SpinData): number {
@@ -319,20 +392,20 @@ export class SpinDataUtils {
     return this.getTotalWin(spinData) / betAmount;
   }
 
-  static getTotalWinFromFreeSpin(spinData: any) : number {
+  static getTotalWinFromFreeSpin(spinData: any): number {
     const freespin = spinData.slot.freespin || spinData.slot.freeSpin;
-    if (!freespin) return 0;
-    return freespin.items.reduce((sum: number, item: any) => sum + (item.totalWin || 0), 0);
+    if (!freespin || !Array.isArray(freespin.items)) return 0;
+    return freespin.items.reduce((sum: number, item: any) => sum + (item?.totalWin || 0), 0);
   }
 
-  static getScatterSpinWins(spinData: any) : number {
-    const totalWin = spinData.slot.totalWin;
+  static getScatterSpinWins(spinData: any): number {
+    const totalWin = spinData?.slot?.totalWin ?? 0;
     const freeSpinWin = this.getTotalWinFromFreeSpin(spinData);
+    console.log(`[SpinDataUtils] Scatter spin wins: ${totalWin} - ${freeSpinWin} = ${totalWin - freeSpinWin}`);
     return totalWin - freeSpinWin;
   }
 
-  static getBonusSpinWins(spinData: any, freeSpinIndex: number) : number {
-    const freeSpinWin = spinData.slot.freespin.items[freeSpinIndex]?.totalWin ?? 0;
-    return freeSpinWin;
+  static getBonusSpinWins(spinData: SpinData, freeSpinIndex: number): number {
+    return (spinData as any)?.slot?.freeSpin?.items?.[freeSpinIndex]?.totalWin ?? 0;
   }
 }

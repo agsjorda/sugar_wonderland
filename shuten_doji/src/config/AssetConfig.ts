@@ -283,34 +283,34 @@ export class AssetConfig {
 			images: {
 			},
 			spine: {
-				// 'free_spin': {
-				// 	atlas: `${prefix}/dialogs/free_spin.atlas`,
-				// 	json: `${prefix}/dialogs/free_spin.json`
-				// },
-				// 'max_win': {
-				// 	atlas: `${prefix}/dialogs/max_win.atlas`,
-				// 	json: `${prefix}/dialogs/max_win.json`
-				// },
-				// 'total_win': {
-				// 	atlas: `${prefix}/dialogs/total_win.atlas`,
-				// 	json: `${prefix}/dialogs/total_win.json`
-				// },
+				'big_win': {
+					atlas: `${prefix}/dialogs/big_win/BigW_${this.GAME_INITIALS}.atlas`,
+					json: `${prefix}/dialogs/big_win/BigW_${this.GAME_INITIALS}.json`
+				},
 				'epic_win': {
-					atlas: `${prefix}/dialogs/epic_win/epic_win.atlas`,
-					json: `${prefix}/dialogs/epic_win/epic_win.json`
+					atlas: `${prefix}/dialogs/epic_win/EpicW_${this.GAME_INITIALS}.atlas`,
+					json: `${prefix}/dialogs/epic_win/EpicW_${this.GAME_INITIALS}.json`
 				},
 				'mega_win': {
-					atlas: `${prefix}/dialogs/mega_win/mega_win.atlas`,
-					json: `${prefix}/dialogs/mega_win/mega_win.json`
+					atlas: `${prefix}/dialogs/mega_win/MegaW_${this.GAME_INITIALS}.atlas`,
+					json: `${prefix}/dialogs/mega_win/MegaW_${this.GAME_INITIALS}.json`
 				},
-				// 'super_win': {
-				// 	atlas: `${prefix}/dialogs/super_win/super_win.atlas`,
-				// 	json: `${prefix}/dialogs/super_win/super_win.json`
-				// },
-				// 'big_win': {
-				// 	atlas: `${prefix}/dialogs/big_win/big_win.atlas`,
-				// 	json: `${prefix}/dialogs/big_win/big_win.json`
-				// },
+				'super_win': {
+					atlas: `${prefix}/dialogs/super_win/SuperW_${this.GAME_INITIALS}.atlas`,
+					json: `${prefix}/dialogs/super_win/SuperW_${this.GAME_INITIALS}.json`
+				},
+				'free_spin': {
+					atlas: `${prefix}/dialogs/free_spin/FreeSpin_${this.GAME_INITIALS}.atlas`,
+					json: `${prefix}/dialogs/free_spin/FreeSpin_${this.GAME_INITIALS}.json`
+				},
+				'total_win': {
+					atlas: `${prefix}/dialogs/total_win/TotalW_${this.GAME_INITIALS}.atlas`,
+					json: `${prefix}/dialogs/total_win/TotalW_${this.GAME_INITIALS}.json`
+				},
+				'max_win': {
+					atlas: `${prefix}/dialogs/max_win/MaxW_${this.GAME_INITIALS}.atlas`,
+					json: `${prefix}/dialogs/max_win/MaxW_${this.GAME_INITIALS}.json`
+				},
 			}
 		};
 	}
@@ -399,57 +399,39 @@ export class AssetConfig {
 			audio: {
 				// Updated to WF
 				// Win dialog SFX
-				'freespin_wf': 'assets/sounds/Wins/freespin_wf.ogg',
-				'congrats_wf': 'assets/sounds/Wins/congrats_wf.ogg',
-				'bigw_wf': 'assets/sounds/Wins/bigw_wf.ogg',
-				'megaw_wf': 'assets/sounds/Wins/megaw_wf.ogg',
-				'superw_wf': 'assets/sounds/Wins/superw_wf.ogg',
-				'epicw_wf': 'assets/sounds/Wins/epicw_wf.ogg',
-
-				// Tumble win SFX
-				'twin1_wf': 'assets/sounds/Wins/twin1_wf.ogg',
-				'twin2_wf': 'assets/sounds/Wins/twin2_wf.ogg',
-				'twin3_wf': 'assets/sounds/Wins/twin3_wf.ogg',
-				'twin4_wf': 'assets/sounds/Wins/twin4_wf.ogg',
-				'twinheaven1_wf': 'assets/sounds/Wins/twinheaven1_wf.ogg',
-				'twinheaven2_wf': 'assets/sounds/Wins/twinheaven2_wf.ogg',
-				'twinheaven3_wf': 'assets/sounds/Wins/twinheaven3_wf.ogg',
-				'twinheaven4_wf': 'assets/sounds/Wins/twinheaven4_wf.ogg',
+				'freespin': `assets/sounds/BG/freespinbg_${this.GAME_INITIALS}.ogg`,
+				'congrats': `assets/sounds/Wins/totalw_${this.GAME_INITIALS}.ogg`,
+				'bigw': `assets/sounds/Wins/bigw_${this.GAME_INITIALS}.ogg`,
+				'megaw': `assets/sounds/Wins/megaw_${this.GAME_INITIALS}.ogg`,
+				'superw': `assets/sounds/Wins/superw_${this.GAME_INITIALS}.ogg`,
+				'epicw': `assets/sounds/Wins/epicw_${this.GAME_INITIALS}.ogg`,
+				'maxw': `assets/sounds/Wins/maxw_${this.GAME_INITIALS}.ogg`,
 
 				// Background SFX
-				'mainbg_wf': 'assets/sounds/BG/mainbg_wf.ogg',
-				'bonusbg_wf': 'assets/sounds/BG/bonusbg_wf.ogg',
-				'argun_wf': 'assets/sounds/SFX/argun_wf.ogg',
+				'mainbg': `assets/sounds/BG/mainbg_${this.GAME_INITIALS}.ogg`,
+				'bonusbg': `assets/sounds/BG/bonusbg_${this.GAME_INITIALS}.ogg`,
+				'ambience': `assets/sounds/BG/ambience_${this.GAME_INITIALS}.ogg`,  // Added: exists but wasn't referenced
 
 				// Menu/UI clicks
-				'click_wf': 'assets/sounds/click_wf.ogg',
+				'click': `assets/sounds/click_${this.GAME_INITIALS}.ogg`,
 				
-				'turbodrop_wf': 'assets/sounds/SFX/turbodrop_wf.ogg',
-				'reeldrop_wf': 'assets/sounds/SFX/reeldrop_wf.ogg',
-				'scatter': 'assets/sounds/SFX/missile_electric_wf.ogg',
+				'turbodrop': `assets/sounds/SFX/turbodrop_${this.GAME_INITIALS}.ogg`,
+				'reeldrop': `assets/sounds/SFX/reeldrop_${this.GAME_INITIALS}.ogg`,
+				'scatter': `assets/sounds/SFX/scatter_${this.GAME_INITIALS}.ogg`,
 
-				// WIP
-				
-				'bonus_explosion_wf': 'assets/sounds/SFX/explosion_heaven_wf.ogg',
-				'multiplier_added_wf': 'assets/sounds/SFX/birdland_wf.ogg',
-				'explosion_wf': 'assets/sounds/SFX/explosion_wf.ogg',
-				'missile_wf': 'assets/sounds/SFX/missile_wf.ogg',
-				'multi_wf': 'assets/sounds/SFX/multi_wf.ogg',
-				'nuke_wf': 'assets/sounds/SFX/nuke_wf.ogg',
+				'multiplier_added': `assets/sounds/SFX/multi_add_${this.GAME_INITIALS}.ogg`,
+				//'explosion': `assets/sounds/SFX/explosion_${this.GAME_INITIALS}.ogg`, // replace with HIT_WIN
+				'multi': `assets/sounds/SFX/multi_${this.GAME_INITIALS}.ogg`,
 
-				// Unused SFX
-				'hit_win_2_wf': 'assets/sounds/SFX/hit_win_2_wf.ogg',
-				'hit_win_wf': 'assets/sounds/SFX/hit_win_wf.ogg',
-				'reeldrop2_wf': 'assets/sounds/SFX/reeldrop2_wf.ogg',
-				'turbo2_wf': 'assets/sounds/SFX/turbo2_wf.ogg',
-				'spin_wf': 'assets/sounds/SFX/spin_wf.ogg',
-				'spin2_wf': 'assets/sounds/SFX/spin2_wf.ogg',
-				'ub_wf': 'assets/sounds/SFX/ub_wf.ogg',
-				
-				// Unused Wins
-				'maxw_end_wf': 'assets/sounds/Wins/maxw_end_wf.ogg',
-				'maxw_wf': 'assets/sounds/Wins/maxw_wf.ogg',
+				'hit_win': `assets/sounds/SFX/hit_win_${this.GAME_INITIALS}.ogg`,
+				'spin': `assets/sounds/SFX/spin_${this.GAME_INITIALS}.ogg`,
+				'ub': `assets/sounds/SFX/ub_${this.GAME_INITIALS}.ogg`,
 
+				// twin1-4
+				// 'twin1': `assets/sounds/SFX/twin1_${this.GAME_INITIALS}.ogg`,
+				// 'twin2': `assets/sounds/SFX/twin2_${this.GAME_INITIALS}.ogg`,
+				// 'twin3': `assets/sounds/SFX/twin3_${this.GAME_INITIALS}.ogg`,
+				// 'twin4': `assets/sounds/SFX/twin4_${this.GAME_INITIALS}.ogg`,
 			}
 		};
 	}

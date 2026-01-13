@@ -94,23 +94,23 @@ export class Dialogs {
 	};
 
 	private winDialogAnimationNames: Record<string, string> = {
-		'Congratulations': 'total_win_idle',
-		'FreeSpinDialog': 'freespin_WF_idle',
-		'BonusFreeSpinDialog': 'free5spin_WF_idle',
-		'BigWin': 'big_WF',
-		'MegaWin': 'mega_WF',
-		'EpicWin': 'epic_WF',
-		'SuperWin': 'super_WF'
+		'Congratulations': 'animation', // standard animation name: animation or total_win
+		'FreeSpinDialog': 'FreeSpin_SD', // standard animation name suggestion: animation or freespin
+		'BonusFreeSpinDialog': 'animation', // standard animation name: animation or retrigger or bonus_freespin
+		'BigWin': 'animation', // standard animation name: animation or big_win
+		'MegaWin': 'mega_win', // standard animation name: mega_win
+		'EpicWin': 'epic_win', // standard animation name: epic_win
+		'SuperWin': 'SuperW_SD' // standard animation name: super_win
 	}
 
 	private dialogSpineNames: Record<string, string> = {
 		'Congratulations': 'total_win',
 		'FreeSpinDialog': 'free_spin',
-		'BonusFreeSpinDialog': 'free_spin',
-		'BigWin': 'win_dialog',
-		'MegaWin': 'win_dialog',
-		'EpicWin': 'win_dialog',
-		'SuperWin': 'win_dialog'
+		'BonusFreeSpinDialog': 'retrigger',
+		'BigWin': 'big_win',
+		'MegaWin': 'mega_win',
+		'EpicWin': 'epic_win',
+		'SuperWin': 'epic_win'
 	}
 	private flashTransition: FlashTransition | null = null;
 
