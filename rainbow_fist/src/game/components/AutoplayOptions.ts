@@ -2,6 +2,7 @@ import { Scene } from 'phaser';
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { playUtilityButtonSfx } from '../../utils/audioHelpers';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 
 export interface AutoplayOptionsConfig {
 	position?: { x: number; y: number };
@@ -331,6 +332,11 @@ export class AutoplayOptions {
 	 */
 	private createEnhanceBetAnimation(scene: Scene): void {
 		try {
+			if (!ensureSpineFactory(scene, '[AutoplayOptions] createEnhanceBetAnimation')) {
+				console.warn('[AutoplayOptions] Spine factory unavailable. Skipping enhance bet idle animation creation.');
+				return;
+			}
+
 			if (!scene.cache.json.has('enhance_bet_idle_on')) {
 				console.warn('[AutoplayOptions] enhance_bet_idle_on spine assets not loaded, skipping idle animation creation');
 				return;

@@ -236,6 +236,7 @@ export class Preloader extends Scene
 		this.assetLoader.loadBuyFeatureAssets(this);
 		this.assetLoader.loadMenuAssets(this);
 		this.assetLoader.loadHelpScreenAssets(this);
+		this.assetLoader.loadAudioAssets(this);
 		
 		console.log(`[Preloader] Loading assets for Preloader and Game scenes`);
 	}
@@ -340,73 +341,41 @@ export class Preloader extends Scene
 
 	private createWebsiteText()
 	{
-		const preloaderVerticalOffsetModifier = 10;
-		
-		// Add "www.dijoker.com" text
-		const websiteTextY = 395 + preloaderVerticalOffsetModifier;
-		const websiteText = this.add.text(
+		const preloaderVerticalOffsetModifier = 180;
+
+		// "Win up to 21,000x" breathing text (aligned with felice_in_space_v2)
+		// Must be above StudioLoadingScreen (depth 999) to be visible in forced-portrait games.
+		const winTextY = preloaderVerticalOffsetModifier;
+		const winText = this.add.text(
 			this.scale.width * 0.5,
-			this.scale.height * 0.5 + websiteTextY, // Position with modifier
-			'www.dijoker.com',
+			this.scale.height * 0.5 + winTextY,
+			'Win up to 21,000x',
 			{
-				fontFamily: 'poppins-regular',
-				fontSize: '14px',
+				fontFamily: 'poppins-bold',
+				fontSize: '35px',
 				color: '#FFFFFF',
-				fontStyle: 'normal',
 				align: 'center'
 			}
-		).setOrigin(0.5, 0.5)
+		)
+		.setOrigin(0.5, 0.5)
 		.setScrollFactor(0)
-		.setAlpha(1);
+		.setAlpha(1)
+		.setDepth(998);
 
-		// Set font weight to 500 for website text
-		try {
-			const textObj = websiteText as any;
-			const originalUpdateText = textObj.updateText?.bind(textObj);
-			if (originalUpdateText) {
-				textObj.updateText = function(this: any) {
-					originalUpdateText();
-					if (this.context) {
-						this.context.font = `500 14px poppins-regular`;
-					}
-				}.bind(textObj);
-				textObj.updateText();
+		// Add breathing animation to the win text
+		this.tweens.add({
+			targets: winText,
+			scale: { from: 0.90, to: 1.15 },
+			duration: 1200,
+			ease: 'Sine.easeInOut',
+			yoyo: true,
+			repeat: -1,  // Infinite repeat
+			hold: 0,
+			delay: 0
+		});
 
-			// Add "Win up to 21,000x" text with the same style as "Press anywhere to continue"
-			const winTextY = 140 + preloaderVerticalOffsetModifier;
-			const winText = this.add.text(
-				this.scale.width * 0.5,
-				this.scale.height * 0.5 + winTextY,
-				'Win up to 21,000x',
-				{
-					fontFamily: 'Poppins-SemiBold, Poppins-Regular, Arial, sans-serif',
-					fontSize: '35px',
-					color: '#FFFFFF',
-					align: 'center'
-				}
-			)
-			.setOrigin(0.5, 0.5)
-			.setScrollFactor(0)
-			.setAlpha(1);
-
-			// Add breathing animation to the win text
-			this.tweens.add({
-				targets: winText,
-				scale: { from: 0.90, to: 1.15 },
-				duration: 1200,
-				ease: 'Sine.easeInOut',
-				yoyo: true,
-				repeat: -1,  // Infinite repeat
-				hold: 0,
-				delay: 0
-			});
-
-			winText.setStroke('#379557', 4) // Add green outline
-			.setShadow(0, 2, '#000000', 4, true, true); // Add shadow for better visibility
-		}
-		} catch (e) {
-			console.warn('Could not set font weight for website text');
-		}
+		winText.setStroke('#379557', 4) // Add green outline
+		.setShadow(0, 2, '#000000', 4, true, true); // Add shadow for better visibility
 	}
 
 	private captureSnapshotAndStart()

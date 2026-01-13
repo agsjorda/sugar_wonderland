@@ -35,6 +35,7 @@ export enum GameEventType {
   BACKEND_BUSY = 'BACKEND_BUSY',
   // Additional events used by the backend
   RESPONSE = 'RESPONSE',
+  FREEROUND_COUNT_UPDATE = 'FREEROUND_COUNT_UPDATE', // payload: number (fsCount from backend)
 }
 
 // Define event data interfaces

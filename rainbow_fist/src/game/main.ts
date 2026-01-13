@@ -10,6 +10,85 @@ import { SpinePlugin } from '@esotericsoftware/spine-phaser-v3';
 
 const targetFPS = 60;
 
+/**
+ * Phaser WebAudioSoundManager has a few internal visibility handlers that call
+ * `AudioContext.suspend()` / `resume()` without checking if the context is already closed.
+ * When the game loads while the tab is backgrounded, some browsers can close the context,
+ * causing "Cannot suspend/resume a closed AudioContext" (often as unhandled promise rejections).
+ *
+ * This replaces the registered Game event handlers with guarded versions.
+ */
+const hardenPhaserWebAudioVisibilityHandlers = (game: Game): void => {
+	try {
+		const sm: any = (game as any)?.sound;
+		const events: any = (game as any)?.events;
+		const coreEvents: any = (Phaser as any)?.Core?.Events;
+
+		if (!sm || !events || !coreEvents) return;
+		// Only applies to WebAudio sound managers that expose an AudioContext
+		if (!sm.context) return;
+
+		const safeSuspend = (ctx: any): void => {
+			if (!ctx || ctx.state === 'closed') return;
+			try {
+				const p = ctx.suspend();
+				if (p && typeof p.catch === 'function') p.catch(() => {});
+			} catch {
+				// ignore
+			}
+		};
+
+		const safeResume = (ctx: any): void => {
+			if (!ctx || ctx.state === 'closed') return;
+			try {
+				const p = ctx.resume();
+				if (p && typeof p.catch === 'function') p.catch(() => {});
+			} catch {
+				// ignore
+			}
+		};
+
+		// Remove Phaser's original handlers (registered during sound manager construction)
+		try { events.off(coreEvents.VISIBLE, sm.onGameVisible, sm); } catch { /* no-op */ }
+		try { events.off(coreEvents.BLUR, sm.onBlur, sm); } catch { /* no-op */ }
+		try { events.off(coreEvents.FOCUS, sm.onFocus, sm); } catch { /* no-op */ }
+
+		// Replace with guarded versions
+		function safeOnGameVisible(this: any): void {
+			const self = this;
+			// Match Phaser's behavior (setTimeout avoids iOS artifacts), but guard closed contexts.
+			window.setTimeout(() => {
+				const ctx = self?.context;
+				if (!ctx || ctx.state === 'closed') return;
+				safeSuspend(ctx);
+				safeResume(ctx);
+			}, 100);
+		}
+
+		function safeOnBlur(this: any): void {
+			const ctx = this?.context;
+			if (!ctx || ctx.state === 'closed') return;
+			if (this?.locked) return;
+			safeSuspend(ctx);
+		}
+
+		function safeOnFocus(this: any): void {
+			const ctx = this?.context;
+			if (!ctx || ctx.state === 'closed') return;
+			if (this?.locked) return;
+			if (ctx.state === 'suspended' || ctx.state === 'interrupted') {
+				safeResume(ctx);
+			}
+		}
+
+		events.on(coreEvents.VISIBLE, safeOnGameVisible, sm);
+		events.on(coreEvents.BLUR, safeOnBlur, sm);
+		events.on(coreEvents.FOCUS, safeOnFocus, sm);
+	} catch {
+		// If anything about Phaser internals changes, fail open (no crash).
+	}
+};
+
 const config: Phaser.Types.Core.GameConfig = {
 	type: Phaser.WEBGL,
 	width: 428,
@@ -70,6 +149,7 @@ const StartGame = (parent: string) => {
     };
 
     const game = new Game({ ...config, parent });
+    hardenPhaserWebAudioVisibilityHandlers(game);
 
     if (isMobile()) {
         try {

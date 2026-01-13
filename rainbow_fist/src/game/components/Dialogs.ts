@@ -8,10 +8,11 @@ import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { getFullScreenSpineScale, playSpineAnimationSequenceWithConfig } from './SpineBehaviorHelper';
 import { FlashTransition } from './FlashTransition';
 import { WinTracker } from './WinTracker';
-import { AUTO_SPIN_WIN_DIALOG_TIMEOUT } from '../../config/GameConfig';
+import { DEFAULT_AUTO_SPIN_WIN_DIALOG_TIMEOUT } from '../../config/GameConfig';
 import { playUtilityButtonSfx } from '../../utils/audioHelpers';
 import { SoundEffectType } from '../../managers/AudioManager';
 import { RainbowTransition } from './RainbowTransition';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 
 export interface PreDialogSpineConfig {
 	spineKey: string;
@@ -148,6 +149,24 @@ export class Dialogs {
 		'SuperWin': 'super_win',
 		'MaxWin': 'max_win'
 	}
+
+	/**
+	 * Auto-close duration overrides (ms) per dialog type.
+	 * Only applies when the dialog is eligible for auto-close via setupAutoCloseTimer().
+	 *
+	 * Note: dialogs that must NOT auto-close (e.g., MaxWin, Congratulations) are excluded by rules,
+	 * so durations here won't matter for them.
+	 */
+	private dialogAutoCloseDurationsMs: Partial<Record<DialogConfig['type'], number>> = {
+		BigWin: DEFAULT_AUTO_SPIN_WIN_DIALOG_TIMEOUT,
+		MegaWin: DEFAULT_AUTO_SPIN_WIN_DIALOG_TIMEOUT,
+		EpicWin: DEFAULT_AUTO_SPIN_WIN_DIALOG_TIMEOUT,
+		SuperWin: DEFAULT_AUTO_SPIN_WIN_DIALOG_TIMEOUT,
+		MaxWin: 15000,
+		Congratulations: 15000,
+		BonusFreeSpinDialog: 5000,
+	};
+
 	private flashTransition: FlashTransition | null = null;
 	private dialogSpinePool: Record<string, SpineGameObject[]> = {};
 	private dialogSpinesPrewarmed: boolean = false;
@@ -463,6 +482,12 @@ export class Dialogs {
 			};
 
 			try {
+				if (!ensureSpineFactory(scene, '[Dialogs] preDialogSpine')) {
+					console.warn('[Dialogs] Spine factory unavailable. Skipping pre-dialog spine:', entry.spineKey);
+					finalize();
+					return;
+				}
+
 				// Create or reuse full white screen background just under the punch spine VFX
 				if (entry.spineKey === 'punch_vfx') {
 					if (this.punchVfxBackground) {
@@ -928,6 +953,11 @@ export class Dialogs {
 
 	private instantiateDialogSpine(scene: Scene, spineName: string): SpineGameObject | null {
 		try {
+			if (!ensureSpineFactory(scene, '[Dialogs] instantiateDialogSpine')) {
+				console.warn('[Dialogs] Spine factory unavailable. Cannot instantiate dialog spine:', spineName);
+				return null;
+			}
+
 			const spine = scene.add.spine(0, 0, spineName, `${spineName}-atlas`);
 			(spine as any).__dialogSpineKey = spineName;
 			spine.setVisible(false);
@@ -1146,32 +1176,82 @@ export class Dialogs {
 			this.autoCloseTimer = null;
 		}
 		
-		// Set up auto-close for win dialogs during autoplay OR when scatter is hit
+		// Auto-close rules:
+		// - In bonus mode, Big/Mega/Epic/Super win dialogs should auto-close.
+		// - In bonus mode, BonusFreeSpinDialog (retrigger) should auto-close.
+		// - In bonus mode, MaxWin and Congratulations (total win) should auto-close.
+		// - Outside bonus, preserve existing behavior: auto-close win dialogs during autoplay or on scatter hit.
+		const dialogType = this.currentDialogType;
+		const isBonus = gameStateManager.isBonus;
+		const isScatter = gameStateManager.isScatter;
+		const isAutoPlaying = gameStateManager.isAutoPlaying;
+
+		const isAutoClosableBonusDialog =
+			dialogType === 'BigWin' ||
+			dialogType === 'MegaWin' ||
+			dialogType === 'EpicWin' ||
+			dialogType === 'SuperWin' ||
+			dialogType === 'MaxWin' ||
+			dialogType === 'Congratulations';
+
+		const shouldAutoClose =
+			// Bonus-mode dialogs should auto-close (including MaxWin + Total Win)
+			((isBonus && isAutoClosableBonusDialog) ||
+				// Bonus-mode retrigger dialog should auto-close
+				(isBonus && dialogType === 'BonusFreeSpinDialog') ||
+				// Outside bonus: preserve legacy behavior
+				(!isBonus && this.isWinDialog() && (isAutoPlaying || isScatter)));
+
+		const reason =
+			isBonus ? 'bonus mode' :
+				isAutoPlaying ? 'autoplay' :
+					isScatter ? 'scatter hit' :
+						'unknown';
+
 		console.log('[Dialogs] Auto-close timer setup check:', {
+			currentDialogType: dialogType,
 			isWinDialog: this.isWinDialog(),
-			isAutoPlaying: gameStateManager.isAutoPlaying,
-			isScatter: gameStateManager.isScatter,
-			currentDialogType: this.currentDialogType
+			isAutoClosableBonusDialog,
+			isBonus,
+			isAutoPlaying,
+			isScatter,
+			shouldAutoClose,
+			reason,
 		});
-		
-		const shouldAutoClose = this.isWinDialog() && (gameStateManager.isAutoPlaying || gameStateManager.isScatter);
-		
-		if (shouldAutoClose) {
-			const reason = gameStateManager.isAutoPlaying ? 'autoplay' : 'scatter hit';
-			console.log(`[Dialogs] Setting up auto-close timer for win dialog during ${reason} (2 seconds)`);
-			console.log(`[Dialogs] Win dialog will automatically close in 2 seconds due to ${reason}`);
-			
-			this.autoCloseTimer = scene.time.delayedCall(AUTO_SPIN_WIN_DIALOG_TIMEOUT, () => {
-				console.log(`[Dialogs] Auto-close timer triggered for win dialog during ${reason} - closing dialog`);
-				this.handleDialogClick(scene);
-			});
-		} else {
-			console.log('[Dialogs] No auto-close timer needed:', {
-				isWinDialog: this.isWinDialog(),
-				isAutoPlaying: gameStateManager.isAutoPlaying,
-				isScatter: gameStateManager.isScatter
-			});
+
+		if (!shouldAutoClose) {
+			return;
 		}
+
+		const configuredAutoCloseMs = (this.dialogAutoCloseDurationsMs[dialogType as DialogConfig['type']] ?? DEFAULT_AUTO_SPIN_WIN_DIALOG_TIMEOUT);
+
+		console.log(`[Dialogs] Setting up auto-close timer for dialog during ${reason} (${configuredAutoCloseMs}ms)`);
+
+		this.autoCloseTimer = scene.time.delayedCall(configuredAutoCloseMs, () => {
+			console.log(`[Dialogs] Auto-close timer triggered for dialog during ${reason} - closing dialog`);
+
+			// Special case: BonusFreeSpinDialog (retrigger) should close without applying "new spin" reset logic.
+			// We also emit WIN_DIALOG_CLOSED so bonus retrigger flow can resume.
+			if (dialogType === 'BonusFreeSpinDialog') {
+				try {
+					if (typeof (this as any).hideDialogWithoutFade === 'function' && this.isDialogShowing()) {
+						(this as any).hideDialogWithoutFade();
+					} else if (typeof this.hideDialog === 'function' && this.isDialogShowing()) {
+						this.hideDialog();
+					}
+				} catch (error) {
+					console.warn('[Dialogs] Failed to auto-close BonusFreeSpinDialog:', error);
+				} finally {
+					try { gameStateManager.isShowingWinDialog = false; } catch {}
+					try { gameEventManager.emit(GameEventType.WIN_DIALOG_CLOSED); } catch {}
+					try { scene.events.emit('dialogAnimationsComplete'); } catch {}
+				}
+				return;
+			}
+
+			// Default: mimic user click close for win dialogs so fade-out + events fire consistently.
+			this.handleDialogClick(scene);
+		});
 	}
 
 	/**
@@ -1192,6 +1272,11 @@ export class Dialogs {
 	 */
 	private createConfettiEffect(scene: Scene): void {
 		try {
+			if (!ensureSpineFactory(scene, '[Dialogs] createConfettiEffect')) {
+				console.warn('[Dialogs] Spine factory unavailable. Skipping confetti effect.');
+				return;
+			}
+
 			// Get position and scale from dialog configuration
 			const position = this.getDialogPosition('confetti_KA', scene);
 			const scale = this.getDialogScale('confetti_KA');
@@ -1228,6 +1313,11 @@ export class Dialogs {
 	 */
 	private createExplosionEffect(scene: Scene): void {
 		try {
+			if (!ensureSpineFactory(scene, '[Dialogs] createExplosionEffect')) {
+				console.warn('[Dialogs] Spine factory unavailable. Skipping explosion effect.');
+				return;
+			}
+
 			// Get position and scale from dialog configuration
 			const position = this.getDialogPosition('Explosion_AK', scene);
 			const scale = this.getDialogScale('Explosion_AK');
@@ -1264,6 +1354,13 @@ export class Dialogs {
 	 */
 	private createPaintEffect(scene: Scene): void {
 		try {
+			if (!ensureSpineFactory(scene, '[Dialogs] createPaintEffect')) {
+				console.warn('[Dialogs] Spine factory unavailable. Skipping paint effect.');
+				// If paint is used to gate number display fade-in, ensure we don't block it.
+				try { this.fadeInNumberDisplay(scene); } catch {}
+				return;
+			}
+
 			// Get position and scale from dialog configuration
 			const position = this.getDialogPosition('Paint_KA', scene);
 			const scale = this.getDialogScale('Paint_KA');
@@ -1693,6 +1790,9 @@ export class Dialogs {
 			this.performDialogCleanup();
 			// Emit dialog animations complete event
 			scene.events.emit('dialogAnimationsComplete');
+			// Emit WIN_DIALOG_CLOSED so bonus flows waiting on this signal can resume.
+			try { gameStateManager.isShowingWinDialog = false; } catch {}
+			try { gameEventManager.emit(GameEventType.WIN_DIALOG_CLOSED); } catch {}
 			console.log('[Dialogs] Bonus free spin dialog hidden without fade');
 			return;
 		}

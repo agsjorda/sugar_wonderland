@@ -20,7 +20,7 @@ export const DELAY_BETWEEN_SPINS: number = 3000;
 export const DROP_REEL_START_INTERVAL_RATIO: number = 0.25;
 // Delay before starting autoplay for free spins
 export const AUTO_SPIN_START_DELAY: number = 1000;
-export const AUTO_SPIN_WIN_DIALOG_TIMEOUT: number = 2000;
+export const DEFAULT_AUTO_SPIN_WIN_DIALOG_TIMEOUT: number = 2000;
 
 export const MULTIPLIER_VALUE_REFERENCE: { [key: number]: number } = {
   10: 2,

@@ -326,6 +326,7 @@ export class Header {
 			console.log('[Header] WIN_START received - showing winnings display');
 
 			const spinData = this.scene.gameAPI.getCurrentSpinData();
+			console.log('[Header] spinData: ', spinData);
 			if(spinData) {
 				const winnings = spinData?.slot?.tumbles?.items[this.scene.gameAPI.getCurrentTumbleIndex()]?.win || 0;
 

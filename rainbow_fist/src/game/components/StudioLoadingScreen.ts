@@ -195,9 +195,9 @@ export class StudioLoadingScreen {
                 const text2 = this.scene.add.text(
                     text2X,
                     text2Y,
-                    this.options.text2.toUpperCase(), // text-transform: uppercase
+                    this.options.text2,
                     {
-                        fontFamily: 'poppins-regular',
+                        fontFamily: 'Poppins-Regular',
                         fontSize: `${fontSize}px`,
                         color: textColor,
                         fontStyle: 'normal',

@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { getFullScreenSpineScale } from './SpineBehaviorHelper';
+import { SoundEffectType } from '../../managers/AudioManager';
 
 export class RainbowTransition {
 	private scene: Scene | undefined;
@@ -38,6 +39,18 @@ export class RainbowTransition {
 
 		this.isPlaying = true;
 		this.cleanup(); // Clean up any existing instances
+
+		// Play rainbow transition SFX with 200ms delay
+		this.scene.time.delayedCall(200, () => {
+			try {
+				const audioManager = (window as any).audioManager;
+				if (audioManager && typeof audioManager.playSoundEffect === 'function') {
+					audioManager.playSoundEffect(SoundEffectType.RAINBOW_TRANSITION);
+				}
+			} catch (error) {
+				console.warn('[RainbowTransition] Failed to play rainbow transition SFX:', error);
+			}
+		});
 
 		const transitionKey = 'rainbow_transition';
 		const sparkleKey = 'sparkle_background';
@@ -301,6 +314,18 @@ export class RainbowTransition {
 
 		this.isPlaying = true;
 		this.cleanup(); // Clean up any existing instances
+
+		// Play rainbow transition SFX with 200ms delay
+		this.scene.time.delayedCall(200, () => {
+			try {
+				const audioManager = (window as any).audioManager;
+				if (audioManager && typeof audioManager.playSoundEffect === 'function') {
+					audioManager.playSoundEffect(SoundEffectType.RAINBOW_TRANSITION);
+				}
+			} catch (error) {
+				console.warn('[RainbowTransition] Failed to play rainbow transition SFX:', error);
+			}
+		});
 
 		const transitionKey = 'rainbow_transition';
 		const sparkleKey = 'sparkle_background';

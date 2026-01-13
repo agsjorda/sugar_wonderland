@@ -3,6 +3,7 @@ import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { SlotController } from './SlotController';
 import { playSpineAnimationSequence, playSpineAnimationSequenceWithConfig } from './SpineBehaviorHelper';
 import { playUtilityButtonSfx } from '../../utils/audioHelpers';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 
 export interface BuyFeatureConfig {
 	position?: { x: number; y: number };
@@ -181,6 +182,12 @@ export class BuyFeature {
 	}
 
 	private createFeatureLogo(scene: Scene): void {
+		// Guard against missing spine factory (prevents intermittent "add.spine missing" crashes)
+		if (!ensureSpineFactory(scene, '[BuyFeature] createFeatureLogo')) {
+			console.warn('[BuyFeature] Spine factory unavailable. Skipping feature logo spine.');
+			return;
+		}
+
 		const screenWidth = scene.cameras.main.width;
 		const screenHeight = scene.cameras.main.height;
 

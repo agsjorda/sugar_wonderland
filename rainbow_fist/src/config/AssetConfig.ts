@@ -198,6 +198,11 @@ export class AssetConfig {
 			images: {
 				'autoplay_off': `assets/controller/${screenMode}/${quality}/autoplay_off.png`,
 				'autoplay_on': `assets/controller/${screenMode}/${quality}/autoplay_on.png`,
+				// Free round button background (currently only available as portrait/high asset)
+				// We reference it directly so it can be used in all modes without additional variants.
+				'freeround_bg': `assets/controller/portrait/high/freeround_bg.png`,
+				// "Spin Now" button for free round reward panel (portrait/high only asset)
+				'spin_now_button': `assets/controller/portrait/high/spin_now_button.png`,
 				'decrease_bet': `assets/controller/${screenMode}/${quality}/decrease_bet.png`,
 				'increase_bet': `assets/controller/${screenMode}/${quality}/increase_bet.png`,
 				'menu': `assets/controller/${screenMode}/${quality}/menu.png`,
@@ -473,6 +478,8 @@ export class AssetConfig {
 
 				// Note: actual folder in /public is "Wins" (case-sensitive on many hosts)
 				'win_dialog_intro': 'assets/sounds/Wins/win_intro_anim_RF.ogg',
+
+				'rainbow_transition': 'assets/sounds/SFX/rainbow_transition_RF.ogg',
 			}
 		};
 	}

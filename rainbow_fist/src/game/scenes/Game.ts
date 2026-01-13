@@ -44,6 +44,7 @@ import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { getFullScreenSpineScale } from '../components/SpineBehaviorHelper';
 import { initializeConsoleDebugHelpers } from '../../utils/ConsoleDebugHelpers';
 import { RainbowTransition } from '../components/RainbowTransition';
+import { FreeRoundManager } from '../components/FreeRoundManager';
 
 export class Game extends Scene
 {
@@ -69,6 +70,7 @@ export class Game extends Scene
 	private menu: Menu;
 	private scatterAnticipation: ScatterAnticipation;
 	private rainbowTransition: RainbowTransition;
+	private freeRoundManager: FreeRoundManager;
 		private winTrackerRow?: Phaser.GameObjects.Container;
 	private startupTransitionPlayed: boolean = false;
 	
@@ -162,6 +164,21 @@ export class Game extends Scene
 	create ()
 	{
 		console.log(`[Game] Creating game scene`);
+		
+		// Initialize AudioManager
+		this.audioManager = new AudioManager(this);
+		console.log('[Game] AudioManager initialized');
+
+		// Audio assets are already loaded in Preloader, so just create instances
+		try {
+			this.audioManager.createMusicInstances();
+			console.log('[Game] Audio initialized and background music started');
+		} catch (e) {
+			console.warn('[Game] Failed to initialize or start audio:', e);
+		}
+
+		// Make AudioManager available globally for other components
+		(window as any).audioManager = this.audioManager;
 
 		// Initialize RainbowTransition component
 		this.rainbowTransition = new RainbowTransition();
@@ -206,9 +223,14 @@ export class Game extends Scene
 				});
 			};
 
+			// Play rainbow transition after audio is ready (audio is loaded in Preloader)
+			// Small delay to ensure audio instances are created
 			this.time.delayedCall(200, () => {
-				this.playReverseRainbowTransition(() => {
+				this.playRainbowTransition(() => {
 					console.log('[Game] Rainbow intro transition complete');
+					
+					// Play main background music after transition completes
+					this.audioManager.playBackgroundMusic(MusicType.MAIN);
 				}, fallbackFade);
 			});
 		};
@@ -257,53 +279,6 @@ export class Game extends Scene
 		//Create symbols
 		console.log(`[Game] Creating symbols...`);
 		this.symbols.create(this);
-
-		// Initialize AudioManager
-		this.audioManager = new AudioManager(this);
-		console.log('[Game] AudioManager initialized');
-
-		// Load audio assets immediately (no deferred loading)
-		try {
-			const audioAssets = this.assetConfig.getAudioAssets();
-			const audioEntries = Object.entries(audioAssets.audio ?? {});
-			const audioCache: any = (this.cache as any)?.audio;
-
-			const isAudioCached = (key: string): boolean => {
-				try {
-					if (audioCache && typeof audioCache.exists === 'function') return !!audioCache.exists(key);
-					if (audioCache && typeof audioCache.has === 'function') return !!audioCache.has(key);
-				} catch {}
-				return false;
-			};
-
-			const toLoad = audioEntries.filter(([key]) => !isAudioCached(key));
-
-			const initializeAudio = () => {
-				try {
-					this.audioManager.createMusicInstances();
-					this.audioManager.playBackgroundMusic(MusicType.MAIN);
-					console.log('[Game] Audio initialized and background music started');
-				} catch (e) {
-					console.warn('[Game] Failed to initialize or start audio:', e);
-				}
-			};
-
-			if (toLoad.length === 0) {
-				initializeAudio();
-			} else {
-				console.log(`[Game] Loading ${toLoad.length} audio assets...`);
-				this.load.once('complete', initializeAudio, this);
-				toLoad.forEach(([key, path]) => {
-					try { this.load.audio(key, path as string); } catch {}
-				});
-				this.load.start();
-			}
-		} catch (e) {
-			console.warn('[Game] Failed to queue audio loading:', e);
-		}
-
-		// Make AudioManager available globally for other components
-		(window as any).audioManager = this.audioManager;
 		
 		// Create dialogs using the managers
 		this.dialogs = new Dialogs(this.networkManager, this.screenModeManager);
@@ -329,6 +304,37 @@ export class Game extends Scene
 		this.slotController.setSymbols(this.symbols); // Set symbols reference for free spin data access
 		this.slotController.setBuyFeatureReference(); // Set BuyFeature reference for bet access
 		this.slotController.create(this);
+
+		// Create free round manager AFTER SlotController so it can mirror the spin button.
+		// It will read the backend initialization data and decide whether to show itself.
+		try {
+			const initData = this.gameAPI.getInitializationData();
+			const initFsRemaining = this.gameAPI.getRemainingInitFreeSpins();
+			const initFsBet = this.gameAPI.getInitFreeSpinBet();
+
+			this.freeRoundManager = new FreeRoundManager();
+			this.freeRoundManager.create(this, this.gameAPI, this.slotController);
+
+			if (initData && initData.hasFreeSpinRound && initFsRemaining > 0) {
+				console.log(
+					`[Game] Initialization indicates free spin round available (${initFsRemaining}). Enabling FreeRoundManager UI.`
+				);
+
+				// If backend provided a bet size for the free rounds, apply it to the SlotController
+				// so both the UI and the underlying base bet used for spins match the init data.
+				if (this.slotController && initFsBet && initFsBet > 0) {
+					console.log(
+						`[Game] Applying initialization free spin bet to SlotController: ${initFsBet.toFixed(2)}`
+					);
+					this.slotController.updateBetAmount(initFsBet);
+				}
+
+				this.freeRoundManager.setFreeSpins(initFsRemaining);
+				this.freeRoundManager.enableFreeSpinMode();
+			}
+		} catch (e) {
+			console.warn('[Game] Failed to create FreeRoundManager from initialization data:', e);
+		}
 		
 		// Create coin animation component
 		this.coinAnimation = new CoinAnimation(this.networkManager, this.screenModeManager);
@@ -368,27 +374,7 @@ export class Game extends Scene
 		console.log(`[Game] Triggering layered effects...`);
 		
 
-		// Show congratulations dialog (on top)
-		//this.dialogs.showPaintEffect(this);
 		
-		// Show congratulations dialog (on top)
-		this.time.delayedCall(2500, () => {
-			// this.dialogs.showCongratulations(this, { winAmount: 10000.00 });
-
-			// this.dialogs.showFreeSpinDialog(this, { freeSpins: 15 });
-	
-			// Show small win dialog (on top)
-			// this.dialogs.showMegaWin(this, { winAmount: 1234567891231.00 });
-			
-			// Show medium win dialog (on top)
-			//this.dialogs.showMediumWin(this, { winAmount: 2500000.50 });
-	
-			// Show large win dialog (on top)
-			//this.dialogs.showLargeWin(this, { winAmount: 5000000.75 });
-	
-			// Show super win dialog (on top)
-			// this.dialogs.showSuperWin(this, { winAmount: 10000000.00 });
-		});
 
 		EventBus.on('spin', () => {
 			this.spin();
@@ -399,6 +385,9 @@ export class Game extends Scene
 			console.log('[Game] Menu button clicked - toggling menu');
 			this.menu.toggleMenu(this);
 		});
+
+		// Add global click handler for non-interactive areas
+		this.setupGlobalClickHandler();
 
 		EventBus.on('show-bet-options', () => {
 			console.log('[Game] Showing bet options with fade-in effect');
@@ -1365,7 +1354,7 @@ export class Game extends Scene
 		}
 	}
 
-	private playReverseRainbowTransition(onComplete: () => void, onFallback: () => void)
+	private playRainbowTransition(onComplete: () => void, onFallback: () => void)
 	{
 		if (this.startupTransitionPlayed) {
 			onComplete();
@@ -1405,6 +1394,54 @@ export class Game extends Scene
 
 	changeScene() {
 		// Scene change logic if needed
+	}
+
+	/**
+	 * Setup global click handler for non-interactive areas
+	 * Plays click SFX when clicking on areas that don't have interactive elements
+	 * Only plays if no other SFX was triggered by the click
+	 */
+	private setupGlobalClickHandler(): void {
+		this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+			// Use a small delay to allow interactive objects to process their events first
+			// This ensures we only play the click sound if no interactive object handled the click
+			// and no other SFX was triggered
+			this.time.delayedCall(50, () => {
+				// Check if any SFX was played recently (indicating a button or interactive element handled the click)
+				if (this.audioManager && this.audioManager.wasSfxPlayedRecently(100)) {
+					console.log('[Game] SFX was already played for this click - skipping MENU_CLICK');
+					return;
+				}
+
+				// Check if any game objects at the pointer position are interactive
+				// We iterate through the scene's children to find interactive objects
+				let hasInteractiveObject = false;
+				
+				// Check all game objects in the scene
+				this.children.list.forEach((child: any) => {
+					if (hasInteractiveObject) return;
+					
+					// Check if the object has input and is interactive
+					if (child.input && child.input.enabled) {
+						// Check if the pointer is within the object's bounds
+						const bounds = child.getBounds ? child.getBounds() : null;
+						if (bounds) {
+							const worldX = pointer.worldX;
+							const worldY = pointer.worldY;
+							if (bounds.contains(worldX, worldY)) {
+								hasInteractiveObject = true;
+							}
+						}
+					}
+				});
+				
+				// Only play click sound if no interactive objects were hit and no SFX was already played
+				if (!hasInteractiveObject && this.audioManager) {
+					this.audioManager.playSoundEffect(SoundEffectType.MENU_CLICK);
+					console.log('[Game] Clicked on non-interactive area - playing click SFX');
+				}
+			});
+		});
 	}
 
 	spin() {

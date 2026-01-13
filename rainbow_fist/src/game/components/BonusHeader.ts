@@ -72,7 +72,7 @@ export class BonusHeader {
 		// Create main container for all bonus header elements
 		this.bonusHeaderContainer = scene.add.container(0, 0);
 		this.bonusHeaderContainer.setDepth(501); // Keep bonus header above symbols/overlay (500) but below winning symbols (600)
-		this.currentWinnings = this.getCachedPreBonusWins();
+		this.currentWinnings = this.getPreBonusWins();
 		
 		const screenConfig = this.screenModeManager.getScreenConfig();
 		const assetScale = this.networkManager.getAssetScale();
@@ -381,10 +381,9 @@ export class BonusHeader {
 		return `${currencySymbol}${formatted}`;
 	}
 
-	private getCachedPreBonusWins(): number {
-		const symbolsComponent = (this.bonusHeaderContainer?.scene as any)?.symbols;
-		const cachedValue = symbolsComponent?.cachedPreBonusWins;
-		return typeof cachedValue === 'number' && !Number.isNaN(cachedValue) ? cachedValue : 0;
+	private getPreBonusWins(): number {
+		const spinData = this.scene.gameAPI.getCurrentSpinData();
+		return SpinDataUtils.getPreBonusWins(spinData as SpinData);
 	}
 
 	/**
@@ -406,7 +405,7 @@ export class BonusHeader {
 	 */
 	public initializeWinnings(): void {
 		console.log('[BonusHeader] Initializing winnings display - starting hidden');
-		this.currentWinnings = this.getCachedPreBonusWins();
+		this.currentWinnings = this.getPreBonusWins();
 		this.hideWinningsDisplay();
 	}
 
@@ -466,25 +465,20 @@ export class BonusHeader {
 		gameEventManager.on(GameEventType.REELS_START, () => {
 			console.log('[BonusHeader] REELS_START received');
 
-			const cachedPreBonusWins = this.getCachedPreBonusWins();
-			if (this.currentWinnings <= 0 && cachedPreBonusWins > 0) {
-				this.currentWinnings = cachedPreBonusWins;
-			}
-
-			const spinData = this.scene.gameAPI.getCurrentSpinData();
-			if(spinData) {
-				const freeSpin = spinData.slot?.freeSpin;
-				// add all tumble item wins
-				const tumbleItems = spinData.slot?.tumbles?.items;
-				const tumbleWins = tumbleItems !== undefined && tumbleItems.length > 0 ? tumbleItems.reduce((sum, item) => sum + item.win, 0) : 0;
-				if(freeSpin && this.currentWinnings <= 0) {
-					this.currentWinnings += freeSpin.multiplierValue ?? 0;
-				}
-				if (tumbleWins > 0) {
-					this.currentWinnings += tumbleWins;
-				}
-				console.log(`[BonusHeader] REELS_START: free spin multiplier: ${freeSpin?.multiplierValue}, tumble wins: ${tumbleWins}, total winnings: ${this.currentWinnings}`);
-			}
+			// const spinData = this.scene.gameAPI.getCurrentSpinData();
+			// if(spinData) {
+			// 	const freeSpin = spinData.slot?.freeSpin;
+			// 	// add all tumble item wins
+			// 	const tumbleItems = spinData.slot?.tumbles?.items;
+			// 	const tumbleWins = tumbleItems !== undefined && tumbleItems.length > 0 ? tumbleItems.reduce((sum, item) => sum + item.win, 0) : 0;
+			// 	if(freeSpin && this.currentWinnings <= 0) {
+			// 		this.currentWinnings += freeSpin.multiplierValue ?? 0;
+			// 	}
+			// 	if (tumbleWins > 0) {
+			// 		this.currentWinnings += tumbleWins;
+			// 	}
+			// 	console.log(`[BonusHeader] REELS_START: free spin multiplier: ${freeSpin?.multiplierValue}, tumble wins: ${tumbleWins}, total winnings: ${this.currentWinnings}`);
+			// }
 			
 			// On reels start, roll the last tumble's winnings into the running total.
 			// If there was no multiplier update for that tumble, do NOT multiply the base winnings.
@@ -639,7 +633,7 @@ export class BonusHeader {
 	}
 
 	private resetBonusDisplayState(isBonus: boolean = false): void {
-		this.currentWinnings = isBonus ? this.getCachedPreBonusWins() : 0;
+		this.currentWinnings = isBonus ? this.getPreBonusWins() : 0;
 		this.currentBaseWinnings = 0;
 		this.currentMultiplier = 0;
 		this.didMultiplierUpdateForCurrentTumble = false;

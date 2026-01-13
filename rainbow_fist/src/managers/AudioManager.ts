@@ -58,6 +58,7 @@ export enum SoundEffectType {
 	SYMBOL_PAU = 'symbol_pau',
 	SYMBOL_PUNCH = 'symbol_punch',
 	WIN_DIALOG_INTRO = 'win_dialog_intro',
+	RAINBOW_TRANSITION = 'rainbow_transition',
 }
 
 export class AudioManager {
@@ -76,6 +77,7 @@ export class AudioManager {
 	private savedAmbientVolume: number | null = null;
 	private duckFadeTimer: any = null;
 	private restoreFadeTimer: any = null;
+	private lastSfxPlayTime: number = 0; // Track when SFX was last played
 
 	constructor(scene: Phaser.Scene) {
 		this.scene = scene;
@@ -174,6 +176,7 @@ export class AudioManager {
 		addSfxInstance(SoundEffectType.SYMBOL_PUNCH, 'symbol_punch');
 		addSfxInstance(SoundEffectType.MULTIPLIER_HIT, 'multiplier_hit');
 		addSfxInstance(SoundEffectType.WIN_DIALOG_INTRO, 'win_dialog_intro');
+		addSfxInstance(SoundEffectType.RAINBOW_TRANSITION, 'rainbow_transition');
 		// Win dialog SFX instances
 		addSfxInstance(SoundEffectType.WIN_BIG, 'bigw');
 		addSfxInstance(SoundEffectType.WIN_MEGA, 'megaw');
@@ -678,6 +681,8 @@ export class AudioManager {
 			});
 
 			oneShotInstance.play();
+			// Track when SFX was played (for click handler to check if other SFX was triggered)
+			this.lastSfxPlayTime = Date.now();
 			console.log(`[AudioManager] Playing ${actualSfxType} SFX as one-shot instance`);
 			return;
 		} catch (error) {
@@ -732,6 +737,8 @@ export class AudioManager {
 					sfx.stop();
 				}
 				sfx.play();
+				// Track when SFX was played (for click handler to check if other SFX was triggered)
+				this.lastSfxPlayTime = Date.now();
 				// Track current win SFX so we can fade it out on dialog close
 				if (sfxType === SoundEffectType.WIN_BIG || sfxType === SoundEffectType.WIN_MEGA || sfxType === SoundEffectType.WIN_SUPER || sfxType === SoundEffectType.WIN_EPIC) {
 					this.currentWinSfx = sfx;
@@ -775,6 +782,8 @@ export class AudioManager {
 					return;
 				}
 				sfx.play();
+				// Track when SFX was played (for click handler to check if other SFX was triggered)
+				this.lastSfxPlayTime = Date.now();
 				console.log(`[AudioManager] Successfully playing ${actualSfxType} sound effect`);
 			} catch (error) {
 				console.error(`[AudioManager] Error playing ${actualSfxType} sound effect:`, error);
@@ -921,6 +930,15 @@ export class AudioManager {
 	 */
 	getSfxVolume(): number {
 		return this.sfxVolume;
+	}
+
+	/**
+	 * Check if SFX was played recently (within the specified time window)
+	 * Used to prevent duplicate SFX from playing for the same user action
+	 */
+	wasSfxPlayedRecently(timeWindowMs: number = 100): boolean {
+		const timeSinceLastSfx = Date.now() - this.lastSfxPlayTime;
+		return timeSinceLastSfx < timeWindowMs;
 	}
 
 	/**
