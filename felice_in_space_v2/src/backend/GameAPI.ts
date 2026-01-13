@@ -2,6 +2,7 @@ import { SpinData } from "./SpinData";
 import { GameData } from "../game/components/GameData";
 import { gameStateManager } from "../managers/GameStateManager";
 import { SoundEffectType } from "../managers/AudioManager";
+import { SLOT_COLUMNS, SLOT_ROWS } from "../config/GameConfig";
 
 /**
  * Function to parse URL query parameters
@@ -102,6 +103,15 @@ export class GameAPI {
     private initializationData: SlotInitializeData | null = null; // Cached initialization response
     private remainingInitFreeSpins: number = 0; // Free spin rounds from initialization still available
     private initFreeSpinBet: number | null = null; // Bet size associated with initialization free spins
+
+    // One-shot debug helper: force the first MANUAL spin to contain 3 scatters (symbol id 0)
+    // in the first 3 columns. Enable via:
+    // - URL: ?mockFirstManualScatterSpin=true
+    // - localStorage: localStorage.setItem('mockFirstManualScatterSpin','true')
+    private static readonly MOCK_FIRST_MANUAL_SCATTER_SPIN_ENABLED: boolean =
+        new URLSearchParams(window.location.search).get('mockFirstManualScatterSpin') === 'true' ||
+        localStorage.getItem('mockFirstManualScatterSpin') === 'true';
+    private mockedFirstManualScatterSpin: boolean = false;
     
     // Test mode: Set to true to force test data on every spin
     // Can be enabled via URL parameter ?testMode=true or localStorage.setItem('testMode', 'true')
@@ -213,6 +223,43 @@ export class GameAPI {
             console.log('[GameAPI] To disable test mode, remove ?testMode=true from URL or set localStorage.setItem("testMode", "false")');
         }
     }   
+
+    private createMockFirstManualScatterSpinData(bet: number): SpinData {
+        // NOTE: In this project, slot.area is [column][row] and the grid is 6 columns x 5 rows.
+        // GameConfig naming is a bit confusing:
+        // - SLOT_ROWS = number of columns
+        // - SLOT_COLUMNS = number of rows
+        const cols = Number(SLOT_ROWS || 6);
+        const rows = Number(SLOT_COLUMNS || 5);
+
+        const area: number[][] = Array.from({ length: cols }, (_, col) =>
+            Array.from({ length: rows }, (_, row) => ((col * 3 + row) % 9) + 1)
+        );
+
+        // Place scatters (symbol id 0) on columns 0,1,2 at the middle row
+        const scatterRow = Math.max(0, Math.min(rows - 1, Math.floor(rows / 2)));
+        for (const col of [0, 1, 2]) {
+            if (col >= 0 && col < cols) {
+                area[col][scatterRow] = 0;
+            }
+        }
+
+        const spinData: any = {
+            playerId: this.currentSpinData?.playerId || 'mock_player',
+            bet: bet.toString(),
+            slot: {
+                area,
+                paylines: [],
+                tumbles: [],
+                // Keep both shapes around for compatibility with callers checking either key.
+                freespin: { count: 0, totalWin: 0, items: [] },
+                freeSpin: { count: 0, totalWin: 0, items: [] },
+                totalWin: 0,
+            },
+        };
+
+        return spinData as SpinData;
+    }
 
     /**
      * 1. Generate game URL token upon game initialization
@@ -618,6 +665,28 @@ export class GameAPI {
      * This method sends a spin request and returns the server response
      */
     public async doSpin(bet: number, isBuyFs: boolean, isEnhancedBet: boolean, isFs: boolean = false): Promise<SpinData> {
+        // Optional debug helper: first manual spin returns mocked data with 3 scatters
+        // Manual spin heuristic: not autoplaying and not an autoplay-requested spin.
+        // Also exclude buy feature spins and initialization free rounds.
+        if (
+            GameAPI.MOCK_FIRST_MANUAL_SCATTER_SPIN_ENABLED &&
+            !this.mockedFirstManualScatterSpin &&
+            !gameStateManager.isBonus &&
+            !gameStateManager.isAutoPlaying &&
+            !gameStateManager.isAutoPlaySpinRequested &&
+            !isBuyFs &&
+            !isFs
+        ) {
+            this.mockedFirstManualScatterSpin = true;
+            const mock = this.createMockFirstManualScatterSpinData(bet);
+            this.currentSpinData = mock;
+            console.log('[GameAPI] 🧪 Mocking first manual spin: 3 scatters in columns 0/1/2', {
+                bet,
+                scatterSymbolId: 0,
+            });
+            return this.currentSpinData;
+        }
+
         // TEST MODE: If enabled, return test data immediately without API call
         if (GameAPI.TEST_MODE_ENABLED) {
             console.log('[GameAPI] 🧪 TEST MODE ENABLED - Using test data instead of API call');

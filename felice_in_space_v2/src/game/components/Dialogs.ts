@@ -563,24 +563,32 @@ export class Dialogs {
 			}
 		} catch {}
 
-		// If a win dialog appears exactly when bonus spins are exhausted, do NOT auto-close it.
-		// We want the normal (non-autoplay) dwell time so the flow can proceed cleanly to Congrats.
-		if (this.isWinDialog() && gameStateManager.isBonusFinished) {
-			console.log('[Dialogs] End-of-bonus win dialog detected - skipping auto-close to allow congrats flow');
-			return;
+		// If a win dialog appears exactly when bonus spins are exhausted, we still need the
+		// flow to continue reliably to the Congrats dialog. Relying on a manual click here
+		// can deadlock the bonus end (stuck at 0 spins), so we auto-close with a slightly
+		// longer dwell time than normal autoplay.
+		const isEndOfBonusWinDialog = this.isWinDialog() && gameStateManager.isBonusFinished;
+		if (isEndOfBonusWinDialog) {
+			console.log('[Dialogs] End-of-bonus win dialog detected - will auto-close with extended dwell to allow congrats flow');
 		}
 
 		// Also auto-close FreeSpinDialog when it's a retrigger during bonus mode
 		const isRetriggerFreeSpinDialog = (this.currentDialogType === 'FreeSpin_Dialog') && this.isRetriggerFreeSpin;
 		const shouldAutoClose = (this.isWinDialog() && (gameStateManager.isAutoPlaying || isFreeSpinAutoplay || gameStateManager.isScatter))
+			|| isEndOfBonusWinDialog
 			|| isRetriggerFreeSpinDialog;
 		
 		if (shouldAutoClose) {
 			const reason = isRetriggerFreeSpinDialog
 				? 'retrigger'
-				: (gameStateManager.isAutoPlaying || isFreeSpinAutoplay ? 'autoplay' : 'scatter hit');
+				: (isEndOfBonusWinDialog ? 'end-of-bonus' : (gameStateManager.isAutoPlaying || isFreeSpinAutoplay ? 'autoplay' : 'scatter hit'));
 			// Base auto-close delay (ms). Previously ~2.5s. Extend by +1s when autoplaying (normal or free spin).
 			let baseDelayMs = 2500;
+
+			// End-of-bonus: give the win dialog a little extra dwell, then proceed to Congrats automatically.
+			if (isEndOfBonusWinDialog) {
+				baseDelayMs = 3500;
+			}
 
 			// If we're running a staged win sequence (Big -> Mega -> Epic -> Super),
 			// align the auto-close timing with the per-stage dwell timing used in

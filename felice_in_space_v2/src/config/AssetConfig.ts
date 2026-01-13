@@ -407,7 +407,14 @@ export class AssetConfig {
 	getScatterAnticipationAssets(): AssetGroup {
 		console.log('[AssetConfig] Loading Scatter Anticipation assets');
 		return {
-			
+			spine: {
+				// NOTE: Keep this key stable; code expects `${key}-atlas` for the atlas cache key.
+				// Files live under: public/assets/portrait/high/scatter_anticipation/
+				'scatter_anticipation_spine': {
+					atlas: `assets/portrait/high/scatter_anticipation/skeleton.atlas`,
+					json: `assets/portrait/high/scatter_anticipation/skeleton.json`,
+				},
+			},
 		};
 	}
 

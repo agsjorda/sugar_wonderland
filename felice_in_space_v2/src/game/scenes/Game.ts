@@ -359,8 +359,9 @@ export class Game extends Scene
 		this.coinAnimation = new CoinAnimation(this.networkManager, this.screenModeManager);
 		this.coinAnimation.create(this);
 
-		// Create scatter anticipation component inside background container to avoid symbol mask and stay behind symbols
-		this.scatterAnticipation.create(this, this.background.getContainer());
+		// Create scatter anticipation component inside Symbols container so it's clipped by the reel mask
+		// (and inserted behind symbols).
+		this.scatterAnticipation.create(this, this.symbols.container);
 		this.scatterAnticipation.hide();
 		(this as any).scatterAnticipation = this.scatterAnticipation;
 		

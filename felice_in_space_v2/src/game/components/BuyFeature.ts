@@ -48,6 +48,36 @@ export class BuyFeature {
 	private scatterRetryCount: number = 0;
 	private readonly SCATTER_MAX_RETRIES: number = 5;
 
+	/**
+	 * Symbol0_FIS has optional attachments ("felice gun", "felice eyes") that are disabled during idle on reels.
+	 * For the Buy Feature panel we always want them visible.
+	 */
+	private enableScatterFeliceAttachments(spineObj: any): void {
+		try {
+			const skeleton: any = spineObj?.skeleton;
+			if (!skeleton || !skeleton.slots) return;
+
+			const slotNamesToEnable = ['felice gun', 'felice eyes'];
+			for (const slotName of slotNamesToEnable) {
+				try {
+					let slot: any = null;
+					if (typeof skeleton.findSlot === 'function') {
+						slot = skeleton.findSlot(slotName);
+					} else if (Array.isArray(skeleton.slots)) {
+						slot = skeleton.slots.find((s: any) => (s?.data?.name || s?.name) === slotName);
+					}
+
+					if (slot && typeof slot.setAttachment === 'function') {
+						slot.setAttachment(slotName);
+					}
+					if (typeof skeleton.setAttachment === 'function') {
+						try { skeleton.setAttachment(slotName, slotName); } catch {}
+					}
+				} catch {}
+			}
+		} catch {}
+	}
+
 	constructor() {
 		// Constructor for BuyFeature component
 	}
@@ -248,18 +278,32 @@ export class BuyFeature {
 					this.container.add(this.scatterSpine);
 				}
 
-				// Play continuous "win" loop for the scatter sugar symbol
+				// Match in-game "enlarged scatter" look: loop the Symbol0_FIS win animation with felice gun/eyes enabled
 				try {
-					const symbolValue = 0;
-					const winAnimationName = `animation`;
+					const winLoopAnimationName = `Symbol0_FIS_Win`;
+					const fallbackIdleAnimationName = `Symbol0_FIS_Idle`;
 					const state: any = this.scatterSpine.animationState;
 					if (state && typeof state.setAnimation === 'function') {
 						try { if (typeof state.clearTracks === 'function') state.clearTracks(); } catch {}
-						state.setAnimation(0, winAnimationName, true);
-						console.log(`[BuyFeature] Playing scatter Spine win loop: ${winAnimationName}`);
+
+						// Ensure attachments are enabled before animation is applied (Spine can reset attachments on track changes)
+						this.enableScatterFeliceAttachments(this.scatterSpine);
+						try {
+							state.setAnimation(0, winLoopAnimationName, true);
+						} catch (e) {
+							// Fallback to idle loop if win animation isn't available for some reason
+							state.setAnimation(0, fallbackIdleAnimationName, true);
+							console.warn(`[BuyFeature] Failed to set ${winLoopAnimationName}; falling back to ${fallbackIdleAnimationName}`, e);
+						}
+						try { if (state.timeScale !== undefined && state.timeScale === 0) state.timeScale = 1; } catch {}
+						// Re-apply attachments after setAnimation + on next frame for safety
+						this.enableScatterFeliceAttachments(this.scatterSpine);
+						scene.time.delayedCall(16, () => this.enableScatterFeliceAttachments(this.scatterSpine));
+
+						console.log(`[BuyFeature] Playing scatter Spine loop (enlarged style): ${winLoopAnimationName}`);
 					}
 				} catch (e) {
-					console.warn('[BuyFeature] Failed to start scatter Spine win animation:', e);
+					console.warn('[BuyFeature] Failed to start scatter Spine animation loop:', e);
 				}
 			} catch (error) {
 				console.error('[BuyFeature] Error creating scatter Spine animation:', error);
@@ -350,7 +394,7 @@ export class BuyFeature {
 		const screenHeight = scene.cameras.main.height;
 		const backgroundTop = screenHeight - 736;
 		
-		const featureName = scene.add.text(screenWidth / 2, backgroundTop + 100, "Sugar Bomb Bonus", {
+		const featureName = scene.add.text(screenWidth / 2, backgroundTop + 100, "Saturn Return Bonus", {
 			fontSize: '24px',
 			fontFamily: 'Poppins-Regular',
 			color: '#ffffff',

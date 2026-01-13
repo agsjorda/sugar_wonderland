@@ -2743,10 +2743,25 @@ export class SlotController {
 				
 				// Decrement now handled at REELS_START for normal autoplay
 				
-				// Check if a win dialog is showing - pause autoplay if so
+                 				// Check if a win dialog is showing - pause autoplay if so.
+				// Defensive: the flag can sometimes be left true even when no dialog is visible;
+				// if that happens, clear it so autoplay doesn't deadlock waiting for WIN_DIALOG_CLOSED.
 				if (gameStateManager.isShowingWinDialog) {
-					console.log('[SlotController] Win dialog is showing - pausing autoplay until dialog closes');
-					return;
+					let isDialogActuallyShowing = false;
+					try {
+						const dialogsAny: any = (this.scene as any)?.dialogs;
+						if (dialogsAny && typeof dialogsAny.isDialogShowing === 'function') {
+							isDialogActuallyShowing = !!dialogsAny.isDialogShowing();
+						}
+					} catch {}
+
+					if (isDialogActuallyShowing) {
+						console.log('[SlotController] Win dialog is showing - pausing autoplay until dialog closes');
+						return;
+					}
+
+					console.log('[SlotController] isShowingWinDialog was true but no dialog is visible - clearing flag and continuing');
+					try { gameStateManager.isShowingWinDialog = false; } catch {}
 				}
 				
 				// Only schedule next spin if we have spins remaining

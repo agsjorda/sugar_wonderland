@@ -9,6 +9,8 @@ export enum GameEventType {
   REELS_STOP = 'REELS_STOP',
   WIN_START = 'WIN_START',
   WIN_STOP = 'WIN_STOP',
+  // Live scatter-on-screen counter (payload: { count: number })
+  SCATTER_ON_SCREEN_COUNT_CHANGED = 'SCATTER_ON_SCREEN_COUNT_CHANGED',
   // Tumble-specific win progress events
   TUMBLE_WIN_PROGRESS = 'TUMBLE_WIN_PROGRESS',   // payload: { cumulativeWin: number }
   TUMBLE_SEQUENCE_DONE = 'TUMBLE_SEQUENCE_DONE', // payload: { totalWin: number }
@@ -99,6 +101,10 @@ export interface TumbleSequenceDoneEventData {
   totalWin: number;
 }
 
+export interface ScatterOnScreenCountChangedEventData {
+  count: number;
+}
+
 export interface MultipliersTriggeredEventData {
   spinTotal: number;
   multiplierSum: number;
@@ -120,6 +126,7 @@ export type GameEventData =
   | BonusEventData
   | AutoStartEventData
   | BackendStatusEventData
+  | ScatterOnScreenCountChangedEventData
   | TumbleWinProgressEventData
   | TumbleSequenceDoneEventData
   | MultipliersTriggeredEventData
