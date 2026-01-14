@@ -262,11 +262,8 @@ export class Game extends Scene
 			try {
 				this.input.once('pointerdown', () => {
 					tryUnlockAudio();
-					// After unlocking, try starting audio immediately.
-					try {
-						this.audioManager?.createMusicInstances?.();
-						this.audioManager?.playBackgroundMusic?.(MusicType.MAIN);
-					} catch {}
+					// After unlocking, re-trigger the normal retry-based init (which is lock-aware and idempotent).
+					try { this.time.delayedCall(0, () => ensureAudioReady(0)); } catch {}
 				});
 			} catch {}
 
@@ -1522,8 +1519,16 @@ export class Game extends Scene
 	}
 
 	shutdown() {
-		this.events.once('shutdown', () => {
-			// Clean up any game-specific resources if needed
-		});
+		// Called by Phaser when the Scene shuts down.
+		// Make sure we don't leave looping BGM running if the game is torn down / replaced.
+		try {
+			const anyWindow: any = window as any;
+			if (anyWindow.audioManager === this.audioManager) {
+				anyWindow.audioManager = undefined;
+			}
+		} catch {}
+		try { this.audioManager?.stopAllMusic?.(); } catch {}
+		try { this.audioManager?.destroy?.(); } catch {}
+		try { (this.sound as any)?.stopAll?.(); } catch {}
 	}
 }

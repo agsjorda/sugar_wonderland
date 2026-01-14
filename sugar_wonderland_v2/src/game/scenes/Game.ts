@@ -230,6 +230,33 @@ export class Game extends Scene
 
 		// Defer audio: it may already be downloading (started in Preloader), so initialize when ready.
 		this.time.delayedCall(0, () => {
+			// Some browsers (especially mobile) keep AudioContext locked/suspended until a user gesture,
+			// even if audio files are already downloaded. This can look like "audio loaded but silent".
+			const isAudioLockedOrSuspended = (): boolean => {
+				try {
+					const soundMgr: any = this.sound as any;
+					if (!soundMgr) return false;
+					if (soundMgr.locked === true) return true;
+					const ctx: any = soundMgr.context;
+					if (ctx && typeof ctx.state === 'string' && ctx.state === 'suspended') return true;
+				} catch {}
+				return false;
+			};
+
+			const tryUnlockAudio = (): void => {
+				try {
+					const soundMgr: any = this.sound as any;
+					if (!soundMgr) return;
+					if (typeof soundMgr.unlock === 'function') {
+						try { soundMgr.unlock(); } catch {}
+					}
+					const ctx: any = soundMgr.context;
+					if (ctx && typeof ctx.resume === 'function' && ctx.state === 'suspended') {
+						try { ctx.resume(); } catch {}
+					}
+				} catch {}
+			};
+
 			const audioCacheHas = (key: string): boolean => {
 				try {
 					const c: any = (this.cache.audio as any);
@@ -251,6 +278,11 @@ export class Game extends Scene
 			};
 
 			const tryInitAudio = (): boolean => {
+				// If audio is still locked/suspended, don't spam play calls; try to unlock and retry shortly.
+				if (isAudioLockedOrSuspended()) {
+					tryUnlockAudio();
+					return false;
+				}
 				try {
 					this.audioManager.createMusicInstances();
 					this.audioManager.playBackgroundMusic(MusicType.MAIN);
@@ -300,6 +332,15 @@ export class Game extends Scene
 				const delay = Math.min(1200, 150 + attempt * 75);
 				this.time.delayedCall(delay, () => ensureAudioReady(attempt + 1));
 			};
+
+			// Last resort: if the game starts before the first user gesture reaches the sound system,
+			// unlock on the first pointerdown anywhere in the Game scene, then retry init.
+			try {
+				this.input.once('pointerdown', () => {
+					tryUnlockAudio();
+					try { this.time.delayedCall(0, () => ensureAudioReady(0)); } catch {}
+				});
+			} catch {}
 
 			ensureAudioReady(0);
 		});
@@ -1331,8 +1372,16 @@ export class Game extends Scene
 	}
 
 	shutdown() {
-		this.events.once('shutdown', () => {
-			// Clean up any game-specific resources if needed
-		});
+		// Called by Phaser when the Scene shuts down.
+		// Make sure we don't leave looping BGM running if the game is torn down / replaced.
+		try {
+			const anyWindow: any = window as any;
+			if (anyWindow.audioManager === this.audioManager) {
+				anyWindow.audioManager = undefined;
+			}
+		} catch {}
+		try { this.audioManager?.stopAllMusic?.(); } catch {}
+		try { this.audioManager?.destroy?.(); } catch {}
+		try { (this.sound as any)?.stopAll?.(); } catch {}
 	}
 }

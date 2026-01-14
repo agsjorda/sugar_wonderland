@@ -101,29 +101,40 @@ export class AudioManager {
 		console.log('[AudioManager] Creating audio instances...');
 		
 		try {
-			// Create main background music
-			const mainMusic = this.scene.sound.add('mainbg_sfx', {
-				volume: this.musicVolume,
-				loop: true
-			});
-			this.musicInstances.set(MusicType.MAIN, mainMusic);
-			console.log('[AudioManager] Main background music instance created');
+			// IMPORTANT:
+			// `createMusicInstances()` is called from retry/unlock flows (e.g. on first user gesture).
+			// If we `sound.add(...)` unconditionally, we can create multiple looping BGM instances that overlap.
+			// So we only create each BGM instance once.
 
-			// Create bonus background music
-			const bonusMusic = this.scene.sound.add('bonusbg_sfx', {
-				volume: this.musicVolume,
-				loop: true
-			});
-			this.musicInstances.set(MusicType.BONUS, bonusMusic);
-			console.log('[AudioManager] Bonus background music instance created');
+			// Create main background music (idempotent)
+			if (!this.musicInstances.has(MusicType.MAIN)) {
+				const mainMusic = this.scene.sound.add('mainbg_sfx', {
+					volume: this.musicVolume,
+					loop: true
+				});
+				this.musicInstances.set(MusicType.MAIN, mainMusic);
+				console.log('[AudioManager] Main background music instance created');
+			}
 
-			// Create free spin background music
-			const freespinMusic = this.scene.sound.add('freeSpin_sfx', {
-				volume: this.musicVolume,
-				loop: true
-			});
-			this.musicInstances.set(MusicType.FREE_SPIN, freespinMusic);
-			console.log('[AudioManager] Free spin background music instance created');
+			// Create bonus background music (idempotent)
+			if (!this.musicInstances.has(MusicType.BONUS)) {
+				const bonusMusic = this.scene.sound.add('bonusbg_sfx', {
+					volume: this.musicVolume,
+					loop: true
+				});
+				this.musicInstances.set(MusicType.BONUS, bonusMusic);
+				console.log('[AudioManager] Bonus background music instance created');
+			}
+
+			// Create free spin background music (idempotent)
+			if (!this.musicInstances.has(MusicType.FREE_SPIN)) {
+				const freespinMusic = this.scene.sound.add('freeSpin_sfx', {
+					volume: this.musicVolume,
+					loop: true
+				});
+				this.musicInstances.set(MusicType.FREE_SPIN, freespinMusic);
+				console.log('[AudioManager] Free spin background music instance created');
+			}
 
 			// Create sound effect instances
 			const spinSfx = this.scene.sound.add('spin_sfx', {
@@ -430,6 +441,23 @@ export class AudioManager {
 			console.log('[AudioManager] Audio is muted, skipping music playback');
 			return;
 		}
+
+		// If the requested track is already playing, do not restart it (common on first user gesture unlock flows).
+		try {
+			if (this.currentMusic === musicType) {
+				const current = this.musicInstances.get(musicType);
+				if (current && current.isPlaying) {
+					// Keep volumes consistent and ensure ambient layer is running.
+					try {
+						if ('setVolume' in current && typeof (current as any).setVolume === 'function') {
+							(current as any).setVolume(this.musicVolume);
+						}
+					} catch {}
+					this.startAmbientAudio();
+					return;
+				}
+			}
+		} catch {}
 
 		// Stop current music if playing
 		this.stopCurrentMusic();
