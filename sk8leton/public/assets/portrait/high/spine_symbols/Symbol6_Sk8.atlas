@@ -1,0 +1,22 @@
+Symbol6_Sk8.webp
+size:1920,1920
+filter:Linear,Linear
+pma:true
+bin lid open TC
+bounds:982,418,934,642
+offsets:0,0,935,643
+fire TC
+bounds:2,69,978,991
+offsets:0,1,979,992
+front of trash TC
+bounds:2,1062,1176,854
+
+Symbol6_Sk8_2.webp
+size:1164,1164
+filter:Linear,Linear
+pma:true
+back of trash TC
+bounds:2,792,1108,370
+bin lid close TC
+bounds:2,527,1160,263
+offsets:0,1,1160,264
