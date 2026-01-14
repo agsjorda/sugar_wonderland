@@ -487,8 +487,8 @@ export class AssetConfig {
 				'turboDrop_sfx': 'assets/sounds/SFX/turbodrop_fis.ogg',
 				// Candy explosion transition SFX (used by SymbolExplosionTransition)
 				'candy_transition_sw': 'assets/sounds/SFX/planets_fis.ogg',
-				'coin_throw_ka': 'assets/sounds/SFX/coin_throw_ka.ogg',
-				'coin_drop_ka': 'assets/sounds/SFX/coin_drop_ka.ogg',
+				//'coin_throw_ka': 'assets/sounds/SFX/coin_throw_ka.ogg',
+				//'coin_drop_ka': 'assets/sounds/SFX/coin_drop_ka.ogg',
 				// Multiplier trigger / bomb SFX (bonus-mode multipliers)
 				'bomb_sw': 'assets/sounds/SFX/texplo_fis.ogg',
 				'scatter_sw': 'assets/sounds/SFX/scatter_fis.ogg',

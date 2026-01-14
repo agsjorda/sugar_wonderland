@@ -31,6 +31,7 @@
 		"@esotericsoftware/spine-core": "4.2.82",
 		"@esotericsoftware/spine-phaser": "4.1.55",
 		"@esotericsoftware/spine-phaser-v3": "4.2.82",
+		"phaser": "^3.60.0",
 		"react": "^19.0.0",
 		"react-dom": "^19.0.0",
 		"spine": "^1.6.2"

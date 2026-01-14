@@ -229,6 +229,47 @@ export class Game extends Scene
 
 		// Defer audio: it may still be downloading (started in Preloader), so initialize when ready.
 		this.time.delayedCall(0, () => {
+			// Some browsers (especially mobile) keep AudioContext locked/suspended until a user gesture,
+			// even if audio files are already downloaded. This can look like "audio loaded but silent".
+			const isAudioLockedOrSuspended = (): boolean => {
+				try {
+					const soundMgr: any = this.sound as any;
+					if (!soundMgr) return false;
+					if (soundMgr.locked === true) return true;
+					const ctx: any = soundMgr.context;
+					if (ctx && typeof ctx.state === 'string' && ctx.state === 'suspended') return true;
+				} catch {}
+				return false;
+			};
+
+			const tryUnlockAudio = (): void => {
+				try {
+					const soundMgr: any = this.sound as any;
+					if (!soundMgr) return;
+					// Phaser WebAudioSoundManager has `unlock()` in many builds.
+					if (typeof soundMgr.unlock === 'function') {
+						try { soundMgr.unlock(); } catch {}
+					}
+					const ctx: any = soundMgr.context;
+					if (ctx && typeof ctx.resume === 'function' && ctx.state === 'suspended') {
+						try { ctx.resume(); } catch {}
+					}
+				} catch {}
+			};
+
+			// Last resort: if the game starts before the first user gesture reaches the sound system,
+			// unlock on the first pointerdown anywhere in the Game scene.
+			try {
+				this.input.once('pointerdown', () => {
+					tryUnlockAudio();
+					// After unlocking, try starting audio immediately.
+					try {
+						this.audioManager?.createMusicInstances?.();
+						this.audioManager?.playBackgroundMusic?.(MusicType.MAIN);
+					} catch {}
+				});
+			} catch {}
+
 			const audioCacheHas = (key: string): boolean => {
 				try {
 					const c: any = (this.cache.audio as any);
@@ -250,6 +291,11 @@ export class Game extends Scene
 			};
 
 			const tryInitAudio = (): boolean => {
+				// If audio is still locked/suspended, don't spam play calls; try to unlock and retry shortly.
+				if (isAudioLockedOrSuspended()) {
+					tryUnlockAudio();
+					return false;
+				}
 				try {
 					this.audioManager.createMusicInstances();
 					this.audioManager.playBackgroundMusic(MusicType.MAIN);

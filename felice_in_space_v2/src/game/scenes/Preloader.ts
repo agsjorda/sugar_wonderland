@@ -345,6 +345,9 @@ export class Preloader extends Scene
 		this.assetLoader.loadBuyFeatureAssets(this);
 		this.assetLoader.loadMenuAssets(this);
 		this.assetLoader.loadHelpScreenAssets(this);
+		// Match rainbow_fist behavior: preload audio as part of the main Preloader load.
+		// (This means "Press Play" won't be enabled until audio is downloaded/decoded.)
+		this.assetLoader.loadAudioAssets(this);
 		
 		console.log(`[Preloader] Loading assets for Preloader and Game scenes`);
 	}
@@ -474,6 +477,36 @@ export class Preloader extends Scene
 
         // Start game on click
         this.buttonSpin?.once('pointerdown', () => {
+			// IMPORTANT (slow network + mobile browsers):
+			// Even if audio files are already cached/loaded, browsers can keep the AudioContext locked/suspended
+			// until a user gesture triggers an unlock. Do it here (synchronously) so Game music can start reliably.
+			try {
+				const soundMgr: any = this.sound as any;
+				const cacheAudio: any = (this.cache as any)?.audio;
+				const hasAudioKey = (key: string): boolean => {
+					try {
+						if (cacheAudio && typeof cacheAudio.exists === 'function') return !!cacheAudio.exists(key);
+						if (cacheAudio && typeof cacheAudio.has === 'function') return !!cacheAudio.has(key);
+					} catch {}
+					return false;
+				};
+
+				// Best-effort unlock/resume
+				if (soundMgr && typeof soundMgr.unlock === 'function') {
+					try { soundMgr.unlock(); } catch {}
+				}
+				const ctx: any = soundMgr?.context;
+				if (ctx && typeof ctx.resume === 'function' && ctx.state === 'suspended') {
+					try { ctx.resume(); } catch {}
+				}
+
+				// Play a tiny UI click SFX to ensure the user gesture actually activates audio playback.
+				// (If the key isn't present, skip silently.)
+				if (hasAudioKey('click_sfx')) {
+					try { this.sound.play('click_sfx', { volume: 1 }); } catch {}
+				}
+			} catch {}
+
             this.tweens.add({
                 targets: fadeOverlay,
                 alpha: 1,
@@ -492,9 +525,7 @@ export class Preloader extends Scene
             });
         });
 
-		// Start loading audio in the background now that the main visual load is complete.
-		// If the user clicks early and this scene stops, Game scene will fall back to loading audio again.
-		this.startBackgroundAudioLoad();
+		// Audio is preloaded in `preload()` (rainbow_fist style), so no background audio load needed here.
 
 		// Ensure web fonts are applied after they are ready
 		const fontsObj: any = (document as any).fonts;

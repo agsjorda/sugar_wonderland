@@ -343,6 +343,9 @@ export class Preloader extends Scene
 		this.assetLoader.loadBuyFeatureAssets(this);
 		this.assetLoader.loadMenuAssets(this);
 		this.assetLoader.loadHelpScreenAssets(this);
+		// Preload audio as part of the main Preloader load (blocking).
+		// This guarantees audio is ready by the time the player can start the game.
+		this.assetLoader.loadAudioAssets(this);
 		
 		console.log(`[Preloader] Loading assets for Preloader and Game scenes`);
 	}
@@ -493,9 +496,7 @@ export class Preloader extends Scene
             });
         });
 
-		// Start loading audio in the background now that the main visual load is complete.
-		// If the user clicks early and this scene stops, Game scene will fall back to loading audio again.
-		this.startBackgroundAudioLoad();
+		// Audio is preloaded in `preload()`, so no background audio load needed here.
 
 		// Ensure web fonts are applied after they are ready
 		const fontsObj: any = (document as any).fonts;
