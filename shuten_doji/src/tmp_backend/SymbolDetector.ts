@@ -24,6 +24,17 @@ export class SymbolDetector {
       }
     }
 
+    // Preserve existing winline detection logic
+    for (let i = 0; i < Data.WINLINES.length; i++) {
+      const winline = Data.WINLINES[i];
+      const grids = this.getGrids(winline, data);
+      const matchingGrids = this.getMatchingGrids(grids);
+
+      if (matchingGrids.length > 0) {
+        allMatching.set(i, matchingGrids);
+      }
+    }
+
     return new Wins(allMatching, filteredCounts);
   }
 

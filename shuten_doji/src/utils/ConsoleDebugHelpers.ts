@@ -193,3 +193,4 @@ export function initializeConsoleDebugHelpers(gameScene: GameScene): void {
 	// Setup mode toggle keys (Q/E)
 	setupModeToggleKeys(gameScene);
 }
+

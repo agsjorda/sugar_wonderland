@@ -30,6 +30,27 @@ export function hideSpineAttachmentsByKeywords(spine: SpineGameObject, keywords:
         }
     } catch {}
 }
+
+/**
+ * Returns the duration (ms) of a spine animation by name, factoring timeScale.
+ * If the animation is missing or invalid, returns fallbackMs (default 0).
+ */
+export function getSpineAnimationDurationMs(
+    spine: SpineGameObject | undefined,
+    animationName: string,
+    fallbackMs: number = 0
+): number {
+    try {
+        if (!spine || !animationName) return fallbackMs;
+        const timeScale = Math.max(0, (spine as any)?.animationState?.timeScale ?? 1) || 1;
+        const durationSec = (spine as any)?.skeleton?.data?.findAnimation?.(animationName)?.duration;
+        if (typeof durationSec === 'number' && durationSec > 0) {
+            return durationSec * 1000 * timeScale;
+        }
+    } catch {}
+    return fallbackMs;
+}
+
 export function playSpineAnimationSequence(spine: SpineGameObject, animationSequence: number[], loopLastAnimation: boolean = true, onComplete?: () => void) {
     
     // Compute total duration (ms) of the animations to be played (one iteration each), factoring in timeScale
@@ -112,22 +133,22 @@ export function playSpineAnimationSequenceWithConfig(
     scene: Scene, spine: 
     SpineGameObject, 
     animationSequence: number[], 
-    scale?: { x: number, y: number }, 
-    anchor?: { x: number, y: number }, 
-    origin?: { x: number, y: number }, 
-    offset?: { x: number, y: number }, 
-    depth?: number, 
-    loopLastAnimation?: boolean,
+    scale: { x: number, y: number } = { x: 1, y: 1 }, 
+    anchor: { x: number, y: number } = { x: 0.5, y: 0.5 }, 
+    origin: { x: number, y: number } = { x: 0.5, y: 0.5 }, 
+    offset: { x: number, y: number } = { x: 0, y: 0 }, 
+    depth: number = 3, 
+    loopLastAnimation: boolean = true,
     onComplete?: () => void) : number
     {
-    const centerX = scene.scale.width * (anchor?.x ?? 0.5) + (offset?.x || 0);
-    const centerY = scene.scale.height * (anchor?.y ?? 0.5) + (offset?.y || 0);
+    const centerX = scene.scale.width * anchor.x + offset.x;
+    const centerY = scene.scale.height * anchor.y + offset.y;
 
     spine.setPosition(centerX, centerY);
-    spine.setOrigin(origin?.x ?? 0.5, origin?.y ?? 0.5);
-    spine.setDepth(depth ?? 3);
+    spine.setOrigin(origin.x, origin.y);
+    spine.setDepth(depth);
     spine.setVisible(true);
-    spine.setScale(scale?.x ?? 1, scale?.y ?? 1);
+    spine.setScale(scale.x, scale.y);
 
     // Compute total duration (ms) of the animations to be played (one iteration each), factoring in timeScale
     let totalDurationMs = 0;
@@ -151,7 +172,7 @@ export function playSpineAnimationSequenceWithConfig(
         } catch {}
 
         if (animationNames.length === 1) {
-            spine.animationState.setAnimation(0, animationNames[0], loopLastAnimation ?? true);
+            spine.animationState.setAnimation(0, animationNames[0], loopLastAnimation);
         }
         else {
             for (let i = 0; i < animationNames.length - 1; i++) {
@@ -162,7 +183,7 @@ export function playSpineAnimationSequenceWithConfig(
             spine.animationState.setAnimation(0, animationNames[0], false);
             
             for (let i = 0; i < animationNames.length - 1; i++) {
-                spine.animationState.addAnimation(0, animationNames[i + 1], i == animationNames.length - 1 ? false : loopLastAnimation ?? true, 0);
+                spine.animationState.addAnimation(0, animationNames[i + 1], i == animationNames.length - 1 ? false : loopLastAnimation, 0);
             }
         }
         

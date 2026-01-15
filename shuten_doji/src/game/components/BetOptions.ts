@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
+import { playUtilityButtonSfx } from '../../utils/audioHelpers';
 
 export interface BetOptionsConfig {
 	position?: { x: number; y: number };
@@ -102,6 +103,7 @@ export class BetOptions {
 		this.closeButton.setOrigin(0.5, 0.5);
 		this.closeButton.setInteractive();
 		this.closeButton.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			// Create slide-down animation
 			if (this.container.scene) {
 				this.container.scene.tweens.add({
@@ -179,6 +181,7 @@ export class BetOptions {
 		// Make interactive
 		container.setInteractive(new Phaser.Geom.Rectangle(0, 0, width, height), Phaser.Geom.Rectangle.Contains);
 		container.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			this.selectButton(index, value);
 		});
 		
@@ -216,6 +219,7 @@ export class BetOptions {
 		this.minusButton.setOrigin(0.5, 0.5);
 		this.minusButton.setInteractive();
 		this.minusButton.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			this.selectPreviousBet();
 		});
 		this.container.add(this.minusButton);
@@ -223,8 +227,8 @@ export class BetOptions {
 		// Bet display
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemoBet = (scene as any).gameAPI?.getDemoState();
-		const currencySymbol = isDemoBet ? '' : '$';
-		this.betDisplay = scene.add.text(x, y, `${currencySymbol}${this.currentBet.toFixed(2)}`, {
+		const currencySymbolBet = isDemoBet ? '' : '$';
+		this.betDisplay = scene.add.text(x, y, `${currencySymbolBet}${this.currentBet.toFixed(2)}`, {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
@@ -241,6 +245,7 @@ export class BetOptions {
 		this.plusButton.setOrigin(0.5, 0.5);
 		this.plusButton.setInteractive();
 		this.plusButton.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			this.selectNextBet();
 		});
 		this.container.add(this.plusButton);
@@ -267,6 +272,7 @@ export class BetOptions {
 		
 		buttonImage.setInteractive();
 		buttonImage.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			// Create slide-down animation
 			if (this.container.scene) {
 				this.container.scene.tweens.add({
@@ -312,6 +318,7 @@ export class BetOptions {
 		selectedBg.strokeRoundedRect(0, 0, 60, 50, 5);
 		
 		this.updateBetDisplay();
+		this.updateButtonStates();
 	}
 
 	private updateBetDisplay(): void {
@@ -321,6 +328,59 @@ export class BetOptions {
 			const currencySymbol = isDemo ? '' : '$';
 			this.betDisplay.setText(`${currencySymbol}${this.currentBet.toFixed(2)}`);
 		}
+	}
+
+	private updateButtonStates(): void {
+		if (this.selectedButtonIndex === -1) {
+			this.enableMinusButton();
+			this.enablePlusButton();
+			return;
+		}
+
+		const lastIndex = this.betOptions.length - 1;
+		if (this.selectedButtonIndex <= 0) {
+			this.disableMinusButton();
+		} else {
+			this.enableMinusButton();
+		}
+
+		if (this.selectedButtonIndex >= lastIndex) {
+			this.disablePlusButton();
+		} else {
+			this.enablePlusButton();
+		}
+	}
+
+	private setButtonEnabled(button: Phaser.GameObjects.Text | undefined, enabled: boolean): void {
+		if (!button) return;
+
+		button.setAlpha(enabled ? 1.0 : 0.3);
+
+		if (enabled) {
+			if (!button.input || !button.input.enabled) {
+				button.setInteractive();
+			} else {
+				button.input.enabled = true;
+			}
+		} else if (button.input) {
+			button.input.enabled = false;
+		}
+	}
+
+	private enablePlusButton(): void {
+		this.setButtonEnabled(this.plusButton, true);
+	}
+
+	private disablePlusButton(): void {
+		this.setButtonEnabled(this.plusButton, false);
+	}
+
+	private enableMinusButton(): void {
+		this.setButtonEnabled(this.minusButton, true);
+	}
+
+	private disableMinusButton(): void {
+		this.setButtonEnabled(this.minusButton, false);
 	}
 
 	private selectPreviousBet(): void {
@@ -402,7 +462,14 @@ export class BetOptions {
 
 	setCurrentBet(bet: number): void {
 		this.currentBet = bet;
+
+		const matchingIndex = this.betOptions.findIndex(option => Math.abs(option - bet) < 0.01);
+		if (matchingIndex !== -1) {
+			this.selectedButtonIndex = matchingIndex;
+		}
+
 		this.updateBetDisplay();
+		this.updateButtonStates();
 	}
 
 	getCurrentBet(): number {

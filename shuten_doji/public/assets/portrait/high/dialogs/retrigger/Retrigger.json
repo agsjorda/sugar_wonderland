@@ -4217,7 +4217,7 @@
         }
     ],
     "animations": {
-        "animation": {
+        "Retrigger_SD": {
             "slots": {
                 "Retrigger": {
                     "alpha": [

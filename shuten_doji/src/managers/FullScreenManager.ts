@@ -1,4 +1,5 @@
 import * as Phaser from 'phaser';
+import { playUtilityButtonSfx } from '../utils/audioHelpers';
 
 export interface FullScreenToggleOptions {
 	margin?: number;
@@ -56,6 +57,7 @@ export class FullScreenManager {
 		scene.scale.on('resize', place);
 
 		btn.on('pointerup', () => {
+			playUtilityButtonSfx(scene);
 			if (!this.isFullscreen(scene)) {
 				this.requestFullscreen().then(() => {
 					btn.setTexture(minimizeKey);

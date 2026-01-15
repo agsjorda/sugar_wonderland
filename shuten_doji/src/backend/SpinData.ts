@@ -290,7 +290,7 @@ export class SpinDataUtils {
   /**
    * Check if this spin has any wins
    */
-  static hasWins(spinData: SpinData): boolean {
+  static hasWin(spinData: SpinData): boolean {
     return spinData?.slot?.tumbles?.items?.length > 0;
   }
   
@@ -396,6 +396,29 @@ export class SpinDataUtils {
     const freespin = spinData.slot.freespin || spinData.slot.freeSpin;
     if (!freespin || !Array.isArray(freespin.items)) return 0;
     return freespin.items.reduce((sum: number, item: any) => sum + (item?.totalWin || 0), 0);
+  }
+
+  /**
+   * Base-game winnings that should carry into the bonus header when a scatter triggers free spins.
+   * Mirrors the legacy logic from `BonusHeader.getPreBonusWins()`:
+   * - "scatter winnings" are stored in `slot.freeSpin.multiplierValue` in this game’s payload
+   * - plus the sum of base-game tumble wins (`slot.tumbles.items[].win`)
+   */
+  static getPreBonusWins(spinData: SpinData): number {
+    if (!spinData || !spinData.slot) return 0;
+
+    const scatterWinningsRaw = spinData.slot.freeSpin.multiplierValue;
+    const scatterWinnings = Number(scatterWinningsRaw) || 0;
+
+    // Sum base-game tumble wins (not free-spin tumbles)
+    const tumbleItems = this.getTumbleItems(spinData);
+    const tumbleWinnings = tumbleItems.reduce((sum: number, item: any) => {
+      const w = Number(item?.win ?? 0);
+      return sum + (Number.isFinite(w) ? w : 0);
+    }, 0);
+
+    const preBonusWins = scatterWinnings + tumbleWinnings;
+    return Number.isFinite(preBonusWins) ? preBonusWins : 0;
   }
 
   static getScatterSpinWins(spinData: any): number {

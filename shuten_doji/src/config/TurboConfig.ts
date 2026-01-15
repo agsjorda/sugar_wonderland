@@ -23,7 +23,7 @@ export class TurboConfig {
     public static readonly TURBO_SPEED_MULTIPLIER: number = 0.75;
     
     // Turbo delay multiplier for spin timing
-    public static readonly TURBO_DELAY_MULTIPLIER: number = 0.4;
+    public static readonly TURBO_DELAY_MULTIPLIER: number = 0.5;
     
     // Turbo duration multiplier for animations
     public static readonly TURBO_DURATION_MULTIPLIER: number = 0.65;

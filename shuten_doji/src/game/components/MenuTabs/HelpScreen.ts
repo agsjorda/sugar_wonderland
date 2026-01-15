@@ -95,12 +95,8 @@ export class HelpScreen {
     private isTabInteractionBlocked: boolean = false;
     
     // Game Rules section
-    private readonly GameRulesText: string = "Win by landing 8 or more matching symbols anywhere on the screen. The more matching symbols you get, the higher your payout.";
     // RTP section
-    private readonly RTPValue: string = '97%';
-    // Max Win section
-    private readonly MaxWinValue: string = '6,750x';
-
+    // Payout section
     private readonly payoutSymbolCount: number = 9;
     private readonly payoutSymbolKey: string = 'symbol';
     private readonly payoutTextRowSpacing: number = 30;
@@ -311,19 +307,19 @@ export class HelpScreen {
 
     private createGameRulesSection(scene: GameScene, contentArea: GameObjects.Container): void {
         this.addTextBlock(scene, 'header1', 'Game Rules', { spacingAfter: 15 });
-        this.addTextBlock(scene, 'content1', this.GameRulesText, { wordWrapWidth: this.contentWidth, spacingAfter: 24 });
+        this.addTextBlock(scene, 'content1', 'Win by landing 8 or more matching symbols anywhere on the screen. The more matching symbols you get, the higher your payout.', { wordWrapWidth: this.contentWidth, spacingAfter: 24 });
     }
 
     private createRTPSection(scene: GameScene, contentArea: GameObjects.Container): void {
         const headerHeight = this.addTextBlock(scene, 'header2', 'RTP').height;
-        const bodyHeight = this.addBodyText(scene, this.RTPValue, false, 0).height;
+        const bodyHeight = this.addBodyText(scene, '96.49% - 96.6%', false, 0).height;
         
         this.yPosition += headerHeight + bodyHeight;
     }
 
     private createMaxWinSection(scene: GameScene, contentArea: GameObjects.Container): void {
         const headerHeight = this.addTextBlock(scene, 'header2', 'Max Win').height;
-        const bodyHeight = this.addBodyText(scene, this.MaxWinValue, false, 0).height;
+        const bodyHeight = this.addBodyText(scene, '21,000x', false, 0).height;
         this.yPosition += headerHeight + bodyHeight ;
     }
 
@@ -380,7 +376,10 @@ export class HelpScreen {
             // Right column: payout value, right-aligned
             const value = payoutData[row] ?? 0;
             const adjustedValue = this.applyBetToPayout(value);
-            const valueText = '$ ' + this.formatPayout(adjustedValue);
+            // Check if demo mode is active - if so, use blank currency symbol
+            const isDemo = (scene as any).gameAPI?.getDemoState();
+            const currencySymbol = isDemo ? '' : '$';
+            const valueText = currencySymbol + (currencySymbol ? ' ' : '') + this.formatPayout(adjustedValue);
             const payoutText = scene.add.text(0, y, valueText, {
                 fontSize: this.payoutTextFontSize + 'px',
                 color: '#FFFFFF',
@@ -473,7 +472,10 @@ export class HelpScreen {
             // Right column: payout value, right-aligned
             const value = SCATTER_PAYOUTS[row] ?? 0;
             const adjustedValue = this.applyBetToPayout(value);
-            const valueText = '$ ' + this.formatPayout(adjustedValue);
+            // Check if demo mode is active - if so, use blank currency symbol
+            const isDemo = (scene as any).gameAPI?.getDemoState();
+            const currencySymbol = isDemo ? '' : '$';
+            const valueText = currencySymbol + (currencySymbol ? ' ' : '') + this.formatPayout(adjustedValue);
             const payoutTextX = baseTextX + this.scatterPayoutTextColumnSpacing / 2;
             const payoutText = scene.add.text(payoutTextX, adjustedTextY, valueText, {
                 fontSize: this.scatterPayoutTextFontSize + 'px',
@@ -650,19 +652,19 @@ export class HelpScreen {
 
         // Border will be added after all children so its height fits content dynamically
 
-        const scatterSymbolInText = scene.add.image(0, 0, 'ScatterLabel');
+        const scatterSymbolInText = scene.add.image(0, 0, 'symbol0');
         scatterSymbolInText.setScale(0.3);
         scatterSymbolInText.setOrigin(0.5, 0.5);
         scatterSymbolInText.setPosition(215, 880);
         freeSpinContainer.add(scatterSymbolInText);
 
-        const scatterSymbolInText2 = scene.add.image(0, 0, 'ScatterLabel');
+        const scatterSymbolInText2 = scene.add.image(0, 0, 'symbol0');
         scatterSymbolInText2.setScale(0.3);
         scatterSymbolInText2.setOrigin(0.5, 0.5);
         scatterSymbolInText2.setPosition(bodyText2.x + bodyText2.width * 0.5 - 15, bodyText2.y + bodyText2.height * 0.5 - 25);
         freeSpinContainer.add(scatterSymbolInText2);
 
-        const scatterSymbolTopLeft = scene.add.image(30, 20, 'ScatterLabel');
+        const scatterSymbolTopLeft = scene.add.image(30, 20, 'symbol0');
         scatterSymbolTopLeft.setScale(0.6);
         scatterSymbolTopLeft.setOrigin(0, 0);
         freeSpinContainer.add(scatterSymbolTopLeft);
@@ -754,7 +756,10 @@ export class HelpScreen {
         buyFeatContainer.add(buyLabel);
 
         // Static price text $10,000 centered on the button
-        const buyPrice = scene.add.text(btnCenterX, btnCenterY + 14, '$10,000', {
+        // Check if demo mode is active - if so, use blank currency symbol
+        const isDemoBuyPrice = (scene as any).gameAPI?.getDemoState();
+        const currencySymbolBuyPrice = isDemoBuyPrice ? '' : '$';
+        const buyPrice = scene.add.text(btnCenterX, btnCenterY + 14, `${currencySymbolBuyPrice}10,000`, {
             fontSize: '18px',
             color: '#FFFFFF',
             fontFamily: 'Poppins-Bold',
@@ -989,10 +994,13 @@ export class HelpScreen {
         balanceCardContainer.add(balanceTitle);
 
         // Main value text layer below the title.
+        // Check if demo mode is active - if so, use blank currency symbol
+        const isDemoBalance = (scene as any).gameAPI?.getDemoState();
+        const currencySymbolBalance = isDemoBalance ? '' : '$';
         const balanceValue = scene.add.text(
             cardLeft + cardWidth / 2,
             cardHeight / 2 + this.padding * 0.8,
-            '$ 200,000.00',
+            `${currencySymbolBalance}${currencySymbolBalance ? ' ' : ''}200,000.00`,
             {
                 ...this.titleStyle,
                 color: '#ffffff',
@@ -1735,11 +1743,14 @@ export class HelpScreen {
     private getResolvedBetAmount(): number {
         try {
             // Help/payout tables should always use BASE bet (non-amplified / non-enhanced).
-            // Some callers may provide a "current bet" that reflects Enhanced Bet (+25%),
-            // so we prefer reading the base bet directly from SlotController when available.
+            // Prefer SlotController base bet when available; fall back to injected getter.
             const baseBetFromSlotController = (this.scene as any)?.slotController?.getBaseBetAmount?.();
             if (Number.isFinite(baseBetFromSlotController) && baseBetFromSlotController > 0) {
                 return baseBetFromSlotController;
+            }
+            const betFromMenu = this.getBetAmount();
+            if (Number.isFinite(betFromMenu) && betFromMenu > 0) {
+                return betFromMenu;
             }
         } catch (error) {
             console.warn('[HelpScreen] Failed to resolve bet amount, falling back to 1:', error);

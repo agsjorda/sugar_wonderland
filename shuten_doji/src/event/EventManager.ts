@@ -33,10 +33,9 @@ export enum GameEventType {
   WHEEL_SPIN_DONE = 'WHEEL_SPIN_DONE',
   BACKEND_READY = 'BACKEND_READY',
   BACKEND_BUSY = 'BACKEND_BUSY',
-  // Free round manager events
-  FREEROUND_COUNT_UPDATE = 'FREEROUND_COUNT_UPDATE', // payload: number (fsCount from backend)
   // Additional events used by the backend
   RESPONSE = 'RESPONSE',
+  FREEROUND_COUNT_UPDATE = 'FREEROUND_COUNT_UPDATE', // payload: number (fsCount from backend)
 }
 
 // Define event data interfaces

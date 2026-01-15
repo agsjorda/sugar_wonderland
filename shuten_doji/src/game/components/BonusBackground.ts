@@ -1,22 +1,20 @@
 import { Scene } from "phaser";
-import { ensureSpineFactory } from "../../utils/SpineGuard";
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
-import { playSpineAnimationSequenceWithConfig } from "./SpineBehaviorHelper";
+import { getFullScreenSpineScale, playSpineAnimationSequence } from "./SpineBehaviorHelper";
 import { SpineGameObject } from "@esotericsoftware/spine-phaser-v3";
 
 export class BonusBackground {
 	private bonusContainer: Phaser.GameObjects.Container;
-	private bonusBg: Phaser.GameObjects.Image;
-	private arch: Phaser.GameObjects.Image;
+	private bonusBackgroundVisual?: Phaser.GameObjects.Image | SpineGameObject;
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
-	private archSpine: SpineGameObject;
-	private reelFrameContainer?: Phaser.GameObjects.Container;
-	private movingDoves: SpineGameObject[] = [];
-	private reelBackground: Phaser.GameObjects.Rectangle;
+	private reelFrame: Phaser.GameObjects.Image;
+	private reelFrameBackground?: Phaser.GameObjects.Rectangle;
 
 	private reelFrameDepth: number = 550;
+	private reelBackground: Phaser.GameObjects.Rectangle;
+	private reelFrameContainer: Phaser.GameObjects.Container;
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -33,8 +31,6 @@ export class BonusBackground {
 		
 		// Create main container for all bonus background elements
 		this.bonusContainer = scene.add.container(0, 0);
-		// Separate overlay container so the reel frame can sit above symbols
-		this.reelFrameContainer = scene.add.container(0, 0).setDepth(this.reelFrameDepth);
 		
 		const screenConfig = this.screenModeManager.getScreenConfig();
 		const assetScale = this.networkManager.getAssetScale();
@@ -46,46 +42,20 @@ export class BonusBackground {
 	}
 
 	private createBonusElements(scene: Scene, assetScale: number): void {
-		const screenConfig = this.screenModeManager.getScreenConfig();
-		
 		this.createPortraitBonusBackground(scene, assetScale);
-	}
-
-	private createDoveSpineAnimation(scene: Scene, assetScale: number, position: {x: number, y: number}, scale: {x: number, y: number}): void {
-		try {
-			if (!ensureSpineFactory(scene, '[BonusBackground] createDoveSpineAnimation')) {
-				console.warn('[BonusBackground] Spine factory unavailable. Skipping dove spine.');
-				return;
-			}
-			
-			// Create the mobile disco lights Spine animation object
-			const doveSpineObject = scene.add.spine(position.x, position.y, "dove", "dove-atlas");
-			doveSpineObject.setOrigin(0.5, 0.5);
-			doveSpineObject.setScale(scale.x, scale.y);
-			doveSpineObject.setDepth(5);
-			doveSpineObject.animationState.setAnimation(0, "animation", true);
-
-			doveSpineObject.animationState.timeScale = 0.5;
-			
-			this.bonusContainer.add(doveSpineObject);
-			
-			console.log('[BonusBackground] Mobile dove Spine animation created successfully');
-		} catch (e) {
-			console.warn('[BonusBackground] createDoveSpineAnimation failed:', e);
-		}
 	}
 
 	private createPortraitBonusBackground(scene: Scene, assetScale: number): void {
 		console.log("[BonusBackground] Creating portrait bonus background layout");
 		
 		// Main bonus background
-		this.bonusBg = scene.add.image(
+		this.bonusBackgroundVisual = scene.add.image(
 			scene.scale.width * 0.5,
 			scene.scale.height * 0.5,
 			'bonus_background'
 		).setOrigin(0.5, 0.5).setScale(assetScale).setDepth(1);
 		this.fitBackgroundToScreen(scene);
-		this.bonusContainer.add(this.bonusBg);
+		this.bonusContainer.add(this.bonusBackgroundVisual);
 
 		this.createReelFrame(scene, assetScale);
 	}
@@ -108,26 +78,26 @@ export class BonusBackground {
 			scene.scale.width + xOffset,
 			gridY - gridHeight * 0.5,
 			'reel_frame_top'
-		).setOrigin(0, 0).setScale(assetScale * -1, assetScale);
+		).setOrigin(0, 0).setScale(assetScale * -1, assetScale).setDepth(this.reelFrameDepth);
 
 		
 		const topLeftFrame = scene.add.image(
 			-xOffset,
 			gridY - gridHeight * 0.5,
 			'reel_frame_top'
-		).setOrigin(0, 0).setScale(assetScale, assetScale);
+		).setOrigin(0, 0).setScale(assetScale, assetScale).setDepth(this.reelFrameDepth);
 		
 		const bottomRightFrame = scene.add.image(
 			scene.scale.width + xOffset,
 			gridY + gridHeight * 0.5,
 			'reel_frame_bottom'
-		).setOrigin(0, 1).setScale(assetScale * -1, assetScale);
+		).setOrigin(0, 1).setScale(assetScale * -1, assetScale).setDepth(this.reelFrameDepth);
 
 		const bottomLeftFrame = scene.add.image(
 			-xOffset,
 			gridY + gridHeight * 0.5,
 			'reel_frame_bottom'
-		).setOrigin(0, 1).setScale(assetScale, assetScale);
+		).setOrigin(0, 1).setScale(assetScale, assetScale).setDepth(this.reelFrameDepth);
 		
 		if (this.reelFrameContainer) {
 			this.reelFrameContainer.add(topRightFrame);
@@ -138,23 +108,43 @@ export class BonusBackground {
 	}
 
 	private fitBackgroundToScreen(scene: Scene): void {
-		if (!this.bonusBg) return;
+		if (!this.bonusBackgroundVisual) return;
 
 		const screenWidth = scene.scale.width;
 		const screenHeight = scene.scale.height;
 
-		// Use frame width/height (intrinsic texture size) to avoid compounding scales
-		const imageWidth = this.bonusBg.frame.width;
-		const imageHeight = this.bonusBg.frame.height;
+		if (this.bonusBackgroundVisual instanceof Phaser.GameObjects.Image) {
+			const imageWidth = this.bonusBackgroundVisual.frame.width;
+			const imageHeight = this.bonusBackgroundVisual.frame.height;
+			if (imageWidth === 0 || imageHeight === 0) {
+				return;
+			}
+			const scaleX = screenWidth / imageWidth;
+			const scaleY = screenHeight / imageHeight;
+			const scale = Math.max(scaleX, scaleY);
+			this.bonusBackgroundVisual.setScale(scale);
+		} else {
+			const scale = getFullScreenSpineScale(scene, this.bonusBackgroundVisual, true);
+			this.bonusBackgroundVisual.setScale(scale.x, scale.y);
+		}
 
-		if (imageWidth === 0 || imageHeight === 0) return;
+		this.bonusBackgroundVisual.setPosition(screenWidth * 0.5, screenHeight * 0.5);
+	}
 
-		const scaleX = screenWidth / imageWidth;
-		const scaleY = screenHeight / imageHeight;
-		const scale = Math.max(scaleX, scaleY);
+	private createBonusBackgroundVisual(scene: Scene, imageKey: string, spineKey: string): Phaser.GameObjects.Image | SpineGameObject {
+		const centerX = scene.scale.width * 0.5;
+		const centerY = scene.scale.height * 0.5;
 
-		this.bonusBg.setScale(scale);
-		this.bonusBg.setPosition(screenWidth * 0.5, screenHeight * 0.5);
+		try {
+			const spine = scene.add.spine(centerX, centerY, spineKey, `${spineKey}-atlas`) as SpineGameObject;
+			spine.setOrigin(0.5075, 0.5);
+			playSpineAnimationSequence(spine, [0], true);
+			return spine;
+		} catch (error) {
+			console.warn(`[BonusBackground] Failed to create spine '${spineKey}':`, error);
+			console.warn(`[BonusBackground] Spine '${spineKey}' unavailable. Falling back to image '${imageKey}'`);
+			return scene.add.image(centerX, centerY, imageKey).setOrigin(0.5, 0.5);
+		}
 	}
 
 	resize(scene: Scene): void {
@@ -162,45 +152,72 @@ export class BonusBackground {
 			this.bonusContainer.setSize(scene.scale.width, scene.scale.height);
 		}
 		this.fitBackgroundToScreen(scene);
-		this.fitArchToBottom(scene);
+		this.fitReelFrameToScreenWidth(scene);
+		// Update background position when resizing
+		this.updateReelFrameBackground(scene);
 	}
 
-	private fitArchToBottom(scene: Scene): void {
-		if (!this.arch) return;
+	/**
+	 * Scales the reel frame so that it fits the full screen width
+	 * while preserving its aspect ratio.
+	 */
+	private fitReelFrameToScreenWidth(scene: Scene): void {
+		if (!this.reelFrame) return;
+
 		const screenWidth = scene.scale.width;
 		const screenHeight = scene.scale.height;
-		const imageWidth = this.arch.frame.width;
-		const imageHeight = this.arch.frame.height;
-		if (!imageWidth || !imageHeight) return;
-		const scale = screenWidth / imageWidth; // cover width, maintain aspect ratio
-		this.arch.setScale(scale);
-		this.arch.setOrigin(0.5, 1);
-		this.arch.setPosition(screenWidth * 0.5, screenHeight);
+
+		const imageWidth = this.reelFrame.frame.width;
+		const imageHeight = this.reelFrame.frame.height;
+
+		if (imageWidth === 0 || imageHeight === 0) return;
+
+		// Uniform scale, based only on width, to keep aspect ratio
+		const scale = screenWidth / imageWidth;
+
+		this.reelFrame.setScale(scale);
+		
+		// Update background to match reel frame position and size
+		this.updateReelFrameBackground(scene);
 	}
 
-	setVisible(isVisible: boolean): void {
-		if (this.bonusContainer) {
-			this.bonusContainer.setVisible(isVisible);
-		}
-		if (this.reelFrameContainer) {
-			this.reelFrameContainer.setVisible(isVisible);
-		}
+	/**
+	 * Creates a semi-transparent white rectangle background that follows the reel frame position
+	 */
+	private createReelFrameBackground(scene: Scene): void {
+		if (!this.reelFrame) return;
+
+		const x = this.reelFrame.x;
+		const y = this.reelFrame.y;
+		const displayWidth = this.reelFrame.displayWidth;
+		const displayHeight = this.reelFrame.displayHeight - 10;
+
+		this.reelFrameBackground = scene.add.rectangle(x, y, displayWidth, displayHeight, 0xffffff, 0.15)
+			.setOrigin(0.5, 0.5)
+			.setDepth(this.reelFrameDepth - 1); // Place it behind the reel frame
+	}
+
+	/**
+	 * Updates the background rectangle to match the reel frame's position and size
+	 */
+	private updateReelFrameBackground(scene: Scene): void {
+		if (!this.reelFrame || !this.reelFrameBackground) return;
+
+		this.reelFrameBackground.setPosition(this.reelFrame.x, this.reelFrame.y);
+		this.reelFrameBackground.setSize(this.reelFrame.displayWidth, this.reelFrame.displayHeight);
 	}
 
 	getContainer(): Phaser.GameObjects.Container {
 		return this.bonusContainer;
 	}
 
-	getReelFrameContainer(): Phaser.GameObjects.Container | undefined {
-		return this.reelFrameContainer;
+	getReelFrame(): Phaser.GameObjects.Image {
+		return this.reelFrame;
 	}
 
 	destroy(): void {
 		if (this.bonusContainer) {
 			this.bonusContainer.destroy();
-		}
-		if (this.reelFrameContainer) {
-			this.reelFrameContainer.destroy();
 		}
 	}
 }

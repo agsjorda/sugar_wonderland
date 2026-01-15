@@ -81,7 +81,15 @@ export class SplitTransition {
 		 * If true, destroys `target` after the transition finishes. If false, the target is
 		 * restored (made visible again) and left intact.
 		 */
-		destroyTargetOnComplete: boolean = false
+		destroyTargetOnComplete: boolean = false,
+		/**
+		 * Optional additional Y separation applied on top of the split movement.
+		 * - The "top" half (first half / leftHalf, which is also "top-ish" for diagonal_height modes) moves UP by this amount.
+		 * - The "bottom" half (second half / rightHalf) moves DOWN by this amount.
+		 *
+		 * Defaults to 0 (no extra Y separation).
+		 */
+		splitYOffset: number = 0
 	): Promise<void> {
 		if (!target.texture || !target.frame) {
 			return;
@@ -303,6 +311,12 @@ export class SplitTransition {
 			leftFinalY = leftHalf.y + moveVector.y * distance;
 			rightFinalX = rightHalf.x - moveVector.x * distance;
 			rightFinalY = rightHalf.y - moveVector.y * distance;
+		}
+
+		// Optional: add vertical separation on top of whatever movement mode was selected.
+		if (splitYOffset !== 0) {
+			leftFinalY -= splitYOffset;
+			rightFinalY += splitYOffset;
 		}
 
 		// Elevate halves above everything else but below the blocker

@@ -1,6 +1,8 @@
 import { Scene } from 'phaser';
 import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
+import { playUtilityButtonSfx } from '../../utils/audioHelpers';
+import { ensureSpineFactory } from '../../utils/SpineGuard';
 
 export interface AutoplayOptionsConfig {
 	position?: { x: number; y: number };
@@ -8,16 +10,9 @@ export interface AutoplayOptionsConfig {
 	onClose?: () => void;
 	onConfirm?: (autoplayCount: number) => void;
 	currentAutoplayCount?: number;
-	/**
-	 * Base bet (non-enhanced). This is what the bet selector operates on.
-	 */
 	currentBet?: number;
-	/**
-	 * The bet value to DISPLAY in the panel (e.g. base*1.25 when Enhanced Bet is ON).
-	 * If omitted, display will match `currentBet`.
-	 */
-	currentBetDisplay?: number;
 	currentBalance?: number;
+	isEnhancedBet?: boolean;
 }
 
 export class AutoplayOptions {
@@ -27,14 +22,9 @@ export class AutoplayOptions {
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
 	private currentAutoplayCount: number = 10;
-	private currentBet: number = 0.20; // Default bet amount
+	private currentBet: number = 0.20; // Default bet amount (base bet)
 	private currentBalance: number = 0; // Current game balance
-	// Multiplier applied to the base bet for display purposes (e.g. 1.25 for enhanced bet).
-	// We derive this from `currentBetDisplay / currentBet` so AutoplayOptions does not need
-	// to know anything about Enhanced Bet directly.
-	private betDisplayMultiplier: number = 1;
-	// Enhanced bet spine animation overlay (ported from rainbow_fist)
-	private enhanceBetIdleAnimation: any = null;
+	private isEnhancedBet: boolean = false; // Track enhanced bet state
 	private autoplayOptions: number[] = [
 		10, 30, 50, 75, 100, 150, 500, 1000
 	];
@@ -55,6 +45,7 @@ export class AutoplayOptions {
 	private minusButton: Phaser.GameObjects.Text;
 	private plusButton: Phaser.GameObjects.Text;
 	private balanceAmountText: Phaser.GameObjects.Text;
+	private enhanceBetIdleAnimation: any = null; // Enhanced bet spine animation
 	private onCloseCallback?: () => void;
 	private onConfirmCallback?: (autoplayCount: number) => void;
 
@@ -81,8 +72,8 @@ export class AutoplayOptions {
 		
 		// Create autoplay input section
 		this.createAutoplayInput(scene);
-
-		// Create enhanced bet animation overlay (shown when betDisplayMultiplier > 1)
+		
+		// Create enhanced bet animation
 		this.createEnhanceBetAnimation(scene);
 		
 		// Create confirm button
@@ -90,74 +81,6 @@ export class AutoplayOptions {
 		
 		// Initially hide the component
 		this.container.setVisible(false);
-	}
-
-	/**
-	 * Create the Enhance Bet idle loop spine animation near the bet display
-	 * (ported from rainbow_fist)
-	 */
-	private createEnhanceBetAnimation(scene: Scene): void {
-		try {
-			if (!scene.cache.json.has('enhance_bet_idle_on')) {
-				console.warn('[AutoplayOptions] enhance_bet_idle_on spine assets not loaded, skipping idle animation creation');
-				return;
-			}
-
-			const screenWidth = scene.scale.width;
-			const screenHeight = scene.scale.height;
-			const backgroundHeight = 772;
-			const backgroundTop = screenHeight - backgroundHeight;
-
-			// Position near the bet display (same x, slightly offset y)
-			const betX = screenWidth * 0.5;
-			const betY = backgroundTop + 490;
-			const animationOffsetX = -10; // slight left offset to match SlotController
-			const animationOffsetY = 0;
-
-			this.enhanceBetIdleAnimation = scene.add.spine(
-				betX + animationOffsetX,
-				betY + animationOffsetY,
-				'enhance_bet_idle_on',
-				'enhance_bet_idle_on-atlas'
-			);
-			this.enhanceBetIdleAnimation.setOrigin(0.5, 0.5);
-			this.enhanceBetIdleAnimation.setScale(2.94, 1.35);
-			this.enhanceBetIdleAnimation.setDepth(2001); // Above the container depth (2000)
-			this.enhanceBetIdleAnimation.setVisible(false);
-
-			// Add to container
-			this.container.add(this.enhanceBetIdleAnimation);
-
-			console.log('[AutoplayOptions] Enhance Bet idle spine animation created');
-		} catch (error) {
-			console.error('[AutoplayOptions] Failed to create enhance bet idle animation:', error);
-		}
-	}
-
-	/** Show the enhance bet idle loop animation */
-	private showEnhanceBetIdleLoop(): void {
-		if (!this.enhanceBetIdleAnimation) {
-			return;
-		}
-		this.enhanceBetIdleAnimation.setVisible(true);
-		const idleName = 'animation'; // single animation in JSON is named 'animation'
-		if (this.enhanceBetIdleAnimation.skeleton?.data.findAnimation(idleName)) {
-			this.enhanceBetIdleAnimation.animationState.setAnimation(0, idleName, true);
-		} else {
-			const animations = this.enhanceBetIdleAnimation.skeleton?.data.animations || [];
-			if (animations.length > 0) {
-				this.enhanceBetIdleAnimation.animationState.setAnimation(0, animations[0].name, true);
-			}
-		}
-	}
-
-	/** Hide the enhance bet idle loop animation */
-	private hideEnhanceBetIdleLoop(): void {
-		if (!this.enhanceBetIdleAnimation) {
-			return;
-		}
-		this.enhanceBetIdleAnimation.animationState.clearTracks();
-		this.enhanceBetIdleAnimation.setVisible(false);
 	}
 
 	private createBackground(scene: Scene): void {
@@ -201,6 +124,7 @@ export class AutoplayOptions {
 		this.closeButton.setOrigin(0.5, 0.5);
 		this.closeButton.setInteractive();
 		this.closeButton.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			// Create slide-down animation
 			if (this.container.scene) {
 				this.container.scene.tweens.add({
@@ -326,6 +250,7 @@ export class AutoplayOptions {
 		// Make interactive
 		container.setInteractive(new Phaser.Geom.Rectangle(0, 0, width, height), Phaser.Geom.Rectangle.Contains);
 		container.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			this.selectButton(index, value);
 		});
 		
@@ -368,6 +293,7 @@ export class AutoplayOptions {
 		this.minusButton.setOrigin(0.5, 0.5);
 		this.minusButton.setInteractive();
 		this.minusButton.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			this.selectPreviousBet();
 		});
 		this.container.add(this.minusButton);
@@ -375,8 +301,8 @@ export class AutoplayOptions {
 		// Bet display
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemoInitial = (scene as any).gameAPI?.getDemoState();
-		const currencySymbolBet = isDemoInitial ? '' : '$';
-		this.autoplayDisplay = scene.add.text(x, y, `${currencySymbolBet}${this.currentBet.toFixed(2)}` , {
+		const currencySymbolInitial = isDemoInitial ? '' : '$';
+		this.autoplayDisplay = scene.add.text(x, y, `${currencySymbolInitial}${this.currentBet.toFixed(2)}` , {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Bold'
@@ -393,9 +319,88 @@ export class AutoplayOptions {
 		this.plusButton.setOrigin(0.5, 0.5);
 		this.plusButton.setInteractive();
 		this.plusButton.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			this.selectNextBet();
 		});
 		this.container.add(this.plusButton);
+
+		this.updateBetButtonStates();
+	}
+
+	/**
+	 * Create the Enhance Bet idle loop spine animation near the bet display
+	 */
+	private createEnhanceBetAnimation(scene: Scene): void {
+		try {
+			if (!ensureSpineFactory(scene, '[AutoplayOptions] createEnhanceBetAnimation')) {
+				console.warn('[AutoplayOptions] Spine factory unavailable. Skipping enhance bet idle animation creation.');
+				return;
+			}
+
+			if (!scene.cache.json.has('enhance_bet_idle_on')) {
+				console.warn('[AutoplayOptions] enhance_bet_idle_on spine assets not loaded, skipping idle animation creation');
+				return;
+			}
+
+			const screenWidth = scene.scale.width;
+			const screenHeight = scene.scale.height;
+			const backgroundHeight = 772;
+			const backgroundTop = screenHeight - backgroundHeight;
+			
+			// Position near the bet display (same x, slightly offset y)
+			const betX = screenWidth * 0.5;
+			const betY = backgroundTop + 490;
+			const animationOffsetX = -10; // slight left offset to match SlotController
+			const animationOffsetY = 0;
+
+			this.enhanceBetIdleAnimation = scene.add.spine(
+				betX + animationOffsetX,
+				betY + animationOffsetY,
+				'enhance_bet_idle_on',
+				'enhance_bet_idle_on-atlas'
+			);
+			this.enhanceBetIdleAnimation.setOrigin(0.5, 0.5);
+			this.enhanceBetIdleAnimation.setScale(2.94, 1.35);
+			this.enhanceBetIdleAnimation.setDepth(2001); // Above the container depth (2000)
+			this.enhanceBetIdleAnimation.setVisible(false);
+
+			// Add to container
+			this.container.add(this.enhanceBetIdleAnimation);
+
+			console.log('[AutoplayOptions] Enhance Bet idle spine animation created');
+		} catch (error) {
+			console.error('[AutoplayOptions] Failed to create enhance bet idle animation:', error);
+		}
+	}
+
+	/**
+	 * Show the enhance bet idle loop animation
+	 */
+	private showEnhanceBetIdleLoop(): void {
+		if (!this.enhanceBetIdleAnimation) {
+			return;
+		}
+		this.enhanceBetIdleAnimation.setVisible(true);
+		const idleName = 'animation'; // single animation in JSON is named 'animation'
+		if (this.enhanceBetIdleAnimation.skeleton?.data.findAnimation(idleName)) {
+			this.enhanceBetIdleAnimation.animationState.setAnimation(0, idleName, true);
+		} else {
+			const animations = this.enhanceBetIdleAnimation.skeleton?.data.animations || [];
+			if (animations.length > 0) {
+				this.enhanceBetIdleAnimation.animationState.setAnimation(0, animations[0].name, true);
+			}
+		}
+	}
+
+	/**
+	 * Hide the enhance bet idle loop animation
+	 */
+	private hideEnhanceBetIdleLoop(): void {
+		if (!this.enhanceBetIdleAnimation) {
+			return;
+		}
+		this.enhanceBetIdleAnimation.animationState.clearTracks();
+		this.enhanceBetIdleAnimation.setVisible(false);
 	}
 
 	private createConfirmButton(scene: Scene): void {
@@ -424,9 +429,9 @@ export class AutoplayOptions {
 		
 		buttonImage.setInteractive();
 		buttonImage.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
+			if (this.onConfirmCallback) this.onConfirmCallback(this.currentAutoplayCount);
 			if (this.container.scene) {
-				if (this.onConfirmCallback) this.onConfirmCallback(this.currentAutoplayCount);
-				
 				this.container.scene.tweens.add({
 					targets: this.container,
 					y: this.container.scene.scale.height,
@@ -477,12 +482,67 @@ export class AutoplayOptions {
 
 	private updateAutoplayDisplay(): void {
 		if (this.autoplayDisplay) {
+			// If enhanced bet is active, show enhanced bet amount (base bet * 1.25)
+			const displayBet = this.isEnhancedBet ? this.currentBet * 1.25 : this.currentBet;
+			console.log("[AutoplayOptions] Updating autoplay display to: $", displayBet, this.isEnhancedBet ? "(enhanced bet)" : "");
 			// Check if demo mode is active - if so, use blank currency symbol
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState();
 			const currencySymbol = isDemo ? '' : '$';
-			const displayBet = this.currentBet * this.betDisplayMultiplier;
 			this.autoplayDisplay.setText(`${currencySymbol}${displayBet.toFixed(2)}`);
 		}
+	}
+
+	private updateBetButtonStates(): void {
+		if (this.selectedBetIndex === -1) {
+			this.enableBetMinusButton();
+			this.enableBetPlusButton();
+			return;
+		}
+
+		const lastIndex = this.betOptions.length - 1;
+		if (this.selectedBetIndex <= 0) {
+			this.disableBetMinusButton();
+		} else {
+			this.enableBetMinusButton();
+		}
+
+		if (this.selectedBetIndex >= lastIndex) {
+			this.disableBetPlusButton();
+		} else {
+			this.enableBetPlusButton();
+		}
+	}
+
+	private setBetButtonEnabled(button: Phaser.GameObjects.Text | undefined, enabled: boolean): void {
+		if (!button) return;
+
+		button.setAlpha(enabled ? 1.0 : 0.3);
+
+		if (enabled) {
+			if (!button.input || !button.input.enabled) {
+				button.setInteractive();
+			} else {
+				button.input.enabled = true;
+			}
+		} else if (button.input) {
+			button.input.enabled = false;
+		}
+	}
+
+	private enableBetPlusButton(): void {
+		this.setBetButtonEnabled(this.plusButton, true);
+	}
+
+	private disableBetPlusButton(): void {
+		this.setBetButtonEnabled(this.plusButton, false);
+	}
+
+	private enableBetMinusButton(): void {
+		this.setBetButtonEnabled(this.minusButton, true);
+	}
+
+	private disableBetMinusButton(): void {
+		this.setBetButtonEnabled(this.minusButton, false);
 	}
 
 	private updateBalanceDisplay(): void {
@@ -510,6 +570,7 @@ export class AutoplayOptions {
 		this.selectedBetIndex = index;
 		this.currentBet = value;
 		this.updateAutoplayDisplay();
+		this.updateBetButtonStates();
 	}
 
 	private selectPreviousBet(): void {
@@ -532,14 +593,11 @@ export class AutoplayOptions {
 			if (config.currentBet !== undefined) {
 				this.currentBet = config.currentBet;
 			}
-			// Derive display multiplier (defaults to 1 when display bet isn't provided)
-			if (config.currentBetDisplay !== undefined && this.currentBet > 0) {
-				this.betDisplayMultiplier = config.currentBetDisplay / this.currentBet;
-			} else {
-				this.betDisplayMultiplier = 1;
-			}
 			if (config.currentBalance !== undefined) {
 				this.currentBalance = config.currentBalance;
+			}
+			if (config.isEnhancedBet !== undefined) {
+				this.isEnhancedBet = config.isEnhancedBet;
 			}
 			this.onCloseCallback = config.onClose;
 			this.onConfirmCallback = config.onConfirm;
@@ -585,9 +643,9 @@ export class AutoplayOptions {
 		}
 
 		this.updateAutoplayDisplay();
-
-		// Show/hide enhanced bet animation based on display multiplier
-		if (this.betDisplayMultiplier > 1.0001) {
+		
+		// Show/hide enhanced bet animation based on state
+		if (this.isEnhancedBet) {
 			this.showEnhanceBetIdleLoop();
 		} else {
 			this.hideEnhanceBetIdleLoop();
@@ -616,7 +674,7 @@ export class AutoplayOptions {
 
 	hide(): void {
 		this.container.setVisible(false);
-
+		
 		// Hide enhanced bet animation when panel is hidden
 		this.hideEnhanceBetIdleLoop();
 		
@@ -642,7 +700,16 @@ export class AutoplayOptions {
 
 	setCurrentBet(bet: number): void {
 		this.currentBet = bet;
+
+		const matchingIndex = this.betOptions.findIndex(option => Math.abs(option - bet) < 0.01);
+		if (matchingIndex !== -1) {
+			this.selectedBetIndex = matchingIndex;
+		} else {
+			this.selectedBetIndex = -1;
+		}
+
 		this.updateAutoplayDisplay();
+		this.updateBetButtonStates();
 	}
 
 	setCurrentBalance(balance: number): void {

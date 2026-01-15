@@ -20516,7 +20516,7 @@
         }
     ],
     "animations": {
-        "animation": {
+        "TotalW_SD": {
             "bones": {
                 "MasterSamurai3": {
                     "rotate": [

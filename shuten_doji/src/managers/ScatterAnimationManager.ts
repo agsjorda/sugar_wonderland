@@ -8,8 +8,6 @@ import { TurboConfig } from '../config/TurboConfig';
 import { SCATTER_MULTIPLIERS } from '../config/GameConfig';
 import { getFullScreenSpineScale, playSpineAnimationSequenceWithConfig } from '../game/components/SpineBehaviorHelper';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
-import { FlashTransition } from '../game/components/FlashTransition';
-import { emitKeypressEvents } from 'readline';
 
 export interface ScatterAnimationConfig {
   scatterRevealDelay: number;
@@ -41,7 +39,6 @@ export class ScatterAnimationManager {
     slideDistance: 200,
     dialogDelay: 300
   };
-  private flashTransition: FlashTransition;
 
   // Apply turbo mode to delays for consistent timing
   // Note: Scatter animations always use normal speed for better visual experience
@@ -65,8 +62,6 @@ export class ScatterAnimationManager {
     this.spinnerContainer = spinnerContainer;
     this.spinnerComponent = spinnerComponent;
     this.dialogsComponent = dialogsComponent;
-
-    this.flashTransition = new FlashTransition(scene);
 
     // Set up event listeners for wheel events
     this.setupWheelEventListeners();
@@ -130,10 +125,23 @@ export class ScatterAnimationManager {
       console.log('[ScatterAnimationManager] Waiting for player to see scatter symbols...');
       await this.delay(this.getTurboAdjustedDelay(this.config.scatterRevealDelay));
 
+      // Step 2: Disable symbols
+      // await this.disableSymbols();
+
+      // Step 3: Slide spinner down
+      // await this.slideSpinnerIn();
+
+      // Step 4: Wait for delay then trigger spinner rotation
+      // await this.delay(this.config.spinDelay);
+
+      // Step 5: Trigger the spinner rotation
+      // this.triggerSpinnerRotation(data);
+
+      // Step 6: Wait for spinner to complete and show free spins dialog
       await this.waitForFreeSpinDialogInput(data);
 
-      // Call nuclear transition here
-      await this.startNuclearTransition(this.scene, 0.6, 800);
+      // Call custom transition here
+      await this.startCustomTransition(this.scene, 0.6, 800);
  
       // Note: Symbol reset will happen after dialog animations complete
       console.log('[ScatterAnimationManager] Scatter bonus sequence completed, waiting for dialog animations to finish');
@@ -296,70 +304,60 @@ export class ScatterAnimationManager {
     }
   }
 
-  private async startNuclearTransition(scene: Scene, delayModifier?: number, flashDuration?: number): Promise<void> {
-    const spine = scene.add.spine(0, 0, 'nuclear', 'nuclear-atlas');
-    const scale = getFullScreenSpineScale(scene, spine, true);
-    const offset = { x: 0, y: 50 };
-    const anchor = { x: 0.5, y: 0.5 };
-    const origin = { x: 0.5, y: 0.5 };
+  private async runFadeToBlackFallback(scene: Scene, flashDuration?: number): Promise<void> {
+    if (!scene) return;
 
-    const onComplete = () => {
-      try { spine.off('complete', onComplete); } catch { }
-      try { spine.destroy(); } catch { }
-    };
+    const duration = flashDuration || 500;
+    const camera = scene.cameras.main;
 
-    const animationDuration = playSpineAnimationSequenceWithConfig(scene, spine, [0], { x: scale.x * 1.1, y: scale.y * 1.2 }, anchor, origin, offset, 999, false, onComplete);
-
-    // Play missile SFX when the nuclear animation starts
-    try {
-      const audioMgr = (window as any).audioManager;
-      if (audioMgr && typeof audioMgr.playSoundEffect === 'function') {
-        audioMgr.playSoundEffect(SoundEffectType.MISSILE);
-        console.log('[ScatterAnimationManager] Missile SFX played at nuclear animation start');
-
-        const isTurbo = gameStateManager.isTurbo;
-        this.scene?.time.delayedCall(900, () => {
-          audioMgr.fadeOutSfx(SoundEffectType.MISSILE, 300);
-          audioMgr.playSoundEffect(SoundEffectType.EXPLOSION);
-          this.scene?.time.delayedCall(300, () => {
-            audioMgr.playSoundEffect(SoundEffectType.NUKE);
-            console.log('[ScatterAnimationManager] Nuke SFX played at nuclear animation end');
-          });
-          console.log('[ScatterAnimationManager] Missile SFX faded out at nuclear animation end');
-        });
-
-      }
-    } catch (e) {
-      console.warn('[ScatterAnimationManager] Failed to play missile SFX at nuclear animation start', e);
-    }
-    const delay = delayModifier ? animationDuration * delayModifier : animationDuration;
-
-    // use FlashTransition component for the flash instead of manual tween
-    const totalDuration = flashDuration || 500;
+    console.warn('[ScatterAnimationManager] Falling back to fade-to-black transition');
 
     return new Promise<void>((resolve) => {
-      scene.time.delayedCall(delay, () => {
-        this.flashTransition.show();
-        this.flashTransition.setAlphaImmediate(0);
-        this.flashTransition.flashOverlay(1, totalDuration / 2, 'In');
+      const onFadeOutComplete = () => {
+        scene.events.emit('scatterBonusCompleted');
+        this.triggerBonusMode(scene);
+        camera.fadeIn(duration, 0, 0, 0);
+      };
 
-        // fade back down after reaching full white
-        scene.time.delayedCall(totalDuration * 2, () => {
-          this.flashTransition.flashOverlay(0, totalDuration / 2, 'Out');
-          // Emit scatter bonus completion BEFORE triggering bonus mode so listeners can
-          // register for dialogAnimationsComplete in time
-          scene.events.emit('scatterBonusCompleted');
-          this.triggerBonusMode(scene);
-        });
+      const onFadeInComplete = () => {
+        camera.off('camerafadeoutcomplete', onFadeOutComplete);
+        camera.off('camerafadeincomplete', onFadeInComplete);
+        resolve();
+      };
 
-        // hide overlay shortly after the flash completes
-        scene.time.delayedCall(totalDuration * 3, () => {
-          this.flashTransition.hide();
+      camera.once('camerafadeoutcomplete', onFadeOutComplete);
+      camera.once('camerafadeincomplete', onFadeInComplete);
+      camera.fadeOut(duration, 0, 0, 0);
+    });
+  }
 
-          // Emit dialog animations complete event AFTER the full iris transition completes
-          console.log('[Dialogs] Dialog animations complete event emitted after full iris transition');
+  private async startCustomTransition(scene: Scene, delayModifier?: number, flashDuration?: number): Promise<void> {
+    if (!scene) {
+      console.warn('[ScatterAnimationManager] Scene not available, using fade-to-black fallback');
+      await this.runFadeToBlackFallback(scene, flashDuration);
+      return;
+    }
 
-          // Restore background music volume after dialog completes
+    const hasSpineSupport = !!(scene.add as any)?.spine;
+    if (!hasSpineSupport) {
+      console.warn('[ScatterAnimationManager] Spine support missing, using fade-to-black fallback');
+      await this.runFadeToBlackFallback(scene, flashDuration);
+      return;
+    }
+
+    try {
+      let scatterBonusEmitted = false;
+      let resolved = false;
+
+      const safeResolve = (resolve: () => void) => {
+        if (resolved) return;
+        resolved = true;
+        resolve();
+      };
+
+      return new Promise<void>((resolve) => {
+        const finish = () => {
+          // Restore background music volume after the transition completes
           try {
             const audioManager = (window as any).audioManager;
             if (audioManager && typeof audioManager.restoreBackground === 'function') {
@@ -367,10 +365,15 @@ export class ScatterAnimationManager {
             }
           } catch { }
 
-          resolve();
-        });
+          safeResolve(resolve);
+        };
+
+        finish();
       });
-    });
+    } catch (error) {
+      console.warn('[ScatterAnimationManager] Custom transition unavailable, using fade-to-black fallback', error);
+      await this.runFadeToBlackFallback(scene, flashDuration);
+    }
   }
 
   private triggerBonusMode(scene: Scene): void {
@@ -505,7 +508,7 @@ export class ScatterAnimationManager {
 
       // Resolve when the Free Spin dialog is clicked
       this.scene.events.once('freeSpinDialogClicked', () => {
-        console.log('[ScatterAnimationManager] freeSpinDialogClicked received - proceeding to nuclear transition');
+        console.log('[ScatterAnimationManager] freeSpinDialogClicked received - proceeding to transition');
         resolveOnce();
       });
     });
@@ -553,8 +556,6 @@ export class ScatterAnimationManager {
     console.log(`[ScatterAnimationManager] Showing free spins dialog for ${freeSpins} free spins`);
     console.log(`[ScatterAnimationManager] Backend data state: freeSpins=${data.freeSpins}, scatterIndex=${data.scatterIndex}`);
 
-    const dialogNameToShow = gameStateManager.isBonus ? 'BonusFreeSpinDialog' : 'FreeSpinDialog';
-    console.log(`[ScatterAnimationManager] Showing ${dialogNameToShow} dialog`);
     // Update game state to reflect bonus mode
     console.log('[ScatterAnimationManager] Setting isBonus to true');
     gameStateManager.isBonus = true;
@@ -564,11 +565,11 @@ export class ScatterAnimationManager {
     try {
       console.log('[ScatterAnimationManager] Calling dialogsComponent.showDialog with type: FreeSpinDialog_KA, freeSpins:', freeSpins);
       this.dialogsComponent.showDialog(this.scene, {
-        type: dialogNameToShow,
+        type: 'FreeSpinDialog',
         freeSpins: freeSpins
       });
 
-      console.log('[ScatterAnimationMa`nager] Free spins dialog displayed successfully');
+      console.log('[ScatterAnimationManager] Free spins dialog displayed successfully');
 
       // Emit IS_BONUS event through the EventManager
       gameEventManager.emit(GameEventType.IS_BONUS, {
@@ -580,8 +581,7 @@ export class ScatterAnimationManager {
       if (this.scene) {
         const eventData = {
           scatterIndex: data.scatterIndex,
-          actualFreeSpins: freeSpins,
-          isRetrigger: false,
+          actualFreeSpins: freeSpins
         };
         console.log(`[ScatterAnimationManager] Emitting scatterBonusActivated event with data:`, eventData);
 

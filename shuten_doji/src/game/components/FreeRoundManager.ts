@@ -132,10 +132,6 @@ export class FreeRoundManager {
 
 		this.container.setDepth(finalDepth);
 
-		// (Previously created a separate `freeround_bg` button here. We now reuse the
-		// SlotController's own spin button and simply swap its texture during
-		// free-round mode, so no extra clickable button is needed.)
-
 		// ---------------------------------------------------------------------
 		// Free spin info panel (same dimensions as SlotController balance BG)
 		// ---------------------------------------------------------------------
@@ -589,15 +585,15 @@ export class FreeRoundManager {
 				const slot: any = spinData.slot;
 				let spinWin = 0;
 
-				// For warfreaks_v2, initialization free spins are base-game spins that use slot.totalWin
-				// (same logic as in Game scene WIN_STOP handler for base game)
+				// For rainbow_fist, initialization free spins are base-game spins.
+				// Prefer direct totalWin if available for most accurate value.
 				if (typeof slot.totalWin === 'number') {
 					spinWin = slot.totalWin;
 					console.log('[FreeRoundManager] Using slot.totalWin for initialization free spin:', spinWin);
-				} else if (Array.isArray(slot.tumbles?.items) && slot.tumbles.items.length > 0) {
-					// Fallback: calculate from tumbles if totalWin is not available
-					spinWin = this.calculateTotalWinFromTumbles(slot.tumbles.items);
-					console.log('[FreeRoundManager] Calculated from tumbles.items:', spinWin);
+				} else if (Array.isArray(slot.tumbles) && slot.tumbles.length > 0) {
+					// Fallback: calculate from tumbles (cluster wins)
+					spinWin = this.calculateTotalWinFromTumbles(slot.tumbles);
+					console.log('[FreeRoundManager] Calculated from tumbles:', spinWin);
 				} else if (Array.isArray(slot.paylines) && slot.paylines.length > 0) {
 					// Fallback: sum payline wins if present.
 					for (const payline of slot.paylines) {
@@ -625,11 +621,6 @@ export class FreeRoundManager {
 	 * For manual initialization free rounds (no autoplay), decrement the remaining
 	 * free spin count once per spin start while we are in the dedicated
 	 * free-round context.
-	 */
-	/**
-	 * For manual initialization free rounds (no autoplay), decrement the remaining
-	 * free spin count once per spin start while we are in the dedicated
-	 * free-round context.
 	 * 
 	 * NOTE: Manual decrement is now DISABLED. The backend provides the fsCount
 	 * in the response (when isFs: true), and we listen for FREEROUND_COUNT_UPDATE
@@ -640,35 +631,6 @@ export class FreeRoundManager {
 		// The FREEROUND_COUNT_UPDATE event handler (set up in create()) will update
 		// the remaining free spins display with the value from the server.
 		console.log('[FreeRoundManager] Manual spin consumption disabled - using backend fsCount instead');
-		
-		// Legacy code commented out:
-		/*
-		gameEventManager.on(GameEventType.REELS_START, () => {
-			if (!this.trackingFreeRoundAutoplay) {
-				return;
-			}
-
-			if (!this.sceneRef) {
-				return;
-			}
-
-			if (gameStateManager.isBonus) {
-				return;
-			}
-
-			const gsmAny: any = gameStateManager as any;
-			if (gsmAny.isInFreeSpinRound !== true) {
-				return;
-			}
-
-			if (this.remainingFreeSpins <= 0) {
-				return;
-			}
-
-			this.remainingFreeSpins -= 1;
-			this.setFreeSpins(this.remainingFreeSpins);
-		});
-		*/
 	}
 
 	/**
@@ -685,19 +647,6 @@ export class FreeRoundManager {
 			totalWin += isNaN(w) ? 0 : w;
 		}
 		return totalWin;
-	}
-
-	/**
-	 * Rough estimate of total free-round value; can be replaced later with actual total win.
-	 */
-	private estimateFreeRoundTotalWin(): number {
-		const bet =
-			this.initBet != null
-				? this.initBet
-				: (this.slotControllerRef && (this.slotControllerRef as any).getBaseBetAmount)
-					? (this.slotControllerRef as any).getBaseBetAmount()
-					: 0;
-		return this.initialFreeSpins * bet;
 	}
 
 	/**
@@ -864,6 +813,8 @@ export class FreeRoundManager {
 		this.panelContainer.add(spinsLabel);
 
 		// "With $X.XX" line
+		const isDemo = (scene as any).gameAPI?.getDemoState();
+		const currencySymbol = isDemo ? '' : '$';
 		const betValue =
 			this.initBet != null
 				? this.initBet
@@ -888,7 +839,7 @@ export class FreeRoundManager {
 		this.panelBetText = scene.add.text(
 			0,
 			0,
-			`$${betDisplay}`,
+			`${currencySymbol}${betDisplay}`,
 			{
 				fontSize: '20px',
 				color: '#379557',
@@ -983,11 +934,8 @@ export class FreeRoundManager {
 	}
 
 	/**
-	 * Alternate completion panel variant:
-	 * Line 1: "[winnings] has been credited"
-	 * Line 2: "to your balance"
-	 * Button: "OK"
-	 * Title: "Free Spin Done"
+	 * Show a completion panel after all free spins are consumed.
+	 * Layout: 397w x 318h, text styles/color schemes matching the reward panel.
 	 */
 	private showCompletionCreditedPanel(totalWin: number): void {
 		if (!this.sceneRef) {
@@ -1256,5 +1204,3 @@ export class FreeRoundManager {
 		this.labelText = null;
 	}
 }
-
-

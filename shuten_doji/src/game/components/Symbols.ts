@@ -7,54 +7,53 @@ import { SymbolDetector, Grid, Wins } from "../../tmp_backend/SymbolDetector";
 import { GameEventData, gameEventManager, GameEventType, UpdateMultiplierValueEventData } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { TurboConfig } from '../../config/TurboConfig';
-import {
-  SLOT_ROWS,
-  SLOT_COLUMNS,
-  DELAY_BETWEEN_SPINS,
-  WILDCARD_SYMBOLS,
-  AUTO_SPIN_START_DELAY,
-  SCATTER_MULTIPLIERS,
-  AUTO_SPIN_WIN_DIALOG_TIMEOUT,
-} from '../../config/GameConfig';
+import { SLOT_ROWS, SLOT_COLUMNS, DELAY_BETWEEN_SPINS, WILDCARD_SYMBOLS, SCATTER_MULTIPLIERS } from '../../config/GameConfig';
 import { AudioManager, SoundEffectType } from '../../managers/AudioManager';
 import { Dialogs } from "./Dialogs";
 import { SpineGameObject } from "@esotericsoftware/spine-phaser-v3";
-import { hideSpineAttachmentsByKeywords, playSpineAnimationSequence, playSpineAnimationSequenceWithConfig } from "./SpineBehaviorHelper";
+import { ensureSpineFactory } from "../../utils/SpineGuard";
+import {
+  AUTO_SPIN_START_DELAY
+} from "../../config/GameConfig";
+import { hideSpineAttachmentsByKeywords, playSpineAnimationSequence, playSpineAnimationSequenceWithConfig, getSpineAnimationDurationMs } from "./SpineBehaviorHelper";
 import { NumberDisplay, NumberDisplayConfig } from "./NumberDisplay";
 import { SpinData, SpinDataUtils } from "../../backend/SpinData";
+import regularScatterData from "../spinDataScenarios/regular_scatter.json";
+import endRetriggerData from "../spinDataScenarios/end_retrigger.json";
+import untriggeredRetriggerData from "../spinDataScenarios/untriggered_retrigger.json";
+import end_retrigger_v2 from "../spinDataScenarios/end_retrigger_v2.json";
+
+
 
 // Debug flags for verbose tumble logging / diagnostics
 const DEBUG_SYMBOLS_TUMBLES = false;
+// Debug gate for verbose Symbols logging (especially inside loops).
+// Runtime override: set `window.__DEBUG_SYMBOLS_LOGS__ = true` in DevTools.
+const DEBUG_SYMBOLS_LOGS = false;
+
+function isSymbolsVerboseLoggingEnabled(): boolean {
+  const w = typeof window !== 'undefined' ? (window as any) : undefined;
+  // Respect global debug kill-switch used elsewhere in the project.
+  if (w && w.__DEBUGGING_ON__ === false) return false;
+  return DEBUG_SYMBOLS_LOGS || (w && w.__DEBUG_SYMBOLS_LOGS__ === true);
+}
 
 export class Symbols {
-  // DEBUGGING (wireframe overlays)
-  public showWireframes: boolean = false; // Toggle to show/hide symbol wireframe boxes
+  // DEBUGGING
+  public showWireframes: boolean = false; // Toggle to show/hide wireframe boxes
   public showMaskWireframe: boolean = false; // Toggle to show/hide mask wireframe
 
-  public wireframeBoxes: GameObjects.Graphics[] = [];
-  public maskWireframe?: GameObjects.Graphics;
+  /**
+   * True while a reel drop/tumble sequence is actively animating.
+   * Used to prevent "cleanup" routines (often triggered by dialogs/transitions) from killing in-flight drop tweens.
+   */
+  public isReelDropping: boolean = false;
+
+  public wireframeBoxes: Phaser.GameObjects.Graphics[] = [];
+  public maskWireframe?: Phaser.GameObjects.Graphics;
+
 
   private static readonly WINLINE_CHECKING_DISABLED: boolean = true;
-
-  /**
-   * When scaling Scatter up, optionally offset it to keep it visually aligned inside the symbol box.
-   * Default behavior: keep the *bottom* of the sprite aligned (shift down as it scales up).
-   * - 0.0 = no auto-offset
-   * - 1.0 = full bottom alignment correction
-   *
-   * Ported from `rainbow_fist` for consistent Scatter sizing/placement.
-   */
-  public static readonly SCATTER_PNG_BOTTOM_ALIGN_FACTOR: number = 0;
-
-  // Default drop shadow settings for image-based symbols (PNG sprites, value overlays)
-  public static readonly SYMBOL_IMAGE_SHADOW_OFFSET_X: number = 0;
-  public static readonly SYMBOL_IMAGE_SHADOW_OFFSET_Y: number = -4;
-  public static readonly SYMBOL_IMAGE_SHADOW_DECAY: number = 0.1;
-  public static readonly SYMBOL_IMAGE_SHADOW_POWER: number = 1;
-  // make the color dark gray
-  public static readonly SYMBOL_IMAGE_SHADOW_COLOR: number = 0x111111;
-  public static readonly SYMBOL_IMAGE_SHADOW_SAMPLES: number = 6;
-  public static readonly SYMBOL_IMAGE_SHADOW_INTENSITY: number = 0.4;
 
   public static FILLER_COUNT: number = 20;
   public reelCount: number = 0;
@@ -72,88 +71,76 @@ export class Symbols {
   public totalGridHeight: number;
   public scatterAnimationManager: ScatterAnimationManager;
   public symbolDetector: SymbolDetector;
+  public scatterTransposedBuffer: number[][] = [];
+  public scatterDataBuffer: Data | null = null;
   private overlayRect?: Phaser.GameObjects.Graphics;
   public currentSpinData: any = null; // Store current spin data for access by other components
   private dialogs: Dialogs;
   public dropSparkPlayedColumns: Set<number> = new Set();
+  // Turbo drop SFX guard to ensure we only fire once per spin.
+  public turboDropSfxPlayedThisSpin: boolean = false;
   public sparkVFXPool: SpineGameObject[] = [];
   public symbolSpritePool: GameObjects.Sprite[] = [];
   public spinePools: { [key: string]: SpineGameObject[] } = {};
-  public scatterTransposedBuffer: number[][] = [];
-  public scatterDataBuffer: Data | null = null;
-  public winEvalRowMajorBuffer: number[][] = [];
-  public winEvalDataBuffer: Data | null = null;
+  // Multiplier symbols are discovered via scanning the current grid when needed (no caching).
   public tumbleRemoveMask: boolean[][] = [];
+
+  public static readonly SCATTER_SPINE_KEY: string = 'symbol0_spine';
+  public static readonly SCATTER_HIT_ANIMATION_NAME: string = 'Symbol0_SD_win';
+  public static readonly MULTIPLIER_SPINE_KEY: string = 'multiplier_spine';
+
+  public static readonly MULTIPLIER_ANIMATION_TIME_SCALE: number = 0.5;
+  public static readonly MULTIPLIER_FRONT_DEPTH: number = 650;
+  // Must match `Background.ts` / `BonusBackground.ts` reel frame depth.
+  public static readonly REEL_FRAME_DEPTH: number = 550;
+  // Scatter should sit above the reel frame in idle/compression.
+  public static readonly SCATTER_ABOVE_REEL_FRAME_DEPTH: number = Symbols.REEL_FRAME_DEPTH + 1;
+  // Default depth ordering inside the reel symbols container (higher renders above lower).
+  // This is primarily to prevent the up-scaled Scatter PNG (value 0) from being occluded by neighbors.
+  public static readonly REEL_SYMBOL_DEPTH: number = 0;
+  public static readonly REEL_SCATTER_DEPTH: number = 5;
+
   public readonly baseSymbolWidth: number = 67;
   public readonly baseSymbolHeight: number = 67;
-  public readonly maskPadding: { left: number, right: number, top: number, bottom: number } = { left: 15, right: 15, top: 6, bottom: 6 };
 
   public gridOffsetX: number = 0;
   public gridOffsetY: number = -53;
   public baseCenterX: number = 0;
   public baseCenterY: number = 0;
 
-  public cachedTotalWin: number = 0;
-  public cachedPreBonusWins: number = 0;
+  public maskPadding: { left: number, right: number, top: number, bottom: number } = { left: 15, right: 15, top: 5, bottom: 5 };
 
   private symbolWinTimeScales: { [key: number]: number } = {
-    0: 1.5,
-    1: 1.41,
-    2: 1.41,
-    3: 1.41,
-    4: 1.41,
-    5: 1.41,
-    6: 1.75,
-    7: 1.75,
-    8: 1.75,
-    9: 1.75,
+    0: 1,
+    1: 1,
+    2: 1,
+    3: 1,
+    4: 1,
+    5: 1,
+    6: 1,
+    7: 1,
+    8: 1,
+    9: 1,
     10: 1,
   }
 
-  private spineSymbolOrigins: { [key: number]: { x: number, y: number } } =
-    {
-      0: { x: 0.482, y: 0.55 },
-      1: { x: 0.5, y: 0.5 },
-      2: { x: 0.5, y: 0.5 },
-      3: { x: 0.5, y: 0.5 },
-      4: { x: 0.5, y: 0.5 },
-      5: { x: 0.5, y: 0.5 },
-      6: { x: 0.5, y: 0.505 },
-      7: { x: 0.5, y: 0.505 },
-      8: { x: 0.5, y: 0.505 },
-      9: { x: 0.5, y: 0.505 },
-      10: { x: 0.505, y: 0.3475 },
-    }
-
-  // Configuration for Spine symbol scales - adjust these values manually
-  private spineSymbolScales: { [key: number]: number } = {
-    0: 1,   // Symbol0_KA scale (scatter)
-    1: 0.5,  // Symbol1_KA scale (HP)
-    2: 0.5,  // Symbol2_KA scale (HP)
-    3: 0.5,  // Symbol3_KA scale (HP)
-    4: 0.5,  // Symbol4_KA scale (HP)
-    5: 0.5,  // Symbol5_KA scale (HP)
-    6: 0.5,  // Symbol6_KA scale (LP)
-    7: 0.5,  // Symbol7_KA scale (LP)
-    8: 0.5,  // Symbol8_KA scale (LP)
-    9: 0.5,  // Symbol9_KA scale (LP)
-    10: 0.5,  // Symbol10_KA scale (multiplier)
-  };
-
-  // Configuration for PNG symbol scales - tuned per symbol if needed
-  private imageSymbolScales: { [key: number]: number } = {
-    0: 1.2,
-    1: 1.15,
-    2: 0.9,
-    3: 1.25,
-    4: 1.1,
-    5: 1.2,
-    6: 1.1,
-    7: 1.1,
-    8: 1.1,
-    9: 1.1,
-    10: 1,
-  };
+  private multiplierAnimationMapping: { [key: number]: string } = {
+    11: '2x',
+    12: '3x',
+    13: '4x',
+    14: '5x',
+    15: '6x',
+    16: '8x',
+    17: '10x',
+    18: '12x',
+    19: '15x',
+    20: '20x',
+    21: '25x',
+    22: '50x',
+    23: '100x',
+    24: '250x',
+    25: '500x',
+  }
 
   public multiplierIndexMapping: { [key: number]: number } = {
     11: 2,
@@ -172,6 +159,69 @@ export class Symbols {
     24: 250,
     25: 500,
   };
+
+  public static readonly SPINE_SYMBOL_ORIGINS: { [key: number]: { x: number, y: number } } =
+    {
+      0: { x: 0.5, y: 0.4 },
+      1: { x: 0.5, y: 0.5 },
+      2: { x: 0.5, y: 0.5 },
+      3: { x: 0.5, y: 0.5 },
+      4: { x: 0.5, y: 0.5 },
+      5: { x: 0.5, y: 0.5 },
+      6: { x: 0.5, y: 0.505 },
+      7: { x: 0.5, y: 0.505 },
+      8: { x: 0.5, y: 0.505 },
+      9: { x: 0.5, y: 0.505 },
+      10: { x: 0.5, y: 0.5 },
+    }
+
+  // Configuration for Spine symbol scales - adjust these values manually
+  public static readonly SPINE_SYMBOL_SCALES: { [key: number]: number } = {
+    0: 0.08,   // Symbol0_RF scale (scatter)
+    1: 0.55,  // Symbol1_RF scale (HP)
+    2: 0.45,  // Symbol2_RF scale (HP)
+    3: 0.6,  // Symbol3_RF scale (HP)
+    4: 0.525,  // Symbol4_RF scale (HP)
+    5: 0.575,  // Symbol5_RF scale (LP)
+    6: 0.5,  // Symbol6_RF scale (LP)
+    7: 0.5,  // Symbol7_RF scale (LP)
+    8: 0.5,  // Symbol8_RF scale (LP)
+    9: 0.5,  // Symbol9_RF scale (LP)
+    10: 0.5,  // Symbol10_RF scale (multiplier)
+  };
+
+  /**
+   * Configuration for PNG symbol scales - tuned per symbol if needed.
+   * Applied AFTER fitting the sprite to the symbol box (via displayWidth/Height).
+   */
+  public static readonly IMAGE_SYMBOL_SCALES: { [key: number]: number } = {
+    0: 1.15,
+    1: 1.15,
+    2: 0.9,
+    3: 1.25,
+    4: 1.1,
+    5: 1.2,
+    6: 1.1,
+    7: 1.1,
+    8: 1.1,
+    9: 1.05,
+    10: 1,
+  };
+
+  /**
+   * Scatter (value 0) prefers Spine on the reels (when available), with PNG fallback.
+   * Spine is also used for the big center hit during the scatter gather sequence.
+   * Use a multiplier here to make the Scatter PNG visually larger than the standard symbol box (fallback/compat).
+   */
+  public static readonly SCATTER_PNG_SCALE_MULTIPLIER: number = 1.25;
+
+  /**
+   * When scaling Scatter up, optionally offset it to keep it visually aligned inside the symbol box.
+   * Default behavior: keep the *bottom* of the sprite aligned (shift up as it scales up).
+   * - 0.0 = no auto-offset
+   * - 1.0 = full bottom alignment correction
+   */
+  public static readonly SCATTER_PNG_BOTTOM_ALIGN_FACTOR: number = 0.0;
 
   // Store current symbol data for reset purposes
   public currentSymbolData: number[][] | null = null;
@@ -198,9 +248,8 @@ export class Symbols {
     this.scene = scene;
     initVariables(this);
     createContainer(this);
-    prewarmSymbolSpinePools(this);
-    prewarmSparkSpinePool(this);
-    prewarmMultiplierSpinePools(this);
+    // Start staggered prewarm asynchronously so scene setup is not blocked.
+    void schedulePrewarmAsync(this);
     onStart(this);
     onSpinDataReceived(this);
     this.onSpinDone(this.scene);
@@ -251,8 +300,10 @@ export class Symbols {
       // Win line checking/clearing disabled
       // Hide winning overlay when spin starts
       this.hideWinningOverlay();
-      // Reset depths and visibility in a single grid pass for new spin
-      this.resetDepthsAndVisibilityForNewSpin();
+      // Reset symbol depths
+      this.resetSymbolDepths();
+      // Restore symbol visibility for new spin
+      this.restoreSymbolVisibility();
     });
 
     // WIN_START/WIN_STOP disabled
@@ -263,12 +314,11 @@ export class Symbols {
       // Reset dialog showing flag
       gameStateManager.isShowingWinDialog = false;
 
-      // If bonus just finished, simply clear the flag here. The actual
-      // Congratulations dialog is now scheduled centrally via the free spin
-      // autoplay stop flow (stopFreeSpinAutoplay → scheduleCongratsDialogAfterAutoplay)
-      // to avoid double-triggering from multiple listeners.
+      // If bonus just finished, immediately show congrats and reset flag
       if (gameStateManager.isBonusFinished) {
-        console.log('[Symbols] isBonusFinished is true on WIN_DIALOG_CLOSED - congrats handled by autoplay stop; clearing isBonusFinished flag only');
+        console.log('[Symbols] isBonusFinished is true on WIN_DIALOG_CLOSED - showing congrats now');
+        // Show congrats now and reset the flag; bonus mode exit happens on congrats close
+        this.showCongratsDialogAfterDelay(4000 * (gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1));
         gameStateManager.isBonusFinished = false;
       }
     });
@@ -307,67 +357,6 @@ export class Symbols {
     }
   }
 
-  /**
-   * Start dropping/clearing existing symbols as soon as a new spin is triggered.
-   * This is intentionally decoupled from `dropReels` so the clear phase can
-   * begin immediately at spin start (manual or autoplay), before new reels drop.
-   */
-  public startPreSpinDrop(): void {
-    if (!this.symbols || this.symbols.length === 0) {
-      console.log('[Symbols] startPreSpinDrop: no symbols to drop');
-      return;
-    }
-
-    const firstCol = this.symbols[0];
-    const numRows = Array.isArray(firstCol) ? firstCol.length : 0;
-    if (numRows === 0) {
-      console.log('[Symbols] startPreSpinDrop: symbol grid has zero rows');
-      return;
-    }
-
-    // Ensure GameData timings are initialized before the very first drop.
-    // This mirrors the logic in processSpinDataSymbols so the first pre-spin
-    // drop does not use the tiny constructor defaults (which look "too fast").
-    const gameData = this.scene?.gameData as GameData;
-    let isTurbo = false;
-    let rowDelay = 0;
-    if (gameData) {
-      const baseDelay = DELAY_BETWEEN_SPINS; // 2500ms default
-      const adjustedDelay = gameStateManager.isTurbo
-        ? baseDelay * TurboConfig.TURBO_SPEED_MULTIPLIER
-        : baseDelay;
-      setSpeed(gameData, adjustedDelay);
-      isTurbo = !!gameData.isTurbo;
-      rowDelay = typeof (gameData as any).dropReelsDelay === 'number'
-        ? (gameData as any).dropReelsDelay
-        : 0;
-    }
-
-    const extendLastReelDrop = false;
-
-    console.log('[Symbols] Starting pre-spin drop of existing symbols', {
-      numRows,
-      isTurbo,
-      rowDelay,
-    });
-
-    // Reverse the sequence: start from bottom row to top row
-    for (let step = 0; step < numRows; step++) {
-      const actualRow = (numRows - 1) - step;
-      const isLastReel = actualRow === 0;
-      const startDelay = isTurbo ? 0 : rowDelay * step;
-
-      this.scene.time.delayedCall(startDelay, () => {
-        console.log(`[Symbols] Pre-spin dropping row ${actualRow}/${numRows - 1}`);
-        try {
-          dropPrevSymbols(this, actualRow, isLastReel && extendLastReelDrop);
-        } catch (e) {
-          console.warn('[Symbols] Error during pre-spin drop for row', actualRow, e);
-        }
-      });
-    }
-  }
-
   private onSpinDone(scene: Game) {
     gameEventManager.on(GameEventType.REELS_STOP, (data: any) => {
       console.log('[Symbols] REELS_STOP event received');
@@ -398,6 +387,9 @@ export class Symbols {
       }
 
       // Reset any symbol tints/effects that might be active
+      // IMPORTANT: Do not kill active tweens here. Dialogs can close while reel drop tweens
+      // are still running (especially around bonus transitions / large win dialogs). Killing
+      // tweens mid-chain leaves symbols stuck partway through their drop.
       this.resetSymbolsState();
     });
 
@@ -415,13 +407,24 @@ export class Symbols {
       this.stopAllSpineAnimations();
 
       // Then stop all other animations and convert Spine symbols back to PNG
-      this.stopAllSymbolAnimations();
+      if (this.isReelDropping) {
+        console.log('[Symbols] Skipping stopAllSymbolAnimations because reel drop is in progress');
+      } else {
+        this.stopAllSymbolAnimations();
+      }
 
       // Restore all symbols to visible state
       this.restoreSymbolVisibility();
 
       // Specifically ensure scatter symbols are visible
       this.ensureScatterSymbolsVisible();
+
+      // After the scatter hit sequence finishes, tween all gathered scatters back to their start positions
+      try {
+        this.tweenGatheredScatterSymbolsBackToStart();
+      } catch (error) {
+        console.warn('[Symbols] Failed to tween scatter symbols back to start:', error);
+      }
 
       // Set up dialog animations complete listener only once
       if (!this.dialogListenerSetup) {
@@ -470,18 +473,9 @@ export class Symbols {
    */
   public getSpineSymbolScale(symbolValue: number): number {
     // clamp the value of symbolValue to the max value of spineSymbolScales
-    symbolValue = Math.min(symbolValue, Object.keys(this.spineSymbolScales).length - 1);
+    symbolValue = Math.min(symbolValue, Object.keys(Symbols.SPINE_SYMBOL_SCALES).length - 1);
 
-    return this.spineSymbolScales[symbolValue] || 1; // Default scale if not configured
-  }
-
-  /**
-   * Get the configured origin for a specific symbol's Spine animation
-   */
-  public getSpineSymbolOrigin(symbolValue: number): { x: number, y: number } {
-    symbolValue = Math.min(symbolValue, Object.keys(this.spineSymbolOrigins).length - 1);
-
-    return this.spineSymbolOrigins[symbolValue] || { x: 0.5, y: 0.5 }; // Default origin if not configured
+    return Symbols.SPINE_SYMBOL_SCALES[symbolValue] || 1; // Default scale if not configured
   }
 
   /**
@@ -489,27 +483,59 @@ export class Symbols {
    */
   public getImageSymbolScale(symbolValue: number): number {
     // Clamp to the max configured index to avoid undefined lookups
-    symbolValue = Math.min(symbolValue, Object.keys(this.imageSymbolScales).length - 1);
+    symbolValue = Math.min(symbolValue, Object.keys(Symbols.IMAGE_SYMBOL_SCALES).length - 1);
 
-    return this.imageSymbolScales[symbolValue] || 1; // Default scale if not configured
+    return Symbols.IMAGE_SYMBOL_SCALES[symbolValue] || 1; // Default scale if not configured
   }
 
-  public showFreeSpinDialog(freeSpinsCount: number): void {
-    // Show Free Spin dialog immediately after scatter hit
-    // try {
-    //   const gameScene: any = this.scene as any;
-    //   const dialogs = gameScene?.dialogs;
-    //   if (dialogs && typeof dialogs.showFreeSpinDialog === 'function') {
-    //     console.log(`[Symbols] Showing Free Spin dialog with ${freeSpinsCount} free spins`);
-    //     dialogs.showFreeSpinDialog(this.scene, { freeSpins: freeSpinsCount });
+  /**
+   * Get the configured origin for a specific symbol's Spine animation
+   */
+  public getSpineSymbolOrigin(symbolValue: number): { x: number, y: number } {
+    symbolValue = Math.min(symbolValue, Object.keys(Symbols.SPINE_SYMBOL_ORIGINS).length - 1);
 
-    //     gameStateManager.isShowingWinDialog = true;
-    //   } else {
-    //     console.warn('[Symbols] Dialogs component not available to show Free Spin dialog');
-    //   }
-    // } catch (e) {
-    //   console.warn('[Symbols] Failed to show Free Spin dialog:', e);
-    // }
+    return Symbols.SPINE_SYMBOL_ORIGINS[symbolValue] || { x: 0.5, y: 0.5 }; // Default origin if not configured
+  }
+
+  /**
+   * Finds the animation name by looping through the multiplier spine animations
+   * and matching the last part after "_" with the multiplierAnimationMapping.
+   * @param spine - The multiplier spine object to search animations in
+   * @param symbolIndex - The symbol index (e.g., 10, 11, 12)
+   * @returns The animation name if found (e.g., "Symbol10_RF_2x"), null otherwise
+   */
+  public findMultiplierAnimationNameByIndex(spine: SpineGameObject, symbolIndex: number): string | null {
+    if (symbolIndex == null || !(symbolIndex in this.multiplierAnimationMapping) || !spine) {
+      return null;
+    }
+
+    const multiplierValue = this.multiplierAnimationMapping[symbolIndex];
+
+    try {
+      const animations = (spine as any)?.skeleton?.data?.animations as Array<{ name: string }> | undefined;
+
+      if (animations) {
+        // Loop through all animations
+        for (const animation of animations) {
+          if (!animation.name || !animation.name.includes('_')) {
+            continue;
+          }
+
+          // Get the last part after "_"
+          const parts = animation.name.split('_');
+          const lastPart = parts[parts.length - 1];
+
+          // Match with the multiplier value from the mapping
+          if (lastPart === multiplierValue) {
+            return animation.name;
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[Symbols] Error accessing spine animations:', error);
+    }
+
+    return null;
   }
 
   /**
@@ -543,15 +569,22 @@ export class Symbols {
 
         }
       }
-      console.log(`[Symbols] Restored visibility for ${resetCount} symbols, set ${visibleCount} to visible`);
+      if (isSymbolsVerboseLoggingEnabled()) {
+        console.log(`[Symbols] Restored visibility for ${resetCount} symbols, set ${visibleCount} to visible`);
+      }
 
       // Also log the current state of the container
       if (this.container) {
-        console.log(`[Symbols] Container alpha after restore: ${this.container.alpha}, visible: ${this.container.visible}`);
+        if (isSymbolsVerboseLoggingEnabled()) {
+          console.log(`[Symbols] Container alpha after restore: ${this.container.alpha}, visible: ${this.container.visible}`);
+        }
       }
 
       // Log the state of any scatter symbols specifically
       this.logScatterSymbolsState();
+
+      // Force all symbols to be visible as a final safety measure
+      this.forceAllSymbolsVisible();
     }
   }
 
@@ -559,12 +592,17 @@ export class Symbols {
    * Log the current state of scatter symbols for debugging
    */
   private logScatterSymbolsState(): void {
+    if (!isSymbolsVerboseLoggingEnabled()) {
+      return;
+    }
     if (!this.symbols || this.symbols.length === 0) {
       return;
     }
 
     let scatterCount = 0;
     let visibleScatterCount = 0;
+    const sample: string[] = [];
+    const MAX_SAMPLE = 12;
 
     for (let col = 0; col < this.symbols.length; col++) {
       for (let row = 0; row < this.symbols[col].length; row++) {
@@ -574,19 +612,26 @@ export class Symbols {
           if (symbol.visible) {
             visibleScatterCount++;
           }
-          console.log(`[Symbols] Scatter symbol at (${row}, ${col}): visible=${symbol.visible}, alpha=${symbol.alpha}, inContainer=${symbol.parentContainer === this.container}`);
+          if (sample.length < MAX_SAMPLE) {
+            sample.push(`(${row},${col}) v=${!!symbol.visible} a=${Number(symbol.alpha ?? 1).toFixed(2)}`);
+          }
         }
       }
     }
 
-    console.log(`[Symbols] Scatter symbols state: ${visibleScatterCount}/${scatterCount} visible`);
+    console.log(
+      `[Symbols] Scatter symbols state: ${visibleScatterCount}/${scatterCount} visible` +
+      (sample.length > 0 ? ` sample=[${sample.join(' ')}]` : '')
+    );
   }
 
   /**
    * Stop all Spine animations on symbols (without converting them)
    */
   public stopAllSpineAnimations(): void {
-    console.log('[Symbols] Stopping all Spine animations on symbols...');
+    if (isSymbolsVerboseLoggingEnabled()) {
+      console.log('[Symbols] Stopping all Spine animations on symbols...');
+    }
 
     if (this.symbols && this.symbols.length > 0) {
       let spineAnimationsStopped = 0;
@@ -599,16 +644,19 @@ export class Symbols {
               if (symbol.animationState.clearTracks) {
                 symbol.animationState.clearTracks();
                 spineAnimationsStopped++;
-                console.log(`[Symbols] Stopped Spine animation at (${row}, ${col})`);
               }
             } catch (error) {
-              console.warn(`[Symbols] Could not stop Spine animation at (${row}, ${col}):`, error);
+              if (isSymbolsVerboseLoggingEnabled()) {
+                console.warn(`[Symbols] Could not stop Spine animation at (${row}, ${col}):`, error);
+              }
             }
           }
         }
       }
 
-      console.log(`[Symbols] Stopped ${spineAnimationsStopped} Spine animations`);
+      if (isSymbolsVerboseLoggingEnabled()) {
+        console.log(`[Symbols] Stopped ${spineAnimationsStopped} Spine animations`);
+      }
     }
   }
 
@@ -616,7 +664,18 @@ export class Symbols {
    * Stop all active animations on symbols (no conversion back to PNG)
    */
   public stopAllSymbolAnimations(): void {
-    console.log('[Symbols] Stopping all active symbol animations (no PNG reversion)...');
+    if (isSymbolsVerboseLoggingEnabled()) {
+      console.log('[Symbols] Stopping all active symbol animations (no PNG reversion)...');
+    }
+
+    // Important: during reel drops we must not kill symbol tweens, or the drop sequence will appear "interrupted".
+    // This can happen if dialog/bonus cleanup fires while a new spin is already dropping.
+    if (this.isReelDropping) {
+      if (isSymbolsVerboseLoggingEnabled()) {
+        console.log('[Symbols] stopAllSymbolAnimations skipped (reel drop in progress)');
+      }
+      return;
+    }
 
     if (this.symbols && this.symbols.length > 0) {
       let animationsStopped = 0;
@@ -639,28 +698,39 @@ export class Symbols {
                   spineTracksCleared++;
                 }
               } catch (error) {
-                console.warn(`[Symbols] Could not stop Spine animation at (${row}, ${col}):`, error);
+                if (isSymbolsVerboseLoggingEnabled()) {
+                  console.warn(`[Symbols] Could not stop Spine animation at (${row}, ${col}):`, error);
+                }
               }
             }
           }
         }
       }
 
-      console.log(`[Symbols] Stopped animations on ${animationsStopped} symbols, cleared tracks on ${spineTracksCleared} Spine symbols`);
+      if (isSymbolsVerboseLoggingEnabled()) {
+        console.log(`[Symbols] Stopped animations on ${animationsStopped} symbols, cleared tracks on ${spineTracksCleared} Spine symbols`);
+      }
     }
 
     // Also kill any tweens on the container
     if (this.container) {
       this.scene.tweens.killTweensOf(this.container);
-      console.log('[Symbols] Container tweens killed');
+      if (isSymbolsVerboseLoggingEnabled()) {
+        console.log('[Symbols] Container tweens killed');
+      }
     }
+
+    // Restore subtle idle motion for any static PNGs after wiping tweens.
+    reapplyIdleTweensToStaticSymbols(this);
   }
 
   /**
    * Specifically ensure scatter symbols are visible
    */
   public ensureScatterSymbolsVisible(): void {
-    console.log('[Symbols] Specifically ensuring scatter symbols are visible');
+    if (isSymbolsVerboseLoggingEnabled()) {
+      console.log('[Symbols] Specifically ensuring scatter symbols are visible');
+    }
 
     if (this.symbols && this.symbols.length > 0) {
       let scatterFound = 0;
@@ -675,17 +745,17 @@ export class Symbols {
             if (typeof symbol.setVisible === 'function') {
               symbol.setVisible(true);
               scatterMadeVisible++;
-              console.log(`[Symbols] Made scatter symbol visible at (${row}, ${col}): visible=${symbol.visible}, alpha=${symbol.alpha}`);
             }
           }
         }
       }
 
-      console.log(`[Symbols] Found ${scatterFound} scatter symbols, made ${scatterMadeVisible} visible`);
+      if (isSymbolsVerboseLoggingEnabled()) {
+        console.log(`[Symbols] Found ${scatterFound} scatter symbols, made ${scatterMadeVisible} visible`);
+      }
 
       // Log the state after making them visible
       if (scatterFound > 0) {
-        console.log('[Symbols] Scatter symbols state after ensuring visibility:');
         this.logScatterSymbolsState();
       }
     }
@@ -695,7 +765,9 @@ export class Symbols {
    * Force all symbols to be visible (for debugging and recovery)
    */
   public forceAllSymbolsVisible(): void {
-    console.log('[Symbols] Force setting all symbols to visible');
+    if (isSymbolsVerboseLoggingEnabled()) {
+      console.log('[Symbols] Force setting all symbols to visible');
+    }
 
     if (this.symbols && this.symbols.length > 0) {
       let forceVisibleCount = 0;
@@ -708,14 +780,18 @@ export class Symbols {
           }
         }
       }
-      console.log(`[Symbols] Force set ${forceVisibleCount} symbols to visible`);
+      if (isSymbolsVerboseLoggingEnabled()) {
+        console.log(`[Symbols] Force set ${forceVisibleCount} symbols to visible`);
+      }
     }
 
     // Also ensure container is visible
     if (this.container) {
       this.container.setAlpha(1);
       this.container.setVisible(true);
-      console.log('[Symbols] Container forced to visible with alpha 1');
+      if (isSymbolsVerboseLoggingEnabled()) {
+        console.log('[Symbols] Container forced to visible with alpha 1');
+      }
     }
   }
 
@@ -733,8 +809,9 @@ export class Symbols {
       return;
     }
 
-    console.log('[Symbols] Resetting Spine symbols back to PNG sprites');
-    console.log('[Symbols] Current symbol data:', this.currentSymbolData);
+    if (isSymbolsVerboseLoggingEnabled()) {
+      console.log('[Symbols] Resetting Spine symbols back to PNG sprites');
+    }
 
     let spineCount = 0;
     let pngCount = 0;
@@ -747,18 +824,16 @@ export class Symbols {
         if (symbol) {
           if (symbol.animationState) {
             spineCount++;
-            console.log(`[Symbols] Found Spine symbol at (${col}, ${row}): ${symbol.constructor.name}`);
           } else {
             pngCount++;
-            console.log(`[Symbols] Found PNG symbol at (${col}, ${row}): ${symbol.texture?.key || 'unknown'}`);
           }
-        } else {
-          console.log(`[Symbols] Empty slot at (${col}, ${row})`);
         }
       }
     }
 
-    console.log(`[Symbols] Before cleanup: ${spineCount} Spine symbols, ${pngCount} PNG symbols`);
+    if (isSymbolsVerboseLoggingEnabled()) {
+      console.log(`[Symbols] Before cleanup: ${spineCount} Spine symbols, ${pngCount} PNG symbols`);
+    }
 
     for (let col = 0; col < this.symbols.length; col++) {
       for (let row = 0; row < this.symbols[col].length; row++) {
@@ -766,56 +841,71 @@ export class Symbols {
 
         // Check if this is a Spine object (has animationState property)
         if (symbol && symbol.animationState) {
-          console.log(`[Symbols] Processing Spine symbol at (${col}, ${row})`);
-
           try {
             // Get the original symbol value from stored data
             const symbolValue = this.currentSymbolData[col][row];
-            console.log(`[Symbols] Symbol value for (${col}, ${row}): ${symbolValue}`);
 
             if (symbolValue !== undefined) {
 
               // Store original position and dimensions
               const x = symbol.x;
               const y = symbol.y;
-              console.log(`[Symbols] Position: (${x}, ${y}), Size: ${this.displayWidth}x${this.displayHeight}`);
 
-              // Destroy or pool the Spine object
-              try {
-                if ((symbol as any).__spinePoolKey) {
-                  // Pooled Spine instance – return it to the pool for reuse
-                  releaseSpineToPool(this, symbol as any);
-                } else {
-                  // Non‑pooled Spine instance – destroy normally
-                  symbol.destroy();
-                }
-              } catch (poolError) {
-                console.warn('[Symbols] Failed to pool Spine symbol, destroying instead:', poolError);
-                try { symbol.destroy(); } catch { }
-              }
+              // Destroy the Spine object
+              symbol.destroy();
 
               // Create PNG sprite in its place
+              // NOTE: symbol image keys are `symbol${i}` (no underscore), per `AssetConfig.getSymbolAssets()`.
               const spriteKey = `symbol${symbolValue}`;
-              console.log(`[Symbols] Creating PNG sprite with key: ${spriteKey}`);
 
               // Check if the sprite texture exists
               if (!this.scene.textures.exists(spriteKey)) {
                 console.error(`[Symbols] Sprite texture '${spriteKey}' does not exist!`);
-                console.log('[Symbols] Available textures:', this.scene.textures.getTextureKeys().filter(key => key.includes('symbol')));
+                if (isSymbolsVerboseLoggingEnabled()) {
+                  console.log('[Symbols] Available textures:', this.scene.textures.getTextureKeys().filter(key => key.includes('symbol')));
+                }
                 continue;
               }
 
               const pngSprite = this.scene.add.sprite(x, y, spriteKey);
               pngSprite.displayWidth = this.displayWidth;
               pngSprite.displayHeight = this.displayHeight;
-              applyDropShadowToImageSymbol(pngSprite);
+              try { (pngSprite as any).symbolValue = symbolValue; } catch { }
+
+              // Apply configured PNG scaling (and optional Scatter alignment) after fitting to the box.
+              try {
+                const baseScaleX = pngSprite.scaleX || 1;
+                const baseScaleY = pngSprite.scaleY || 1;
+                const configured = this.getImageSymbolScale(symbolValue);
+                const mult = (symbolValue === 0 && configured === 1)
+                  ? (Symbols.SCATTER_PNG_SCALE_MULTIPLIER || 1)
+                  : configured;
+
+                pngSprite.setScale(baseScaleX * mult, baseScaleY * mult);
+
+                if (symbolValue === 0) {
+                  const alignFactor = Symbols.SCATTER_PNG_BOTTOM_ALIGN_FACTOR ?? 0;
+                  if (alignFactor) {
+                    const dy = this.displayHeight * (mult - 1) * 0.5 * alignFactor;
+                    pngSprite.setPosition(x, y + dy);
+                  }
+                }
+              } catch { }
+
+              // Match default reel layering rules used by pooled symbol creation.
+              try {
+                if (symbolValue === 0) {
+                  setScatterObjectLayerRelativeToFrame(this, pngSprite, this.isReelDropping ? 'below_reel_frame' : 'above_reel_frame');
+                } else if (typeof (pngSprite as any).setDepth === 'function') {
+                  (pngSprite as any).setDepth(Symbols.REEL_SYMBOL_DEPTH);
+                }
+              } catch { }
 
               // Add to container and update reference
               this.container.add(pngSprite);
               this.symbols[col][row] = pngSprite;
 
               resetCount++;
-              console.log(`[Symbols] Successfully reset Spine symbol back to PNG: ${spriteKey} at (${col}, ${row})`);
             } else {
               console.warn(`[Symbols] Symbol value is undefined for (${col}, ${row})`);
             }
@@ -826,7 +916,9 @@ export class Symbols {
       }
     }
 
-    console.log(`[Symbols] Reset complete: Found ${spineCount} Spine symbols, successfully reset ${resetCount}`);
+    if (isSymbolsVerboseLoggingEnabled()) {
+      console.log(`[Symbols] Reset complete: Found ${spineCount} Spine symbols, successfully reset ${resetCount}`);
+    }
   }
 
   public resetSymbolsState() {
@@ -847,14 +939,14 @@ export class Symbols {
             if (typeof symbol.setAlpha === 'function') {
               symbol.setAlpha(1);
             }
-
-            // Stop any active tweens on this symbol
-            //this.scene.tweens.killTweensOf(symbol);
           }
         }
       }
       console.log('[Symbols] Reset symbols state - cleared tints and stopped animations');
     }
+
+    // Reapply idle tweens to static PNGs so they continue breathing/shining.
+    reapplyIdleTweensToStaticSymbols(this);
   }
 
   /**
@@ -897,18 +989,7 @@ export class Symbols {
 
     // Create overlay graphics
     this.overlayRect = this.scene.add.graphics();
-
-    // Set semi-transparent black fill
-    this.overlayRect.fillStyle(0x000000, 0.7);
-
-    // Fill rectangle covering the symbol grid area
-    const gridBounds = this.getSymbolGridBounds();
-    this.overlayRect.fillRect(
-      gridBounds.x,
-      gridBounds.y,
-      gridBounds.width,
-      gridBounds.height
-    );
+    this.updateOverlayRectGeometry();
 
     // Set depth to be above symbols but below winning symbols
     this.overlayRect.setDepth(500);
@@ -927,6 +1008,9 @@ export class Symbols {
       this.createOverlayRect();
     }
     if (this.overlayRect) {
+      // Ensure overlay matches the current grid bounds (handles resizes / layout shifts)
+      this.updateOverlayRectGeometry();
+
       // Stop any existing tweens on the overlay
       this.scene.tweens.killTweensOf(this.overlayRect);
 
@@ -953,6 +1037,27 @@ export class Symbols {
       });
     }
     console.log('[Symbols] Winning overlay fade in started');
+  }
+
+  /**
+   * Rebuild the overlay graphics to match the current symbol grid bounds.
+   * (Graphics are immediate-mode; if the grid moves/sizes, we must redraw.)
+   */
+  private updateOverlayRectGeometry(): void {
+    if (!this.overlayRect) return;
+
+    // Hardcoded to match the reel frame background rect in `Background.ts` / `BonusBackground.ts`
+    // (Full screen width, centered on the reel area)
+    const gridY = this.scene.scale.height * 0.483 - 53;
+    const gridHeight = 385 * 0.97;
+    const x = 0;
+    const y = gridY - gridHeight * 0.5;
+    const width = this.scene.scale.width;
+    const height = gridHeight;
+
+    this.overlayRect.clear();
+    this.overlayRect.fillStyle(0x000000, 0.7);
+    this.overlayRect.fillRect(x, y, width, height);
   }
 
   /**
@@ -1008,57 +1113,27 @@ export class Symbols {
       for (let row = 0; row < this.symbols[col].length; row++) {
         const symbol = this.symbols[col][row];
         if (symbol) {
-          // Move symbol back to container if it's not already there
-          if (symbol.parentContainer !== this.container) {
-            this.scene.children.remove(symbol);
-            this.container.add(symbol);
-          }
-          if (typeof symbol.setDepth === 'function') {
-            symbol.setDepth(0); // Reset to default depth
+          const symbolValue = Number((symbol as any)?.symbolValue);
+          if (symbolValue === 0) {
+            // Scatter depth is stateful: above the reel frame when idle/compressing,
+            // but forced back under the reel frame during active drops/tumbles.
+            setScatterObjectLayerRelativeToFrame(this, symbol, this.isReelDropping ? 'below_reel_frame' : 'above_reel_frame');
+          } else {
+            // Move non-scatter back to container if it's not already there
+            if (symbol.parentContainer !== this.container) {
+              this.scene.children.remove(symbol);
+              this.container.add(symbol);
+            }
+            if (typeof symbol.setDepth === 'function') {
+              symbol.setDepth(Symbols.REEL_SYMBOL_DEPTH);
+            }
           }
           resetCount++;
         }
       }
     }
-    console.log(`[Symbols] Reset depths and container for ${resetCount} symbols`);
-  }
-
-  /**
-   * Reset depths and visibility for all symbols in a single grid pass.
-   * Used at spin start / new spin data to avoid multiple full-grid walks.
-   */
-  public resetDepthsAndVisibilityForNewSpin(): void {
-    if (!this.symbols || this.symbols.length === 0) {
-      return;
-    }
-
-    // Ensure container is fully visible
-    if (this.container) {
-      this.container.setAlpha(1);
-      this.container.setVisible(true);
-    }
-
-    for (let col = 0; col < this.symbols.length; col++) {
-      for (let row = 0; row < this.symbols[col].length; row++) {
-        const symbol = this.symbols[col][row];
-        if (!symbol) continue;
-
-        // Move symbol back to container if it's not already there
-        if (symbol.parentContainer !== this.container) {
-          try { this.scene.children.remove(symbol); } catch { }
-          try { this.container?.add(symbol); } catch { }
-        }
-
-        // Reset depth
-        if (typeof symbol.setDepth === 'function') {
-          symbol.setDepth(0);
-        }
-
-        // Ensure visible for new spin
-        if (typeof symbol.setVisible === 'function') {
-          symbol.setVisible(true);
-        }
-      }
+    if (isSymbolsVerboseLoggingEnabled()) {
+      console.log(`[Symbols] Reset depths and container for ${resetCount} symbols`);
     }
   }
 
@@ -1067,34 +1142,38 @@ export class Symbols {
    */
   public moveScatterSymbolsToFront(data: Data, scatterGrids: any[]): void {
     if (scatterGrids.length === 0) {
-      console.log('[Symbols] No scatter symbols to move to front');
+      if (isSymbolsVerboseLoggingEnabled()) {
+        console.log('[Symbols] No scatter symbols to move to front');
+      }
       return;
     }
 
-    console.log(`[Symbols] Moving ${scatterGrids.length} scatter symbols to front`);
+    if (isSymbolsVerboseLoggingEnabled()) {
+      console.log(`[Symbols] Moving ${scatterGrids.length} scatter symbols to front`);
+    }
 
     // Set depth of scatter symbols to be above the overlay
     let movedCount = 0;
     for (const grid of scatterGrids) {
-      if (this.symbols && this.symbols[grid.y] && this.symbols[grid.y][grid.x]) {
-        const symbol = this.symbols[grid.y][grid.x];
-        console.log(`[Symbols] Moving scatter symbol at (${grid.x}, ${grid.y}) to front, current depth:`, symbol.depth);
+      // NOTE: this.symbols is [col][row]; scatterGrids coordinates in this class are treated as { x: col, y: row }
+      const col = grid.x;
+      const row = grid.y;
+      if (this.symbols && this.symbols[col] && this.symbols[col][row]) {
+        const symbol = this.symbols[col][row];
 
-        // Remove symbol from container and add directly to scene for independent depth control
-        this.container.remove(symbol);
-        this.scene.add.existing(symbol);
-
-        if (typeof symbol.setDepth === 'function') {
-          symbol.setDepth(600); // Above overlay (500) but below win lines (1000)
-        }
-        console.log(`[Symbols] Scatter symbol at (${grid.x}, ${grid.y}) moved to scene with depth:`, symbol.depth);
+        // Keep scatters above the reel frame while the bonus hit flow runs.
+        setScatterObjectLayerRelativeToFrame(this, symbol, 'above_reel_frame');
         movedCount++;
       } else {
-        console.warn(`[Symbols] Scatter symbol at (${grid.x}, ${grid.y}) not found or invalid`);
+        if (isSymbolsVerboseLoggingEnabled()) {
+          console.warn(`[Symbols] Scatter symbol at (${grid.x}, ${grid.y}) not found or invalid`);
+        }
       }
     }
 
-    console.log(`[Symbols] Successfully moved ${movedCount} out of ${scatterGrids.length} scatter symbols to front`);
+    if (isSymbolsVerboseLoggingEnabled()) {
+      console.log(`[Symbols] Successfully moved ${movedCount} out of ${scatterGrids.length} scatter symbols to front`);
+    }
   }
 
   /**
@@ -1103,18 +1182,29 @@ export class Symbols {
   public startScatterAnimationSequence(mockData: any): void {
     console.log('[Symbols] Starting scatter animation sequence');
 
+    // Cleanup any leftover big-center scatter Spine from a previous scatter flow (or aborted run)
+    // before starting a new sequence.
+    this.cleanupActiveBigScatterSpine();
+
+    // Note: returning gathered scatter PNGs + big scatter cleanup is now handled immediately
+    // after the big scatter Spine finishes its 2-play hit animation (with fallback), so we no
+    // longer tie the reset to dialogAnimationsComplete here.
+
     // Reset winning symbols spine animations back to PNG after scatter symbol animations
     this.stopAllSymbolAnimations();
     // this.hideAllSymbols();
     this.hideWinningOverlay();
 
-    // Hide winnings display when scatter animation starts
-    const header = (this.scene as any).header;
-    if (header && typeof header.hideWinningsDisplay === 'function') {
-      console.log('[Symbols] Hiding winnings display for scatter animation');
-      header.hideWinningsDisplay();
-    } else {
-      console.warn('[Symbols] Header not available or hideWinningsDisplay method not found');
+    // Base-game scatter hits should still show the header win value (scatter payout).
+    // Only hide the winnings display if we're already in bonus mode (bonus-mode retrigger UX).
+    if (gameStateManager.isBonus) {
+      const header = (this.scene as any).header;
+      if (header && typeof header.hideWinningsDisplay === 'function') {
+        console.log('[Symbols] Hiding winnings display for scatter animation (bonus mode)');
+        header.hideWinningsDisplay();
+      } else {
+        console.warn('[Symbols] Header not available or hideWinningsDisplay method not found');
+      }
     }
 
     // Then trigger the scatter animation sequence (spinner, dialog, etc.)
@@ -1127,17 +1217,16 @@ export class Symbols {
   }
 
   /**
-   * Handle scatter retriggers that occur while bonus mode/free spins are already active.
-   * Shows a short Bonus Free Spin dialog, auto-closes it, then resumes the free spin flow.
+   * Handle scatter retriggers that occur while already in bonus/free-spin mode.
+   * Shows a short Bonus Free Spin dialog, auto-closes it, and resumes play.
    */
-  public async handleBonusScatterRetrigger(mockData: any, scatterGrids: any[], spinData: any): Promise<void> {
+  public async handleBonusScatterRetrigger(mockData: any, scatterGrids: any[], spinData: SpinData): Promise<void> {
     console.log('[Symbols] Handling bonus-mode scatter retrigger');
 
-    // For retriggers, award a fixed number of extra free spins configured in GameData
     const awardedFreeSpins = this.scene.gameData?.bonusRetriggerFreeSpins ?? 5;
     console.log(`[Symbols] Bonus scatter retrigger - awarding ${awardedFreeSpins} extra free spins from GameData`);
 
-    // If our free spin autoplay system is active, extend the remaining count
+    // Extend the free-spin autoplay counter when active so the UI/state stay in sync.
     if (this.freeSpinAutoplayActive && awardedFreeSpins > 0) {
       const before = this.freeSpinAutoplaySpinsRemaining;
       this.freeSpinAutoplaySpinsRemaining += awardedFreeSpins;
@@ -1164,6 +1253,12 @@ export class Symbols {
     if (!dialogs || typeof dialogs.showBonusFreeSpinDialog !== 'function') {
       console.warn('[Symbols] Dialogs component unavailable - skipping bonus retrigger dialog');
       gameStateManager.isScatter = false;
+      try {
+        gameEventManager.emit(GameEventType.SYMBOLS_BONUS_RETRIGGER_COMPLETE);
+        console.log('[Symbols] Emitted SYMBOLS_BONUS_RETRIGGER_COMPLETE (dialogs unavailable)');
+      } catch (error) {
+        console.warn('[Symbols] Failed to emit SYMBOLS_BONUS_RETRIGGER_COMPLETE:', error);
+      }
       return;
     }
 
@@ -1176,64 +1271,38 @@ export class Symbols {
       console.error('[Symbols] Failed to show bonus free spin dialog during retrigger:', error);
       gameStateManager.isShowingWinDialog = false;
       gameStateManager.isScatter = false;
+      try {
+        gameEventManager.emit(GameEventType.SYMBOLS_BONUS_RETRIGGER_COMPLETE);
+        console.log('[Symbols] Emitted SYMBOLS_BONUS_RETRIGGER_COMPLETE (dialogs unavailable)');
+      } catch (error) {
+        console.warn('[Symbols] Failed to emit SYMBOLS_BONUS_RETRIGGER_COMPLETE:', error);
+      }
       return;
     }
 
-    await delay(AUTO_SPIN_WIN_DIALOG_TIMEOUT);
+    // Wait for the user to close the retrigger dialog (no auto-close).
+    await new Promise<void>((resolve) => {
+      const onClosed = () => {
+        try { gameEventManager.off(GameEventType.WIN_DIALOG_CLOSED, onClosed); } catch {}
+        resolve();
+      };
+      gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, onClosed);
+    });
 
-    try {
-      if (typeof (dialogs as any).hideDialogWithoutFade === 'function' && dialogs.isDialogShowing()) {
-        (dialogs as any).hideDialogWithoutFade();
-      } else if (typeof dialogs.hideDialog === 'function' && dialogs.isDialogShowing()) {
-        dialogs.hideDialog();
-      }
-    } catch (error) {
-      console.warn('[Symbols] Failed to auto-hide bonus free spin dialog:', error);
-    } finally {
-      gameStateManager.isShowingWinDialog = false;
-      gameStateManager.isScatter = false;
-      try {
-        gameEventManager.emit(GameEventType.WIN_DIALOG_CLOSED);
-      } catch (error) {
-        console.warn('[Symbols] Failed to emit WIN_DIALOG_CLOSED after bonus retrigger dialog:', error);
-      }
-      try {
-        this.scene.events.emit('dialogAnimationsComplete');
-      } catch (error) {
-        console.warn('[Symbols] Failed to emit dialogAnimationsComplete after bonus retrigger dialog:', error);
-      }
-    }
+    // Retrigger UX: after the player closes the retrigger dialog, resume quickly.
+    // We mark one-shot flags to skip any extra "multiplier hit" / autoplay delays once.
+    try { (this as any).__skipStopEventDelayOnce = true; } catch {}
+    try { (this as any).__skipNextFreeSpinAutoplayExtraDelayOnce = true; } catch {}
 
-    // Notify listeners that the bonus retrigger flow has fully completed
+    // Cleanup state after the dialog is closed.
+    gameStateManager.isShowingWinDialog = false;
+    gameStateManager.isScatter = false;
     try {
       gameEventManager.emit(GameEventType.SYMBOLS_BONUS_RETRIGGER_COMPLETE);
-    } catch (e) {
-      console.warn('[Symbols] Failed to emit SYMBOLS_BONUS_RETRIGGER_COMPLETE:', e);
+      console.log('[Symbols] Emitted SYMBOLS_BONUS_RETRIGGER_COMPLETE after bonus retrigger dialog');
+    } catch (error) {
+      console.warn('[Symbols] Failed to emit SYMBOLS_BONUS_RETRIGGER_COMPLETE after bonus retrigger dialog:', error);
     }
-  }
-
-  private getFreeSpinAwardFromSpinData(spinData: any, mockData: any): number {
-    if (!spinData?.slot) {
-      return mockData?.freeSpins || 0;
-    }
-
-    const freespin = spinData.slot.freespin || spinData.slot.freeSpin;
-
-    if (typeof freespin?.count === 'number' && freespin.count > 0) {
-      return freespin.count;
-    }
-
-    const items = Array.isArray(freespin?.items) ? freespin.items : [];
-    const firstItem = items.length > 0 ? items[0] : null;
-    if (firstItem && typeof firstItem.spinsLeft === 'number' && firstItem.spinsLeft > 0) {
-      return firstItem.spinsLeft;
-    }
-
-    if (items.length > 0) {
-      return items.length;
-    }
-
-    return mockData?.freeSpins || 0;
   }
 
   private getScatterIndexForRetrigger(scatterCount: number, freeSpinAward: number): number {
@@ -1249,220 +1318,191 @@ export class Symbols {
   }
 
   /**
+   * Release the pooled "big-center" scatter Spine (spawned during scatter gather) if it's still active.
+   * Prevents the scatter Spine from persisting across spins / bonus transitions.
+   */
+  private cleanupActiveBigScatterSpine(): void {
+    const bigScatter: SpineGameObject | null = ((this as any).__activeBigScatterSpine as SpineGameObject) ?? null;
+    if (!bigScatter) return;
+    try { releaseSpineToPool(this, bigScatter as any); } catch { }
+    (this as any).__activeBigScatterSpine = null;
+  }
+
+  /**
+   * Tween any previously "gathered" scatter PNGs back to their stored start positions.
+   * Symbols participating in the gather store `startX/startY/startScaleX/startScaleY` via setData().
+   */
+  private tweenGatheredScatterSymbolsBackToStart(duration: number = 550): void {
+    if (!this.scene || !this.symbols || this.symbols.length === 0) return;
+
+    for (let col = 0; col < this.symbols.length; col++) {
+      for (let row = 0; row < this.symbols[col].length; row++) {
+        const symbol: any = this.symbols?.[col]?.[row];
+        this.tweenOneGatheredScatterSymbolBackToStart(symbol, duration);
+      }
+    }
+  }
+
+  /**
+   * Awaitable variant for returning gathered scatter PNGs back to their stored start positions.
+   * Scoped to the provided scatter grids so we don't scan the entire grid.
+   *
+   * Note: `tweenOneGatheredScatterSymbolBackToStart` clears the stored start data and does not
+   * expose a completion callback, so we resolve based on duration with a small buffer.
+   */
+  private async tweenGatheredScatterSymbolsBackToStartAsync(scatterGrids: any[], duration: number = 550): Promise<void> {
+    try {
+      if (!this.scene || !Array.isArray(scatterGrids) || scatterGrids.length === 0) return;
+
+      const waits = scatterGrids.map((grid) => {
+        return new Promise<void>((resolve) => {
+          try {
+            const col = grid?.x;
+            const row = grid?.y;
+            const symbol: any =
+              (typeof col === 'number' && typeof row === 'number') ? this.symbols?.[col]?.[row] : null;
+
+            const startX = symbol?.getData?.('startX');
+            const startY = symbol?.getData?.('startY');
+            if (typeof startX !== 'number' || typeof startY !== 'number') {
+              resolve();
+              return;
+            }
+
+            try { this.tweenOneGatheredScatterSymbolBackToStart(symbol, duration); } catch { }
+            this.scene.time.delayedCall(duration + 50, () => resolve());
+          } catch {
+            resolve();
+          }
+        });
+      });
+
+      await Promise.all(waits);
+    } catch { }
+  }
+
+  private tweenOneGatheredScatterSymbolBackToStart(symbol: any, duration: number = 550): void {
+    if (!symbol || typeof symbol.getData !== 'function') return;
+
+    const startX = symbol.getData('startX');
+    const startY = symbol.getData('startY');
+    if (typeof startX !== 'number' || typeof startY !== 'number') {
+      return;
+    }
+
+    // Clear stored start data early so multiple listeners (per-symbol + global) won't double-reset.
+    try { symbol.data?.remove?.('startX'); } catch { }
+    try { symbol.data?.remove?.('startY'); } catch { }
+    try { symbol.data?.remove?.('startScaleX'); } catch { }
+    try { symbol.data?.remove?.('startScaleY'); } catch { }
+
+    const startScaleX = (typeof symbol.getData === 'function' ? symbol.getData('startScaleX') : undefined);
+    const startScaleY = (typeof symbol.getData === 'function' ? symbol.getData('startScaleY') : undefined);
+    const targetScaleX = (typeof startScaleX === 'number' ? startScaleX : (symbol.scaleX ?? 1));
+    const targetScaleY = (typeof startScaleY === 'number' ? startScaleY : (symbol.scaleY ?? 1));
+
+    // Stop any in-flight gather/fade tweens before tweening back.
+    try { this.scene.tweens.killTweensOf(symbol); } catch { }
+
+    // Ensure the symbol is visible for the return tween.
+    try { symbol.setVisible?.(true); } catch { }
+    try { symbol.setAlpha?.(Math.max(0.001, symbol.alpha ?? 1)); } catch { }
+    try { symbol.setDepth?.(550); } catch { }
+
+    try {
+      this.scene.tweens.add({
+        targets: symbol,
+        x: startX,
+        y: startY,
+        scaleX: targetScaleX,
+        scaleY: targetScaleY,
+        alpha: 1,
+        angle: 0,
+        duration,
+        ease: 'Sine.easeInOut',
+        onComplete: () => {
+          // Put the symbol back under the symbols container so later spins / visibility logic behaves normally.
+          try {
+            if (symbol.parentContainer !== this.container) {
+              this.scene.children.remove(symbol);
+              this.container.add(symbol);
+            }
+          } catch { }
+          try { symbol.setDepth?.(0); } catch { }
+          try { symbol.setAlpha?.(1); } catch { }
+          try { symbol.setVisible?.(true); } catch { }
+          try { symbol.setAngle?.(0); } catch { }
+        }
+      });
+    } catch {
+      // Fallback: snap if tween fails for any reason.
+      try { symbol.setPosition?.(startX, startY); } catch { }
+      try { symbol.setScale?.(targetScaleX, targetScaleY); } catch { }
+      try { symbol.setAlpha?.(1); } catch { }
+      try { symbol.setVisible?.(true); } catch { }
+      try { symbol.setAngle?.(0); } catch { }
+      try {
+        if (symbol.parentContainer !== this.container) {
+          this.scene.children.remove(symbol);
+          this.container.add(symbol);
+        }
+      } catch { }
+      try { symbol.setDepth?.(0); } catch { }
+    }
+  }
+
+  /**
    * Animate scatter symbols with Spine animations (no winlines)
    */
   public async animateScatterSymbols(data: Data, scatterGrids: any[]): Promise<void> {
     if (scatterGrids.length === 0) {
-      console.log('[Symbols] No scatter symbols to animate');
+      if (isSymbolsVerboseLoggingEnabled()) {
+        console.log('[Symbols] No scatter symbols to animate');
+      }
       return;
     }
 
-    // Temporarily keep scatter (symbol 0) as PNG; skip Spine replacement
-    console.log('[Symbols] Skipping scatter Spine animation: using PNG for symbol 0');
+    if (isSymbolsVerboseLoggingEnabled()) {
+      console.log(`[Symbols] Starting scatter symbol Spine animation for ${scatterGrids.length} symbols`);
+    }
 
-    console.log(`[Symbols] Starting scatter symbol Spine animation for ${scatterGrids.length} symbols`);
-
-    // Replace scatter symbols with Spine animations
-    const animationPromises = scatterGrids.map((grid, gridIndex) => {
+    // Keep scatter symbols as PNGs (no Spine replacement)
+    const animationPromises = scatterGrids.map((grid) => {
       return new Promise<void>((resolve) => {
         // Note: scatterGrids coordinates are [row][col] from transposed data
         // but this.symbols array is [col][row] format, so we need to swap coordinates
         const col = grid.x; // grid.x is actually the column in transposed data
         const row = grid.y; // grid.y is actually the row in transposed data
 
-        console.log(`[Symbols] ScatterGrid coordinates: grid.x=${grid.x}, grid.y=${grid.y} -> col=${col}, row=${row}`);
-        console.log(`[Symbols] Accessing this.symbols[${col}][${row}]`);
+        // Extremely verbose per-symbol diagnostics removed; enable debug and add breakpoints if needed.
 
         if (this.symbols && this.symbols[col] && this.symbols[col][row]) {
           const currentSymbol = this.symbols[col][row];
 
+          // Ensure symbol can render above the win overlay (overlayRect is a top-level scene object at depth 500).
+          // If the symbol stays inside `this.container`, its own depth won't beat `overlayRect`.
           try {
-            // Get the scatter symbol value (0) and construct the Spine key
-            const symbolValue = 0;
-            const spineKey = `Symbol${symbolValue}_WF`;
-            const spineAtlasKey = spineKey + '-atlas';
-            const hitAnimationName = `symbol${0}_WF`;
-
-            // Store original position and scale
-            const x = currentSymbol.x;
-            const y = currentSymbol.y;
-
-            console.log(`[Symbols] Replacing scatter sprite with Spine animation: ${spineKey} at column ${col}, row ${row}`);
-
-            // Remove the current sprite
-            currentSymbol.destroy();
-
-            const attemptCreate = (attempts: number) => {
-              try {
-                if (!(this.scene.cache.json as any).has(spineKey)) {
-                  if (attempts < 5) {
-                    console.warn(`[Symbols] Spine json '${spineKey}' not ready. Retrying (${attempts + 1}/5)...`);
-                    this.scene.time.delayedCall(150, () => attemptCreate(attempts + 1));
-                    return;
-                  }
-                }
-                // Create Spine animation in its place
-                const spineSymbol = this.scene.add.spine(x, y, spineKey, spineAtlasKey);
-                spineSymbol.setOrigin(0.5, 0.5);
-
-                // Start with the configured base scale
-                const configuredScale = this.getSpineSymbolScale(symbolValue);
-                spineSymbol.setScale(configuredScale);
-
-                // Add to scene directly (not container) to maintain elevated depth above overlay
-                this.scene.add.existing(spineSymbol);
-                this.symbols[col][row] = spineSymbol;
-
-                // Register the scatter symbol with the ScatterAnimationManager
-                if (this.scatterAnimationManager) {
-                  this.scatterAnimationManager.registerScatterSymbol(spineSymbol);
-                }
-
-                // Ensure the Spine animation maintains the elevated depth
-                spineSymbol.setDepth(600); // Above overlay (500) but below win lines (1000)
-
-                // Store original position for later reset
-                try {
-                  spineSymbol.setData('startX', x);
-                  spineSymbol.setData('startY', y);
-                } catch { }
-
-                // Reset position back to start when dialog animations complete
-                const resetScatterPosition = () => {
-                  try { this.scene.tweens.killTweensOf(spineSymbol); } catch { }
-                  try {
-                    const sx = spineSymbol.getData && spineSymbol.getData('startX');
-                    const sy = spineSymbol.getData && spineSymbol.getData('startY');
-                    if (typeof sx === 'number' && typeof sy === 'number') {
-                      spineSymbol.setPosition(sx, sy);
-                    } else {
-                      spineSymbol.setPosition(x, y);
-                    }
-                    try { spineSymbol.setAngle(0); } catch { }
-                  } catch { }
-                  try {
-                    spineSymbol.setScale(this.getSpineSymbolScale(0));
-                  } catch { }
-                  try { this.scene.events.off('dialogAnimationsComplete', resetScatterPosition); } catch { }
-                };
-
-                // Support both camelCase and lowercase event names
-                try { this.scene.events.once('dialogAnimationsComplete', resetScatterPosition); } catch { }
-
-                console.log(`[Symbols] Successfully replaced scatter sprite with Spine animation at column ${col}, row ${row} with depth:`, spineSymbol.depth);
-
-                // Play the hit animation (looped)
-                spineSymbol.animationState.setAnimation(0, hitAnimationName, true);
-                console.log(`[Symbols] Playing looped scatter animation: ${hitAnimationName}`);
-
-                // Create smooth scale tween to increase size by 20%
-                const enlargedScale = configuredScale * 1.5; // Increase by 20%
-                const scalingDuration = 500;
-                this.scene.tweens.add({
-                  targets: spineSymbol,
-                  scaleX: enlargedScale,
-                  scaleY: enlargedScale,
-                  duration: scalingDuration, // Smooth 500ms transition
-                  ease: 'Power2.easeOut', // Smooth easing
-                  onComplete: () => {
-                    console.log(`[Symbols] Scatter symbol scale tween completed: ${configuredScale} → ${enlargedScale}`);
-                  }
-                });
-
-                // Add rapid shaking animation (fast angle oscillation)
-                const shakingTween = this.scene.tweens.add({
-                  targets: spineSymbol,
-                  angle: { from: -3, to: 3 },
-                  duration: 60,
-                  yoyo: true,
-                  repeat: -1,
-                  ease: 'Sine.easeInOut'
-                });
-                console.log('[Symbols] Applied rapid shaking tween to scatter symbol');
-
-                // Schedule diagonal flight to the right with slow start then fast ramp
-                const flightTurboMultiplier = gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1.0;
-                const flightDelayMs = scalingDuration * 0.8;
-                const stagger = Math.max(0, Math.floor(gridIndex * 250 * flightTurboMultiplier));
-                const slowPhaseDuration = Math.max(1, Math.floor(1200 * flightTurboMultiplier)) + stagger; // after 500ms ramp up
-                const fastPhaseDuration = Math.max(1, Math.floor(400 * flightTurboMultiplier));
-
-                this.scene.time.delayedCall(flightDelayMs, () => {
-                  const startX = spineSymbol.x;
-                  const startY = spineSymbol.y;
-                  const targetX = startX + 1200;
-                  const targetY = startY - 600; // up-right in Phaser (y decreases upward)
-
-                  this.scene.tweens.add({
-                    targets: spineSymbol,
-                    x: startX - 25,
-                    y: startY + 15,
-                    duration: slowPhaseDuration,
-                    ease: 'Sine.easeIn',
-                    onComplete: () => {
-                      shakingTween.stop();
-                      this.scene.tweens.add({
-                        targets: spineSymbol,
-                        x: targetX,
-                        y: targetY,
-                        duration: fastPhaseDuration,
-                        ease: 'Expo.easeIn'
-                      });
-
-                      try {
-                        const audio = (window as any)?.audioManager as AudioManager;
-                        audio.playOneShot(SoundEffectType.MISSILE);
-                        console.log('[Symbols] Missile SFX played at scatter symbol animation start');
-                      } catch { }
-                    }
-                  });
-                });
-
-                console.log(`[Symbols] Applied smooth scale tween: ${configuredScale} → ${enlargedScale} to scatter symbol ${symbolValue}`);
-
-                // Resolve after a short delay to allow animation to start
-                setTimeout(() => resolve(), 100);
-              } catch (e) {
-                if (attempts < 5) {
-                  this.scene.time.delayedCall(150, () => attemptCreate(attempts + 1));
-                  return;
-                }
-                throw e;
-              }
-            };
-            attemptCreate(0);
-
-          } catch (error) {
-            console.warn(`[Symbols] Failed to replace scatter sprite with Spine animation at column ${col}, row ${row}:`, error);
-
-            // Fallback to the old pulse method if Spine replacement fails
-            if (this.symbols[col] && this.symbols[col][row]) {
-              const symbol = this.symbols[col][row];
-
-              // Pulse effect: scale up and down with glow
-              this.scene.tweens.add({
-                targets: symbol,
-                scaleX: 1.2,
-                scaleY: 1.2,
-                duration: 300,
-                ease: 'Sine.easeInOut',
-                yoyo: true,
-                repeat: 2, // Pulse 3 times total
-                onComplete: () => {
-                  resolve();
-                }
-              });
-
-              // Add glow effect - check if methods exist before calling
-              if (typeof symbol.setTint === 'function') {
-                symbol.setTint(0x00FFFF); // Cyan tint for scatter
-              }
-              if (typeof symbol.setBlendMode === 'function') {
-                symbol.setBlendMode(Phaser.BlendModes.ADD);
-              }
-            } else {
-              resolve();
+            if (currentSymbol.parentContainer === this.container) {
+              this.container.remove(currentSymbol);
+              this.scene.add.existing(currentSymbol);
             }
+          } catch { }
+          // Above win overlay (500) but under big scatter/bonus Spine overlays
+          try { currentSymbol.setDepth?.(550); } catch { }
+
+          // Light pulse to highlight the scatter hit
+          try {
+            this.scene.tweens.add({
+              targets: currentSymbol,
+              scaleX: currentSymbol.scaleX * 1.1,
+              scaleY: currentSymbol.scaleY * 1.1,
+              duration: 250,
+              yoyo: true,
+              ease: 'Sine.easeInOut',
+              onComplete: () => resolve()
+            });
+          } catch {
+            resolve();
           }
         } else {
           resolve();
@@ -1473,22 +1513,252 @@ export class Symbols {
     // Wait for all Spine animations to start
     await Promise.all(animationPromises);
 
-    // Wait longer for the animations to play and scale tween to complete
-    // Apply turbo mode to the delay for consistent timing
-    const baseDelay = 3000;
-    const turboMultiplier = gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1.0;
-    const adjustedDelay = baseDelay * turboMultiplier;
-    console.log(`[Symbols] Scatter animation delay: base=${baseDelay}ms, turbo=${gameStateManager.isTurbo}, adjusted=${adjustedDelay}ms`);
-    await this.delay(adjustedDelay);
+    // Briefly hold the initial hit pose so players can see all scatters
+    await this.delay(500);
 
-    console.log('[Symbols] Scatter symbol Spine animation completed');
+    // Gather all scatter symbols to a single focal point near the slot center
+    const centerX = this.slotX;
+    const centerY = this.slotY;
+    const gatherDuration = 700;
 
-    // Notify listeners that scatter symbol animations (including delay) have completed
+    const gatherPromises = scatterGrids.map(grid => {
+      return new Promise<void>((resolve) => {
+        const col = grid.x;
+        const row = grid.y;
+        const symbol: any = this.symbols?.[col]?.[row];
+        if (!symbol) {
+          resolve();
+          return;
+        }
+
+        // Store original position/scale once so we can reset after the big scatter hit completes.
+        // (We no longer tie this to dialogAnimationsComplete; we return immediately after the 2-hit sequence.)
+        try {
+          const hasStartPosition = typeof symbol.getData === 'function' ? symbol.getData('startX') !== undefined : false;
+          if (!hasStartPosition && typeof symbol.setData === 'function') {
+            symbol.setData('startX', symbol.x);
+            symbol.setData('startY', symbol.y);
+            symbol.setData('startScaleX', (symbol as any)?.scaleX ?? 1);
+            symbol.setData('startScaleY', (symbol as any)?.scaleY ?? 1);
+          }
+        } catch { }
+
+        // Re-assert depth before the gather tween in case something re-ordered it.
+        // Keep it above the win overlay but below big scatter/bonus Spine overlays.
+        try { symbol.setDepth?.(550); } catch { }
+
+        // Tween symbol toward the focal point
+        this.scene.tweens.add({
+          targets: symbol,
+          x: centerX,
+          y: centerY,
+          duration: gatherDuration,
+          ease: 'Sine.easeInOut',
+          onComplete: () => resolve()
+        });
+      });
+    });
+
+    await Promise.all(gatherPromises);
+    console.log('[Symbols] Scatter symbols gathered to center');
+
+    // After gathering, spawn a single big-center Scatter as SPINE (not PNG).
+    // Keep reel scatters gathered but fade them out so the center spine reads cleanly.
     try {
-      gameEventManager.emit(GameEventType.SYMBOLS_SCATTER_ANIMATIONS_COMPLETE);
-    } catch (e) {
-      console.warn('[Symbols] Failed to emit SYMBOLS_SCATTER_ANIMATIONS_COMPLETE:', e);
+      for (const grid of scatterGrids) {
+        const symbol: any = this.symbols?.[grid.x]?.[grid.y];
+        if (!symbol) continue;
+        try { symbol.setDepth?.(550); } catch { }
+        try {
+          this.scene.tweens.add({
+            targets: symbol,
+            alpha: 0,
+            duration: 150,
+            ease: 'Sine.easeOut',
+            onComplete: () => {
+              try { symbol.setVisible?.(false); } catch { }
+            }
+          });
+        } catch { }
+      }
+    } catch { }
+
+    const bigScatterSpineKey = Symbols.SCATTER_SPINE_KEY; // 'symbol0_spine'
+    const bigScatterAtlasKey = `${bigScatterSpineKey}-atlas`;
+    const bigCenterX = this.slotX;
+    const bigCenterY = this.slotY;
+
+    // Reuse a previously spawned big-scatter spine if it exists (helps during iteration/testing)
+    let bigScatter: SpineGameObject | null = ((this as any).__activeBigScatterSpine as SpineGameObject) ?? null;
+    if (!bigScatter) {
+      try {
+        bigScatter = acquireSpineFromPool(this, bigScatterSpineKey, bigScatterAtlasKey);
+        (this as any).__activeBigScatterSpine = bigScatter;
+      } catch (e) {
+        console.warn('[Symbols] Failed to acquire big scatter Spine from pool:', e);
+        bigScatter = null;
+      }
     }
+
+    if (bigScatter) {
+      try {
+        // Ensure it renders above overlay and gathered symbols.
+        // Note: pooled spines may still live under a container; detach if needed.
+        try { (bigScatter as any)?.parentContainer?.remove?.(bigScatter); } catch { }
+
+        bigScatter.setPosition(bigCenterX, bigCenterY);
+        bigScatter.setOrigin(0.5, 0.5);
+        bigScatter.setDepth(800);
+        bigScatter.setVisible(true);
+        bigScatter.setActive(true);
+        try { bigScatter.setAlpha(1); } catch { }
+
+        // Scale: reuse configured scatter scale and amplify to match the previous PNG 4.5x enlargement.
+        const baseScatterScale = this.getSpineSymbolScale(0);
+        const targetScatterScale = baseScatterScale * 4.5;
+        const startScatterScale = Math.max(0.0001, baseScatterScale * 0.6);
+        bigScatter.setScale(startScatterScale);
+
+        // Kick the Scatter win animation by name; fallback to first animation if missing.
+        // IMPORTANT: We must not start the freespins scatter sequence until this big-center scatter
+        // finishes its hit animation ONCE, returns to idle, then holds for 500ms.
+        // Use Spine completion events, with a hard 5s fallback.
+        //
+        // Note: The scale "pop-in" tween should start immediately (visual feedback), while the
+        // await below only gates progression to the freespins dialog/sequence.
+        let waitForHitThenIdlePause: Promise<void> = Promise.resolve();
+        try {
+          const desired = Symbols.SCATTER_HIT_ANIMATION_NAME; // 'Symbol0_SD_win'
+          const animations = (bigScatter as any)?.skeleton?.data?.animations as Array<{ name: string }> | undefined;
+          const hasDesired = Array.isArray(animations) && animations.some(a => a?.name === desired);
+          const fallback = Array.isArray(animations) && animations.length > 0 ? animations[0]?.name : undefined;
+          const nameToPlay = hasDesired ? desired : fallback;
+          const state = (bigScatter as any)?.animationState;
+
+          if (nameToPlay && state?.setAnimation) {
+            const playScatterAnimSfx = () => {
+              try {
+                const audio = (window as any)?.audioManager;
+                if (audio && typeof audio.playSoundEffect === 'function') {
+                  audio.playSoundEffect(SoundEffectType.SCATTER_ANIMATION);
+                }
+              } catch { }
+            };
+
+            try { state.clearTracks?.(); } catch { }
+
+            waitForHitThenIdlePause = new Promise<void>((resolve) => {
+              let resolved = false;
+              let listener: any = null;
+
+              const safeResolve = () => {
+                if (resolved) return;
+                resolved = true;
+                try { if (listener) state.removeListener?.(listener as any); } catch { }
+                resolve();
+              };
+
+              listener = {
+                complete: (entry: any) => {
+                  try {
+                    const isTrack0 = entry?.trackIndex === 0;
+                    const animName = entry?.animation?.name ?? "";
+                    if (!isTrack0) return;
+                    if (animName !== nameToPlay) return;
+
+                    // Return to idle after the hit completes, then hold for 500ms before continuing.
+                    try {
+                      const idleName = 'Symbol0_SD_idle';
+                      const hasIdle = !!(bigScatter as any)?.skeleton?.data?.findAnimation?.(idleName);
+                      if (hasIdle) {
+                        try { state.setAnimation(0, idleName, true); } catch { }
+                      }
+                    } catch { }
+
+                    try {
+                      this.scene?.time?.delayedCall?.(500, () => safeResolve());
+                    } catch {
+                      safeResolve();
+                    }
+                  } catch {
+                    // If anything unexpected happens inside the listener, let the 5s fallback release us.
+                  }
+                }
+              };
+
+              // Hard fallback: never block the game flow on missing/interrupting Spine events.
+              try {
+                this.scene?.time?.delayedCall?.(5000, () => {
+                  console.warn('[Symbols] Big scatter Spine did not complete within 5s; continuing scatter flow (fallback)');
+                  safeResolve();
+                });
+              } catch { }
+
+              try { state.addListener?.(listener as any); } catch { }
+              try {
+                this.scene?.time?.delayedCall?.(200, () => {
+                  playScatterAnimSfx();
+                });
+                state.setAnimation(0, nameToPlay, false);
+              } catch { safeResolve(); }
+            });
+          }
+        } catch (e) {
+          console.warn('[Symbols] Failed to play big scatter Spine animation:', e);
+        }
+
+        // Pop-in scale tween for the big center scatter.
+        try {
+          this.scene.tweens.add({
+            targets: bigScatter,
+            scaleX: targetScatterScale,
+            scaleY: targetScatterScale,
+            duration: 450,
+            ease: 'Sine.easeOut'
+          });
+        } catch { }
+
+        // Gate progression to the freespins dialog/sequence on hit-once + idle pause (with fallback).
+        try { await waitForHitThenIdlePause; } catch { }
+
+        // Cleanup/outro: scale the big scatter back down, then return the gathered scatter PNGs.
+        try {
+          // Scale back down to the starting scale (with a small safety timeout).
+          await new Promise<void>((resolve) => {
+            let done = false;
+            const finish = () => {
+              if (done) return;
+              done = true;
+              resolve();
+            };
+            try { this.scene?.time?.delayedCall?.(1000, () => finish()); } catch { }
+            try {
+              this.scene?.tweens?.add?.({
+                targets: bigScatter,
+                scaleX: startScatterScale,
+                scaleY: startScatterScale,
+                duration: 250,
+                ease: 'Sine.easeInOut',
+                onComplete: () => finish()
+              });
+            } catch {
+              finish();
+            }
+          });
+        } catch { }
+
+        // Now remove the big scatter spine (cleanup) and tween the scatter PNGs back.
+        try { this.cleanupActiveBigScatterSpine(); } catch { }
+        try { await this.tweenGatheredScatterSymbolsBackToStartAsync(scatterGrids, 550); } catch { }
+      } catch (e) {
+        console.warn('[Symbols] Failed to configure big scatter Spine:', e);
+        // If configuration failed, do return it to pool to avoid a broken persistent spine.
+        try { releaseSpineToPool(this, bigScatter as any); } catch { }
+        bigScatter = null;
+      }
+    }
+
+    console.log('[Symbols] Scatter symbol Spine animation completed (or fallback reached)');
   }
 
   /**
@@ -1552,11 +1822,11 @@ export class Symbols {
    */
   private getSymbolGridBounds(): { x: number, y: number, width: number, height: number } {
     // Add padding to make the overlay slightly larger than the symbol grid
-    const paddingX = 9;
+    const paddingX = 4;
     const paddingY = 8;
 
-    const offsetX = 1;
-    const offsetY = 0.7;
+    const offsetX = 0;
+    const offsetY = 0;
 
     const x = this.slotX - this.totalGridWidth * 0.5 - paddingX + offsetX;
     const y = this.slotY - this.totalGridHeight * 0.5 - paddingY + offsetY;
@@ -1671,7 +1941,7 @@ export class Symbols {
     else if (gameStateManager.isBonus) {
       const fsLegacy = this.currentSpinData?.slot?.freespin?.count || 0;
       // Prefer the new format's first item's spinsLeft when available
-      const fsItems = this.currentSpinData?.slot?.freespin?.items || this.currentSpinData?.slot?.freespin?.items || [];
+      const fsItems = this.currentSpinData?.slot?.freespin?.items || this.currentSpinData?.slot?.freeSpin?.items;
       const firstItemSpinsLeft = Array.isArray(fsItems) && fsItems.length > 0 && typeof fsItems[0]?.spinsLeft === 'number'
         ? fsItems[0].spinsLeft
         : 0;
@@ -1695,31 +1965,6 @@ export class Symbols {
       console.log('[Symbols] No free spins data available, not triggering autoplay.');
     }
     console.log('[Symbols] ===== END TRIGGERING AUTOPLAY FOR FREE SPINS =====');
-  }
-
-  /**
-   * Developer helper to manually kick off free spin autoplay without the scatter flow.
-   * Optionally accepts a spin payload to override the current spin data before starting.
-   */
-  public debugTriggerFreeSpinAutoplay(spinDataOverride?: any): void {
-    console.log('[Symbols] DEBUG: Forcing free spin autoplay sequence');
-
-    if (spinDataOverride) {
-      console.log('[Symbols] DEBUG: Overriding current spin data for autoplay');
-      this.currentSpinData = spinDataOverride;
-    }
-
-    // Reset guards so triggerAutoplayForFreeSpins can run again
-    this.pendingFreeSpinsData = null;
-    this.freeSpinAutoplayActive = false;
-    this.freeSpinAutoplaySpinsRemaining = 0;
-    this.freeSpinAutoplayTriggered = false;
-
-    if (!gameStateManager.isBonus) {
-      console.warn('[Symbols] DEBUG: Bonus mode is not active; forcing it may be required for full UI state.');
-    }
-
-    this.triggerAutoplayForFreeSpins();
   }
 
   /**
@@ -1762,7 +2007,7 @@ export class Symbols {
       return;
     }
 
-    console.log('[Symbols] ===== PERFORMING FREE SPIN AUTOPLAY =====');
+    console.log(`[Symbols] ===== PERFORMING FREE SPIN AUTOPLAY =====`);
     console.log(`[Symbols] Free spin autoplay: ${this.freeSpinAutoplaySpinsRemaining} spins remaining`);
 
     // Check if we're still in bonus mode
@@ -1772,53 +2017,17 @@ export class Symbols {
       return;
     }
 
-    // In bonus mode, if a win dialog is currently visible, wait for it to fully close
-    try {
-      const gameScene: any = this.scene as any;
-      const dialogs = gameScene?.dialogs;
-      const hasActiveWinDialog =
-        dialogs &&
-        typeof dialogs.isDialogShowing === 'function' &&
-        typeof dialogs.isWinDialog === 'function' &&
-        dialogs.isDialogShowing() &&
-        dialogs.isWinDialog();
-
-      if (gameStateManager.isBonus && hasActiveWinDialog) {
-        console.log('[Symbols] Bonus win dialog is showing - waiting for WIN_DIALOG_CLOSED before continuing free spin autoplay');
-
-        const baseDelay = 500;
-        const turboDelay = gameStateManager.isTurbo
-          ? baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER
-          : baseDelay;
-
-        const onWinDialogClosed = () => {
-          console.log('[Symbols] WIN_DIALOG_CLOSED received - resuming free spin autoplay after win dialog');
-          try {
-            gameEventManager.off(GameEventType.WIN_DIALOG_CLOSED, onWinDialogClosed);
-          } catch { }
-
-          this.scene.time.delayedCall(turboDelay, () => {
-            this.performFreeSpinAutoplay();
-          });
-        };
-
-        // Use event bus so we react exactly when the win dialog finishes its fade-out
-        gameEventManager.on(GameEventType.WIN_DIALOG_CLOSED, onWinDialogClosed);
-        return;
-      }
-    } catch (e) {
-      console.warn('[Symbols] Failed to inspect dialog state before free spin autoplay:', e);
-    }
-
-    // Fallback: if some dialog state still marks a win dialog as showing, wait for dialogAnimationsComplete
+    // Check if win dialog is showing - pause autoplay if so
     if (gameStateManager.isShowingWinDialog) {
-      console.log('[Symbols] Win dialog flag is set - pausing free spin autoplay until dialogAnimationsComplete');
+      console.log('[Symbols] Win dialog is showing - pausing free spin autoplay');
+      // Wait for dialog animations to complete instead of using a fixed delay
+      console.log('[Symbols] Waiting for dialogAnimationsComplete event before continuing free spin autoplay');
       this.scene.events.once('dialogAnimationsComplete', () => {
-        console.log('[Symbols] dialogAnimationsComplete received - continuing free spin autoplay');
+        console.log('[Symbols] Dialog animations complete - continuing free spin autoplay');
+        // Use the same timing as normal autoplay (500ms base with turbo multiplier)
         const baseDelay = 500;
-        const turboDelay = gameStateManager.isTurbo
-          ? baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER
-          : baseDelay;
+        const turboDelay = gameStateManager.isTurbo ?
+          baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER : baseDelay;
         console.log(`[Symbols] Scheduling free spin retry in ${turboDelay}ms (base: ${baseDelay}ms, turbo: ${gameStateManager.isTurbo})`);
         this.scene.time.delayedCall(turboDelay, () => {
           this.performFreeSpinAutoplay();
@@ -1885,51 +2094,6 @@ export class Symbols {
       return;
     }
 
-    // Determine if the current bonus spin had any win so we can optionally
-    // add extra delay before starting the next free spin.
-    let hadWinThisBonusSpin = false;
-    try {
-      const spinData: any = this.currentSpinData;
-      const slotData = spinData?.slot;
-
-      if (gameStateManager.isBonus && slotData) {
-        const freespinBlock = slotData.freespin || slotData.freeSpin;
-
-        if (freespinBlock && Array.isArray(freespinBlock.items)) {
-          // Prefer the GameAPI free spin index so we stay in sync with Game.ts
-          const apiIndex =
-            typeof (this.scene as any).gameAPI?.getCurrentFreeSpinIndex === 'function'
-              ? (this.scene as any).gameAPI.getCurrentFreeSpinIndex()
-              : null;
-
-          const fsIndex =
-            apiIndex !== null && apiIndex !== undefined
-              ? apiIndex - 1
-              : this.currentFreeSpinIndex;
-
-          if (fsIndex >= 0 && fsIndex < freespinBlock.items.length) {
-            const currentItem = freespinBlock.items[fsIndex];
-            const currentTotalWin =
-              typeof currentItem?.totalWin === 'number' ? currentItem.totalWin : 0;
-
-            hadWinThisBonusSpin = currentTotalWin > 0;
-            console.log(
-              `[Symbols] Free spin autoplay WIN_STOP: totalWin for current free spin index ${fsIndex} is ${currentTotalWin} (hadWin=${hadWinThisBonusSpin})`
-            );
-          } else {
-            console.log(
-              `[Symbols] Free spin autoplay WIN_STOP: fsIndex ${fsIndex} out of range for freespin items length ${freespinBlock.items.length}`
-            );
-          }
-        }
-      }
-    } catch (e) {
-      console.warn(
-        '[Symbols] Failed to evaluate win amount for free spin autoplay delay:',
-        e
-      );
-    }
-
     console.log('[Symbols] WIN_STOP received - continuing free spin autoplay after winlines complete');
     this.freeSpinAutoplayWaitingForWinlines = false;
 
@@ -1939,26 +2103,47 @@ export class Symbols {
       this.freeSpinAutoplayTimer = null;
     }
 
-    // Base delay before the next free spin starts
-    let baseDelay = 500;
-
-    // In bonus mode, if there was any win on this free spin, add extra delay
-    // so the player has more time to see the result before the next spin.
-    if (hadWinThisBonusSpin && gameStateManager.isBonus && !gameStateManager.isShowingWinDialog) {
-      baseDelay += 500; // +1s on top of the standard delay
-      console.log(
-        `[Symbols] Applying extra bonus delay after winning free spin. New baseDelay=${baseDelay}ms`
-      );
+    // Use the same timing as normal autoplay (500ms base with turbo multiplier)
+    // Retrigger UX: optionally skip extra delays once right after the retrigger dialog closes.
+    const skipExtraDelayOnce = !!(this as any).__skipNextFreeSpinAutoplayExtraDelayOnce;
+    if (skipExtraDelayOnce) {
+      try { (this as any).__skipNextFreeSpinAutoplayExtraDelayOnce = false; } catch {}
     }
 
-    const turboDelay = gameStateManager.isTurbo
-      ? baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER
-      : baseDelay;
-    console.log(
-      `[Symbols] Scheduling next free spin in ${turboDelay}ms (base: ${baseDelay}ms, turbo: ${gameStateManager.isTurbo}, hadWin=${hadWinThisBonusSpin})`
-    );
+    const baseDelay = skipExtraDelayOnce ? 150 : 500;
+    const turboDelay = gameStateManager.isTurbo ?
+      baseDelay * TurboConfig.TURBO_DELAY_MULTIPLIER : baseDelay;
 
-    this.freeSpinAutoplayTimer = this.scene.time.delayedCall(turboDelay, () => {
+    // Extra delay when: multiplier symbol exists AND any match occurred (spin or tumble)
+    let extraDelay = 0;
+    if (skipExtraDelayOnce) {
+      extraDelay = 0;
+    }
+    try {
+      if (skipExtraDelayOnce) {
+        // Intentionally skip extra-delay logic for fast retrigger resume.
+      } else {
+        const spinData = this.scene?.gameAPI?.getCurrentSpinData?.();
+      // For free spins, GameAPI's index is already incremented for the *next* spin,
+      // so use the just-finished index (current - 1).
+      const finishedFreeSpinIndex = Math.max(0, (this.scene?.gameAPI?.getCurrentFreeSpinIndex?.() ?? 1) - 1);
+      if (spinData) {
+        const hasMatch = SpinDataUtils.hasAnyMatch(spinData, finishedFreeSpinIndex);
+        const hasMultiplier = SpinDataUtils.hasAnyMultiplierSymbol(spinData, finishedFreeSpinIndex);
+        if (hasMatch && hasMultiplier) {
+          extraDelay = 1000;
+        }
+        console.log('[Symbols] Free spin extra-delay check:', { hasMatch, hasMultiplier, extraDelay });
+      }
+      }
+    } catch (e) {
+      console.warn('[Symbols] Failed extra-delay check for free spin autoplay:', e);
+    }
+
+    const totalDelay = turboDelay + extraDelay;
+    console.log(`[Symbols] Scheduling next free spin in ${totalDelay}ms (base: ${baseDelay}ms, turbo: ${gameStateManager.isTurbo}, extra: ${extraDelay}ms)`);
+
+    this.freeSpinAutoplayTimer = this.scene.time.delayedCall(totalDelay, () => {
       this.performFreeSpinAutoplay();
     });
   }
@@ -1974,23 +2159,16 @@ export class Symbols {
     const gameScene = this.scene as any;
     const hasWinDialog = gameScene.dialogs && gameScene.dialogs.isDialogShowing() && gameScene.dialogs.isWinDialog();
 
-    const isBonusFinishedDelay = gameStateManager.isBonusFinished ? 1000 : 0;
     if (hasWinDialog) {
       console.log('[Symbols] Win dialog is currently showing - waiting for auto-close (2.5s) plus buffer time');
       // Wait for win dialog auto-close (2.5s) plus additional buffer time (1s) = 3.5s total
-
-      const autoCloseDelay = 2500;
-      const bufferDelay = 1000 * (gameStateManager.isTurbo ? TurboConfig.TURBO_DELAY_MULTIPLIER : 1);
-      const totalDelay = autoCloseDelay + bufferDelay + isBonusFinishedDelay;
-      this.scene.time.delayedCall(totalDelay, () => {
+      this.scene.time.delayedCall(3500, () => {
         this.showCongratsDialogAfterDelay();
       });
     } else {
       console.log('[Symbols] No win dialog showing - waiting 1 second before showing congrats');
       // No win dialog, just wait a short buffer time
-      const bufferDelay = 1000 * (gameStateManager.isTurbo ? TurboConfig.TURBO_DELAY_MULTIPLIER : 1);
-      const totalDelay = bufferDelay + isBonusFinishedDelay;
-      this.scene.time.delayedCall(totalDelay, () => {
+      this.scene.time.delayedCall(1000, () => {
         this.showCongratsDialogAfterDelay();
       });
     }
@@ -2002,29 +2180,23 @@ export class Symbols {
   private showCongratsDialogAfterDelay(delay: number = 1000): void {
     console.log('[Symbols] Showing congrats dialog after delay');
 
-    // If another dialog is still showing, enqueue the congrats dialog to run afterwards
+    // Close any open win dialogs first (safety check)
     const gameScene = this.scene as any;
-    if (
-      gameScene.dialogs &&
-      typeof gameScene.dialogs.isDialogShowing === 'function' &&
-      gameScene.dialogs.isDialogShowing()
-    ) {
-      console.log('[Symbols] Dialog already showing - enqueueing congrats dialog to show afterwards');
-      // Poll until dialogs are clear, then re-run this method to actually show congrats
-      this.scene.time.delayedCall(500, () => {
-        this.showCongratsDialogAfterDelay(delay);
-      });
-      return;
+    if (gameScene.dialogs && typeof gameScene.dialogs.hideDialog === 'function') {
+      if (gameScene.dialogs.isDialogShowing()) {
+        console.log('[Symbols] Closing any remaining win dialogs before showing congrats');
+        gameScene.dialogs.hideDialog();
+      }
     }
 
-    // Calculate total win from freespinItems
+    const totalWin = this.scene.gameAPI.getCurrentSpinData()?.slot?.totalWin;
 
     // Show congrats dialog with total win amount
     if (gameScene.dialogs && typeof gameScene.dialogs.showCongratulations === 'function') {
       this.scene.time.delayedCall(delay, () => {
-        gameScene.dialogs.showCongratulations(this.scene, { winAmount: this.cachedTotalWin });
+        gameScene.dialogs.showCongratulations(this.scene, { winAmount: totalWin });
       });
-      console.log(`[Symbols] Congratulations dialog shown with total win: ${this.cachedTotalWin}`);
+      console.log(`[Symbols] Congratulations dialog shown with total win: ${totalWin}`);
     } else {
       console.warn('[Symbols] Dialogs component not available for congratulations dialog');
     }
@@ -2076,35 +2248,6 @@ export class Symbols {
     return this.freeSpinAutoplayActive;
   }
 
-
-  public calculateAndCacheTotalWin(spinData: any) {
-    const totalWin = spinData.slot.totalWin;
-    if (totalWin) {
-      this.cachedTotalWin = totalWin;
-    }
-    else {
-      const freespinData = spinData.slot.freespin || spinData.slot.freeSpin;
-      if (freespinData && freespinData.items && Array.isArray(freespinData.items)) {
-        this.cachedTotalWin = freespinData.items.reduce((sum: number, item: any) => {
-          return sum + (item.totalWin || 0);
-        }, 0);
-      }
-      else {
-        this.cachedTotalWin = 0;
-      }
-    }
-  }
-
-  public calculateAndCachePreBonusWins(spinData: any) {
-    if (gameStateManager.isBonus) {
-      return;
-    }
-
-    const multiplierValue = spinData?.slot?.freeSpin?.multiplierValue ?? spinData?.slot?.freespin?.multiplierValue;
-    this.cachedPreBonusWins = typeof multiplierValue === 'number' && !Number.isNaN(multiplierValue) ? multiplierValue : 0;
-    console.log(`[Symbols] Cached pre-bonus wins from free spin multiplierValue: ${this.cachedPreBonusWins}`);
-  }
-
   /**
    * Get the time scale for a specific symbol's win animation
    */
@@ -2116,7 +2259,7 @@ export class Symbols {
   /**
    * Process spin data directly (for free spin autoplay)
    */
-  public async processSpinData(spinData: any): Promise<void> {
+  public async processSpinData(spinData: SpinData): Promise<void> {
     console.log('[Symbols] Processing spin data directly:', spinData);
 
     if (!spinData || !spinData.slot || !spinData.slot.area) {
@@ -2135,8 +2278,40 @@ export class Symbols {
     // Process the symbols using the same logic as before
     await processSpinDataSymbols(this, symbols, spinData);
   }
+
+  /**
+   * Perform an offline spin using test data
+   */
+  public async performOfflineSpin(scenario: any | undefined): Promise<void> {
+    console.log('[Symbols] Performing offline spin with test data...');
+
+    let testSpinData: SpinData;
+
+    if (scenario) {
+      testSpinData = getTestSpinData(scenario) as SpinData;
+    } else {
+      testSpinData = getTestSpinData() as SpinData;
+    }
+    
+    this.scene.gameAPI?.setCurrentSpinData(testSpinData, { resetFreeSpinIndex: true, resetTumbleIndex: true });
+    await this.processSpinData(testSpinData);
+  }
 }
 
+function getTestSpinData(scenario: 'regular_scatter' | 'end_retrigger' | 'untriggered_retrigger' | 'end_retrigger_v2' = 'regular_scatter'): any {
+  switch (scenario) {
+    case 'regular_scatter':
+      return regularScatterData;
+    case 'end_retrigger':
+      return endRetriggerData;
+    case 'untriggered_retrigger':
+      return untriggeredRetriggerData;
+    case 'end_retrigger_v2':
+      return end_retrigger_v2;
+    default:
+      return regularScatterData;
+  }
+}
 
 function getObjectsToShake(self: Symbols): any[] {
   const targets: any[] = [];
@@ -2245,6 +2420,7 @@ function simulateCameraShake(self: Symbols, targets: any[], durationMs: number, 
 
 // preload()
 function initVariables(self: Symbols) {
+  // Match `shuten_doji_old` grid centering.
   let centerX = self.scene.scale.width * 0.5;
   let centerY = self.scene.scale.height * 0.483;
 
@@ -2271,11 +2447,13 @@ function createContainer(self: Symbols) {
 
   const maskShape = self.scene.add.graphics();
 
+  // Calculate mask dimensions
   const maskX = self.slotX - self.totalGridWidth * 0.5 - self.maskPadding.left;
   const maskY = self.slotY - self.totalGridHeight * 0.5 - self.maskPadding.top;
   const maskWidth = self.totalGridWidth + self.maskPadding.left + self.maskPadding.right;
   const maskHeight = self.totalGridHeight + self.maskPadding.top + self.maskPadding.bottom;
 
+  // Add padding to prevent sprite cutoff, especially on the right side
   maskShape.fillRect(maskX, maskY, maskWidth, maskHeight);
 
   const mask = maskShape.createGeometryMask();
@@ -2306,60 +2484,352 @@ function onStart(self: Symbols) {
   });
 }
 
-function prewarmSymbolSpinePools(self: Symbols, countPerSymbol: number = 8) {
-  // Pre-warm Spine instances for symbols 1-9 to avoid first-use hitches.
-  const symbolValues = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+async function schedulePrewarmAsync(self: Symbols) {
+  const prewarmDelayMs = 500;
+
+  // Let create() finish before kicking off heavier work.
+  await yieldToScene(self);
+
+  await prewarmSymbolSpinePools(self, 1);
+  await waitForSceneDelay(self, prewarmDelayMs);
+  await prewarmSymbolSpinePools(self, 2);
+  await waitForSceneDelay(self, prewarmDelayMs);
+  await prewarmSymbolSpinePools(self, 2);
+}
+
+function waitForSceneDelay(self: Symbols, delayMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    if (!self.scene?.time) {
+      setTimeout(resolve, delayMs);
+      return;
+    }
+    self.scene.time.delayedCall(delayMs, () => resolve());
+  });
+}
+
+// Yield to the next tick/frame to keep prewarm work non-blocking.
+function yieldToScene(self: Symbols): Promise<void> {
+  return waitForSceneDelay(self, 0);
+}
+
+async function prewarmSymbolSpinePools(self: Symbols, countPerSymbol: number = 8) {
+  // Pre-warm Spine instances for symbols that ship Spine data (per `AssetConfig.getSymbolAssets()`: 0–5).
+  // This avoids first-use hitches without spamming warnings for symbols that only have PNGs.
+  const symbolValues = [0, 1, 2, 3, 4, 5];
   for (const value of symbolValues) {
     const spineKey = `symbol${value}_spine`;
     const atlasKey = `${spineKey}-atlas`;
 
+    let failedForValue = false; // stop noisy retries if the asset is missing
+    await yieldToScene(self);
     for (let i = 0; i < countPerSymbol; i++) {
+      await yieldToScene(self);
       try {
         const spine = acquireSpineFromPool(self, spineKey, atlasKey);
-        if (spine) {
-          releaseSpineToPool(self, spine);
+        if (!spine) {
+          console.warn('[Symbols] Spine not available during prewarm, skipping further attempts for', spineKey);
+          failedForValue = true;
+          break;
         }
-      } catch (e) {
-        console.warn('[Symbols] Failed to prewarm Spine pool for', spineKey, e);
-        break;
-      }
-    }
-  }
-}
-
-function prewarmSparkSpinePool(self: Symbols, count: number = 6) {
-  const spineKey = 'spark_vfx';
-  const atlasKey = `${spineKey}-atlas`;
-  for (let i = 0; i < count; i++) {
-    try {
-      const spine = acquireSpineFromPool(self, spineKey, atlasKey);
-      if (spine) {
         releaseSpineToPool(self, spine);
+      } catch (e) {
+        failedForValue = true;
+        break;
       }
-    } catch (e) {
-      console.warn('[Symbols] Failed to prewarm spark Spine pool', e);
-      break;
+    }
+    if (failedForValue) {
+      continue;
     }
   }
 }
 
-function prewarmMultiplierSpinePools(self: Symbols, countEach: number = 3) {
-  // Pre-warm pooled Spine instances used by playMultiplierSymbolAnimations to avoid first-use hitches.
-  const keys = ['shatter_frame', 'multiplier_frame', 'multiplier_dove'];
-  for (const spineKey of keys) {
-    const atlasKey = `${spineKey}-atlas`;
-    for (let i = 0; i < countEach; i++) {
+/**
+ * Spine pooling helpers (for frequently created short-lived Spine effects).
+ */
+function getSpinePoolKey(spineKey: string, atlasKey: string): string {
+  return `${spineKey}|${atlasKey}`;
+}
+
+function acquireSpineFromPool(self: Symbols, spineKey: string, atlasKey: string): SpineGameObject | null {
+  const poolKey = getSpinePoolKey(spineKey, atlasKey);
+  // Fast path: reuse a LIFO stack of available items to avoid O(n) scans
+  const availablePools = (self as any).spineAvailablePools || ((self as any).spineAvailablePools = {});
+  const availableStack: SpineGameObject[] = availablePools[poolKey] || (availablePools[poolKey] = []);
+
+  if (!self.spinePools[poolKey]) {
+    self.spinePools[poolKey] = [];
+  }
+  const pool = self.spinePools[poolKey];
+
+  // Try LIFO stack first; fallback to linear scan to remain backward compatible
+  let available: any = availableStack.pop();
+  if (!available) {
+    available = pool.find((fx: any) => !(fx as any).__pooledActive);
+  }
+  if (available) {
+    (available as any).__pooledActive = true;
+    try {
+      // Remove any lingering listeners from previous uses before clearing tracks
+      const state: any = available.animationState;
+      if (state?.clearListeners) {
+        state.clearListeners();
+      } else if (state?.listeners?.length) {
+        state.listeners.length = 0;
+      }
+
+      available.setVisible(false);
+      available.setActive(false);
+      // Reset animation state and pose so new animations always start from time 0
+      available.animationState?.clearTracks();
       try {
-        const spine = acquireSpineFromPool(self, spineKey, atlasKey);
-        if (spine) {
-          releaseSpineToPool(self, spine);
-        }
-      } catch (e) {
-        console.warn('[Symbols] Failed to prewarm multiplier Spine pool for', spineKey, e);
-        break;
+        available.skeleton?.setToSetupPose();
+      } catch { }
+    } catch { }
+    return available;
+  }
+
+  try {
+    if (!ensureSpineFactory(self.scene, '[Symbols] acquireSpineFromPool')) {
+      // If the global factory exists but the scene plugin instance isn't attached yet,
+      // creating spines will intermittently crash. Let callers fallback/retry.
+      console.warn('[Symbols] Spine factory unavailable while acquiring from pool. Skipping creation:', spineKey);
+      return null;
+    }
+    const created: SpineGameObject = self.scene.add.spine(0, 0, spineKey, atlasKey);
+    (created as any).__pooledActive = true;
+    (created as any).__spinePoolKey = poolKey;
+    try {
+      created.setVisible(false);
+      created.setActive(false);
+      // Ensure a deterministic initial pose for newly created pooled Spine objects.
+      try {
+        created.skeleton?.setToSetupPose();
+      } catch { }
+    } catch { }
+    pool.push(created);
+    return created;
+  } catch (e) {
+    console.warn('[Symbols] Failed to create pooled Spine:', spineKey, atlasKey, e);
+    return null;
+  }
+}
+
+function releaseSpineToPool(self: Symbols, spine: SpineGameObject | any): void {
+  if (!spine) return;
+  try {
+    self.scene.tweens.killTweensOf(spine);
+  } catch { }
+  try {
+    // Clear listeners first so clearTracks does not dispatch stale callbacks
+    const state: any = spine.animationState;
+    if (state?.clearListeners) {
+      state.clearListeners();
+    } else if (state?.listeners?.length) {
+      state.listeners.length = 0;
+    }
+    state?.clearTracks?.();
+  } catch { }
+  try {
+    spine.setVisible(false);
+    spine.setActive(false);
+  } catch { }
+  try {
+    (spine as any).__pooledActive = false;
+    // Push into available stack for O(1) reuse
+    const poolKey = (spine as any).__spinePoolKey;
+    if (poolKey) {
+      const availablePools = (self as any).spineAvailablePools || ((self as any).spineAvailablePools = {});
+      const availableStack: SpineGameObject[] = availablePools[poolKey] || (availablePools[poolKey] = []);
+      availableStack.push(spine);
+    }
+  } catch { }
+}
+
+function releaseSpriteToPool(self: Symbols, sprite: GameObjects.Sprite): void {
+  if (!sprite) return;
+  try { self.scene.tweens.killTweensOf(sprite); } catch { }
+  try {
+    sprite.setVisible(false);
+    sprite.setActive(false);
+    sprite.setAlpha(1);
+  } catch { }
+  self.symbolSpritePool.push(sprite);
+}
+
+/**
+ * Add idle motion to static PNG symbols so they feel alive.
+ * Uses a quick squash + settle loop.
+ */
+function applyIdleTweensToPngSymbol(self: Symbols, sprite: GameObjects.Sprite): void {
+  if (!sprite || !self?.scene) {
+    return;
+  }
+
+  // Clear any previous tweens (pooled sprites may carry old ones)
+  try { self.scene.tweens.killTweensOf(sprite); } catch { }
+
+  const baseScaleX = sprite.scaleX || 1;
+  const baseScaleY = sprite.scaleY || 1;
+  const squashX = baseScaleX * Phaser.Math.FloatBetween(1.025, 1.05);
+  const squashY = baseScaleY * Phaser.Math.FloatBetween(0.94, 0.96);
+  const settleDuration = Phaser.Math.Between(110, 170);
+  const delay = Phaser.Math.Between(0, 200);
+
+  try {
+    self.scene.tweens.add({
+      targets: sprite,
+      scaleX: squashX,
+      scaleY: squashY,
+      duration: settleDuration,
+      ease: 'Sine.easeInOut',
+      yoyo: true,
+      repeat: -1,
+      delay,
+      repeatDelay: Phaser.Math.Between(1000, 2000), // cycle every ~1–2s
+    });
+  } catch { }
+}
+
+/**
+ * Reapply idle tweens to all current static (PNG) symbols.
+ * Useful after global tween kill/reset routines.
+ */
+function reapplyIdleTweensToStaticSymbols(self: Symbols): void {
+  if (!self?.symbols || self.symbols.length === 0) {
+    return;
+  }
+
+  for (let col = 0; col < self.symbols.length; col++) {
+    for (let row = 0; row < self.symbols[col].length; row++) {
+      const symbol = self.symbols[col][row];
+      // Only apply to non-Spine symbols (lack animationState) that look like sprites
+      if (symbol && !symbol.animationState && typeof symbol.setAlpha === 'function') {
+        applyIdleTweensToPngSymbol(self, symbol as GameObjects.Sprite);
       }
     }
   }
+}
+
+type ScatterFrameLayerMode = 'above_reel_frame' | 'below_reel_frame';
+
+function isScatterSymbolObject(obj: any): boolean {
+  return !!obj && Number((obj as any)?.symbolValue) === 0;
+}
+
+function setScatterObjectLayerRelativeToFrame(self: Symbols, obj: any, mode: ScatterFrameLayerMode): void {
+  if (!self || !obj || !(obj as any).active) return;
+  if (!isScatterSymbolObject(obj)) return;
+
+  if (mode === 'above_reel_frame') {
+    // Pull out of the masked symbols container so it can render above the reel frame.
+    try {
+      if (obj.parentContainer === self.container) {
+        self.container.remove(obj);
+      }
+    } catch { }
+    try { self.scene?.add?.existing?.(obj); } catch { }
+    try { if (typeof obj.setDepth === 'function') obj.setDepth(Symbols.SCATTER_ABOVE_REEL_FRAME_DEPTH); } catch { }
+    return;
+  }
+
+  // mode === 'below_reel_frame'
+  // Put back into the masked container so it sits behind the reel frame during drops/tumbles.
+  try {
+    if (obj.parentContainer !== self.container) {
+      self.scene?.children?.remove?.(obj);
+      self.container?.add?.(obj);
+    }
+  } catch { }
+  try { if (typeof obj.setDepth === 'function') obj.setDepth(Symbols.REEL_SCATTER_DEPTH); } catch { }
+  try { self.container?.bringToTop?.(obj); } catch { }
+}
+
+function setAllScatterSymbolsLayerRelativeToFrame(self: Symbols, mode: ScatterFrameLayerMode): void {
+  if (!self?.symbols || self.symbols.length === 0) return;
+  for (let col = 0; col < self.symbols.length; col++) {
+    for (let row = 0; row < self.symbols[col].length; row++) {
+      const obj = self.symbols[col][row];
+      if (!obj) continue;
+      if (!isScatterSymbolObject(obj)) continue;
+      setScatterObjectLayerRelativeToFrame(self, obj, mode);
+    }
+  }
+}
+
+/**
+ * Create a plain PNG symbol sprite and add it to the symbols container.
+ */
+function createPngSymbol(self: Symbols, value: number, x: number, y: number, alpha: number = 1, applyIdleTweens: boolean = true): any {
+  const spriteKey = `symbol${value}`;
+
+  // Try to reuse a pooled sprite if available
+  let sprite: GameObjects.Sprite | undefined;
+  if (self.symbolSpritePool.length > 0) {
+    sprite = self.symbolSpritePool.pop();
+  }
+
+  if (sprite) {
+    // Reconfigure an existing pooled sprite
+    try {
+      sprite.setTexture(spriteKey);
+    } catch {
+      // If texture reset fails, drop the sprite and create a new one
+      sprite = undefined;
+    }
+  }
+
+  if (!sprite) {
+    sprite = self.scene.add.sprite(x, y, spriteKey);
+  } else {
+    sprite.setPosition(x, y);
+  }
+
+  try { (sprite as any).symbolValue = value; } catch { }
+  sprite.displayWidth = self.displayWidth;
+  sprite.displayHeight = self.displayHeight;
+
+  // Apply configured PNG scaling (and optional Scatter alignment) after fitting to the box.
+  try {
+    const baseScaleX = sprite.scaleX || 1;
+    const baseScaleY = sprite.scaleY || 1;
+    const configured = self.getImageSymbolScale(value);
+    const mult = (value === 0 && configured === 1)
+      ? (Symbols.SCATTER_PNG_SCALE_MULTIPLIER || 1)
+      : configured;
+
+    sprite.setScale(baseScaleX * mult, baseScaleY * mult);
+
+    if (value === 0) {
+      // Offset based on scale so enlarged Scatter stays aligned in the symbol box.
+      // With origin at 0.5,0.5, scaling increases height around center; to keep the bottom edge
+      // in the same place (Phaser +Y is down), shift DOWN by (H * (mult - 1)) / 2.
+      const alignFactor = Symbols.SCATTER_PNG_BOTTOM_ALIGN_FACTOR ?? 0;
+      if (alignFactor) {
+        const dy = self.displayHeight * (mult - 1) * 0.5 * alignFactor;
+        sprite.setPosition(x, y + dy);
+      }
+    }
+  } catch { }
+
+  if (typeof sprite.setAlpha === 'function') sprite.setAlpha(alpha);
+  try { sprite.setVisible(true); sprite.setActive(true); } catch { }
+  if (self.container && sprite.parentContainer !== self.container) {
+    self.container.add(sprite);
+  }
+  // Default reel layering: keep Scatter above other reel symbols so its scaled PNG doesn't get occluded.
+  try {
+    if (typeof (sprite as any).setDepth === 'function') {
+      (sprite as any).setDepth(value === 0 ? Symbols.REEL_SCATTER_DEPTH : Symbols.REEL_SYMBOL_DEPTH);
+    }
+    if (value === 0 && self.container?.bringToTop && (self.container as any).list?.includes?.(sprite)) {
+      self.container.bringToTop(sprite);
+    }
+  } catch { }
+  // Apply idle breathing and shine with a slight random stagger so symbols are de-synced.
+  if (applyIdleTweens) {
+    applyIdleTweensToPngSymbol(self, sprite);
+  }
+  return sprite;
 }
 
 function createInitialSymbols(self: Symbols) {
@@ -2426,357 +2896,18 @@ function createInitialSymbols(self: Symbols) {
       const y = startY + row * symbolTotalHeight + symbolTotalHeight * 0.5;
 
       const value = initialRowMajor[row][col];
-      // For the initial grid on scene start, always use lightweight PNG sprites
-      // to avoid the cost of creating multiple Spine instances up front.
-      // const created = createSpineOrPngSymbol(self, value, x, y, 1);
-      const created = createPngSymbol(self, value, x, y, 1);
+      // Use Spine symbols at startup (falls back to PNG if Spine unavailable).
+      const created = createSpineOrPngSymbol(self, value, x, y, 1);
       rows.push(created);
     }
     self.symbols.push(rows);
   }
 
+  // Initial state is "idle" (not dropping): scatters should render above the reel frame.
+  try { setAllScatterSymbolsLayerRelativeToFrame(self, 'above_reel_frame'); } catch { }
+
   console.log('[Symbols] Initial symbols created successfully');
   console.log(`[Symbols] Created ${self.wireframeBoxes.length} wireframe boxes`);
-}
-
-/**
- * Create a plain PNG symbol sprite and add it to the symbols container.
- */
-function applyDropShadowToImageSymbol(sprite: any): void {
-  if (!sprite) {
-    return;
-  }
-
-  const fxHost = (sprite as any).preFX ?? (sprite as any).postFX;
-  if (!fxHost || typeof fxHost.addShadow !== 'function') {
-    return;
-  }
-
-  // Avoid stacking multiple shadows on pooled sprites
-  if ((sprite as any).__symbolShadowFx) {
-    return;
-  }
-
-  try {
-    const shadowFx = fxHost.addShadow(
-      Symbols.SYMBOL_IMAGE_SHADOW_OFFSET_X,
-      Symbols.SYMBOL_IMAGE_SHADOW_OFFSET_Y,
-      Symbols.SYMBOL_IMAGE_SHADOW_DECAY,
-      Symbols.SYMBOL_IMAGE_SHADOW_POWER,
-      Symbols.SYMBOL_IMAGE_SHADOW_COLOR,
-      Symbols.SYMBOL_IMAGE_SHADOW_SAMPLES,
-      Symbols.SYMBOL_IMAGE_SHADOW_INTENSITY
-    );
-    (sprite as any).__symbolShadowFx = shadowFx;
-  } catch (e) {
-    console.warn('[Symbols] Failed to add drop shadow to image symbol', e);
-  }
-}
-
-function createPngSymbol(self: Symbols, value: number, x: number, y: number, alpha: number = 1): any {
-  const spriteKey = 'symbol' + value;
-
-  // Try to reuse a pooled sprite if available
-  let sprite: GameObjects.Sprite | undefined;
-  if (self.symbolSpritePool.length > 0) {
-    sprite = self.symbolSpritePool.pop();
-  }
-
-  if (sprite) {
-    // Reconfigure an existing pooled sprite
-    try {
-      sprite.setTexture(spriteKey);
-    } catch {
-      // If texture assignment fails for some reason, fall back to a fresh sprite
-      sprite = undefined;
-    }
-  }
-
-  if (!sprite) {
-    // Create a new sprite if the pool is empty or reuse failed
-    sprite = self.scene.add.sprite(x, y, spriteKey);
-    // Newly created sprites must be added to the container once
-    self.container.add(sprite);
-  } else {
-    // Reused pooled sprites should be repositioned before applying special-case offsets
-    sprite.setPosition(x, y);
-  }
-
-  try { (sprite as any).symbolValue = value; } catch { }
-  sprite.displayWidth = self.displayWidth;
-  sprite.displayHeight = self.displayHeight;
-
-  const baseScaleX = sprite.scaleX || 1;
-  const baseScaleY = sprite.scaleY || 1;
-
-  if (value === 0) {
-    // Scatter scale now driven by imageSymbolScales[0]
-    const mult = self.getImageSymbolScale(0);
-    try {
-      sprite.setScale(baseScaleX * mult, baseScaleY * mult);
-    } catch { }
-
-    // Offset based on scale so enlarged Scatter stays aligned in the symbol box.
-    // With origin at 0.5,0.5, scaling increases height around center; to keep the bottom edge
-    // in the same place (Phaser +Y is down), shift DOWN by (H * (mult - 1)) / 2.
-    const alignFactor = Symbols.SCATTER_PNG_BOTTOM_ALIGN_FACTOR ?? 0;
-    if (alignFactor) {
-      try {
-        const dy = self.displayHeight * (mult - 1) * 0.5 * alignFactor;
-        sprite.setPosition(x, y + dy);
-      } catch { }
-    }
-  } else {
-    // Apply configured PNG scale after fitting to the symbol box
-    try {
-      const configuredScale = self.getImageSymbolScale(value);
-      sprite.setScale(baseScaleX * configuredScale, baseScaleY * configuredScale);
-    } catch { }
-  }
-
-  if (typeof (sprite as any).setAlpha === 'function') {
-    (sprite as any).setAlpha(alpha);
-  }
-
-  // Add a subtle drop shadow so PNG symbols feel grounded on the reels.
-  applyDropShadowToImageSymbol(sprite);
-
-  // Ensure the sprite is active and visible in the grid.
-  // IMPORTANT: Do not reset position here or we'd wipe out Scatter's adaptive offset.
-  try { sprite.setVisible(true); sprite.setActive(true); } catch { }
-
-  // Ensure the sprite is in the symbols container (pooled sprites should already be, but be safe)
-  if (self.container && (sprite as any).parentContainer !== self.container) {
-    try { self.container.add(sprite); } catch { }
-  }
-
-  return sprite;
-}
-
-/**
- * Determine whether a symbol object is a poolable PNG sprite (not Spine).
- */
-function isPoolablePngSymbol(self: Symbols, symbol: any): boolean {
-  if (!symbol) return false;
-  // Spine objects expose animationState; plain sprites do not.
-  if ((symbol as any).animationState) return false;
-  // Require a texture and setTexture method so we can safely reuse it.
-  if (!(symbol as any).texture || typeof (symbol as any).setTexture !== 'function') return false;
-  return true;
-}
-
-/**
- * Return a PNG symbol sprite to the pool instead of destroying it.
- */
-function releasePngSymbolToPool(self: Symbols, symbol: any): void {
-  if (!isPoolablePngSymbol(self, symbol)) {
-    return;
-  }
-
-  try {
-    // Stop any active tweens on this symbol
-    self.scene.tweens.killTweensOf(symbol);
-  } catch { }
-
-  try {
-    symbol.setVisible(false);
-    symbol.setActive(false);
-  } catch { }
-
-  self.symbolSpritePool.push(symbol as GameObjects.Sprite);
-}
-
-/**
- * Spine pooling helpers (for frequently created short-lived Spine effects).
- */
-function getSpinePoolKey(spineKey: string, atlasKey: string): string {
-  return `${spineKey}|${atlasKey}`;
-}
-
-function acquireSpineFromPool(self: Symbols, spineKey: string, atlasKey: string): SpineGameObject | null {
-  const poolKey = getSpinePoolKey(spineKey, atlasKey);
-  // Fast path: reuse a LIFO stack of available items to avoid O(n) scans
-  const availablePools = (self as any).spineAvailablePools || ((self as any).spineAvailablePools = {});
-  const availableStack: SpineGameObject[] = availablePools[poolKey] || (availablePools[poolKey] = []);
-
-  if (!self.spinePools[poolKey]) {
-    self.spinePools[poolKey] = [];
-  }
-  const pool = self.spinePools[poolKey];
-
-  // Try LIFO stack first; fallback to linear scan to remain backward compatible
-  let available: any = availableStack.pop();
-  if (!available) {
-    available = pool.find((fx: any) => !fx.__pooledActive);
-  }
-  if (available) {
-    (available as any).__pooledActive = true;
-    try {
-      available.setVisible(false);
-      available.setActive(false);
-      // Reset animation state and pose so new animations always start from time 0
-      // and from a clean setup pose (prevents leftover state between different
-      // symbol indices, e.g. HP/LP symbol win effects).
-      available.animationState?.clearTracks();
-      try {
-        available.skeleton?.setToSetupPose();
-      } catch { }
-    } catch { }
-    return available;
-  }
-
-  try {
-    const created: SpineGameObject = self.scene.add.spine(0, 0, spineKey, atlasKey);
-    (created as any).__pooledActive = true;
-    (created as any).__spinePoolKey = poolKey;
-    try {
-      created.setVisible(false);
-      created.setActive(false);
-      // Ensure a deterministic initial pose for newly created pooled Spine objects.
-      try {
-        created.skeleton?.setToSetupPose();
-      } catch { }
-    } catch { }
-    pool.push(created);
-    return created;
-  } catch (e) {
-    console.warn('[Symbols] Failed to create pooled Spine:', spineKey, atlasKey, e);
-    return null;
-  }
-}
-
-function releaseSpineToPool(self: Symbols, spine: SpineGameObject | any): void {
-  if (!spine) return;
-  try {
-    self.scene.tweens.killTweensOf(spine);
-  } catch { }
-  try {
-    spine.animationState?.clearTracks();
-  } catch { }
-  try {
-    spine.setVisible(false);
-    spine.setActive(false);
-  } catch { }
-  try {
-    (spine as any).__pooledActive = false;
-    // Push into available stack for O(1) reuse
-    const poolKey = (spine as any).__spinePoolKey;
-    if (poolKey) {
-      const availablePools = (self as any).spineAvailablePools || ((self as any).spineAvailablePools = {});
-      const availableStack: SpineGameObject[] = availablePools[poolKey] || (availablePools[poolKey] = []);
-      availableStack.push(spine);
-    }
-  } catch { }
-}
-
-/**
- * Process symbols from SpinData (GameAPI response)
- * 
- * This function is now fully event-driven: it does not await Promises.
- * Instead, it kicks off the async phases (drop reels, tumbles, multipliers,
- * scatter/bonus handling) and uses GameEventType-based events to chain them.
-
- */
-function processSpinDataSymbols(self: Symbols, symbols: number[][], spinData: any) {
-  console.log('[Symbols] Processing SpinData symbols (event-driven):', symbols);
-
-  // Clear all scatter symbols from previous spin
-  if (self.scatterAnimationManager) {
-    self.scatterAnimationManager.clearScatterSymbols();
-  }
-
-  // Reset symbols and clear previous state before starting new spin
-  console.log('[Symbols] Resetting symbols and clearing previous state for new spin');
-  self.ensureCleanSymbolState();
-  self.resetSymbolsState();
-
-  // Always clear win lines and overlay when a new spin starts
-  console.log('[Symbols] Clearing win lines and overlay for new spin');
-  self.clearWinLines();
-  self.hideWinningOverlay();
-
-  // Reset depths and visibility in a single grid pass before applying new symbols
-  self.resetDepthsAndVisibilityForNewSpin();
-
-  // Create a mock Data object to use with existing functions
-  const mockData = new Data();
-  mockData.symbols = symbols;
-
-  // Convert SpinData paylines to the format expected by the game
-  const convertedWins = convertPaylinesToWinFormat(spinData);
-  console.log('[Symbols] Converted SpinData paylines to win format:', convertedWins);
-
-  // Create a Wins object with the converted data
-  mockData.wins = new Wins(convertedWins);
-
-  mockData.balance = 0; // Not used in symbol processing
-  mockData.bet = parseFloat(spinData.bet);
-  mockData.freeSpins = (
-    (spinData?.slot?.freespin?.items && Array.isArray(spinData.slot.freespin.items))
-      ? spinData.slot.freespin.items.length
-      : (spinData?.slot?.freespin?.count || 0)
-  );
-
-  // Set proper timing for animations
-  const baseDelay = DELAY_BETWEEN_SPINS; // 2500ms default
-  const adjustedDelay = gameStateManager.isTurbo
-    ? baseDelay * TurboConfig.TURBO_SPEED_MULTIPLIER
-    : baseDelay;
-
-  console.log('[Symbols] Setting animation timing:', {
-    baseDelay,
-    isTurbo: gameStateManager.isTurbo,
-    adjustedDelay
-  });
-
-  // Set the timing in the mock data
-  mockData.delayBetweenSpins = adjustedDelay;
-
-  // Apply timing to GameData for animations
-  setSpeed(self.scene.gameData, adjustedDelay);
-
-  // Set spinning state
-  gameStateManager.isReelSpinning = true;
-
-  // Pre-compute tumble information for the event chain
-  let tumbles: any = undefined;
-  let hasTumbles = false;
-  try {
-    tumbles = gameStateManager.isBonus
-      ? spinData?.slot?.freespin?.items[self.scene.gameAPI.getCurrentFreeSpinIndex() - 1]?.tumble
-      : spinData?.slot?.tumbles;
-    hasTumbles = Array.isArray(tumbles?.items) && tumbles.items.length > 0;
-    if (hasTumbles) {
-      console.log(`[Symbols] Tumble steps detected from SpinData: count=${tumbles.items.length}`);
-    } else {
-      console.log('[Symbols] No tumble steps detected from SpinData');
-    }
-  } catch (e) {
-    console.warn('[Symbols] Failed inspecting tumbles from SpinData:', e);
-    tumbles = undefined;
-    hasTumbles = false;
-  }
-
-  // Set up the chained event subscriptions for the async phases
-  setupSpinProcessingEventChain(self, mockData, spinData, tumbles, hasTumbles);
-
-  // Kick off the first async phase: create symbols and drop reels.
-  // Subsequent phases are chained via GameEventType events.
-  createNewSymbols(self, mockData);
-  try {
-    // Fire and forget; completion is signaled via SYMBOLS_DROP_REELS_COMPLETE
-    dropReels(self, mockData).catch((e) => {
-      console.warn('[Symbols] dropReels rejected:', e);
-      try {
-        gameEventManager.emit(GameEventType.SYMBOLS_DROP_REELS_COMPLETE);
-      } catch { }
-    });
-  } catch (e) {
-    console.warn('[Symbols] dropReels threw synchronously:', e);
-    try {
-      gameEventManager.emit(GameEventType.SYMBOLS_DROP_REELS_COMPLETE);
-    } catch { }
-  }
 }
 
 /**
@@ -2793,7 +2924,7 @@ function processSpinDataSymbols(self: Symbols, symbols: number[][], spinData: an
 function setupSpinProcessingEventChain(
   self: Symbols,
   mockData: Data,
-  spinData: any,
+  spinData: SpinData,
   tumbles: any,
   hasTumbles: boolean
 ): void {
@@ -2801,7 +2932,6 @@ function setupSpinProcessingEventChain(
   //    and re-evaluate wins. Then either start tumbles or skip ahead.
   gameEventManager.once(GameEventType.SYMBOLS_DROP_REELS_COMPLETE, () => {
     console.log('[Symbols] SYMBOLS_DROP_REELS_COMPLETE received - updating symbol grid');
-
 
     // Update symbols after animation: swap to new grid immediately so logic uses it,
     // but dispose old symbols asynchronously to keep the drop frame light.
@@ -2812,17 +2942,13 @@ function setupSpinProcessingEventChain(
     // Schedule disposal of the old symbol grid on the next tick
     try {
       if (oldSymbols && oldSymbols.length > 0) {
-        self.scene.time.delayedCall(0, () => {
-          try { disposeSymbols(self, oldSymbols); } catch { }
-        });
+        try { disposeSymbols(self, oldSymbols); } catch { }
       }
     } catch { }
 
     // Re-evaluate wins after initial drop completes (async so visuals continue)
     try {
-      self.scene.time.delayedCall(0, () => {
-        try { reevaluateWinsFromGrid(self); } catch { }
-      });
+      try { reevaluateWinsFromGrid(self); } catch { }
     } catch { }
 
     // If there are tumble steps from the backend, start them now.
@@ -2857,12 +2983,19 @@ function setupSpinProcessingEventChain(
     gameEventManager.once(GameEventType.SYMBOLS_TUMBLES_COMPLETE, () => {
       console.log('[Symbols] SYMBOLS_TUMBLES_COMPLETE received - starting multiplier symbol animations');
       try {
-        playMultiplierSymbolAnimations(self).catch((e) => {
-          console.warn('[Symbols] playMultiplierSymbolAnimations rejected:', e);
-          try {
-            gameEventManager.emit(GameEventType.SYMBOLS_MULTIPLIER_ANIMATIONS_COMPLETE);
-          } catch { }
-        });
+        playMultiplierSymbolAnimations(self)
+          .then(() => {
+            console.log('[Symbols] Multiplier symbol animations completed successfully');
+            try {
+              gameEventManager.emit(GameEventType.SYMBOLS_MULTIPLIER_ANIMATIONS_COMPLETE);
+            } catch { }
+          })
+          .catch((e) => {
+            console.warn('[Symbols] playMultiplierSymbolAnimations rejected:', e);
+            try {
+              gameEventManager.emit(GameEventType.SYMBOLS_MULTIPLIER_ANIMATIONS_COMPLETE);
+            } catch { }
+          });
       } catch (e) {
         console.warn('[Symbols] playMultiplierSymbolAnimations threw synchronously:', e);
         try {
@@ -2886,8 +3019,7 @@ function setupSpinProcessingEventChain(
  * - Detect scatter and branch into scatter/bonus handling
  * - For non-scatter spins, immediately proceed to finalization
  */
-function handlePostMultiplierFlow(self: Symbols, mockData: Data, spinData: any): void {
-
+function handlePostMultiplierFlow(self: Symbols, mockData: Data, spinData: SpinData): void {
   // Replace with spine animations if needed (disabled while using symbol-count logic)
   try {
     if (!(Symbols as any).WINLINE_CHECKING_DISABLED) {
@@ -2899,35 +3031,61 @@ function handlePostMultiplierFlow(self: Symbols, mockData: Data, spinData: any):
 
   // Check for scatter symbols and trigger scatter bonus if found
   console.log('[Symbols] Checking for scatter symbols...');
-  console.log('[Symbols] MockData symbols:', mockData.symbols);
   console.log('[Symbols] SCATTER_SYMBOL from Data:', Data.SCATTER);
 
-  // Reuse a transposed buffer for scatter detection to avoid per-spin allocations.
-  const srcSymbols = mockData.symbols;
-  const rowCount = srcSymbols[0]?.length ?? 0;
-  const colCount = srcSymbols.length;
-
-  if (rowCount > 0 && colCount > 0) {
+  // Get the current symbol grid state after all tumbles have completed
+  // Directly transpose from row-major (currentSymbolData[row][col]) to row-major output
+  // The two inversions in the original code cancel out, so we can just transpose directly
+  if (self.currentSymbolData && self.currentSymbolData.length > 0) {
+    const numRows = self.currentSymbolData.length;
+    const numCols = self.currentSymbolData[0]?.length ?? 0;
+    
     // Ensure outer buffer size
     if (!Array.isArray(self.scatterTransposedBuffer)) {
       self.scatterTransposedBuffer = [];
     }
 
-    for (let row = 0; row < rowCount; row++) {
+    // Direct transpose: rowArr[col] = currentSymbolData[row][col]
+    for (let row = 0; row < numRows; row++) {
       const rowArr = self.scatterTransposedBuffer[row] || (self.scatterTransposedBuffer[row] = []);
-      for (let col = 0; col < colCount; col++) {
-        // Invert vertical order when transposing: SpinData area uses bottom->top
-        const colLen = srcSymbols[col].length;
-        rowArr[col] = srcSymbols[col][colLen - 1 - row];
+      for (let col = 0; col < numCols; col++) {
+        rowArr[col] = self.currentSymbolData[row]?.[col] ?? 0;
       }
       // Trim any stale columns from previous larger grids
-      rowArr.length = colCount;
+      rowArr.length = numCols;
     }
     // Trim any extra rows from previous larger grids
-    self.scatterTransposedBuffer.length = rowCount;
+    self.scatterTransposedBuffer.length = numRows;
+    
+    console.log('[Symbols] Using updated grid state after tumbles for scatter detection');
   } else {
-    self.scatterTransposedBuffer.length = 0;
+    // Fallback to mockData if currentSymbolData is not available
+    console.warn('[Symbols] currentSymbolData not available, falling back to mockData.symbols');
+    // Convert mockData.symbols (column-major) to row-major format for scatterTransposedBuffer
+    const srcSymbols = mockData.symbols;
+    const rowCount = srcSymbols[0]?.length ?? 0;
+    const colCount = srcSymbols.length;
+    
+    if (rowCount > 0 && colCount > 0) {
+      if (!Array.isArray(self.scatterTransposedBuffer)) {
+        self.scatterTransposedBuffer = [];
+      }
+      for (let row = 0; row < rowCount; row++) {
+        const rowArr = self.scatterTransposedBuffer[row] || (self.scatterTransposedBuffer[row] = []);
+        for (let col = 0; col < colCount; col++) {
+          // Invert vertical order when transposing: SpinData area uses bottom->top
+          const colLen = srcSymbols[col].length;
+          rowArr[col] = srcSymbols[col][colLen - 1 - row];
+        }
+        rowArr.length = colCount;
+      }
+      self.scatterTransposedBuffer.length = rowCount;
+    } else {
+      self.scatterTransposedBuffer.length = 0;
+    }
   }
+  
+  console.log('[Symbols] Transposed symbols for scatter detection:', self.scatterTransposedBuffer);
 
   // Reuse a single Data instance for scatter detection
   if (!self.scatterDataBuffer) {
@@ -2935,7 +3093,6 @@ function handlePostMultiplierFlow(self: Symbols, mockData: Data, spinData: any):
   }
   const scatterData = self.scatterDataBuffer;
   scatterData.symbols = self.scatterTransposedBuffer;
-  console.log('[Symbols] Transposed symbols for scatter detection:', self.scatterTransposedBuffer);
 
   const scatterGrids = self.symbolDetector.getScatterGrids(scatterData);
   console.log('[Symbols] ScatterGrids found:', scatterGrids);
@@ -2959,25 +3116,34 @@ function handlePostMultiplierFlow(self: Symbols, mockData: Data, spinData: any):
 function handleScatterAndBonusFlow(
   self: Symbols,
   mockData: Data,
-  spinData: any,
+  spinData: SpinData,
   scatterGrids: any[]
 ): void {
   console.log(`[Symbols] Scatter detected! Found ${scatterGrids.length} scatter symbols`);
-  try {
-    self.calculateAndCacheTotalWin(spinData);
-    self.calculateAndCachePreBonusWins(spinData);
-  } catch { }
   gameStateManager.isScatter = true;
+
+  // Normal-mode scatter hits (4+) can award a direct scatter payout in addition to tumble wins.
+  // Ensure the header win value reflects that scatter payout/total. Do NOT do this for bonus-mode retriggers.
+  if (!gameStateManager.isBonus) {
+    const header = (self.scene as any).header;
+    const scatterWinsRaw = SpinDataUtils.getPreBonusWins(spinData as any);
+    const scatterWins = Number.isFinite(scatterWinsRaw) ? scatterWinsRaw : 0;
+
+    if (header && typeof header.showWinningsDisplay === 'function') {
+      console.log(`[Symbols] Base-game scatter hit - updating header winnings to ${scatterWins}`);
+      header.showWinningsDisplay(scatterWins);
+    } else if (header && typeof header.updateWinningsDisplay === 'function') {
+      console.log(`[Symbols] Base-game scatter hit - updating header winnings (fallback) to ${scatterWins}`);
+      header.updateWinningsDisplay(scatterWins);
+    }
+  }
 
   // If there are no normal wins (no paylines), play scatter SFX now
   try {
-    const hasWins = Array.isArray(spinData.slot?.paylines) && spinData.slot.paylines.length > 0;
-    if (!hasWins) {
-      const audio = (window as any)?.audioManager;
-      if (audio && typeof audio.playSoundEffect === 'function') {
-        audio.playSoundEffect(SoundEffectType.SCATTER);
-        console.log('[Symbols] Played scatter SFX for scatter-only hit');
-      }
+    const audio = (window as any)?.audioManager;
+    if (audio && typeof audio.playSoundEffect === 'function') {
+      audio.playSoundEffect(SoundEffectType.SCATTER);
+      console.log('[Symbols] Played scatter SFX for scatter-only hit');
     }
   } catch { }
 
@@ -3003,7 +3169,6 @@ function handleScatterAndBonusFlow(
   // animation sequence, then finalize the spin.
   gameEventManager.once(GameEventType.SYMBOLS_SCATTER_ANIMATIONS_COMPLETE, () => {
     console.log('[Symbols] SYMBOLS_SCATTER_ANIMATIONS_COMPLETE received');
-
 
     // Reset winning symbols spine animations back to PNG after scatter symbol animations
     // Check if win dialog is showing - if so, wait for it to close before starting scatter animation
@@ -3059,14 +3224,21 @@ function handleScatterAndBonusFlow(
   // Animate the individual scatter symbols with their hit animations.
   console.log('[Symbols] Starting scatter symbol hit animations...');
   try {
-    self.animateScatterSymbols(mockData, scatterGrids).catch((error: any) => {
-      console.error('[Symbols] animateScatterSymbols rejected:', error);
-      // Show Free Spin dialog immediately if cant animate scatter symbols
-      // self.showFreeSpinDialog(mockData.freeSpins || 0);
-      try {
-        gameEventManager.emit(GameEventType.SYMBOLS_SCATTER_ANIMATIONS_COMPLETE);
-      } catch { }
-    });
+    self.animateScatterSymbols(mockData, scatterGrids)
+      .then(() => {
+        console.log('[Symbols] Scatter symbol animations completed successfully');
+        try {
+          gameEventManager.emit(GameEventType.SYMBOLS_SCATTER_ANIMATIONS_COMPLETE);
+        } catch { }
+      })
+      .catch((error: any) => {
+        console.error('[Symbols] animateScatterSymbols rejected:', error);
+        // Show Free Spin dialog immediately if cant animate scatter symbols
+        // self.showFreeSpinDialog(mockData.freeSpins || 0);
+        try {
+          gameEventManager.emit(GameEventType.SYMBOLS_SCATTER_ANIMATIONS_COMPLETE);
+        } catch { }
+      });
   } catch (error) {
     console.error('[Symbols] Error animating scatter symbols:', error);
     try {
@@ -3085,11 +3257,10 @@ function handleScatterAndBonusFlow(
  * This function preserves that behavior but uses Phaser timers instead of
  * async/await to poll for dialog completion.
  */
-function finalizeSpinProcessing(self: Symbols, spinData: any): void {
+function finalizeSpinProcessing(self: Symbols, spinData: SpinData): void {
   console.log('[Symbols] finalizeSpinProcessing called');
 
   // Early win-dialog threshold check (same thresholds as Game.checkAndShowWinDialog)
-
   if (spinData) {
     try {
       const currentSpinWin = gameStateManager.isScatter
@@ -3127,13 +3298,53 @@ function finalizeSpinProcessing(self: Symbols, spinData: any): void {
 
     // Mark spin as done after all animations and tumbles finish (no winline drawer flow)
     console.log('[Symbols] Emitting REELS_STOP and WIN_STOP after symbol animations and tumbles (no winlines flow)');
+    const scene = self.scene;
+
+    // Optional delay: if a multiplier was actually "hit" (multiplier symbol present AND a match occurred),
+    // pause stop-events briefly so multiplier hit animations can finish before downstream systems advance.
+    let extraDelayMs = 0;
     try {
-      gameEventManager.emit(GameEventType.WIN_STOP, { spinData });
-      if(gameStateManager.isReelSpinning) {
-        gameEventManager.emit(GameEventType.REELS_STOP, { spinData });
+      const skipStopDelayOnce = !!(self as any).__skipStopEventDelayOnce;
+      if (skipStopDelayOnce) {
+        try { (self as any).__skipStopEventDelayOnce = false; } catch {}
+        console.log('[Symbols] Skipping stop-event extra delay once (bonus retrigger resume)');
+      } else {
+      const freeSpinIndex = gameStateManager.isBonus
+        ? Math.max(0, (scene?.gameAPI?.getCurrentFreeSpinIndex?.() ?? 1) - 1)
+        : undefined;
+      const hasMatch = SpinDataUtils.hasAnyMatch(spinData, freeSpinIndex);
+      const hasMultiplier = SpinDataUtils.hasAnyMultiplierSymbol(spinData, freeSpinIndex);
+      if (hasMatch && hasMultiplier) {
+        const baseExtraDelayMs = 800;
+        extraDelayMs = gameStateManager.isTurbo ? baseExtraDelayMs * TurboConfig.TURBO_DELAY_MULTIPLIER : baseExtraDelayMs;
+      }
+      console.log('[Symbols] Stop-event delay check:', { hasMatch, hasMultiplier, extraDelayMs, freeSpinIndex });
       }
     } catch (e) {
-      console.warn('[Symbols] Failed to emit REELS_STOP/WIN_STOP:', e);
+      console.warn('[Symbols] Failed stop-event delay check:', e);
+    }
+
+    const emitStops = () => {
+      try {
+        gameEventManager.emit(GameEventType.WIN_STOP, { spinData });
+        if (scene?.time) {
+          scene.time.delayedCall(50, () => {
+            gameEventManager.emit(GameEventType.REELS_STOP, { spinData });
+          });
+        } else {
+          // Fallback if scene/time is unavailable; emit immediately to avoid stalling
+          gameEventManager.emit(GameEventType.REELS_STOP, { spinData });
+        }
+      } catch (e) {
+        console.warn('[Symbols] Failed to emit REELS_STOP/WIN_STOP:', e);
+      }
+    };
+
+    if (extraDelayMs > 0 && scene?.time) {
+      console.log(`[Symbols] Delaying WIN_STOP/REELS_STOP by ${extraDelayMs}ms due to multiplier hit`);
+      scene.time.delayedCall(extraDelayMs, emitStops);
+    } else {
+      emitStops();
     }
   };
 
@@ -3149,6 +3360,113 @@ function finalizeSpinProcessing(self: Symbols, spinData: any): void {
 
   // Start dialog polling loop on the next tick
   self.scene.time.delayedCall(0, pollDialogState);
+}
+
+/**
+ * Process symbols from SpinData (GameAPI response)
+ */
+function processSpinDataSymbols(self: Symbols, symbols: number[][], spinData: SpinData) {
+  console.log('[Symbols] Processing SpinData symbols (event-driven):', symbols);
+
+  // Clear all scatter symbols from previous spin
+  if (self.scatterAnimationManager) {
+    self.scatterAnimationManager.clearScatterSymbols();
+  }
+
+  // Reset symbols and clear previous state before starting new spin
+  console.log('[Symbols] Resetting symbols and clearing previous state for new spin');
+  self.ensureCleanSymbolState();
+  self.resetSymbolsState();
+
+  // Always clear win lines and overlay when a new spin starts
+  console.log('[Symbols] Clearing win lines and overlay for new spin');
+  self.clearWinLines();
+  self.hideWinningOverlay();
+
+  // Reset depths and visibility (using rainbow_fist's separate methods)
+  self.resetSymbolDepths();
+  self.restoreSymbolVisibility();
+
+  // Create a mock Data object to use with existing functions
+  const mockData = new Data();
+  mockData.symbols = symbols;
+
+  // Convert SpinData paylines to the format expected by the game
+  const convertedWins = convertPaylinesToWinFormat(spinData);
+  console.log('[Symbols] Converted SpinData paylines to win format:', convertedWins);
+
+  // Create a Wins object with the converted data
+  mockData.wins = new Wins(convertedWins);
+
+  mockData.balance = 0; // Not used in symbol processing
+  mockData.bet = parseFloat(spinData.bet);
+  mockData.freeSpins = (
+    (spinData?.slot?.freeSpin?.items && Array.isArray(spinData.slot.freeSpin.items))
+      ? spinData.slot.freeSpin.items.length
+      : (spinData?.slot?.freeSpin?.items?.length || 0)
+  );
+
+  // Set proper timing for animations
+  const baseDelay = DELAY_BETWEEN_SPINS; // 2500ms default
+  const adjustedDelay = gameStateManager.isTurbo
+    ? baseDelay * TurboConfig.TURBO_SPEED_MULTIPLIER
+    : baseDelay;
+
+  console.log('[Symbols] Setting animation timing:', {
+    baseDelay,
+    isTurbo: gameStateManager.isTurbo,
+    adjustedDelay
+  });
+
+  // Set the timing in the mock data
+  mockData.delayBetweenSpins = adjustedDelay;
+
+  // Apply timing to GameData for animations
+  setSpeed(self.scene.gameData, adjustedDelay);
+
+  // Set spinning state
+  gameStateManager.isReelSpinning = true;
+
+  // Pre-compute tumble information for the event chain
+  let tumbles: any = undefined;
+  let hasTumbles = false;
+  const currentSpinDataFromGameAPI = self.scene.gameAPI.getCurrentSpinData();
+  try {
+    tumbles = gameStateManager.isBonus
+      ? currentSpinDataFromGameAPI?.slot?.freeSpin?.items[self.scene.gameAPI.getCurrentFreeSpinIndex() - 1]?.tumble
+      : currentSpinDataFromGameAPI?.slot?.tumbles;
+    hasTumbles = Array.isArray(tumbles?.items) && tumbles.items.length > 0;
+    if (hasTumbles) {
+      console.log(`[Symbols] Tumble steps detected from SpinData: count=${tumbles.items.length}`);
+    } else {
+      console.log('[Symbols] No tumble steps detected from SpinData');
+    }
+  } catch (e) {
+    console.warn('[Symbols] Failed inspecting tumbles from SpinData:', e);
+    tumbles = undefined;
+    hasTumbles = false;
+  }
+
+  // Set up the chained event subscriptions for the async phases
+  setupSpinProcessingEventChain(self, mockData, spinData, tumbles, hasTumbles);
+
+  // Kick off the first async phase: create symbols and drop reels.
+  // Subsequent phases are chained via GameEventType events.
+  createNewSymbols(self, mockData);
+  try {
+    // Fire and forget; completion is signaled via SYMBOLS_DROP_REELS_COMPLETE
+    dropReels(self, mockData).catch((e) => {
+      console.warn('[Symbols] dropReels rejected:', e);
+      try {
+        gameEventManager.emit(GameEventType.SYMBOLS_DROP_REELS_COMPLETE);
+      } catch { }
+    });
+  } catch (e) {
+    console.warn('[Symbols] dropReels threw synchronously:', e);
+    try {
+      gameEventManager.emit(GameEventType.SYMBOLS_DROP_REELS_COMPLETE);
+    } catch { }
+  }
 }
 
 /**
@@ -3178,46 +3496,44 @@ function getWinningGridsForPayline(spinData: any, payline: any): any[] {
   const lineKey = payline.lineKey;
   const count = payline.count;
 
-  return [];
+  // Get the winline pattern for this lineKey
+  if (lineKey < 0 || lineKey >= Data.WINLINES.length) {
+    console.warn(`[Symbols] Invalid lineKey: ${lineKey}`);
+    return [];
+  }
 
-  // // Get the winline pattern for this lineKey
-  // if (lineKey < 0 || lineKey >= Data.WINLINES.length) {
-  //   console.warn(`[Symbols] Invalid lineKey: ${lineKey}`);
-  //   return [];
-  // }
+  const winline = Data.WINLINES[lineKey];
 
-  // const winline = Data.WINLINES[lineKey];
+  // Get all positions in the winline pattern (where winline[y][x] === 1)
+  const winlinePositions: { x: number, y: number }[] = [];
+  for (let x = 0; x < winline[0].length; x++) {
+    for (let y = 0; y < winline.length; y++) {
+      if (winline[y][x] === 1) {
+        winlinePositions.push({ x, y });
+      }
+    }
+  }
 
-  // // Get all positions in the winline pattern (where winline[y][x] === 1)
-  // const winlinePositions: { x: number, y: number }[] = [];
-  // for (let x = 0; x < winline[0].length; x++) {
-  //   for (let y = 0; y < winline.length; y++) {
-  //     if (winline[y][x] === 1) {
-  //       winlinePositions.push({ x, y });
-  //     }
-  //   }
-  // }
+  // Sort positions by x coordinate to get left-to-right order
+  winlinePositions.sort((a, b) => a.x - b.x);
 
-  // // Sort positions by x coordinate to get left-to-right order
-  // winlinePositions.sort((a, b) => a.x - b.x);
+  // Take only the first 'count' positions as winning symbols
+  const winningPositions = winlinePositions.slice(0, count);
 
-  // // Take only the first 'count' positions as winning symbols
-  // const winningPositions = winlinePositions.slice(0, count);
-
-  // // Add the winning positions to the result (SpinData.area is [column][row], bottom->top)
-  // for (const pos of winningPositions) {
-  //   const colLen = spinData.slot.area[pos.x]?.length || 0;
-  //   const rowIndex = Math.max(0, colLen - 1 - pos.y);
-  //   const symbolAtPosition = spinData.slot.area[pos.x][rowIndex];
-  //   winningGrids.push(new Grid(pos.x, pos.y, symbolAtPosition));
-  // }
+  // Add the winning positions to the result (SpinData.area is [column][row], bottom->top)
+  for (const pos of winningPositions) {
+    const colLen = spinData.slot.area[pos.x]?.length || 0;
+    const rowIndex = Math.max(0, colLen - 1 - pos.y);
+    const symbolAtPosition = spinData.slot.area[pos.x][rowIndex];
+    winningGrids.push(new Grid(pos.x, pos.y, symbolAtPosition));
+  }
 
   return winningGrids;
 }
 
 function onSpinDataReceived(self: Symbols) {
   // Listen for the new SPIN_DATA_RESPONSE event from GameAPI
-  gameEventManager.on(GameEventType.SPIN_DATA_RESPONSE, (data: any) => {
+  gameEventManager.on(GameEventType.SPIN_DATA_RESPONSE, async (data: any) => {
     console.log('[Symbols] SPIN_DATA_RESPONSE received:', data);
     console.log('[Symbols] SpinData:', data.spinData);
 
@@ -3225,7 +3541,6 @@ function onSpinDataReceived(self: Symbols) {
       console.error('[Symbols] Invalid SpinData received - missing slot.area');
       return;
     }
-
     // Store the current spin data for access by other components
     self.currentSpinData = data.spinData;
     console.log('[Symbols] Stored current spin data for access by other components');
@@ -3242,9 +3557,8 @@ function onSpinDataReceived(self: Symbols) {
       console.log('[Symbols] Using symbols from SpinData slot.area:', symbols);
     }
 
-    // Process the symbols using the same logic as before, using mock scatter data.
-    // This is now a fully event-driven pipeline (no awaits inside).
-    processSpinDataSymbols(self, symbols, data.spinData);
+    // Process the symbols using the same logic as before, using mock scatter data
+    await processSpinDataSymbols(self, symbols, data.spinData);
   });
 }
 
@@ -3312,8 +3626,8 @@ function scheduleWinAmountPopup(self: Symbols, x: number, y: number, displayAmou
   const numberConfig: NumberDisplayConfig = {
     x: baseX,
     y: baseY,
-    scale: 0.05,
-    spacing: 4,
+    scale: 0.2,
+    spacing: -10,
     alignment: 'center',
     decimalPlaces: 2,
     showCommas: true,
@@ -3321,7 +3635,7 @@ function scheduleWinAmountPopup(self: Symbols, x: number, y: number, displayAmou
     suffix: '',
     commaYOffset: 7,
     dotYOffset: 7,
-    animateThreshold: -1
+    shouldTickUp: false,
   };
 
   // Schedule the display creation after delay
@@ -3420,20 +3734,15 @@ function scheduleTranslate(self: Symbols, obj: any, delayMs: number = 500, durat
 }
 
 /**
- * Create a symbol for the main grid.
- *
- * - Scatter + low‑paying + high‑paying symbols (0–9) use lightweight PNG sprites.
- * - Spine is reserved for dedicated win / special animations (handled elsewhere).
+ * Create a symbol as pooled Spine (Symbol0–Symbol9) playing idle when available, or PNG fallback
  */
 function createSpineOrPngSymbol(self: Symbols, value: number, x: number, y: number, alpha: number = 1): any {
   console.log(`[Symbols] Creating spine or PNG symbol for value: ${value}`);
 
   // Try pooled spine for Symbol0–Symbol9
-  if (value >= 1 && value <= 9) {
+  if (value >= 0 && value <= 9) {
     const spineKey = `symbol${value}_spine`;
     const atlasKey = `${spineKey}-atlas`;
-    const animationName = `Symbol${value}`;
-    const gameInitials = 'SD';
     try {
       const spine = acquireSpineFromPool(self, spineKey, atlasKey);
       if (spine) {
@@ -3443,8 +3752,15 @@ function createSpineOrPngSymbol(self: Symbols, value: number, x: number, y: numb
         try { spine.setVisible(true); spine.setActive(true); spine.setAlpha(alpha); } catch { }
         try { (spine as any).symbolValue = value; } catch { }
         try {
-          // const animationState = 'idle'
-          // spine.animationState.setAnimation(0, `${animationName}_${animationState}_${gameInitials}` , true);
+          // Prefer named idle animation; fallback to sequence index if missing.
+          const idleName = `Symbol${value}_SD_idle`;
+          const state: any = (spine as any)?.animationState;
+          const hasIdle = !!(spine as any)?.skeleton?.data?.findAnimation?.(idleName);
+          if (hasIdle && state?.setAnimation) {
+            state.setAnimation(0, idleName, true);
+          } else {
+            playSpineAnimationSequence(spine, [0], true);
+          }
         } catch {
           console.error(`[Symbols] Failed to play idle animation for symbol ${value}`);
         }
@@ -3453,6 +3769,15 @@ function createSpineOrPngSymbol(self: Symbols, value: number, x: number, y: numb
         if (self.container && spine.parentContainer !== self.container) {
           self.container.add(spine);
         }
+        // Default reel layering: keep Scatter above other reel symbols (even if Scatter ever becomes Spine-driven).
+        try {
+          if (typeof (spine as any).setDepth === 'function') {
+            (spine as any).setDepth(value === 0 ? Symbols.REEL_SCATTER_DEPTH : Symbols.REEL_SYMBOL_DEPTH);
+          }
+          if (value === 0 && self.container?.bringToTop && (self.container as any).list?.includes?.(spine)) {
+            self.container.bringToTop(spine);
+          }
+        } catch { }
         return spine;
       }
     } catch {
@@ -3469,12 +3794,12 @@ function createSpineOrPngSymbol(self: Symbols, value: number, x: number, y: numb
   // Fallback to PNG sprite (pooled)
   const sprite = createPngSymbol(self, value, x, y, alpha);
   // Ensure idle tweening on fallback PNG symbols so they breathe/shine.
+  applyIdleTweensToPngSymbol(self, sprite);
   console.warn(`[Symbols] Created fallback PNG sprite for symbol ${value}`);
   return sprite;
 }
 
 function createNewSymbols(self: Symbols, data: Data) {
-  let scene = self.scene;
   disposeSymbols(self, self.newSymbols);
   self.newSymbols = [];
 
@@ -3528,82 +3853,56 @@ async function dropReels(self: Symbols, data: Data): Promise<void> {
   console.log('[Symbols] dropReels called with data:', data);
   console.log('[Symbols] SLOT_ROWS:', SLOT_ROWS);
 
+  self.isReelDropping = true;
   self.dropSparkPlayedColumns.clear();
+  // Reset turbo drop guard so it can fire once during this spin's overshoot.
+  self.turboDropSfxPlayedThisSpin = false;
+  // During drop/tumble motion, keep scatters under the reel frame.
+  try { setAllScatterSymbolsLayerRelativeToFrame(self, 'below_reel_frame'); } catch { }
 
-  // Stagger reel starts at a fixed interval and let them overlap
-
-  // Anticipation disabled: do not check columns for scatter, no reel extension
-  const extendLastReelDrop = false;
-  try { (self.scene as any).__isScatterAnticipationActive = false; } catch { }
-
-  const reelPromises: Promise<void>[] = [];
-  // Adjustable gap between clearing previous symbols and spawning new ones per row
-  const PREV_TO_NEW_DELAY_MS = (self.scene.gameData as any)?.prevToNewDelayMs ?? 250;
-  // Reverse the sequence: start from bottom row to top row
-  for (let step = 0; step < SLOT_COLUMNS; step++) {
-    const actualRow = (SLOT_COLUMNS - 1) - step;
-    const isLastReel = actualRow === 0;
-    const startDelay = self.scene.gameData.dropReelsDelay * step;
-    const p = (async () => {
-      await delay(startDelay);
-      console.log(`[Symbols] Processing row ${actualRow}`);
-      dropPrevSymbols(self, actualRow, isLastReel && extendLastReelDrop)
-
-      // Wait before spawning new symbols so previous ones are cleared first
-      await delay(PREV_TO_NEW_DELAY_MS);
-      await dropNewSymbols(self, actualRow, isLastReel && extendLastReelDrop);
-    })();
-    reelPromises.push(p);
-  }
-  console.log('[Symbols] Waiting for all reels to complete animation...');
-  await Promise.all(reelPromises);
-  console.log('[Symbols] All reels have completed animation');
-
-  // Notify listeners that the initial drop-reels phase has fully completed
   try {
-    gameEventManager.emit(GameEventType.SYMBOLS_DROP_REELS_COMPLETE);
-  } catch (e) {
-    console.warn('[Symbols] Failed to emit SYMBOLS_DROP_REELS_COMPLETE:', e);
-  }
-}
+    // Stagger reel starts at a fixed interval and let them overlap
 
-function rowDropPrevSymbols(self: Symbols, index: number, extendDuration: boolean = false) {
-  if (self.symbols === undefined || self.symbols === null) {
-    return;
-  }
+    // Anticipation disabled: do not check columns for scatter, no reel extension
+    const extendLastReelDrop = false;
+    try { (self.scene as any).__isScatterAnticipationActive = false; } catch { }
 
-  // Check if symbols array has valid structure
-  if (!self.symbols[0] || !self.symbols[0][0]) {
-    console.warn('[Symbols] fadePrevSymbols: symbols array structure is invalid, skipping');
-    return;
-  }
+    const reelPromises: Promise<void>[] = [];
+    // Adjustable gap between clearing previous symbols and spawning new ones per row
+    const PREV_TO_NEW_DELAY_MS = (self.scene.gameData as any)?.prevToNewDelayMs ?? 750;
+    // Reverse the sequence: start from bottom row to top row
+    for (let step = 0; step < SLOT_COLUMNS; step++) {
+      const actualRow = (SLOT_COLUMNS - 1) - step;
+      const isLastReel = actualRow === 0;
+      const startDelay = gameStateManager.isTurbo ? 0 : self.scene.gameData.dropReelsDelay * step;
+      const p = (async () => {
+        // Use Phaser time so dialog/scene pauses don't desync reel scheduling
+        // await phaserDelay(self.scene, startDelay);
+        await delay(startDelay);
+        console.log(`[Symbols] Processing row ${actualRow}`);
+        dropPrevSymbols(self, actualRow, isLastReel && extendLastReelDrop);
 
-  const extraMs = extendDuration ? 1500 : 0;
-
-  // Compute a drop distance that guarantees symbols exit the screen regardless of their start
-  const DROP_DISTANCE = self.totalGridHeight + 50;//distanceToScreenBottom + self.totalGridHeight + (height * 2) + self.scene.gameData.winUpHeight;
-  const DROP_DELAY = 100; // delay between each symbol in the row
-
-  for (let col = 0; col < self.symbols.length; col++) {
-    if (!self.symbols[col] || !self.symbols[col][index]) {
-      console.warn(`[Symbols] fadePrevSymbols: skipping invalid col ${col} or index ${index}`);
-      continue;
+        // Wait before spawning new symbols so previous ones are cleared first
+        // await phaserDelay(self.scene, PREV_TO_NEW_DELAY_MS);
+        await delay(PREV_TO_NEW_DELAY_MS);
+        await dropNewSymbols(self, actualRow, isLastReel && extendLastReelDrop);
+      })();
+      reelPromises.push(p);
     }
+    console.log('[Symbols] Waiting for all reels to complete animation...');
+    await Promise.all(reelPromises);
+    console.log('[Symbols] All reels have completed animation');
 
-    const symbol = self.symbols[col][index];
-    const rowLen = self.symbols[0].length;
-
-    self.scene.tweens.chain({
-      targets: symbol,
-      tweens: [
-        {
-          delay: DROP_DELAY * (rowLen - index),
-          y: `+= ${DROP_DISTANCE}`,
-          duration: (self.scene.gameData.dropDuration * 0.9) + extraMs,
-          ease: Phaser.Math.Easing.Cubic.InOut,
-        }
-      ],
-    });
+    // Notify listeners that the initial drop-reels phase has fully completed
+    try {
+      gameEventManager.emit(GameEventType.SYMBOLS_DROP_REELS_COMPLETE);
+    } catch (e) {
+      console.warn('[Symbols] Failed to emit SYMBOLS_DROP_REELS_COMPLETE:', e);
+    }
+  } finally {
+    self.isReelDropping = false;
+    // After drops complete (idle), allow scatters to sit above the reel frame again.
+    try { setAllScatterSymbolsLayerRelativeToFrame(self, 'above_reel_frame'); } catch { }
   }
 }
 
@@ -3624,9 +3923,8 @@ function dropPrevSymbols(self: Symbols, index: number, extendDuration: boolean =
   const gridBottomY = self.slotY + self.totalGridHeight * 0.5;
   const distanceToScreenBottom = Math.max(0, self.scene.scale.height - gridBottomY);
   const DROP_DISTANCE = distanceToScreenBottom + self.totalGridHeight + (height * 2) + self.scene.gameData.winUpHeight;
-  const totalAnimations = self.symbols.length;
-  const STAGGER_MS = gameStateManager.isTurbo ? 0 : 175; // match dropNewSymbols stagger (left-to-right, one by one feel)
-  const clearHop = self.scene.gameData.winUpHeight * 0.25;
+  const STAGGER_MS = gameStateManager.isTurbo ? 0 : 150; // mirror dropNewSymbols stagger
+  const symbolHop = self.scene.gameData.winUpHeight * 0.1;
 
   for (let i = 0; i < self.symbols.length; i++) {
     // Check if the current row exists and has the required index
@@ -3635,31 +3933,54 @@ function dropPrevSymbols(self: Symbols, index: number, extendDuration: boolean =
       continue;
     }
 
+    // Trigger drop animation on the symbol if available (sugar Spine)
+    try { playDropAnimationIfAvailable(self.symbols[i][index]); } catch { }
+
+    const symbol = self.symbols[i][index];
+    const targetY = symbol.y + DROP_DISTANCE;
+
+    // Copy dropNewSymbols animation sequencing (hop + optional overshoot/settle)
+    // Make previous-symbols clear-out a bit snappier than the main drop by default.
+    // You can tune this at runtime via `gameData.dropPrevDurationMultiplier` (e.g. 0.75..0.9).
+    const prevDropMultRaw = (self.scene.gameData as any)?.dropPrevDurationMultiplier;
+    const prevDropMult =
+      (typeof prevDropMultRaw === 'number' && prevDropMultRaw > 0)
+        ? prevDropMultRaw
+        : 0.8;
+    const dropTotalMs = (self.scene.gameData.dropDuration * prevDropMult) + extraMs;
+    const overshootPxRaw = (self.scene.gameData as any)?.dropOvershootPx;
+    const overshootPx = Math.max(
+      0,
+      typeof overshootPxRaw === 'number'
+        ? overshootPxRaw
+        : Math.min(32, Math.max(10, height * 0.2)),
+    );
+    const fallFracRaw = (self.scene.gameData as any)?.dropOvershootFallFraction;
+    const fallFrac = (typeof fallFracRaw === 'number' && fallFracRaw > 0 && fallFracRaw < 1) ? fallFracRaw : 0.7;
+    const fallMs = Math.max(1, Math.floor(dropTotalMs * fallFrac));
+    const settleMs = Math.max(1, Math.floor(dropTotalMs - fallMs));
+    const overshootY = targetY + overshootPx;
+    const doOvershoot = overshootPx > 0 && settleMs > 0;
+
+    const tweensArr: any[] = [
+      {
+        delay: STAGGER_MS * i,
+        y: `-= ${symbolHop}`,
+        duration: self.scene.gameData.winUpDuration * prevDropMult,
+        ease: Phaser.Math.Easing.Circular.Out,
+      },
+    ];
+
+    if (doOvershoot) {
+      tweensArr.push({ y: overshootY, duration: fallMs, ease: Phaser.Math.Easing.Quadratic.In });
+      tweensArr.push({ y: targetY, duration: settleMs, ease: Phaser.Math.Easing.Back.Out });
+    } else {
+      tweensArr.push({ y: targetY, duration: dropTotalMs, ease: Phaser.Math.Easing.Linear });
+    }
+
     self.scene.tweens.chain({
-      targets: self.symbols[i][index],
-      tweens: [
-        {
-          delay: STAGGER_MS * i,
-          y: `-= ${clearHop}`,
-          duration: self.scene.gameData.winUpDuration,
-          ease: Phaser.Math.Easing.Circular.Out,
-        },
-        {
-          y: `+= ${DROP_DISTANCE}`,
-          duration: (self.scene.gameData.dropDuration * 0.9) + extraMs,
-          ease: Phaser.Math.Easing.Linear,
-        },
-        {
-          y: `+= ${5}`,
-          duration: self.scene.gameData.dropDuration * 0.05,
-          ease: Phaser.Math.Easing.Linear,
-        },
-        {
-          y: `-= ${5}`,
-          duration: self.scene.gameData.dropDuration * 0.05,
-          ease: Phaser.Math.Easing.Linear,
-        },
-      ],
+      targets: symbol,
+      tweens: tweensArr,
     });
   }
 }
@@ -3675,7 +3996,7 @@ function dropFillers(self: Symbols, index: number, extendDuration: boolean = fal
   const baseTotal = Symbols.FILLER_COUNT + SLOT_COLUMNS;
   const baseDropDistance = baseTotal * height + GameData.WIN_UP_HEIGHT;
   const extraMs = extendDuration ? 3000 : 0;
-  const baseDropMs = self.scene.gameData.dropDuration * 0.9;
+  const baseDropMs = self.scene.gameData.dropDuration;
   const extraPixels = extraMs > 0 && baseDropMs > 0 ? (baseDropDistance * (extraMs / baseDropMs)) : 0;
   const extraRows = extraPixels > 0 ? Math.ceil(extraPixels / height) : 0;
   const TOTAL_ITEMS = Symbols.FILLER_COUNT + SLOT_COLUMNS + extraRows;
@@ -3720,13 +4041,7 @@ function dropFillers(self: Symbols, index: number, extendDuration: boolean = fal
           duration: self.scene.gameData.dropDuration * 0.05,
           ease: Phaser.Math.Easing.Linear,
           onComplete: () => {
-            // Return filler PNG symbols to the pool when finished; destroy others.
-            const sym = fillerSymbols[i];
-            if (isPoolablePngSymbol(self, sym)) {
-              releasePngSymbolToPool(self, sym);
-            } else if (sym && sym.destroy) {
-              sym.destroy();
-            }
+            fillerSymbols[i].destroy();
           }
         }
       ]
@@ -3752,6 +4067,17 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
     const STAGGER_MS = gameStateManager.isTurbo ? 0 : 150; // delay between each column drop
     const symbolHop = self.scene.gameData.winUpHeight * 0.5;
 
+    // Play reel drop SFX per-symbol, timed to the overshoot (settle) start.
+    const playReelDropSfx = (phase: 'overshoot' | 'landing', col: number) => {
+      const playedTurbo = playTurboDropSfxOnce(self, phase);
+      if (!playedTurbo) {
+        playReelDropSfxIfAllowed(self);
+      }
+      if (isSymbolsVerboseLoggingEnabled()) {
+        console.log(`[Symbols] Playing reel drop sound effect for symbol col ${col}, reel ${index} at ${phase}`);
+      }
+    };
+
     for (let col = 0; col < self.newSymbols.length; col++) {
       let symbol = self.newSymbols[col][index];
       const targetY = getYPos(self, index);
@@ -3759,78 +4085,83 @@ function dropNewSymbols(self: Symbols, index: number, extendDuration: boolean = 
       // Trigger drop animation on the new symbol if available (sugar Spine)
       try { playDropAnimationIfAvailable(symbol); } catch { }
 
+      // Overshoot config (optional). If not provided, we use a subtle default based on symbol height.
+      const dropTotalMs = (self.scene.gameData.dropDuration * 0.9) + extraMs;
+      const overshootPxRaw = (self.scene.gameData as any)?.dropOvershootPx;
+      const overshootPx = Math.max(
+        0,
+        typeof overshootPxRaw === 'number'
+          ? overshootPxRaw
+          // Bouncy default: a bit more travel, capped so it doesn't look too floaty
+          : Math.min(32, Math.max(10, height * 0.2)),
+      );
+      const fallFracRaw = (self.scene.gameData as any)?.dropOvershootFallFraction;
+      // Bouncy default: give settle more time
+      const fallFrac = (typeof fallFracRaw === 'number' && fallFracRaw > 0 && fallFracRaw < 1) ? fallFracRaw : 0.7;
+      const fallMs = Math.max(1, Math.floor(dropTotalMs * fallFrac));
+      const settleMs = Math.max(1, Math.floor(dropTotalMs - fallMs));
+      const overshootY = targetY + overshootPx;
+      const doOvershoot = overshootPx > 0 && settleMs > 0;
+
+      const onLanding = () => {
+        completedAnimations++;
+        if (completedAnimations === totalAnimations) {
+          // Anticipation behavior disabled
+          if (gameStateManager.isTurbo) {
+            self.scene.time.delayedCall(500, () => {
+              resolve();
+            });
+          }
+          else
+            resolve();
+        }
+      };
+
+      const tweensArr: any[] = [
+        {
+          delay: STAGGER_MS * col,
+          y: `-= ${symbolHop}`,
+          duration: self.scene.gameData.winUpDuration,
+          ease: Phaser.Math.Easing.Circular.Out,
+        },
+      ];
+
+      if (doOvershoot) {
+        tweensArr.push({ y: overshootY, duration: fallMs, ease: Phaser.Math.Easing.Quadratic.In });
+        // Back.Out gives a springy settle (it will briefly overshoot past the target and return)
+        tweensArr.push({
+          y: targetY,
+          duration: settleMs,
+          ease: Phaser.Math.Easing.Back.Out,
+          onStart: () => playReelDropSfx('overshoot', col),
+          onComplete: () => {
+            try { playIdleAnimationIfAvailable(symbol); } catch { }
+            onLanding();
+          }
+        });
+      } else {
+        tweensArr.push({
+          y: targetY,
+          duration: dropTotalMs,
+          ease: Phaser.Math.Easing.Linear,
+          onComplete: () => {
+            playReelDropSfx('landing', col);
+            try { playIdleAnimationIfAvailable(symbol); } catch { }
+            onLanding();
+          }
+        });
+      }
+
       self.scene.tweens.chain({
         targets: symbol,
-        tweens: [
-          {
-            delay: STAGGER_MS * col,
-            y: `-= ${symbolHop}`,
-            duration: self.scene.gameData.winUpDuration,
-            ease: Phaser.Math.Easing.Circular.Out,
-          },
-          {
-            y: targetY,
-            duration: (self.scene.gameData.dropDuration * 0.9) + extraMs,
-            ease: Phaser.Math.Easing.Linear,
-            onComplete: () => {
-              // // Optional shake per column land (grid + border only)
-              // try {
-              //   const mag = (self.scene.gameData as any)?.dropShakeMagnitude ?? 0;
-              //   const dur = Math.max(50, (self.scene.gameData as any)?.dropShakeDurationMs ?? 120);
-              //   if (mag > 0) {
-              //     const axis = (self.scene.gameData as any)?.dropShakeAxis ?? 'both';
-              //     simulateCameraShake(self, getObjectsToShake(self), dur, mag, axis);
-              //   }
-              // } catch { }
-
-              const audioManager = (window as any).audioManager;
-              // Play reel drop sound effect only when turbo mode is off
-              if (audioManager) {
-                if (gameStateManager.isTurbo) {
-                  audioManager.playSingleInstanceSoundEffect(gameStateManager.isBonus ? SoundEffectType.BONUS_TURBO_REEL_DROP : SoundEffectType.TURBO_REEL_DROP);
-                }
-                else {
-                  audioManager.playSoundEffect(gameStateManager.isBonus ? SoundEffectType.BONUS_REEL_DROP : SoundEffectType.REEL_DROP);
-                }
-                console.log(`[Symbols] Playing reel drop sound effect for reel ${index} after drop completion`);
-              }
-
-              // Play Spark_VFX animation on symbol drop
-              tryPlaySparkVFXForColumn(self, col, symbol);
-
-              completedAnimations++;
-              if (completedAnimations === totalAnimations) {
-                // Anticipation behavior disabled
-                if (gameStateManager.isTurbo) {
-                  self.scene.time.delayedCall(500, () => {
-                    resolve();
-                  });
-                }
-                else
-                  resolve();
-              }
-            }
-          }
-        ]
+        tweens: tweensArr
       })
     }
   });
 }
 
-function tryPlaySparkVFXForColumn(self: Symbols, col: number, symbol: any): void {
-  try {
-    if (!symbol || self.dropSparkPlayedColumns.has(col)) return;
-    self.dropSparkPlayedColumns.add(col);
-    const sparkTimeScale = (self.scene.gameData as any)?.sparkVFXTimeScale ?? 1;
-    const sparkScale = (self.scene.gameData as any)?.sparkVFXScale ?? 0.5;
-    playSparkVFXOnSymbol(self, symbol, sparkTimeScale, sparkScale);
-  } catch (e) {
-    console.warn('[Symbols] Failed to play Spark_VFX on symbol drop:', e);
-  }
-}
-
-
 function disposeSymbols(self: Symbols, symbols: any[][]) {
+  if (!symbols) return;
   console.log('[Symbols] Disposing old symbols...');
   let disposedCount = 0;
 
@@ -3839,29 +4170,21 @@ function disposeSymbols(self: Symbols, symbols: any[][]) {
       const symbol = symbols[col][row];
       if (!symbol) continue;
 
-      // Pool PNG sprites, pooled Spine instances, destroy other non‑poolable objects (e.g. containers, FX)
-      if (isPoolablePngSymbol(self, symbol)) {
-        try {
-          releasePngSymbolToPool(self, symbol);
-          disposedCount++;
-        } catch (error) {
-          console.error(`[Symbols] Error disposing pooled PNG symbol at (${col}, ${row}):`, error);
-        }
-      } else if ((symbol as any).__spinePoolKey) {
-        // This is a pooled Spine instance – return it to the Spine pool
-        try {
+      // try { self.scene.tweens.killTweensOf(symbol); } catch { }
+
+      try {
+        if ((symbol as any).__spinePoolKey) {
           releaseSpineToPool(self, symbol as any);
-          disposedCount++;
-        } catch (error) {
-          console.error(`[Symbols] Error disposing pooled Spine symbol at (${col}, ${row}):`, error);
-        }
-      } else if (symbol.destroy) {
-        try {
+        } else if (symbol.animationState) {
           symbol.destroy();
-          disposedCount++;
-        } catch (error) {
-          console.error(`[Symbols] Error disposing symbol at (${col}, ${row}):`, error);
+        } else {
+          releaseSpriteToPool(self, symbol as any);
         }
+        disposedCount++;
+      } catch (error) {
+        console.error(`[Symbols] Error disposing symbol at (${col}, ${row}):`, error);
+      } finally {
+        symbols[col][row] = null as any;
       }
     }
   }
@@ -3874,8 +4197,8 @@ function playDropAnimationIfAvailable(obj: any): void {
   try {
     const val = (obj as any)?.symbolValue;
     const canSpine = !!(obj?.animationState && obj.animationState.setAnimation);
-    if (typeof val === 'number' && val >= 1 && val <= 9 && canSpine) {
-      const drop = `Symbol${val}_SW_Drop`;
+    if (typeof val === 'number' && val >= 0 && val <= 9 && canSpine) {
+      const drop = `Symbol${val}_SD_drop`;
       try {
         const hasDrop = !!(obj as any)?.skeleton?.data?.findAnimation?.(drop);
         if (hasDrop) {
@@ -3886,127 +4209,80 @@ function playDropAnimationIfAvailable(obj: any): void {
   } catch { }
 }
 
-/**
- * Create and play the Spark_VFX spine animation on top of a symbol
- * @param self - Symbols instance
- * @param symbol - The symbol object to play the VFX on top of
- * @param timeScale - Time scale for the animation (default: 1)
- */
-function acquireSparkVFXFromPool(self: Symbols): SpineGameObject | null {
-  // Backwards-compatible wrapper around the generic Spine pool
-  const fx = acquireSpineFromPool(self, 'spark_vfx', 'spark_vfx-atlas');
-  if (fx && self.container) {
-    try { self.container.add(fx); } catch { }
-  }
-  return fx;
-}
-
-function releaseSparkVFXToPool(self: Symbols, sparkVFX: SpineGameObject): void {
-  // Use generic Spine pooling cleanup
-  releaseSpineToPool(self, sparkVFX);
-}
-
-function playSparkVFXOnSymbol(self: Symbols, symbol: any, timeScale: number = 1, scale: number = 0.5): void {
-  const sparkVFX = acquireSparkVFXFromPool(self);
-  if (!sparkVFX) return;
-
+function playIdleAnimationIfAvailable(obj: any): void {
   try {
-    const excessDeptth = 200;
-
-    sparkVFX.setScale(scale);
-    sparkVFX.setPosition(symbol.x, symbol.y + symbol.displayHeight * (1 - scale) * 0.5 * symbol.scaleY);
-    sparkVFX.setDepth(symbol.depth + excessDeptth);
-    sparkVFX.setVisible(true);
-    sparkVFX.setActive(true);
-    try { self.container.bringToTop(sparkVFX); } catch { }
-
-    if (sparkVFX.animationState) {
-      sparkVFX.animationState.timeScale = timeScale;
-    }
-
-    let completed = false;
-    const onDone = () => {
-      if (completed) return;
-      completed = true;
-      releaseSparkVFXToPool(self, sparkVFX);
-    };
-
-    const animationName = 'animation';
-    if (!(sparkVFX.animationState && sparkVFX.animationState.setAnimation)) {
-      onDone();
-      return;
-    }
-
-    const entry: any = sparkVFX.animationState.setAnimation(0, animationName, false);
-
-    // Attach completion listener
-    try {
-      if (entry && (entry.setListener || 'listener' in entry)) {
-        if (typeof entry.setListener === 'function') {
-          entry.setListener({ complete: onDone, end: onDone });
-        } else {
-          entry.listener = { complete: onDone, end: onDone };
+    const val = (obj as any)?.symbolValue;
+    const canSpine = !!(obj?.animationState && obj.animationState.setAnimation);
+    if (typeof val === 'number' && val >= 0 && val <= 9 && canSpine) {
+      const idle = `Symbol${val}_SD_idle`;
+      try {
+        const hasIdle = !!(obj as any)?.skeleton?.data?.findAnimation?.(idle);
+        if (hasIdle) {
+          obj.animationState.setAnimation(0, idle, true);
         }
-      }
-    } catch { }
+      } catch { }
+    }
+  } catch { }
+}
 
-    // Fallback: state-level listener
-    try {
-      if (sparkVFX.animationState && sparkVFX.animationState.addListener) {
-        sparkVFX.animationState.addListener({ complete: onDone, end: onDone } as any);
-      }
-    } catch { }
+function playReelDropSfxIfAllowed(self: Symbols): void {
+  try {
+    if ((window as any).audioManager) {
+      (window as any).audioManager.playSoundEffect(
+        gameStateManager.isBonus ? SoundEffectType.BONUS_REEL_DROP : SoundEffectType.REEL_DROP
+      );
+    }
+  } catch { }
+}
 
-    // Fallback: use timeout based on animation duration
-    try {
-      const dur = sparkVFX.skeleton?.data?.findAnimation?.(animationName)?.duration;
-      if (typeof dur === 'number' && dur > 0) {
-        const safeScale = timeScale || 1;
-        const durationMs = dur * 1000 / safeScale;
-        if (durationMs > 0 && Number.isFinite(durationMs)) {
-          self.scene.time.delayedCall(durationMs, onDone);
-        }
-      }
-    } catch { }
+/**
+ * Guarded turbo drop SFX trigger.
+ * Fires once per spin, specifically at the start of the overshoot phase.
+ */
+function playTurboDropSfxOnce(self: Symbols, phase: 'overshoot' | 'landing'): boolean {
+  try {
+    const isTurbo = !!(self?.scene?.gameData?.isTurbo || gameStateManager.isTurbo);
+    if (!isTurbo) return false;
+    // Only allow during the overshoot start and once per spin.
+    if (phase !== 'overshoot' || self.turboDropSfxPlayedThisSpin) return false;
+
+    const audio = (window as any)?.audioManager;
+    if (!audio || typeof audio.playSoundEffect !== 'function') return false;
+
+    const sfx = gameStateManager.isBonus ? SoundEffectType.BONUS_TURBO_DROP : SoundEffectType.TURBO_DROP;
+    audio.playSoundEffect(sfx);
+    self.turboDropSfxPlayedThisSpin = true;
+    console.log('[Symbols] Playing turbo drop sound effect at overshoot start', { sfx });
+    return true;
   } catch (e) {
-    console.warn('[Symbols] Failed to play Spark_VFX on symbol:', e);
-    releaseSparkVFXToPool(self, sparkVFX);
+    console.warn('[Symbols] Failed to play turbo drop SFX:', e);
+    return false;
   }
 }
 
 function reevaluateWinsFromGrid(self: Symbols): void {
   try {
-    // Reuse a single Data instance for win evaluation to avoid per-call allocations
-    if (!self.winEvalDataBuffer) {
-      self.winEvalDataBuffer = new Data();
-    }
-    const dt = self.winEvalDataBuffer;
-
+    // Build Data with current row-major symbols
+    const dt = new Data();
     // Ensure currentSymbolData is populated; if not, derive from self.symbols
     if (!self.currentSymbolData) {
       const numCols = self.symbols?.length || 0;
       const numRows = numCols > 0 ? (self.symbols[0]?.length || 0) : 0;
-
-      if (!Array.isArray(self.winEvalRowMajorBuffer)) {
-        self.winEvalRowMajorBuffer = [];
-      }
-
+      const rowMajor: number[][] = [];
       for (let row = 0; row < numRows; row++) {
-        const rowArr = self.winEvalRowMajorBuffer[row] || (self.winEvalRowMajorBuffer[row] = []);
+        rowMajor[row] = [];
         for (let col = 0; col < numCols; col++) {
           // Attempt to read a value property stored during drops; fallback to 0
           try {
             const obj: any = self.symbols[col][row];
             const val = self.currentSymbolData?.[row]?.[col];
-            rowArr[col] = typeof val === 'number' ? val : (obj?.symbolValue ?? 0);
+            rowMajor[row][col] = typeof val === 'number' ? val : (obj?.symbolValue ?? 0);
           } catch {
-            rowArr[col] = 0;
+            rowMajor[row][col] = 0;
           }
         }
-        rowArr.length = numCols;
       }
-      self.winEvalRowMajorBuffer.length = numRows;
-      dt.symbols = self.winEvalRowMajorBuffer;
+      dt.symbols = rowMajor;
     } else {
       dt.symbols = self.currentSymbolData;
     }
@@ -4014,16 +4290,15 @@ function reevaluateWinsFromGrid(self: Symbols): void {
     // Compute wins using SymbolDetector
     const wins = self.symbolDetector.getWins(dt);
     dt.wins = wins;
+    console.log('[Symbols] Re-evaluated wins after drop:', { matchCount: wins.symbolCounts.size });
 
-    // Avoid heavy logging every tumble; keep a minimal statement only when there are wins
     if (wins.symbolCounts.size > 0) {
-      console.log('[Symbols] Re-evaluated wins after drop, matchCount:', wins.symbolCounts.size);
+      console.log('[Symbols] Symbol counts:', wins.symbolCounts.entries());
       gameEventManager.emit(GameEventType.WIN_START);
     }
 
     // Apply highlighting only if not disabled
     if (!(Symbols as any).WINLINE_CHECKING_DISABLED) {
-      console.log('[Symbols] Re-evaluated wins from grid, replacing with spine animations');
       replaceWithSpineAnimations(self, dt);
     }
   } catch (e) {
@@ -4044,371 +4319,501 @@ function getYPos(self: Symbols, index: number) {
  */
 async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
   try {
+    // Reset the sequence counter for fly-out animations to ensure proper staggering
+    (animateMultiplierValueToPosition as any)._seq = 0;
+    
     const cols = self.symbols?.length || 0;
     const rows = cols > 0 && self.symbols[0] ? self.symbols[0].length : 0;
-    const numCols = self.symbols?.length || 0;
-    const scale = self.getSpineSymbolScale(10);
-    if (cols > 0 && rows > 0) {
-      const isTurbo = (self.scene as any)?.gameData?.isTurbo || gameStateManager.isTurbo;
-      const speedMultiplier = isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1;
-      // Stagger each dove’s departure so multiple multipliers don’t all launch at once.
-      // Keep this turbo-scaled so turbo still feels fast.
-      const birdDepartureStaggerMs = 800;
-      let birdDepartureIndex = 0;
-      const baseTimeScale = self.getSymbolWinTimeScale(10);
-      const timeScale = isTurbo
-        ? baseTimeScale * TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER
-        : baseTimeScale;
 
-      let maxDurationMs = 0;
-      for (let col = 0; col < cols; col++) {
-        for (let row = 0; row < rows; row++) {
-          const value = self.currentSymbolData?.[row]?.[col];
-          if (typeof value === 'number' && value >= 10) {
-            const originalObj: any = self.symbols[col]?.[row];
+    const isTurbo = (self.scene as any)?.gameData?.isTurbo || gameStateManager.isTurbo;
+    const baseTimeScale = self.getSymbolWinTimeScale(10);
+    const timeScale = isTurbo
+      ? baseTimeScale * TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER
+      : baseTimeScale;
 
-            // Base position for the multiplier visuals
-            const baseX = originalObj?.x ?? 0;
-            const baseY = originalObj?.y ?? getYPos(self, row);
+    // We want multiplier symbols to feel "counted" and readable, so stagger their animation starts.
+    // Requirement: 500ms delay between each multiplier symbol being animated, applied BEFORE the spine animation starts.
+    const MULTIPLIER_ANIM_STAGGER_MS = 750;
 
-            // Shared references/parameters so value image can follow the dove
-            let valueImage: any = null;
-            let leaveTargetX = 0;
-            let leaveTargetY = 0;
-            let leaveDelay = 0;
-            let leaveDuration = 0;
-            let returnStartingX = 0;
-            let returnStartingY = 0;
-            let returnTargetX = 0;
-            let returnTargetY = 0;
-            let returnDelay = 0;
-            let returnDuration = 0;
-            // Vertical offset for the value image relative to the dove (about 50px)
-            const returnValueOffsetY = 150 * scale;
+    // We wait for the longest end-time (startOffset + duration), then subtract the time we've already spent staggering.
+    let maxEndOffsetMs = 0;
+    const flyOutPromises: Promise<void>[] = [];
 
-            // Remove the original multiplier object – it will be replaced by the new assets
-            if (originalObj) {
-              try { self.scene.tweens.killTweensOf(originalObj); } catch { }
-              try { originalObj.destroy(); } catch { }
+    const processSymbol = (symbolObj: any, fallbackValue?: number): number | null => {
+      const symbolValue = typeof fallbackValue === 'number'
+        ? fallbackValue
+        : (symbolObj as any)?.symbolValue;
+
+      if (typeof symbolValue !== 'number' || symbolValue < 10) return null;
+
+      try {
+        if (self.container?.bringToTop && self.container.list?.includes(symbolObj)) {
+          self.container.bringToTop(symbolObj);
+        } else if (symbolObj?.parentContainer?.bringToTop) {
+          symbolObj.parentContainer.bringToTop(symbolObj);
+        }
+
+        if (typeof symbolObj?.setDepth === 'function') {
+          symbolObj.setDepth(Symbols.MULTIPLIER_FRONT_DEPTH);
+        }
+      } catch (err) {
+        console.warn('[Symbols] Failed to elevate multiplier symbol depth:', err);
+      }
+
+      const state = symbolObj?.animationState;
+      const skeletonData: any = symbolObj?.skeleton?.data;
+      if (!state) return null;
+
+      // Prefer the currently assigned animation, otherwise find one that matches the multiplier value.
+      let animationName = state.tracks?.[0]?.animation?.name;
+      if (!animationName) {
+        animationName =
+          self.findMultiplierAnimationNameByIndex(symbolObj, symbolValue) ??
+          skeletonData?.animations?.[0]?.name ??
+          null;
+      }
+
+      let animDurationMs: number | null = null;
+      if (animationName) {
+        // Play multiplier-hit SFX right when the multiplier spine animation starts.
+        try {
+          const audio = (window as any)?.audioManager;
+          if (audio && typeof audio.playSoundEffect === 'function') {
+            audio.playSoundEffect(SoundEffectType.MULTIPLIER_HIT);
+          }
+        } catch { }
+        // Clear the track first to ensure the animation restarts from the beginning
+        // This is important when multiple multipliers need to animate in quick succession
+        try {
+          state.clearTrack(0);
+          state.setAnimation(0, animationName, false);
+        } catch { }
+        // Estimate duration so we can await the longest-running animation.
+        const animDurationSec =
+          skeletonData?.findAnimation?.(animationName)?.duration ??
+          skeletonData?.animations?.[0]?.duration;
+        if (typeof animDurationSec === 'number' && animDurationSec > 0 && timeScale > 0) {
+          animDurationMs = (animDurationSec * 1000) / timeScale;
+        }
+      }
+
+      try { state.timeScale = timeScale; } catch { }
+
+      // After the spine animation completes, fly the multiplier value to the header
+      const symbolX = (symbolObj as any)?.x;
+      const symbolY = (symbolObj as any)?.y;
+      if (typeof symbolX === 'number' && typeof symbolY === 'number') {
+        // Start the value fly-out slightly BEFORE the multiplier symbol animation completes.
+        // This keeps the UI feeling snappier and better synced to the end of the spine motion.
+        const FLY_OUT_EARLY_MS = 200;
+        const delayMs = Math.max(0, (animDurationMs ?? 0) - FLY_OUT_EARLY_MS);
+        flyOutPromises.push((async () => {
+          try {
+            if (delayMs > 0) {
+              await delay(delayMs);
             }
+            await animateMultiplierValueToPosition(self, symbolValue, symbolX, symbolY);
+          } catch (err) {
+            console.warn('[Symbols] Failed to animate multiplier fly-out:', err);
+          }
+        })());
+      }
 
-            // Container that will hold frame, dove and value – also used for tweening
-            const multContainer = self.scene.add.container(baseX, baseY);
-            // Ensure multiplier visuals render above all other symbols/overlays
-            try { multContainer.setDepth(700); } catch { }
-            // Replace grid reference with the new container so cleanup logic still works
-            try { self.symbols[col][row] = multContainer as any; } catch { }
+      return animDurationMs ?? 0;
+    };
 
-            let localMaxDurationMs = 0;
-
-            // Helper to update the maximum duration
-            const updateDurationFromSpine = (spineObj: any, animNameFallback?: string) => {
-              try {
-                const state = spineObj?.animationState;
-                if (!state) return;
-
-                // Try to set an explicit animation if provided
-                if (animNameFallback) {
-                  try { state.setAnimation(0, animNameFallback, false); } catch { }
-                }
-
-                let durSec: number | undefined;
-                const data = spineObj?.skeleton?.data;
-                if (data?.findAnimation && animNameFallback) {
-                  durSec = data.findAnimation(animNameFallback)?.duration;
-                }
-
-                // Fallback: use first animation in the skeleton, if any
-                if ((durSec === undefined || durSec <= 0) && Array.isArray(data?.animations) && data.animations.length > 0) {
-                  durSec = (data.animations[0] as any).duration;
-                }
-
-                const ts = state.timeScale || 1;
-                if (typeof durSec === 'number' && durSec > 0 && ts > 0) {
-                  const durMs = (durSec * 1000) / ts;
-                  if (durMs > localMaxDurationMs) {
-                    localMaxDurationMs = durMs;
-                  }
-                }
-              } catch { }
-            };
-
-            // Create shatter spine (pooled)
-            try {
-              const shatterKey = 'shatter_frame';
-              const shatterAtlasKey = `${shatterKey}-atlas`;
-              const shatterSpine = acquireSpineFromPool(self, shatterKey, shatterAtlasKey);
-              if (shatterSpine) {
-                try {
-                  shatterSpine.setOrigin(0.5, 0.5);
-                  shatterSpine.setScale(scale * 0.4);
-                  // Start hidden but active; will be made visible when its animation starts
-                  shatterSpine.setVisible(false);
-                  shatterSpine.setActive(true);
-                  multContainer.add(shatterSpine);
-
-                  const shatterDelay = 500 / speedMultiplier;
-                  self.scene.time.delayedCall(shatterDelay, () => {
-                    shatterSpine.setVisible(true);
-                    // get first animation in skeleton
-                    const animationName = shatterSpine.skeleton?.data?.animations[0]?.name ?? 'animation';
-                    shatterSpine.animationState.setAnimation(0, animationName, false);
-                    shatterSpine.animationState.timeScale = timeScale;
-                  });
-                } catch { }
-              }
-            } catch (e) {
-              console.warn('[Symbols] Failed to create shatter spine:', e);
-            }
-
-            // Create multiplier frame spine (pooled)
-            try {
-              const frameKey = 'multiplier_frame';
-              const frameAtlasKey = `${frameKey}-atlas`;
-              const frameSpine: any = acquireSpineFromPool(self, frameKey, frameAtlasKey);
-              if (frameSpine) {
-                try {
-                  const origin = self.getSpineSymbolOrigin(value);
-                  frameSpine.setOrigin(origin.x, origin.y);
-                  frameSpine.setScale(scale);
-                  frameSpine.setVisible(true);
-                  frameSpine.setActive(true);
-                  multContainer.add(frameSpine);
-                  if (frameSpine.animationState) {
-                    frameSpine.animationState.setAnimation(0, `symbol${value}_WF`, false);
-                    frameSpine.animationState.timeScale = timeScale;
-                  }
-                } catch { }
-                updateDurationFromSpine(frameSpine, `symbol${value}_WF`);
-              }
-            } catch (e) {
-              console.warn('[Symbols] Failed to create multiplier frame spine:', e);
-            }
-
-            // Create multiplier dove spine (pooled)
-            try {
-              const doveKey = 'multiplier_dove';
-              const doveAtlasKey = `${doveKey}-atlas`;
-              const doveSpine: any = acquireSpineFromPool(self, doveKey, doveAtlasKey);
-              if (doveSpine) {
-                try {
-                  doveSpine.setOrigin(0.5, 0.5);
-                  doveSpine.setDepth(999);
-                    // Reset any residual state from the pool
-                    try { self.scene.tweens.killTweensOf(doveSpine); } catch { }
-                    doveSpine.setVisible(true);
-                    doveSpine.setActive(true);
-                    doveSpine.setAlpha(1);
-                    doveSpine.setRotation(0);
-                    doveSpine.setAngle(0);
-                    doveSpine.setPosition(0, 0);
-                    if (doveSpine.animationState) {
-                      try { doveSpine.animationState.clearTracks(); } catch { }
-                    }
-                  multContainer.add(doveSpine);
-                  if (doveSpine.animationState) {
-                    doveSpine.animationState.setAnimation(0, `symbol10_WF`, true);
-
-                    // Play spin sound effect
-                    if ((window as any).audioManager) {
-                      (window as any).audioManager.playOneShot(SoundEffectType.MULTI);
-                      console.log('[Symbols] Playing multiplier sound effect');
-                    }
-
-                    // Pre‑compute path parameters so both dove and value image can share them
-                    // First hop: exit diagonally toward the opposite side of the screen
-                    const isOnLeftSide = col < numCols / 2;
-                    // Push the exit point fully off-screen on the opposite side
-                    leaveTargetX = isOnLeftSide
-                      ? self.scene.scale.width * 1.2
-                      : -self.scene.scale.width * 1.2;
-                    leaveTargetY = -self.scene.scale.height * (Math.random() * 0.2 + 0.3);
-                    const baseRandomLeaveDelayMs = (Math.random() * 300 + 120);
-                    const staggerLeaveDelayMs = birdDepartureIndex * birdDepartureStaggerMs;
-                    birdDepartureIndex += 1;
-                    leaveDelay = (baseRandomLeaveDelayMs + staggerLeaveDelayMs) / speedMultiplier;
-                    leaveDuration = 1250 / speedMultiplier;
-                    const leaveFacingDirection = isOnLeftSide ? 1 : -1;
-                    doveSpine.setScale(leaveFacingDirection * scale, scale);
-                    scheduleTranslate(self, doveSpine, leaveDelay, leaveDuration, leaveTargetX, leaveTargetY);
-
-                    // Second hop: re-enter from a random point above the screen, heading to the target
-                    returnStartingX = Math.random() * self.scene.scale.width * 1.1 - self.scene.scale.width * 0.1;
-                    returnStartingY = -self.scene.scale.height * (0.15 + Math.random() * 0.1);
-
-                    returnTargetX = self.scene.scale.width * 0.68 + Math.random() * self.scene.scale.width * 0.07;
-                    returnTargetY = self.scene.scale.height * 0.1;
-                    const returnPause = (Math.random() * 250 + 150) / speedMultiplier;
-                    returnDelay = leaveDelay + leaveDuration + returnPause;
-                    returnDuration = (Math.random() * 400 + 600) / speedMultiplier;
-
-                    // Ensure the awaited duration also covers the full leave + return tweens,
-                    // including the final value-image drop/fade sequence that runs after the
-                    // dove has reached its target.
-                    //
-                    //  - Outbound:  leaveDelay + leaveDuration
-                    //  - Return:    returnDelay + returnDuration (where returnDelay already
-                    //               includes leaveDelay + leaveDuration)
-                    //  - Tail:      ~400ms for the drop (250ms) + fade (150ms, delayed by 250ms)
-                    //
-                    // We only care about when everything is visually finished, so use the
-                    // actual tween timings (already turbo-adjusted above).
-                    const tweenTailMs = 400 / speedMultiplier;
-                    const extraDelayMs = 150 / speedMultiplier;
-                    const totalTweenDurationMs = returnDelay + returnDuration + tweenTailMs + extraDelayMs;
-                    if (totalTweenDurationMs > localMaxDurationMs) {
-                      localMaxDurationMs = totalTweenDurationMs;
-                    }
-
-                    console.log('[Symbols] returnStartingX ', returnStartingX);
-                    const preReturnRepositionMs = 50 / speedMultiplier;
-                    self.scene.time.delayedCall(Math.max(0, returnDelay - preReturnRepositionMs), () => {
-                      multContainer.remove(doveSpine);
-                      doveSpine.animationState.setAnimation(0, `symbol10_WF`, true);
-                      doveSpine.setPosition(returnStartingX, returnStartingY);
-
-                      const returnFacingDirection = returnStartingX > returnTargetX ? 1 : -1;
-                      doveSpine.setScale(returnFacingDirection * scale, scale);
-
-                      // play multiplier_added_wf sound effect
-                      if ((window as any).audioManager) {
-                        (window as any).audioManager.playSoundEffect(SoundEffectType.MULTIPLIER_ADDED);
-                        console.log('[Symbols] Playing multiplier_added_wf sound effect');
-                      }
-
-                      // Detach value image and place it under the dove before the return flight
-                      if (valueImage) {
-                        try {
-                          multContainer.remove(valueImage);
-                        } catch { }
-                        try {
-                          valueImage.setPosition(returnStartingX, returnStartingY + returnValueOffsetY);
-                        } catch { }
-                        // Start the value image return tween slightly after this callback,
-                        // so it lines up with the dove's return tween start.
-                        try {
-                          scheduleTranslate(
-                            self,
-                            valueImage,
-                            50 / speedMultiplier,
-                            returnDuration,
-                            returnTargetX,
-                            returnTargetY + returnValueOffsetY,
-                            true
-                          );
-                        } catch { }
-                      }
-                    });
-
-                    const onComplete = () => {
-                      // Final white-flash on dove, then drop and fade out the value image
-                      doveSpine.animationState.setAnimation(0, `symbol10_WF_white`, true);
-
-                      if (valueImage) {
-                        try {
-                          // Drop the value image by ~50px over 300ms
-                          self.scene.tweens.add({
-                            targets: valueImage,
-                            y: valueImage.y + 20,
-                            duration: 250 / speedMultiplier,
-                            ease: Phaser.Math.Easing.Cubic.In,
-                          });
-
-                          // Fade out quickly while (or just after) dropping, then destroy
-                          self.scene.tweens.add({
-                            targets: valueImage,
-                            alpha: 0,
-                            duration: 150 / speedMultiplier,
-                            delay: 250 / speedMultiplier,
-                            ease: Phaser.Math.Easing.Quadratic.Out,
-                            onComplete: () => {
-
-                              // call event here to update multiplier value in normal or bonus header
-                              const multiplierValue = self.multiplierIndexMapping[value];
-
-                              gameEventManager.emit(GameEventType.UPDATE_MULTIPLIER_VALUE,
-                                { multiplier: multiplierValue } as UpdateMultiplierValueEventData
-                              );
-                              try { valueImage.destroy(); } catch { }
-                            }
-                          });
-                        } catch { }
-                      }
-
-                      self.scene.time.delayedCall(300 / speedMultiplier, () => {
-                        try { releaseSpineToPool(self, doveSpine); } catch { }
-                      });
-                    };
-                    scheduleTranslate(self, doveSpine, returnDelay, returnDuration, returnTargetX, returnTargetY, true, onComplete);
-
-                    doveSpine.animationState.timeScale = timeScale;
-                  }
-                } catch { }
-                updateDurationFromSpine(doveSpine, `symbol10_WF`);
-              }
-            } catch (e) {
-              console.warn('[Symbols] Failed to create multiplier dove spine:', e);
-            }
-
-            // Create multiplier value sprite (image key derived from symbol value)
-            try {
-              // Symbol 10 is missing in documentation and backend so we start at 11 for multiplier indices
-              // Map backend multiplier value (>=11) into the available sprite indices (multiplier_0..multiplier_14)
-              let spriteIndex = Number(value) - 11;
-              if (!Number.isFinite(spriteIndex) || spriteIndex < 0) spriteIndex = 0;
-
-              const valueKey = `multiplier_${spriteIndex}`;
-              valueImage = self.scene.add.image(0, 0, valueKey);
-              if (valueImage) {
-                try {
-                  valueImage.setOrigin(0.5, 1);
-                  valueImage.setPosition(55 * scale, 70 * scale);
-                  valueImage.setScale(scale);
-                  applyDropShadowToImageSymbol(valueImage);
-                  multContainer.add(valueImage);
-
-                  // Make the value image follow the dove on the outbound flight
-                  try {
-                    scheduleTranslate(self, valueImage, leaveDelay, leaveDuration, leaveTargetX, leaveTargetY);
-                  } catch { }
-                } catch { }
-              }
-            } catch (e) {
-              console.warn('[Symbols] Failed to create multiplier value sprite for value', value, e);
-            }
-
-            // Apply subtle scale and translate tweens to the whole multiplier container
-            try { scheduleScaleUp(self, multContainer, 20 / speedMultiplier, 200 / speedMultiplier, 1.05); } catch { }
-            try { scheduleTranslate(self, multContainer, 20 / speedMultiplier, 200 / speedMultiplier, 0, -3); } catch { }
-
-            // Update global maximum duration
-            if (localMaxDurationMs > maxDurationMs) {
-              maxDurationMs = localMaxDurationMs;
-            }
+    if (cols && rows) {
+      // Scan the current grid for multiplier symbols (value >= 10), then animate them sequentially.
+      const multiplierSymbols: Array<{ symbolObj: any; symbolValue: number }> = [];
+      // Invert the col and row loop so that it starts from the end of the array, and swap the row and col loops
+      for (let col = cols - 1; col >= 0; col--) {
+        for (let row = rows - 1; row >= 0; row--) {
+          const gridValue = self.currentSymbolData?.[row]?.[col];
+          const symbolObj: any = self.symbols[col]?.[row];
+          const symbolValue = typeof gridValue === 'number' ? gridValue : (symbolObj as any)?.symbolValue;
+          if (typeof symbolValue === 'number' && symbolValue >= 10 && symbolObj?.animationState) {
+            multiplierSymbols.push({ symbolObj, symbolValue });
           }
         }
       }
 
-      console.log(
-        `[Symbols] Multiplier symbol timeScale set to ${timeScale} after tumbles (turbo=${isTurbo}), maxDurationMs=${maxDurationMs}`
-      );
+      let startOffsetMs = 0;
+      for (let i = 0; i < multiplierSymbols.length; i++) {
+        // Apply the requested 500ms gap *before* the next multiplier's spine animation starts.
+        if (i > 0) {
+          await phaserDelay(self.scene, MULTIPLIER_ANIM_STAGGER_MS);
+          startOffsetMs += MULTIPLIER_ANIM_STAGGER_MS;
+        }
 
-      // Wait until the (longest) multiplier animation finishes
-      if (maxDurationMs > 0) {
-        await delay(maxDurationMs);
+        const { symbolObj, symbolValue } = multiplierSymbols[i];
+        const animDurationMs = processSymbol(symbolObj, symbolValue) ?? 0;
+        const endOffsetMs = startOffsetMs + Math.max(0, animDurationMs);
+        if (endOffsetMs > maxEndOffsetMs) {
+          maxEndOffsetMs = endOffsetMs;
+        }
       }
-    }
-  } catch (err) {
-    console.warn('[Symbols] Failed to update multiplier symbol timeScale after tumbles:', err);
-  }
 
-  // Notify listeners that multiplier animations have completed
-  try {
-    gameEventManager.emit(GameEventType.SYMBOLS_MULTIPLIER_ANIMATIONS_COMPLETE);
-  } catch (e) {
-    console.warn('[Symbols] Failed to emit SYMBOLS_MULTIPLIER_ANIMATIONS_COMPLETE:', e);
+      // We already "spent" startOffsetMs time waiting between symbol starts.
+      // Wait only the remaining time until the longest-running (staggered) animation should have ended.
+      const remainingMs = Math.max(0, maxEndOffsetMs - startOffsetMs);
+      const waitAnimations = remainingMs > 0 ? phaserDelay(self.scene, remainingMs) : Promise.resolve();
+      const waitFlyOuts = flyOutPromises.length ? Promise.all(flyOutPromises) : Promise.resolve();
+      await Promise.all([waitAnimations, waitFlyOuts]);
+      return;
+    }
+
+    // No grid to scan; just resolve.
+    const waitAnimations = Promise.resolve();
+    const waitFlyOuts = flyOutPromises.length ? Promise.all(flyOutPromises) : Promise.resolve();
+    await Promise.all([waitAnimations, waitFlyOuts]);
+  } catch (err) {
+    console.warn('[Symbols] Failed to play multiplier symbol animations:', err);
   }
 }
+
+async function animateMultiplierValueToPosition(self: Symbols, value: number, x: number, y: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    try {
+      const scene = self?.scene;
+      if (!scene) {
+        resolve();
+        return;
+      }
+
+      // Hardcoded win bar position (matches HUD ratios)
+      const targetX = scene.scale.width * 0.75;
+      // Positive Y goes downward in Phaser, so a positive offset lands slightly LOWER than the win bar.
+      // Scaled to screen height so it remains subtle but consistent across resolutions.
+      const targetY = scene.scale.height * 0.1575;
+
+      // Reuse the multiplier bar texture so we know the asset is available
+      const baseScale = self.getSpineSymbolScale(value);
+      // Pre-flight scale punch: scale up to 3.0, then settle at 2.0 before traveling.
+      // Applied relative to the symbol's baseScale so it stays consistent across resolutions.
+      const MULTIPLIER_PREFLIGHT_SCALE_UP = 3.0;
+      const MULTIPLIER_TRAVEL_SCALE = 2.0;
+      const travelScale = baseScale * MULTIPLIER_TRAVEL_SCALE;
+      const multiplierNumber = `multiplier_number_${value}x`;
+      const floatImage = scene.add.image(x, y, multiplierNumber)
+        .setOrigin(0.5, 0.5)
+        .setScale(baseScale)
+        .setDepth(900);
+
+      // Keep the value attached for debugging/telemetry if needed
+      try { floatImage.setData?.('multiplierValue', value); } catch { }
+
+      // Stagger multiplier fly-outs so they don't all launch at once.
+      const seq = typeof (animateMultiplierValueToPosition as any)._seq === 'number'
+        ? (animateMultiplierValueToPosition as any)._seq
+        : 0;
+      const baseStaggerMs = 90;
+      const jitterMs = Phaser.Math.Between(0, 45);
+      const startDelayMs = seq * baseStaggerMs + jitterMs;
+      (animateMultiplierValueToPosition as any)._seq = seq + 1;
+
+      const emitMultiplierLanded = () => {
+        try {
+          const mappedValue = self?.multiplierIndexMapping?.[value];
+          if (typeof mappedValue === 'number') {
+            gameEventManager.emit(
+              GameEventType.UPDATE_MULTIPLIER_VALUE,
+              { multiplier: mappedValue } as UpdateMultiplierValueEventData
+            );
+          } else {
+            console.warn('[Symbols] Multiplier mapping missing for symbol index:', value);
+          }
+        } catch (err) {
+          console.warn('[Symbols] Failed to emit multiplier update:', err);
+        }
+      };
+
+      const kickOff = () => {
+        // Pick a tween variant (structure allows adding more variants later)
+        const variant = MULTIPLIER_TWEEN_VARIANTS[
+          Math.floor(Math.random() * MULTIPLIER_TWEEN_VARIANTS.length)
+        ] || tweenMultiplierLine;
+
+        // Ensure the scale punch completes BEFORE any movement begins.
+        tweenMultiplierPreFlightScale(scene, floatImage, { baseScale, scaleUpTo: baseScale * MULTIPLIER_PREFLIGHT_SCALE_UP, settleTo: travelScale })
+          .catch(() => { /* if scale tween fails, still attempt the flight */ })
+          .then(() => variant(scene, floatImage, { startX: x, startY: y, targetX, targetY, baseScale, travelScale }))
+          .then(() => {
+            emitMultiplierLanded();
+            resolve();
+          })
+          .catch((err: any) => {
+            console.warn('[Symbols] Multiplier tween variant failed:', err);
+            try { floatImage.destroy(); } catch { }
+            emitMultiplierLanded();
+            resolve();
+          });
+      };
+
+      if (startDelayMs > 0) {
+        delay(startDelayMs).then(kickOff);
+      } else {
+        kickOff();
+      }
+    } catch (err) {
+      console.warn('[Symbols] Failed to animate multiplier value to header:', err);
+      resolve();
+    }
+  });
+}
+
+type MultiplierTweenParams = {
+  startX: number;
+  startY: number;
+  targetX: number;
+  targetY: number;
+  baseScale: number;
+  travelScale: number;
+};
+
+function tweenMultiplierPreFlightScale(
+  scene: any,
+  floatImage: any,
+  params: { baseScale: number; scaleUpTo: number; settleTo: number }
+): Promise<void> {
+  const { baseScale, scaleUpTo, settleTo } = params;
+  return new Promise<void>((resolve) => {
+    try {
+      // If the object is already gone or the tween manager isn't available, just continue.
+      if (!scene?.tweens?.addTimeline || !floatImage || floatImage?.destroyed) {
+        try { floatImage?.setScale?.(settleTo ?? baseScale); } catch { }
+        resolve();
+        return;
+      }
+
+      scene.tweens.addTimeline({
+        targets: floatImage,
+        tweens: [
+          {
+            duration: 170,
+            scale: scaleUpTo,
+            ease: Phaser.Math.Easing.Cubic.Out,
+          },
+          {
+            duration: 140,
+            scale: settleTo,
+            ease: Phaser.Math.Easing.Cubic.Out,
+          },
+        ],
+        onComplete: () => resolve(),
+      });
+    } catch {
+      try { floatImage?.setScale?.(settleTo ?? baseScale); } catch { }
+      resolve();
+    }
+  });
+}
+
+// Variant 0: straight-line flight to the target (win bar) using an ease-in-out.
+function tweenMultiplierLine(scene: any, floatImage: any, params: MultiplierTweenParams): Promise<void> {
+  const { startX: x, startY: y, targetX, targetY, travelScale } = params;
+
+  return new Promise<void>((resolve) => {
+    try {
+      const dx = targetX - x;
+      const dy = targetY - y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      // Slower, smoother travel than the arc variant
+      const duration = Phaser.Math.Clamp(distance * 2.80, 900, 2600);
+
+      scene.tweens.add({
+        targets: floatImage,
+        duration,
+        x: targetX,
+        y: targetY,
+        ease: Phaser.Math.Easing.Sine.InOut,
+        onComplete: () => {
+          // Small "pop" and fade-out on arrival
+          scene.tweens.add({
+            targets: floatImage,
+            duration: 180,
+            scale: travelScale * 1.15,
+            alpha: 0,
+            ease: Phaser.Math.Easing.Cubic.Out,
+            onComplete: () => {
+              try { floatImage.destroy(); } catch { }
+              resolve();
+            },
+          });
+        },
+      });
+    } catch {
+      try { floatImage.destroy(); } catch { }
+      resolve();
+    }
+  });
+}
+
+// Variant 1: basketball-style arc shot toward the multiplier bar (ring)
+function tweenMultiplierArc(scene: any, floatImage: any, params: MultiplierTweenParams): Promise<void> {
+  const { startX: x, startY: y, targetX, targetY, travelScale } = params;
+
+  return new Promise<void>((resolve) => {
+    const dx = targetX - x;
+    const dy = targetY - y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const arcLift = Math.max(80, Math.min(200, distance * 0.25));
+    const apexX = x + dx * 0.5 + dx * 0.08; // slight additional X drift near apex
+    const apexY = Math.min(y, targetY) - arcLift;
+    const driftAtApex = dx * 0.12;
+    const tinyFall = Math.min(8, arcLift * 0.03);
+
+    // Phase 1: quick shoot upward
+    scene.tweens.add({
+      targets: floatImage,
+      duration: 320,
+      x: x + dx * 0.45,
+      y: apexY,
+      ease: Phaser.Math.Easing.Sine.Out,
+      onComplete: () => {
+        // Phase 2: brief rest at apex (minimal vertical movement, slight X drift)
+        scene.tweens.add({
+          targets: floatImage,
+          duration: 240,
+          x: apexX + driftAtApex,
+          y: apexY + tinyFall,
+          ease: Phaser.Math.Easing.Sine.InOut,
+          onComplete: () => {
+            // Phase 3: controlled drop toward the ring
+            scene.tweens.add({
+              targets: floatImage,
+              duration: 780,
+              x: targetX,
+              y: targetY,
+              scale: travelScale,
+              alpha: 1,
+              ease: Phaser.Math.Easing.Cubic.Out,
+              onComplete: () => {
+                scene.tweens.add({
+                  targets: floatImage,
+                  duration: 180,
+                  scale: travelScale * 1.15,
+                  alpha: 0,
+                  ease: Phaser.Math.Easing.Cubic.Out,
+                  onComplete: () => {
+                    try { floatImage.destroy(); } catch { }
+                    resolve();
+                  },
+                });
+              },
+            });
+          },
+        });
+      },
+    });
+  });
+}
+
+// Variant 2: ricochet bounce off screen edges, then a top bounce, then into the ring
+function tweenMultiplierRicochet(scene: any, floatImage: any, params: MultiplierTweenParams): Promise<void> {
+  const { startX: x, startY: y, targetX, targetY, travelScale } = params;
+
+  return new Promise<void>((resolve) => {
+    try {
+      const width = scene.scale?.width ?? 720;
+      const height = scene.scale?.height ?? 1280;
+      const margin = 8; // tighter buffer so ricochets appear near the edge
+
+      // Row-based ricochet count: fewer on top half, slightly more on bottom half
+      const startRatio = height > 0 ? y / height : 0.5;
+      let bounceCount = 2;
+      if (startRatio < 0.5) {
+        bounceCount = 1 + Math.floor(Math.random() * 2); // 1-2 ricochets
+      } else {
+        bounceCount = 2 + Math.floor(Math.random() * 2); // 2-3 ricochets
+      }
+
+      const points: Array<{ x: number; y: number }> = [];
+      let currentX = x;
+      let currentY = y;
+
+      // Ensure starting direction alternates between calls
+      const startLeft = (() => {
+        if (typeof (tweenMultiplierRicochet as any)._lastStartLeft === 'boolean') {
+          return !(tweenMultiplierRicochet as any)._lastStartLeft;
+        }
+        return x >= width * 0.5; // initial seed based on position
+      })();
+      (tweenMultiplierRicochet as any)._lastStartLeft = startLeft;
+
+      let nextSideLeft = startLeft;
+
+      // Side ricochets
+      for (let i = 0; i < bounceCount; i++) {
+        const towardLeft = nextSideLeft; // alternate sides
+        const targetSideX = towardLeft ? margin : width - margin;
+        const ascent = Phaser.Math.Between(Math.floor(height * 0.08), Math.floor(height * 0.16));
+        const targetSideY = Math.max(margin + 4, currentY - ascent); // always move up with tiny buffer
+        points.push({ x: targetSideX, y: targetSideY });
+        currentX = targetSideX;
+        currentY = targetSideY;
+        nextSideLeft = !nextSideLeft; // flip for the next bounce
+      }
+
+      // One last ricochet at the top, then to the ring
+      const topX = Phaser.Math.Between(Math.floor(width * 0.2), Math.floor(width * 0.8));
+      const topY = margin;
+      points.push({ x: topX, y: topY });
+      points.push({ x: targetX, y: targetY });
+
+      const tweenToPoint = (toX: number, toY: number, ease: any, isFinalLeg: boolean) => {
+        const dx = (floatImage.x ?? 0) - toX;
+        const dy = (floatImage.y ?? 0) - toY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const speedFactor = isFinalLeg ? 1.0 : 0.8; // faster on side hops, normal on final leg
+        const duration = Phaser.Math.Clamp(dist * speedFactor * 1.35, 220, isFinalLeg ? 720 : 560);
+        return new Promise<void>((res) => {
+          scene.tweens.add({
+            targets: floatImage,
+            x: toX,
+            y: toY,
+            duration,
+            ease,
+            onComplete: () => res(),
+          });
+        });
+      };
+
+      (async () => {
+        for (let i = 0; i < points.length; i++) {
+          const isLastLeg = i === points.length - 1;
+          const isTopBounce = i === points.length - 2;
+          const useEase = isLastLeg ? Phaser.Math.Easing.Cubic.Out : Phaser.Math.Easing.Linear;
+          await tweenToPoint(points[i].x, points[i].y, useEase, isLastLeg);
+        }
+
+        scene.tweens.add({
+          targets: floatImage,
+          duration: 160,
+          scale: travelScale * 1.1,
+          alpha: 0,
+          ease: Phaser.Math.Easing.Cubic.Out,
+          onComplete: () => {
+            try { floatImage.destroy(); } catch { }
+            resolve();
+          },
+        });
+      })().catch(() => {
+        try { floatImage.destroy(); } catch { }
+        resolve();
+      });
+    } catch {
+      try { floatImage.destroy(); } catch { }
+      resolve();
+    }
+  });
+}
+
+// Register available tween variants here to allow easy randomization/expansion.
+const MULTIPLIER_TWEEN_VARIANTS: Array<(scene: any, floatImage: any, params: MultiplierTweenParams) => Promise<void>> = [
+  tweenMultiplierLine,
+  // tweenMultiplierArc,
+  // tweenMultiplierRicochet,
+];
 
 
 /**
@@ -4416,19 +4821,19 @@ async function playMultiplierSymbolAnimations(self: Symbols): Promise<void> {
  * Uses turbo drop SFX when turbo is active, otherwise uses the regular reel drop SFX.
  */
 function playTumbleSfx(self: Symbols): void {
+  console.log('[Symbols] Playing tumble sound effect');
   try {
     const audio = (window as any)?.audioManager;
     if (!audio || typeof audio.playSoundEffect !== 'function') {
       return;
     }
 
-    const isTurbo = !!(self.scene?.gameData?.isTurbo || gameStateManager.isTurbo);
     let sfxType: SoundEffectType = SoundEffectType.TWIN1;
-    switch (self.scene.gameAPI.getCurrentTumbleIndex() - 1) {
+    switch (self.scene.gameAPI.getCurrentTumbleIndex()) {
       case 0:
         sfxType = SoundEffectType.TWIN1;
         break;
-      case 1:
+      case 1: 
         sfxType = SoundEffectType.TWIN2;
         break;
       case 2:
@@ -4439,10 +4844,33 @@ function playTumbleSfx(self: Symbols): void {
         break;
     }
     audio.playSoundEffect(sfxType);
-    console.log('[Symbols] Playing tumble sound effect', { isTurbo, sfxType });
+    console.log('[Symbols] Playing tumble sound effect', { sfxType });
   } catch (e) {
     console.warn('[Symbols] Failed to play tumble SFX:', e);
   }
+}
+
+/**
+ * Map the symbol index to the hit/effect sound effect that should be used.
+ * Lower symbol indices take precedence when multiple symbols are removed.
+ */
+function resolveSymbolHitSfx(symbolIndex: number): SoundEffectType | null {
+  if (!Number.isFinite(symbolIndex) || symbolIndex <= 0) {
+    return null;
+  }
+  if (symbolIndex === 1) {
+    return SoundEffectType.SYMBOL_PUNCH;
+  }
+  if (symbolIndex === 2) {
+    return SoundEffectType.SYMBOL_PAU;
+  }
+  if (symbolIndex === 3) {
+    return SoundEffectType.HIT_WIN;
+  }
+  if (symbolIndex === 4) {
+    return SoundEffectType.SYMBOL_NYET;
+  }
+  return SoundEffectType.SYMBOL_KISS;
 }
 
 /**
@@ -4451,9 +4879,31 @@ function playTumbleSfx(self: Symbols): void {
  */
 async function applyTumbles(self: Symbols, tumbles: any[], mockData?: Data): Promise<void> {
   for (const tumble of tumbles) {
+    self.scene.gameAPI.incrementCurrentTumbleIndex();
     await applySingleTumble(self, tumble);
-    if (mockData) {
-      synchronizeMockDataSymbols(self, mockData);
+  }
+
+  // Synchronize mockData.symbols with the current grid state after all tumbles
+  // Convert from row-major (self.currentSymbolData[row][col]) to column-major (col[row])
+  // with bottom-to-top indexing within each column to match SpinData format
+  if (mockData && self.currentSymbolData && self.currentSymbolData.length > 0) {
+    try {
+      const numRows = self.currentSymbolData.length;
+      const numCols = self.currentSymbolData[0]?.length ?? 0;
+      const columnMajor: number[][] = [];
+      for (let col = 0; col < numCols; col++) {
+        columnMajor[col] = [];
+        for (let row = 0; row < numRows; row++) {
+          // Convert row-major to column-major with bottom-to-top indexing
+          // SpinData uses bottom->top, so row 0 (bottom) becomes last index in column
+          const value = self.currentSymbolData[row]?.[col] ?? 0;
+          columnMajor[col][numRows - 1 - row] = value;
+        }
+      }
+      mockData.symbols = columnMajor;
+      console.log('[Symbols] Synchronized mockData.symbols with updated grid after tumbles');
+    } catch (e) {
+      console.warn('[Symbols] Failed to synchronize mockData.symbols:', e);
     }
   }
 
@@ -4465,128 +4915,14 @@ async function applyTumbles(self: Symbols, tumbles: any[], mockData?: Data): Pro
   }
 }
 
-/**
- * Rebuild mock data symbols (column-major, bottom-up) from the current row-major symbol grid
- * so backend consumers (scatter detection, etc.) stay in sync with on-screen tumbles.
- */
-function synchronizeMockDataSymbols(self: Symbols, mockData: Data): void {
-  if (!mockData || !self.currentSymbolData || !self.currentSymbolData.length) {
-    return;
-  }
-
-  const rowCount = self.currentSymbolData.length;
-  const colCount = self.currentSymbolData[0]?.length ?? 0;
-  if (colCount === 0) return;
-
-  const rebuilt: number[][] = Array.from({ length: colCount }, () => Array<number>(rowCount).fill(0));
-
-  for (let row = 0; row < rowCount; row++) {
-    for (let col = 0; col < colCount; col++) {
-      const value = self.currentSymbolData[row]?.[col];
-      const safeValue = typeof value === 'number' ? value : 0;
-      const backendRowIndex = (rowCount - 1) - row; // backend arrays use bottom->top order
-      rebuilt[col][backendRowIndex] = safeValue;
-    }
-  }
-
-  mockData.symbols = rebuilt;
-}
-
-// Helper: Rebuild currentSymbolData after compression (extracted to avoid duplication)
-function rebuildCurrentSymbolDataAfterCompression(self: Symbols, numCols: number, numRows: number): void {
-  if (!self.currentSymbolData) return;
-  const rebuilt: (number | null)[][] = Array.from({ length: numRows }, () => Array<number | null>(numCols).fill(null));
-  for (let col = 0; col < numCols; col++) {
-    const keptValues: number[] = [];
-    for (let row = 0; row < numRows; row++) {
-      const v = self.currentSymbolData[row]?.[col];
-      if (typeof v === 'number') keptValues.push(v);
-    }
-    const bottomStart = numRows - keptValues.length;
-    for (let i = 0; i < keptValues.length; i++) {
-      const newRow = bottomStart + i;
-      rebuilt[newRow][col] = keptValues[i];
-    }
-  }
-  const finalized: number[][] = rebuilt.map(row => row.map(v => (typeof v === 'number' ? v : 0)));
-  self.currentSymbolData = finalized;
-}
-
-// Helper: Create drop promise for a symbol (extracted to avoid duplication)
-function createDropPromise(
-  self: Symbols,
-  created: any,
-  col: number,
-  targetY: number,
-  sequenceIndex: number,
-  MANUAL_STAGGER_MS: number,
-  isOverlap: boolean,
-  gameData: any
-): Promise<void> {
-  return new Promise<void>((resolve) => {
-    try {
-      // Tumble-only slowdown (requested): affect ONLY tumble "in" symbol drops.
-      // 1.0 = unchanged, 1.5 = ~50% slower (longer), 2.0 = ~2x slower.
-      const TUMBLE_DROP_TIME_MULTIPLIER = 1.5;
-      const DROP_STAGGER_MS = (gameData?.tumbleDropStaggerMs ?? (MANUAL_STAGGER_MS * 0.25));
-      const computedStartDelay = (gameData?.tumbleDropStartDelayMs ?? 0) + (DROP_STAGGER_MS * sequenceIndex);
-      const skipPreHop = !!(gameData?.tumbleSkipPreHop);
-      const symbolHop = (gameData?.winUpHeight ?? 0) * 0.5;
-
-      const preHopDuration = (gameData?.winUpDuration ?? 1000) * TUMBLE_DROP_TIME_MULTIPLIER;
-      const dropDurationBase = isOverlap
-        ? ((gameData?.dropDuration ?? 1000) * 1.2)
-        : ((gameData?.dropDuration ?? 1000) * 0.9);
-      const dropDuration = dropDurationBase * TUMBLE_DROP_TIME_MULTIPLIER;
-      const tweensArr: any[] = [];
-      const handleLanding = () => {
-        // try {
-        //   const mag = (gameData as any)?.dropShakeMagnitude ?? 0;
-        //   const dur = Math.max(50, (gameData as any)?.dropShakeDurationMs ?? 120);
-        //   if (mag > 0) {
-        //     const axis = (gameData as any)?.dropShakeAxis ?? 'both';
-        //     if (!gameStateManager.isTurbo) simulateCameraShake(self, getObjectsToShake(self), dur, mag, axis);
-        //   }
-        // } catch { }
-        try {
-          if (!gameData?.isTurbo && (window as any).audioManager) {
-            (window as any).audioManager.playSoundEffect(gameStateManager.isBonus ? SoundEffectType.BONUS_REEL_DROP : SoundEffectType.REEL_DROP);
-          }
-        } catch { }
-        tryPlaySparkVFXForColumn(self, col, created);
-        resolve();
-      };
-      if (!skipPreHop) {
-        tweensArr.push({
-          delay: computedStartDelay,
-          y: `-= ${symbolHop}`,
-          duration: preHopDuration,
-          ease: Phaser.Math.Easing.Circular.Out,
-        });
-        tweensArr.push({
-          y: targetY,
-          duration: dropDuration,
-          ease: Phaser.Math.Easing.Linear,
-          onComplete: handleLanding
-        });
-      } else {
-        tweensArr.push({
-          delay: computedStartDelay,
-          y: targetY,
-          duration: dropDuration,
-          ease: Phaser.Math.Easing.Linear,
-          onComplete: handleLanding
-        });
-      }
-      self.scene.tweens.chain({ targets: created, tweens: tweensArr });
-    } catch { resolve(); }
-  });
-}
-
 async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
   self.dropSparkPlayedColumns.clear();
-  const outs = (tumble?.symbols?.out || []) as Array<{ symbol: number; count: number }>;
+  // Default tumble posture: during tumble/drop motion, scatters sit under the reel frame.
+  try { setAllScatterSymbolsLayerRelativeToFrame(self, 'below_reel_frame'); } catch { }
+  // NOTE: `out` entries can include a per-symbol win amount coming from the game API / scenarios.
+  const outs = (tumble?.symbols?.out || []) as Array<{ symbol: number; count: number; win?: number }>;
   const ins = (tumble?.symbols?.in || []) as number[][]; // per real column (x index)
+  let symbolHitSfxSelection: { type: SoundEffectType; priority: number } | undefined = undefined;
 
   if (!self.symbols || !self.symbols.length || !self.symbols[0] || !self.symbols[0].length) {
     console.warn('[Symbols] applySingleTumble: Symbols grid not initialized');
@@ -4604,6 +4940,61 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
   const gameData = self.scene?.gameData;
   const currentSymbolData = self.currentSymbolData;
   const MANUAL_STAGGER_MS: number = (gameData?.tumbleStaggerMs ?? 100);
+
+  // Optional delay (ms) before spawning the hit effect when matched symbols start animating.
+  // Can be configured per-tumble or globally on gameData.
+  const HIT_EFFECT_DELAY_MS: number = 0;
+
+  const spawnHitEffect = (x: number, y: number, delayMs: number = HIT_EFFECT_DELAY_MS) => {
+    try {
+      const d = Math.max(0, Number(delayMs) || 0);
+      const run = () => {
+        try {
+          if (!ensureSpineFactory(self.scene, '[Symbols] spawnHitEffect')) return;
+          const effect = self.scene.add.spine(x, y, 'hit_effect', 'hit_effect-atlas');
+          try { effect.setOrigin(0.5, 0.5); } catch { }
+          try { effect.setScale(0.6); } catch { }
+          try { self.moveSymbolToFront(effect); } catch { }
+
+          let effectDurationMs = 500;
+          const onEffectDone = () => {
+            try { effect.destroy(); } catch { }
+          };
+
+          try {
+            const animationName = effect.skeleton?.data?.animations?.[0]?.name || 'animation';
+            let entry: any = null;
+            if (effect.animationState?.setAnimation) {
+              entry = effect.animationState.setAnimation(0, animationName, false);
+            }
+            effectDurationMs = Math.max(100, getSpineAnimationDurationMs(effect, animationName, effectDurationMs));
+            try {
+              if (entry && (entry.setListener || 'listener' in entry)) {
+                if (typeof entry.setListener === 'function') {
+                  entry.setListener({ complete: onEffectDone, end: onEffectDone });
+                } else {
+                  entry.listener = { complete: onEffectDone, end: onEffectDone };
+                }
+              }
+            } catch { }
+            try { effect.animationState?.addListener?.({ complete: onEffectDone, end: onEffectDone } as any); } catch { }
+          } catch {
+            onEffectDone();
+            return;
+          }
+
+          // Safety in case listeners don't fire
+          self.scene.time.delayedCall(effectDurationMs + 100, () => onEffectDone());
+        } catch { }
+      };
+
+      if (d > 0) {
+        self.scene.time.delayedCall(d, run);
+      } else {
+        run();
+      }
+    } catch { }
+  };
 
   // Build / reuse a removal mask per cell
   // removeMask[col][row]
@@ -4709,7 +5100,7 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
     }
   }
 
-  // Debug: per-column removal vs incoming (gated behind debug flag)
+  // Debug: per-column removal vs incoming
   if (DEBUG_SYMBOLS_TUMBLES) {
     try {
       const removedPerCol: number[] = Array.from({ length: numCols }, () => 0);
@@ -4742,250 +5133,261 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
 
   // Animate removal: for high-count sugar symbols (1..9), play SW_Win before destroy; otherwise fade out
   const removalPromises: Promise<void>[] = [];
-  const STAGGER_MS = 50; // match drop sequence stagger (shortened)
 
   try { self.showWinningOverlay(); } catch { }
 
   // Track unique winning symbols and their positions for win amount popup
-  const uniqueWinningSymbols = new Map<number, Array<{ x: number; y: number; isEdge: boolean }>>();
-
-  const trackWinningSymbolPosition = (symbolValue: number, x: number, y: number, col: number, row: number) => {
-    try {
-      const isEdge = col === 0 || col === numCols - 1 || row === 0 || row === numRows - 1;
-      if (!uniqueWinningSymbols.has(symbolValue)) {
-        uniqueWinningSymbols.set(symbolValue, []);
-      }
-      uniqueWinningSymbols.get(symbolValue)!.push({ x, y, isEdge });
-    } catch { }
-  };
-
-  const clearSymbolSlot = (col: number, row: number) => {
-    self.symbols[col][row] = null as any;
-    if (self.currentSymbolData && self.currentSymbolData[row]) {
-      (self.currentSymbolData[row] as any)[col] = null;
-    }
-  };
-
-  const destroySymbolSafe = (obj: any) => {
-    try { self.scene.tweens.killTweensOf(obj); } catch { }
-    try { obj.destroy(); } catch { }
-  };
-
-  const playFallbackTweenOnSymbol = (obj: any, col: number, row: number, vNum: number, resolve: () => void) => {
-    const x = obj.x;
-    const y = obj.y;
-
-    try { self.moveSymbolToFront(obj); } catch { }
-    try { scheduleScaleUp(self, obj, 100, 500, 1.1); } catch { }
-    try { scheduleScaleUp(self, obj, 700, 200, 0); } catch { }
-    try {
-      scheduleTranslate(self, obj, 400, 500, 0, -3, false, () => {
-        destroySymbolSafe(obj);
-        clearSymbolSlot(col, row);
-        trackWinningSymbolPosition(vNum, x, y, col, row);
-        resolve();
-      });
-    } catch {
-      destroySymbolSafe(obj);
-      clearSymbolSlot(col, row);
-      resolve();
-    }
-  };
-
-  const playSpineWinEffect = (obj: any, col: number, row: number, vNum: number, resolve: () => void) => {
-    const isHighPaying = vNum >= 1 && vNum <= 5;
-    const spineKey = `Symbol_${isHighPaying ? 'HP' : 'LP'}_WF`;
-    const spineAtlasKey = `${spineKey}-atlas`;
-    const x = obj.x;
-    const y = obj.y;
-
-    try {
-      const fx = acquireSpineFromPool(self, spineKey, spineAtlasKey);
-      if (!fx) {
-        playFallbackTweenOnSymbol(obj, col, row, vNum, resolve);
-        return;
-      }
-
-      let animationCanPlay = false;
-      let animationDuration = 1000;
-      let completed = false;
-
-      try {
-        fx.setPosition(x, y);
-        fx.setVisible(true);
-        fx.setActive(true);
-        fx.setOrigin(0.5, 0.5);
-      } catch { }
-
-      try {
-        fx.setScale(self.getSpineSymbolScale(vNum));
-      } catch { }
-
-      try {
-        const animationName = isHighPaying ? `symbol${vNum}_WF_win` : `symbol${vNum}_WF`;
-        console.log('[Symbols] Playing animation:', animationName);
-        if (fx.animationState && fx.animationState.setAnimation) {
-          const entry: any = fx.animationState.setAnimation(0, animationName, false);
-          animationCanPlay = !!entry;
+  const uniqueWinningSymbols = new Map<number, Array<{ x: number; y: number; row?: number; isEdge: boolean }>>();
+  for (let col = 0; col < numCols; col++) {
+    for (let row = 0; row < numRows; row++) {
+      if (removeMask[col][row]) {
+        const obj = self.symbols[col][row];
+        if (obj) {
+          // Select a single "hit" SFX for the tumble step synchronously.
+          // (Don't do this only inside Promise executors; TypeScript may treat it as async and infer unreachable usage later.)
           try {
-            fx.animationState.timeScale = gameData?.isTurbo
-              ? self.getSymbolWinTimeScale(vNum) * TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER
-              : self.getSymbolWinTimeScale(vNum);
-          } catch { }
-          try {
-            const dur = fx.skeleton?.data?.findAnimation?.(animationName)?.duration;
-            animationDuration = (typeof dur === 'number' ? dur : 0.798) * 1000 * (fx.animationState.timeScale || 1);
-          } catch {
-            animationDuration = 1000 * (fx.animationState.timeScale || 1);
-          }
-
-          const onDone = () => {
-            console.log('[Symbols] Animation complete (track/state listener)');
-            if (completed) return; completed = true;
-            try { releaseSpineToPool(self, fx); } catch { }
-            resolve();
-          };
-
-          try {
-            if (entry && (entry.setListener || 'listener' in entry)) {
-              if (typeof entry.setListener === 'function') {
-                entry.setListener({ complete: onDone, end: onDone });
-              } else {
-                (entry as any).listener = { complete: onDone, end: onDone };
+            const value = self.currentSymbolData?.[row]?.[col];
+            const vNum = Number(value);
+            const sfxTypeCandidate = resolveSymbolHitSfx(vNum);
+            if (sfxTypeCandidate !== null) {
+              const candidatePriority = Number.isFinite(vNum) ? vNum : Number.POSITIVE_INFINITY;
+              if (Number.isFinite(candidatePriority)) {
+                if (!symbolHitSfxSelection || candidatePriority < symbolHitSfxSelection.priority) {
+                  symbolHitSfxSelection = { type: sfxTypeCandidate, priority: candidatePriority };
+                }
               }
             }
           } catch { }
-          try {
-            if (fx.animationState && fx.animationState.addListener) {
-              fx.animationState.addListener({ complete: onDone, end: onDone } as any);
+
+          removalPromises.push(new Promise<void>((resolve) => {
+            try {
+              const value = self.currentSymbolData?.[row]?.[col];
+              const vNum = Number(value);
+              const x = obj.x;
+              const y = obj.y;
+
+              // Record positions for win amount popup for all valid symbols (including image-only)
+              if (Number.isFinite(vNum)) {
+                try {
+                  const isEdge = col === 0 || col === numCols - 1 || row === 0 || row === numRows - 1;
+                  if (!uniqueWinningSymbols.has(vNum)) {
+                    uniqueWinningSymbols.set(vNum, []);
+                  }
+                  uniqueWinningSymbols.get(vNum)!.push({ x, y, row, isEdge });
+                } catch { }
+              }
+
+              // Replace fade with Spine effect for matched symbols
+              const isIndex1to9 = Number.isFinite(vNum) && vNum >= 1 && vNum <= 9;
+              if (isIndex1to9) {
+                // Choose effect by index range
+                // const spineKey = (vNum >= 1 && vNum <= 5) ? 'Symbol_HP_256' : 'Symbol_LP_256';
+                // Use the same spine keys that are loaded in AssetConfig (symbol{n}_spine)
+                const spineKey = `symbol${vNum}_spine`;
+                const spineAtlasKey = `${spineKey}-atlas`;
+
+                // Remove the matched symbol immediately; effect will play at its position
+                try { self.scene.tweens.killTweensOf(obj); } catch { }
+                try { obj.destroy(); } catch { }
+                self.symbols[col][row] = null as any;
+                if (self.currentSymbolData && self.currentSymbolData[row]) {
+                  (self.currentSymbolData[row] as any)[col] = null;
+                }
+
+                // Unified resolver to avoid double-complete
+                let completed = false;
+                const finish = () => { if (completed) return; completed = true; resolve(); };
+
+                // PNG fallback helper when Spine create/anim fails
+                const fallbackToPng = () => {
+                  try {
+                    const durationMs = 600;
+                    const animationDurationRatio = 0.5;
+                    // This sprite is a short-lived FX element; skip idle tweens so they don't fight the win-scale tween.
+                    const png = createPngSymbol(self, vNum, x, y, 1, false);
+                    try { self.container?.add?.(png); } catch { }
+                    try { self.moveSymbolToFront(png); } catch { }
+                    // Trigger the hit effect at the start of the matched-symbol animation (optionally delayed).
+                    spawnHitEffect(x, y);
+                    try { scheduleScaleUp(self, png, 20, durationMs * animationDurationRatio, 1.2); } catch { }
+                    try { scheduleTranslate(self, png, 20, durationMs * animationDurationRatio, 0, -4); } catch { }
+                    self.scene.time.delayedCall(durationMs, () => {
+                      try { png.destroy(); } catch { }
+                      finish();
+                    });
+                  } catch {
+                    finish();
+                  }
+                };
+
+                try {
+                  if (!ensureSpineFactory(self.scene, '[Symbols] playWinLineFx')) throw new Error('Spine factory unavailable');
+                  const fx = self.scene.add.spine(x, y, spineKey, spineAtlasKey);
+                  try { fx.setOrigin(0.5, 0.5); } catch { }
+                  // Fit effect to symbol box for consistent sizing
+                  try {
+                    fx.setScale(self.getSpineSymbolScale(vNum));
+                    // fitSpineToSymbolBox(self, fx); 
+                  } catch { }
+
+                  let animationDuration = 1000;
+                  try {
+                    // High-paying symbols (<=5) have explicit win animations; low-paying reuse idle/wiggle
+                    const animationName = `Symbol${vNum}_SD_win`;
+                    if (fx.animationState && fx.animationState.setAnimation) {
+                      // Set animation and attach listener to TrackEntry if possible
+                      const entry: any = fx.animationState.setAnimation(0, animationName, false);
+                      // Trigger the hit effect at the start of the matched-symbol animation (optionally delayed).
+                      spawnHitEffect(x, y);
+                      // Apply configured time scale (use self scope)
+                      try { fx.animationState.timeScale = self.scene.gameData.isTurbo ? self.getSymbolWinTimeScale(vNum) * TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : self.getSymbolWinTimeScale(vNum); } catch { }
+                      // Resolve duration from skeleton data
+                      try {
+                        const dur = fx.skeleton?.data?.findAnimation?.(animationName)?.duration;
+                        animationDuration = (typeof dur === 'number' ? dur : 0.798) * 1000 * (fx.animationState.timeScale || 1);
+                      } catch {
+                        animationDuration = 1000 * (fx.animationState.timeScale || 1);
+                      }
+                      // Unified completion handler
+                      const onDone = () => {
+                        console.log('[Symbols] Animation complete (track/state listener)');
+                          try { fx.destroy(); } catch { }
+                        finish();
+                      };
+                      // Prefer TrackEntry listener if available
+                      try {
+                        if (entry && (entry.setListener || 'listener' in entry)) {
+                          if (typeof entry.setListener === 'function') {
+                            entry.setListener({ complete: onDone, end: onDone });
+                          } else {
+                            entry.listener = { complete: onDone, end: onDone };
+                          }
+                        }
+                      } catch { }
+                      // Fallback: state-level listener
+                      try {
+                        if (fx.animationState && fx.animationState.addListener) {
+                          fx.animationState.addListener({ complete: onDone, end: onDone } as any);
+                        }
+                      } catch {
+                        console.warn('[Symbols] Failed to animate symbols using spine animation');
+                      }
+                    } else {
+                      console.warn('[Symbols] Spine animationState missing, falling back to PNG');
+                      try { fx.destroy(); } catch { }
+                      fallbackToPng();
+                      return;
+                    }
+
+                    try { self.moveSymbolToFront(fx); } catch { }
+                    try { scheduleScaleUp(self, fx, 20, 200, 1.05); } catch { }
+                    try { scheduleTranslate(self, fx, 20, 200, 0, -3); } catch { }
+                  } catch {
+                    try { fx.destroy(); } catch { }
+                    fallbackToPng();
+                    return;
+                  }
+
+                  console.log('[Symbols] Animation duration:', animationDuration);
+                  // Safety timeout in case Spine complete event does not fire
+                  self.scene.time.delayedCall(Math.max(animationDuration, self.scene.gameData.winUpDuration + animationDuration), () => {
+                    if (completed) return; completed = true;
+                    try { fx.destroy(); } catch { }
+                    resolve();
+                  });
+                } catch {
+                  // Fallback to PNG if spine creation fails
+                  fallbackToPng();
+                }
+              } else {
+                // Non-sugar or unsupported index: soften the removal but still give a pop.
+                try { self.scene.tweens.killTweensOf(obj); } catch { }
+                // Trigger the hit effect at the start of the matched-symbol animation (optionally delayed).
+                spawnHitEffect(x, y);
+                try { scheduleScaleUp(self, obj, 20, 200, 1.5); } catch { }
+                try { scheduleTranslate(self, obj, 20, 200, 0, -10); } catch { }
+                console.log('[Symbols] Animation complete (tween fallback)');
+              }
+
+            } catch {
+              try { obj.destroy(); } catch { }
+              self.symbols[col][row] = null as any;
+              if (self.currentSymbolData && self.currentSymbolData[row]) {
+                (self.currentSymbolData[row] as any)[col] = null;
+              }
+              console.log('[Symbols] Animation complete (fallback)');
+              resolve();
             }
+          }));
+        } else {
+          // Even if the display object is missing, still play the hit effect for this matched cell.
+          try {
+            const symbolTotalWidth = self.displayWidth + self.horizontalSpacing;
+            const symbolTotalHeight = self.displayHeight + self.verticalSpacing;
+            const startX = self.slotX - self.totalGridWidth * 0.5;
+            const startY = self.slotY - self.totalGridHeight * 0.5;
+            const x = startX + col * symbolTotalWidth + symbolTotalWidth * 0.5;
+            const y = startY + row * symbolTotalHeight + symbolTotalHeight * 0.5;
+            spawnHitEffect(x, y);
           } catch { }
+          self.symbols[col][row] = null as any;
+          if (self.currentSymbolData && self.currentSymbolData[row]) {
+            (self.currentSymbolData[row] as any)[col] = null;
+          }
+          console.log('[Symbols] Animation complete (no object)');
         }
-      } catch {
-        animationCanPlay = false;
-      }
-
-      if (!animationCanPlay) {
-        try { releaseSpineToPool(self, fx); } catch { }
-        playFallbackTweenOnSymbol(obj, col, row, vNum, resolve);
-        return;
-      }
-
-      destroySymbolSafe(obj);
-      clearSymbolSlot(col, row);
-
-      try {
-        const audio = (window as any)?.audioManager;
-        if (audio && typeof audio.playSingleInstanceSoundEffect === 'function') {
-          const delay = 700 / (gameStateManager.isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
-          self.scene.time.delayedCall(delay, () => {
-            audio.playSingleInstanceSoundEffect(gameStateManager.isBonus ? SoundEffectType.BONUS_EXPLOSION : SoundEffectType.EXPLOSION);
-            console.log('[Symbols] Playing explosion SFX');
-          });
-        }
-      } catch { }
-
-      try { self.moveSymbolToFront(fx); } catch { }
-      try { scheduleScaleUp(self, fx, 20, 200, 1.05); } catch { }
-      try { scheduleTranslate(self, fx, 20, 200, 0, -3); } catch { }
-      trackWinningSymbolPosition(vNum, x, y, col, row);
-
-      console.log('[Symbols] Animation duration:', animationDuration);
-      self.scene.time.delayedCall(Math.max(animationDuration, (gameData?.winUpDuration ?? 0) + animationDuration), () => {
-        if (completed) return; completed = true;
-        try { releaseSpineToPool(self, fx); } catch { }
-        resolve();
-      });
-    } catch {
-      playFallbackTweenOnSymbol(obj, col, row, vNum, resolve);
-    }
-  };
-
-  const playFadeOutRemoval = (obj: any, col: number, row: number, resolve: () => void) => {
-    try { self.scene.tweens.killTweensOf(obj); } catch { }
-    self.scene.tweens.add({
-      targets: obj,
-      alpha: 0,
-      duration: gameData?.winUpDuration ?? 1000,
-      ease: Phaser.Math.Easing.Cubic.In,
-      onComplete: () => {
-        try { obj.destroy(); } catch { }
-        clearSymbolSlot(col, row);
-        resolve();
-      }
-    });
-  };
-
-  const createRemovalPromise = (col: number, row: number, obj: any) => new Promise<void>((resolve) => {
-    try {
-      const value = currentSymbolData?.[row]?.[col];
-      const vNum = Number(value);
-      const isIndex1to9 = Number.isFinite(vNum) && vNum >= 1 && vNum <= 9;
-
-      if (isIndex1to9) {
-        playSpineWinEffect(obj, col, row, vNum, resolve);
-      } else {
-        playFadeOutRemoval(obj, col, row, resolve);
-      }
-    } catch {
-      try { obj.destroy(); } catch { }
-      clearSymbolSlot(col, row);
-      console.log('[Symbols] Animation complete (fallback)');
-      resolve();
-    }
-  });
-
-  for (let col = 0; col < numCols; col++) {
-    for (let row = 0; row < numRows; row++) {
-      if (!removeMask[col][row]) continue;
-      const obj = self.symbols[col][row];
-      if (obj) {
-        removalPromises.push(createRemovalPromise(col, row, obj));
-      } else {
-        clearSymbolSlot(col, row);
-        console.log('[Symbols] Animation complete (no object)');
       }
     }
   }
 
   // Schedule win amount popup once per unique winning symbol, preferring non-edge positions
-  // Pre-build win amount map for O(1) lookup instead of O(n*m) nested loops
-  const winAmountBySymbol = new Map<number, number>();
-  const tumbles = gameStateManager.isBonus
-    ? self.currentSpinData?.slot?.freespin?.items[self.scene.gameAPI.getCurrentFreeSpinIndex() - 1]?.tumble
-    : self.currentSpinData?.slot?.tumbles;
-  if (tumbles && Array.isArray(tumbles.items)) {
-    for (const tumbleItem of tumbles.items) {
-      if (tumbleItem.symbols?.out) {
-        for (const out of tumbleItem.symbols.out) {
-          if (typeof out.symbol === 'number' && typeof out.win === 'number') {
-            winAmountBySymbol.set(out.symbol, out.win);
-          }
-        }
-      }
-    }
-  }
-
+  const usedRows = new Set<number>();
   for (const [symbolValue, positions] of uniqueWinningSymbols.entries()) {
     try {
       // Prefer non-edge positions, fallback to edge positions
       const nonEdgePositions = positions.filter(p => !p.isEdge);
       const positionsToChooseFrom = nonEdgePositions.length > 0 ? nonEdgePositions : positions;
-      const randomIndex = Math.floor(Math.random() * positionsToChooseFrom.length);
-      const selectedPosition = positionsToChooseFrom[randomIndex];
 
-      // Use pre-built map for O(1) lookup
-      const displayAmount = winAmountBySymbol.get(symbolValue) || 0;
+      // Prefer a position whose row is not already used by other selections
+      const rowDistinctChoices = positionsToChooseFrom.filter(p => typeof p.row === 'number' && !usedRows.has(p.row));
+      const selectionPool = rowDistinctChoices.length > 0 ? rowDistinctChoices : positionsToChooseFrom;
 
-      const delayMs = 750 / (gameData?.isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
+      const randomIndex = Math.floor(Math.random() * selectionPool.length);
+      const selectedPosition = selectionPool[randomIndex];
+      if (typeof selectedPosition.row === 'number') {
+        usedRows.add(selectedPosition.row);
+      }
+
+      // Calculate win amount for this unique symbol for THIS tumble step only.
+      // `uniqueWinningSymbols` is derived from the current tumble's removal mask, so summing across all tumble items is incorrect here.
+      const matchingOut = outs.find(o => Number(o?.symbol) === Number(symbolValue));
+      const displayAmount = Number(matchingOut?.win ?? 0) || 0;
+
+      const delayMs = 500 / (self.scene.gameData.isTurbo ? TurboConfig.WINLINE_ANIMATION_SPEED_MULTIPLIER : 1);
       const durationMs = 1000;
       scheduleWinAmountPopup(self, selectedPosition.x, selectedPosition.y, displayAmount, delayMs, durationMs);
+    } catch { }
+  }
+
+  if (symbolHitSfxSelection) {
+    try {
+      const audio = (window as any)?.audioManager;
+      if (audio && typeof audio.playSingleInstanceSoundEffect === 'function') {
+        // symbolHitSfxSelection is an object { type, priority }; AudioManager expects the SoundEffectType key
+        audio.playSingleInstanceSoundEffect(symbolHitSfxSelection.type);
+      }
     } catch { }
   }
 
   await Promise.all(removalPromises);
 
   try { self.hideWinningOverlay(); } catch { }
+
+  // Compression phase: allow scatters to sit above the reel frame.
+  try { setAllScatterSymbolsLayerRelativeToFrame(self, 'above_reel_frame'); } catch { }
+
+  // Base stagger for tumble compression (existing symbols moving down)
+  const STAGGER_MS = 50;
 
   // Compress each column downwards and compute target indices for remaining symbols
   const symbolTotalHeight = self.displayHeight + self.verticalSpacing;
@@ -5016,22 +5418,61 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
       }
       compressPromises.push(new Promise<void>((resolve) => {
         try {
-          self.scene.tweens.add({
-            targets: obj,
-            y: targetY,
-            delay: STAGGER_MS * col * (gameData?.compressionDelayMultiplier ?? 1),
-            duration: (gameData?.dropDuration ?? 1000) / 2,
-            // ease: Phaser.Math.Easing.Bounce.Out,
-            ease: Phaser.Math.Easing.Cubic.Out,
-            onComplete: () => resolve(),
-          });
+          const compressionDelay = STAGGER_MS * col * (self.scene?.gameData?.compressionDelayMultiplier ?? 1);
+          const compressionTotalMs = self.scene.gameData.dropDuration / 2;
+          
+          // Overshoot config for compression
+          const overshootPxRaw = self.scene.gameData?.compressionOvershootPx;
+          const overshootPx = Math.max(
+            0,
+            typeof overshootPxRaw === 'number'
+              ? overshootPxRaw
+              // Bouncy default
+              : Math.min(32, Math.max(10, symbolTotalHeight * 0.15)),
+          );
+          const fallFracRaw = self.scene.gameData?.compressionOvershootFallFraction;
+          const fallFrac = (typeof fallFracRaw === 'number' && fallFracRaw > 0 && fallFracRaw < 1) ? fallFracRaw : 0.65;
+          const fallMs = Math.max(1, Math.floor(compressionTotalMs * fallFrac));
+          const settleMs = Math.max(1, Math.floor(compressionTotalMs - fallMs));
+          const overshootY = targetY + overshootPx;
+          const doOvershoot = overshootPx > 0 && settleMs > 0;
+
+          if (doOvershoot) {
+            // Use chain for overshoot: fall to overshoot, then settle to target
+            const tweensArr: any[] = [
+              {
+                delay: compressionDelay,
+                y: overshootY,
+                duration: fallMs,
+                ease: Phaser.Math.Easing.Quadratic.In,
+              },
+              {
+                y: targetY,
+                duration: settleMs,
+                ease: Phaser.Math.Easing.Back.Out,
+                onStart: () => playReelDropSfxIfAllowed(self),
+                onComplete: () => resolve(),
+              },
+            ];
+            self.scene.tweens.chain({ targets: obj, tweens: tweensArr });
+          } else {
+            // No overshoot: simple tween to target
+            self.scene.tweens.add({
+              targets: obj,
+              y: targetY,
+              delay: compressionDelay,
+              duration: compressionTotalMs,
+              ease: Phaser.Math.Easing.Cubic.Out,
+              onComplete: () => resolve(),
+            });
+          }
         } catch { resolve(); }
       }));
     });
   }
 
   // Overlap-aware drop scheduling: if enabled, start drops during compression; otherwise, drop after compression completes
-  const overlapDrops = !!(gameData?.tumbleOverlapDropsDuringCompression);
+  const overlapDrops = !!(self.scene?.gameData?.tumbleOverlapDropsDuringCompression);
   const dropPromises: Promise<void>[] = [];
   const symbolTotalWidth = self.displayWidth + self.horizontalSpacing;
   const startX = self.slotX - self.totalGridWidth * 0.5;
@@ -5042,7 +5483,23 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
     self.symbols = newGrid;
     // Rebuild currentSymbolData to reflect compressed positions now
     try {
-      rebuildCurrentSymbolDataAfterCompression(self, numCols, numRows);
+      if (self.currentSymbolData) {
+        const rebuilt: (number | null)[][] = Array.from({ length: numRows }, () => Array<number | null>(numCols).fill(null));
+        for (let col = 0; col < numCols; col++) {
+          const keptValues: number[] = [];
+          for (let row = 0; row < numRows; row++) {
+            const v = self.currentSymbolData[row]?.[col];
+            if (typeof v === 'number') keptValues.push(v);
+          }
+          const bottomStart = numRows - keptValues.length;
+          for (let i = 0; i < keptValues.length; i++) {
+            const newRow = bottomStart + i;
+            rebuilt[newRow][col] = keptValues[i];
+          }
+        }
+        const finalized: number[][] = rebuilt.map(row => row.map(v => (typeof v === 'number' ? v : 0)));
+        self.currentSymbolData = finalized;
+      }
     } catch { }
 
     // Start drops now, while compression tweens are in-flight
@@ -5056,7 +5513,9 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
         else break;
       }
       const spawnCount = Math.min(emptyCount, incoming.length);
-      console.log(`[Symbols] (overlap) Column ${col}: empty=${emptyCount}, incoming=${incoming.length}, spawning=${spawnCount}`);
+      if (isSymbolsVerboseLoggingEnabled()) {
+        console.log(`[Symbols] (overlap) Column ${col}: empty=${emptyCount}, incoming=${incoming.length}, spawning=${spawnCount}`);
+      }
       for (let j = 0; j < spawnCount; j++) {
         const targetRow = Math.max(0, emptyCount - 1 - j);
         const targetY = startY + targetRow * symbolTotalHeight + symbolTotalHeight * 0.5;
@@ -5067,6 +5526,7 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
         const topOfGridCenterY = startY + symbolTotalHeight * 0.5;
         const startYPos = topOfGridCenterY - self.scene.scale.height + (j * symbolTotalHeight);
         const created: any = createSpineOrPngSymbol(self, value, xPos, startYPos, 1);
+        try { if (value === 0) setScatterObjectLayerRelativeToFrame(self, created, 'below_reel_frame'); } catch { }
 
         self.symbols[col][targetRow] = created;
         if (self.currentSymbolData && self.currentSymbolData[targetRow]) {
@@ -5075,7 +5535,59 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
 
         try { playDropAnimationIfAvailable(created); } catch { }
 
-        dropPromises.push(createDropPromise(self, created, col, targetY, sequenceIndex, MANUAL_STAGGER_MS, true, gameData));
+        const DROP_STAGGER_MS = (self.scene?.gameData?.tumbleDropStaggerMs ?? (MANUAL_STAGGER_MS * 0.25));
+        const symbolHop = self.scene.gameData.winUpHeight * 0.5;
+        dropPromises.push(new Promise<void>((resolve) => {
+          try {
+            const computedStartDelay = (self.scene?.gameData?.tumbleDropStartDelayMs ?? 0) + (DROP_STAGGER_MS * sequenceIndex);
+            const skipPreHop = !!(self.scene?.gameData?.tumbleSkipPreHop);
+            const tweensArr: any[] = [];
+
+            // Overshoot config (tumble-specific overrides supported)
+            const dropTotalMs = (self.scene.gameData.dropDuration * 1.2);
+            const overshootPxRaw = (self.scene.gameData as any)?.tumbleDropOvershootPx ?? (self.scene.gameData as any)?.dropOvershootPx;
+            const overshootPx = Math.max(
+              0,
+              typeof overshootPxRaw === 'number'
+                ? overshootPxRaw
+                // Bouncy default
+                : Math.min(32, Math.max(10, symbolTotalHeight * 0.2)),
+            );
+            const fallFracRaw = (self.scene.gameData as any)?.tumbleDropOvershootFallFraction ?? (self.scene.gameData as any)?.dropOvershootFallFraction;
+            const fallFrac = (typeof fallFracRaw === 'number' && fallFracRaw > 0 && fallFracRaw < 1) ? fallFracRaw : 0.7;
+            const fallMs = Math.max(1, Math.floor(dropTotalMs * fallFrac));
+            const settleMs = Math.max(1, Math.floor(dropTotalMs - fallMs));
+            const overshootY = targetY + overshootPx;
+            const doOvershoot = overshootPx > 0 && settleMs > 0;
+
+            const handleLanding = () => {
+              try { playIdleAnimationIfAvailable(created); } catch { }
+              resolve();
+            };
+            if (!skipPreHop) {
+              tweensArr.push({
+                delay: computedStartDelay,
+                y: `-= ${symbolHop}`,
+                duration: self.scene.gameData.winUpDuration,
+                ease: Phaser.Math.Easing.Circular.Out,
+              });
+              if (doOvershoot) {
+                tweensArr.push({ y: overshootY, duration: fallMs, ease: Phaser.Math.Easing.Quadratic.In });
+                tweensArr.push({ y: targetY, duration: settleMs, ease: Phaser.Math.Easing.Back.Out, onStart: () => playReelDropSfxIfAllowed(self), onComplete: handleLanding });
+              } else {
+                tweensArr.push({ y: targetY, duration: dropTotalMs, ease: Phaser.Math.Easing.Linear, onComplete: () => { playReelDropSfxIfAllowed(self); handleLanding(); } });
+              }
+            } else {
+              if (doOvershoot) {
+                tweensArr.push({ delay: computedStartDelay, y: overshootY, duration: fallMs, ease: Phaser.Math.Easing.Quadratic.In });
+                tweensArr.push({ y: targetY, duration: settleMs, ease: Phaser.Math.Easing.Back.Out, onStart: () => playReelDropSfxIfAllowed(self), onComplete: handleLanding });
+              } else {
+                tweensArr.push({ delay: computedStartDelay, y: targetY, duration: dropTotalMs, ease: Phaser.Math.Easing.Linear, onComplete: () => { playReelDropSfxIfAllowed(self); handleLanding(); } });
+              }
+            }
+            self.scene.tweens.chain({ targets: created, tweens: tweensArr });
+          } catch { resolve(); }
+        }));
         sequenceIndex++;
         totalSpawned++;
       }
@@ -5086,9 +5598,27 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
   } else {
     // Default behavior: wait compression, then set grid and drop
     await Promise.all(compressPromises);
+    // Drop-in phase: force scatters back under the reel frame while they tumble in.
+    try { setAllScatterSymbolsLayerRelativeToFrame(self, 'below_reel_frame'); } catch { }
     self.symbols = newGrid;
     try {
-      rebuildCurrentSymbolDataAfterCompression(self, numCols, numRows);
+      if (self.currentSymbolData) {
+        const rebuilt: (number | null)[][] = Array.from({ length: numRows }, () => Array<number | null>(numCols).fill(null));
+        for (let col = 0; col < numCols; col++) {
+          const keptValues: number[] = [];
+          for (let row = 0; row < numRows; row++) {
+            const v = self.currentSymbolData[row]?.[col];
+            if (typeof v === 'number') keptValues.push(v);
+          }
+          const bottomStart = numRows - keptValues.length;
+          for (let i = 0; i < keptValues.length; i++) {
+            const newRow = bottomStart + i;
+            rebuilt[newRow][col] = keptValues[i];
+          }
+        }
+        const finalized: number[][] = rebuilt.map(row => row.map(v => (typeof v === 'number' ? v : 0)));
+        self.currentSymbolData = finalized;
+      }
     } catch { }
 
     for (let col = 0; col < numCols; col++) {
@@ -5100,7 +5630,9 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
         else break;
       }
       const spawnCount = Math.min(emptyCount, incoming.length);
-      console.log(`[Symbols] Column ${col}: empty=${emptyCount}, incoming=${incoming.length}, spawning=${spawnCount}`);
+      if (isSymbolsVerboseLoggingEnabled()) {
+        console.log(`[Symbols] Column ${col}: empty=${emptyCount}, incoming=${incoming.length}, spawning=${spawnCount}`);
+      }
       for (let j = 0; j < spawnCount; j++) {
         const targetRow = Math.max(0, emptyCount - 1 - j);
         const targetY = startY + targetRow * symbolTotalHeight + symbolTotalHeight * 0.5;
@@ -5110,18 +5642,77 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
         const topOfGridCenterY = startY + symbolTotalHeight * 0.5;
         const startYPos = topOfGridCenterY - self.scene.scale.height + (j * symbolTotalHeight);
         const created: any = createSpineOrPngSymbol(self, value, xPos, startYPos, 1);
+        try { if (value === 0) setScatterObjectLayerRelativeToFrame(self, created, 'below_reel_frame'); } catch { }
         self.symbols[col][targetRow] = created;
         if (self.currentSymbolData && self.currentSymbolData[targetRow]) {
           (self.currentSymbolData[targetRow] as any)[col] = value;
         }
         try { playDropAnimationIfAvailable(created); } catch { }
-        dropPromises.push(createDropPromise(self, created, col, targetY, sequenceIndex, MANUAL_STAGGER_MS, false, gameData));
+        const DROP_STAGGER_MS = (self.scene?.gameData?.tumbleDropStaggerMs ?? (MANUAL_STAGGER_MS * 0.25));
+        const symbolHop = self.scene.gameData.winUpHeight * 0.5;
+        dropPromises.push(new Promise<void>((resolve) => {
+          try {
+            const computedStartDelay = (self.scene?.gameData?.tumbleDropStartDelayMs ?? 0) + (DROP_STAGGER_MS * sequenceIndex);
+            const skipPreHop = !!(self.scene?.gameData?.tumbleSkipPreHop);
+            const tweensArr: any[] = [];
+
+            // Overshoot config (tumble-specific overrides supported)
+            const dropTotalMs = (self.scene.gameData.dropDuration * 0.9);
+            const overshootPxRaw = (self.scene.gameData as any)?.tumbleDropOvershootPx ?? (self.scene.gameData as any)?.dropOvershootPx;
+            const overshootPx = Math.max(
+              0,
+              typeof overshootPxRaw === 'number'
+                ? overshootPxRaw
+                // Bouncy default
+                : Math.min(32, Math.max(10, symbolTotalHeight * 0.2)),
+            );
+            const fallFracRaw = (self.scene.gameData as any)?.tumbleDropOvershootFallFraction ?? (self.scene.gameData as any)?.dropOvershootFallFraction;
+            const fallFrac = (typeof fallFracRaw === 'number' && fallFracRaw > 0 && fallFracRaw < 1) ? fallFracRaw : 0.7;
+            const fallMs = Math.max(1, Math.floor(dropTotalMs * fallFrac));
+            const settleMs = Math.max(1, Math.floor(dropTotalMs - fallMs));
+            const overshootY = targetY + overshootPx;
+            const doOvershoot = overshootPx > 0 && settleMs > 0;
+
+            const handleLanding = () => {
+              try {
+                const mag = (self.scene.gameData as any)?.dropShakeMagnitude ?? 0;
+                const dur = Math.max(50, (self.scene.gameData as any)?.dropShakeDurationMs ?? 120);
+                if (mag > 0) {
+                  const axis = (self.scene.gameData as any)?.dropShakeAxis ?? 'both';
+                  if (!gameStateManager.isTurbo) simulateCameraShake(self, getObjectsToShake(self), dur, mag, axis);
+                }
+              } catch { }
+              try { playIdleAnimationIfAvailable(created); } catch { }
+              resolve();
+            };
+            if (!skipPreHop) {
+              tweensArr.push({ delay: computedStartDelay, y: `-= ${symbolHop}`, duration: self.scene.gameData.winUpDuration, ease: Phaser.Math.Easing.Circular.Out });
+              if (doOvershoot) {
+                tweensArr.push({ y: overshootY, duration: fallMs, ease: Phaser.Math.Easing.Quadratic.In });
+                tweensArr.push({ y: targetY, duration: settleMs, ease: Phaser.Math.Easing.Back.Out, onComplete: handleLanding });
+              } else {
+                tweensArr.push({ y: targetY, duration: dropTotalMs, ease: Phaser.Math.Easing.Linear, onComplete: handleLanding });
+              }
+            } else {
+              if (doOvershoot) {
+                tweensArr.push({ delay: computedStartDelay, y: overshootY, duration: fallMs, ease: Phaser.Math.Easing.Quadratic.In });
+                tweensArr.push({ y: targetY, duration: settleMs, ease: Phaser.Math.Easing.Back.Out, onComplete: handleLanding });
+              } else {
+                tweensArr.push({ delay: computedStartDelay, y: targetY, duration: dropTotalMs, ease: Phaser.Math.Easing.Linear, onComplete: handleLanding });
+              }
+            }
+            self.scene.tweens.chain({ targets: created, tweens: tweensArr });
+          } catch { resolve(); }
+        }));
         sequenceIndex++;
         totalSpawned++;
       }
     }
     await Promise.all(dropPromises);
   }
+
+  // Back to idle: scatters above the reel frame.
+  try { setAllScatterSymbolsLayerRelativeToFrame(self, 'above_reel_frame'); } catch { }
 
   // Debug: validate totals between outs and ins after spawn
   try {
@@ -5136,7 +5727,7 @@ async function applySingleTumble(self: Symbols, tumble: any): Promise<void> {
     }
   } catch { }
 
-  // Re-evaluate wins after each tumble drop completes (async so visuals continue)
+  // Re-evaluate wins after each tumble drop completes
   try { reevaluateWinsFromGrid(self); } catch { }
 }
 
@@ -5194,6 +5785,9 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
 
         // For symbol 0 and symbols 10–21, keep PNGs: do not replace with Spine
         if (typeof symbolValue === 'number' && (symbolValue === 0 || (symbolValue >= 10 && symbolValue <= 21))) {
+          // Still give PNG-only matches a small pop so wins feel responsive.
+          try { scheduleScaleUp(self, currentSymbol, 20, 200, 1.05); } catch { }
+          try { scheduleTranslate(self, currentSymbol, 20, 200, 0, -3); } catch { }
           continue;
         }
 
@@ -5207,6 +5801,13 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
 
         try {
           console.log(`[Symbols] Replacing sprite with Spine animation: ${spineKey} at (${grid.x}, ${grid.y})`);
+
+          // If spine isn't ready, keep the sprite and apply a small pop so the win still feels responsive.
+          if (!ensureSpineFactory(self.scene, '[Symbols] replaceSpriteWithSpine')) {
+            try { scheduleScaleUp(self, currentSymbol, 20, 200, 1.05); } catch { }
+            try { scheduleTranslate(self, currentSymbol, 20, 200, 0, -3); } catch { }
+            continue;
+          }
 
           // Remove the current sprite
           currentSymbol.destroy();
@@ -5245,11 +5846,10 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
             if (!hasPlayedWinSfx) {
               const audio = (window as any)?.audioManager;
               if (audio && typeof audio.playSoundEffect === 'function') {
-                // Use MULTI when a wildcard is present in the win, otherwise use the standard hit win SFX
-                const sfx = hasWildcardInWin ? SoundEffectType.MULTI : SoundEffectType.HIT_WIN_ALT;
+                const sfx = hasWildcardInWin ? SoundEffectType.WILD_MULTI : SoundEffectType.HIT_WIN;
                 audio.playSoundEffect(sfx);
                 hasPlayedWinSfx = true;
-                // If this spin triggered scatter, chain play scatter after the hit/multi SFX
+                // If this spin triggered scatter, chain play scatter_ka after hit/wildmulti
                 try {
                   if (gameStateManager.isScatter) {
                     // short chain delay to ensure ordering
@@ -5278,6 +5878,13 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
             if (self.container) {
               self.container.add(recreated);
             }
+            // If recreation fell back to PN,G still apply a subtle win bump.
+            try {
+              if (!(recreated as any)?.animationState) {
+                scheduleScaleUp(self, recreated, 20, 200, 2);
+                scheduleTranslate(self, recreated, 20, 200, 0, -10);
+              }
+            } catch { }
           } catch { }
         }
       }
@@ -5286,31 +5893,23 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
 }
 
 function createMultiplierSymbol(self: Symbols, value: number, x: number, y: number, alpha: number = 1): any {
-  // Multiplier symbols prefer a Spine representation with timeScale = 0 (frozen pose)
-  // to keep a rich visual while avoiding continuous animation cost. If the Spine
-  // asset or pool is not available, gracefully fall back to a PNG symbol.
-  const adjustedIndex = value - 1;
-
-  // Use the pooled multiplier frame Spine (defined in AssetConfig / symbol assets)
-  const spineKey = 'multiplier_WF';
-  const atlasKey = `${spineKey}-atlas`;
+  console.log(`[Symbols] Creating multiplier symbol: ${value}`);
 
   let spine: SpineGameObject | null = null;
   try {
-    spine = acquireSpineFromPool(self, spineKey, atlasKey);
+    spine = acquireSpineFromPool(self, Symbols.MULTIPLIER_SPINE_KEY, `${Symbols.MULTIPLIER_SPINE_KEY}-atlas`);
   } catch (e) {
     console.warn('[Symbols] Failed to acquire pooled multiplier Spine, falling back to PNG:', e);
   }
 
   // Fallback: if Spine could not be acquired/created, use the existing PNG path
   if (!spine) {
-    return createPngSymbol(self, adjustedIndex, x, y, alpha);
+    return createPngSymbol(self, value, x, y, alpha);
   }
 
   try {
-    // Configure basic transform
-    const origin = self.getSpineSymbolOrigin(adjustedIndex);
-    const scale = self.getSpineSymbolScale(adjustedIndex);
+    const origin = self.getSpineSymbolOrigin(value);
+    const scale = self.getSpineSymbolScale(value);
 
     spine.setOrigin(origin.x, origin.y);
     spine.setScale(scale);
@@ -5322,43 +5921,36 @@ function createMultiplierSymbol(self: Symbols, value: number, x: number, y: numb
       spine.setAlpha(alpha);
     } catch { }
 
-    // Tag with symbol value for any downstream logic (tumbles, effects, etc.)
-    try { (spine as any).symbolValue = adjustedIndex; } catch { }
+    try { (spine as any).symbolValue = value; } catch { }
 
-    // Ensure the multiplier Spine lives inside the main symbols container
     try {
       if (self.container && spine.parentContainer !== self.container) {
         self.container.add(spine);
       }
     } catch { }
 
-    // Set an appropriate animation for this multiplier and freeze it
     try {
       const state = spine.animationState;
       if (state) {
-        // Animation names follow the `symbol{value}_WF` convention used elsewhere
-        const animName = `symbol${adjustedIndex}_WF`;
-        try {
-          state.setAnimation(0, animName, true);
-        } catch {
-          // If specific animation is missing, fall back to the first available one
-          try {
-            const firstAnimName = spine.skeleton?.data?.animations?.[0]?.name;
-            if (firstAnimName) {
-              state.setAnimation(0, firstAnimName, true);
-            }
-          } catch { }
+        const animName = self.findMultiplierAnimationNameByIndex(spine, value);
+        const fallbackAnimName = spine.skeleton?.data?.animations?.[0]?.name;
+        const nameToPlay = animName ?? fallbackAnimName;
+
+        if (nameToPlay) {
+          state.setAnimation(0, nameToPlay, false);
         }
-        // Freeze animation playback as requested
+
         state.timeScale = 0;
       }
-    } catch { }
+    } catch {
+      console.error('[Symbols] Failed to set animation for multiplier symbol: ', value);
+    }
 
     return spine;
   } catch (configureError) {
     console.warn('[Symbols] Failed to configure multiplier Spine, falling back to PNG:', configureError);
     try { releaseSpineToPool(self, spine as any); } catch { }
-    return createPngSymbol(self, adjustedIndex, x, y, alpha);
+    return createPngSymbol(self, value, x, y, alpha);
   }
 }
 
@@ -5371,6 +5963,25 @@ async function delay(duration: number) {
     setTimeout(() => {
       resolve(true);
     }, duration);
+  });
+}
+
+/**
+ * Promise-based delay that uses Phaser's clock (scene time), so it respects scene pauses / time scaling.
+ * This is important for reel/drop sequencing: we don't want real-time JS timers to elapse while the
+ * scene/tweens are paused due to dialogs/transitions.
+ */
+function phaserDelay(scene: Phaser.Scene, durationMs: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    try {
+      if (!scene || !scene.time || durationMs <= 0) {
+        resolve();
+        return;
+      }
+      scene.time.delayedCall(durationMs, () => resolve());
+    } catch {
+      resolve();
+    }
   });
 }
 

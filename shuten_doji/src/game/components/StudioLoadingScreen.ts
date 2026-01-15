@@ -195,9 +195,9 @@ export class StudioLoadingScreen {
                 const text2 = this.scene.add.text(
                     text2X,
                     text2Y,
-                    this.options.text2.toUpperCase(), // text-transform: uppercase
+                    this.options.text2,
                     {
-                        fontFamily: 'poppins-regular',
+                        fontFamily: 'Poppins-Regular',
                         fontSize: `${fontSize}px`,
                         color: textColor,
                         fontStyle: 'normal',
@@ -400,7 +400,6 @@ export class StudioLoadingScreen {
 
     public updateProgress(progress: number): void {
         if (this.progressBarFill && this.progressBarX !== undefined && this.progressBarY !== undefined && this.progressBarWidth !== undefined && this.progressBarHeight !== undefined) {
-            // Use the stored bar coordinates
             const fillX = this.progressBarX - this.progressBarWidth * 0.5 + this.progressBarPadding;
             const fillY = this.progressBarY - this.progressBarHeight * 0.5 + this.progressBarPadding;
             const fillWidth = this.progressBarWidth - this.progressBarPadding * 2;

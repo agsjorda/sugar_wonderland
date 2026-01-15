@@ -90,7 +90,7 @@ export class CoinAnimation {
 		const coin = this.scene.physics.add.sprite(centerX, centerY, 'coin');
 		
 		// Add to physics group
-		// this.coins.add(coin);
+		this.coins?.add(coin);
 		
 		// Set up physics properties
 		coin.setBounce(0.6);
@@ -126,7 +126,7 @@ export class CoinAnimation {
 					try {
 						const audio = (window as any).audioManager as AudioManager | undefined;
 						if (audio && typeof audio.playSoundEffect === 'function') {
-							// audio.playSoundEffect(SoundEffectType.COIN_DROP);
+							audio.playSoundEffect(SoundEffectType.COIN_DROP);
 						}
 					} catch {}
 				}

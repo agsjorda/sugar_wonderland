@@ -15,28 +15,12 @@ export const ALL_SYMBOLS: number[] = [...SCATTER_SYMBOL, ...NORMAL_SYMBOLS, ...W
 export const SCATTER_MULTIPLIERS: number[] = [9, 11, 13, 15, 17, 19, 21, 23, 25, 27];
 
 // Timing Configuration
-export const DELAY_BETWEEN_SPINS: number = 2000;
+export const DELAY_BETWEEN_SPINS: number = 3000;
 // Ratio for time between column starts relative to DELAY_BETWEEN_SPINS
-export const DROP_REEL_START_INTERVAL_RATIO: number = 0;
+export const DROP_REEL_START_INTERVAL_RATIO: number = 0.25;
 // Delay before starting autoplay for free spins
 export const AUTO_SPIN_START_DELAY: number = 1000;
-export const AUTO_SPIN_WIN_DIALOG_TIMEOUT: number = 2500;
-// Delay before showing tiered win dialogs while in bonus mode (ms)
-export const BONUS_WIN_DIALOG_DELAY_MS: number = 1500;
-
-/**
- * Internal "demo mode" toggle.
- * When enabled, the game can run even if there is no API token (no token popups, no hard failures).
- *
- * Flip this to `false` to restore normal token-required API behavior.
- */
-export const DEMO_ALLOW_NO_TOKEN: boolean = true;
-
-/**
- * API-driven popups (token expired, out-of-balance, etc).
- * Kept as a derived flag so existing call sites can stay simple.
- */
-export const ENABLE_API_POPUPS: boolean = !DEMO_ALLOW_NO_TOKEN;
+export const DEFAULT_AUTO_SPIN_WIN_DIALOG_TIMEOUT: number = 2000;
 
 export const MULTIPLIER_VALUE_REFERENCE: { [key: number]: number } = {
   10: 2,
@@ -56,8 +40,106 @@ export const MULTIPLIER_VALUE_REFERENCE: { [key: number]: number } = {
   24: 500,
 };
 
-export const SCATTER_VALUE_MAPPING: { [key: number]: number } = {
-  4: 3,
-  5: 5,
-  6: 100,
-};
+// Winline Configuration
+export const WINLINES: number[][][] = [
+  [
+    [1, 1, 1, 1, 1],
+    [0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0],
+  ],
+  [
+    [0, 0, 0, 0, 0],
+    [1, 1, 1, 1, 1],
+    [0, 0, 0, 0, 0],
+  ],
+  [
+    [0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0],
+    [1, 1, 1, 1, 1],
+  ],
+  [
+    [0, 1, 1, 1, 0],
+    [1, 0, 0, 0, 1],
+    [0, 0, 0, 0, 0],
+  ],
+  [
+    [0, 0, 0, 0, 0],
+    [1, 0, 0, 0, 1],
+    [0, 1, 1, 1, 0],
+  ],
+  [
+    [0, 0, 1, 0, 0],
+    [1, 1, 0, 1, 1],
+    [0, 0, 0, 0, 0],
+  ],
+  [
+    [0, 0, 0, 0, 0],
+    [1, 1, 0, 1, 1],
+    [0, 0, 1, 0, 0],
+  ],
+  [
+    [1, 1, 0, 1, 1],
+    [0, 0, 0, 0, 0],
+    [0, 0, 1, 0, 0],
+  ],
+  [
+    [0, 0, 1, 0, 0],
+    [0, 0, 0, 0, 0],
+    [1, 1, 0, 1, 1],
+  ],
+  [
+    [1, 0, 0, 0, 1],
+    [0, 1, 0, 1, 0],
+    [0, 0, 1, 0, 0],
+  ],
+  [
+    [0, 0, 1, 0, 0],
+    [0, 1, 0, 1, 0],
+    [1, 0, 0, 0, 1],
+  ],
+  [
+    [0, 0, 0, 1, 1],
+    [0, 0, 1, 0, 0],
+    [1, 1, 0, 0, 0],
+  ],
+  [
+    [1, 1, 0, 0, 0],
+    [0, 0, 1, 0, 0],
+    [0, 0, 0, 1, 1],
+  ],
+  [
+    [0, 0, 0, 1, 0],
+    [1, 0, 1, 0, 1],
+    [0, 1, 0, 0, 0],
+  ],
+  [
+    [1, 0, 0, 0, 1],
+    [0, 0, 0, 0, 0],
+    [0, 1, 1, 1, 0],
+  ],
+  [
+    [0, 1, 0, 0, 0],
+    [1, 0, 1, 0, 1],
+    [0, 0, 0, 1, 0],
+  ],
+  [
+    [1, 0, 0, 0, 1],
+    [0, 1, 1, 1, 0],
+    [0, 0, 0, 0, 0],
+  ],
+  [
+    [0, 0, 0, 0, 0],
+    [0, 1, 1, 1, 0],
+    [1, 0, 0, 0, 1],
+  ],
+  [
+    [1, 0, 1, 0, 1],
+    [0, 1, 0, 1, 0],
+    [0, 0, 0, 0, 0],
+  ],
+  [
+    [0, 0, 0, 0, 0],
+    [0, 1, 0, 1, 0],
+    [1, 0, 1, 0, 1],
+  ],
+];

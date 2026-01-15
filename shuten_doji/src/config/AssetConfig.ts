@@ -373,6 +373,10 @@ export class AssetConfig {
 
 		return {
 			spine: {
+				'hit_effect': {
+					atlas: `${prefix}/symbols/Slash_VFX_SD/Slash_VFX_SD.atlas`,
+					json: `${prefix}/symbols/Slash_VFX_SD/Slash_VFX_SD.json`
+				},
 			}
 		};
 	}

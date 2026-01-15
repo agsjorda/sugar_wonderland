@@ -17363,7 +17363,7 @@
         }
     ],
     "animations": {
-        "mega_win": {
+        "MegaW_SD": {
             "bones": {
                 "ShutenMaster3": {
                     "rotate": [

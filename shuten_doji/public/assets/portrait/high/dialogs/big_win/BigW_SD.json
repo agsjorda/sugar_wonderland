@@ -17761,7 +17761,7 @@
         }
     ],
     "animations": {
-        "animation": {
+        "BigW_SD": {
             "bones": {
                 "bone6": {
                     "rotate": [

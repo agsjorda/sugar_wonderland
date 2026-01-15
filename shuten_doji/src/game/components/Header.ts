@@ -3,17 +3,21 @@ import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { GameEventData, gameEventManager, GameEventType, UpdateMultiplierValueEventData } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
+import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { Game } from "../scenes/Game";
 import { NumberDisplay, NumberDisplayConfig } from "./NumberDisplay";
 import { TurboConfig } from "../../config/TurboConfig";
-import { IMAGE_SHINE_PIPELINE_KEY } from "../shaders/ImageShinePipeline";
 import { GameData } from "./GameData";
+import { IMAGE_SHINE_PIPELINE_KEY } from "../shaders/ImageShinePipeline";
 
 export class Header {
+	// DEBUGGING
+	public showMultiplierWireframe: boolean = false;
+	private multiplierWireframe: Phaser.GameObjects.Graphics | null = null;
+
 	private headerContainer: Phaser.GameObjects.Container;
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
-	private logoImage?: Phaser.GameObjects.Image;
 	private winBarImage?: Phaser.GameObjects.Image;
 	private winBarBackplate?: Phaser.GameObjects.Rectangle;
 	private amountText: Phaser.GameObjects.Text;
@@ -27,29 +31,20 @@ export class Header {
 	private winBarCenterX: number = 0;
 	private yTextOffset: number = 20;
 
+	// Slightly adjusted for larger font sizes (amount +2px, label +2px)
+	private winningsLabelTextOffset: {x: number, y: number} = {x: 0, y: -14};
+	private winningsValueTextOffset: {x: number, y: number} = {x: 0, y: 8};
+	private multiplierNumberDisplayOffset: {x: number, y: number} = {x: 0, y: 0};
+
+	// Win amount text base color (spec)
+	private totalAmountTextColor: string = '#FFB837';
+	// Text outline (spec)
+	private textStrokeColor: string = '#99030A';
+	private textStrokeThickness: number = 3;
+	private logoImage: Phaser.GameObjects.Image;
+
 	private getWinningsCenterX(): number {
 		return this.winBarCenterX || this.scene?.scale?.width * 0.5 || 0;
-	}
-
-	/**
-	 * Keep the main winnings amount color in sync with the current label.
-	 * - TOTAL WIN -> green
-	 * - everything else -> white
-	 * Note: when we are showing an equation, `amountTotalText` is visible and handles the green total.
-	 */
-	private syncAmountColorToLabel(): void {
-		if (!this.amountText || !this.youWonText) {
-			return;
-		}
-
-		// When using the split equation display, keep the prefix white and let `amountTotalText` be green.
-		if (this.amountTotalText?.visible) {
-			this.amountText.setColor('#ffffff');
-			return;
-		}
-
-		const isTotalWin = this.youWonText.text === 'TOTAL WIN';
-		this.amountText.setColor(isTotalWin ? '#00ff00' : '#ffffff');
 	}
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
@@ -68,6 +63,7 @@ export class Header {
 		
 		// Create main container for all header elements
 		this.headerContainer = scene.add.container(0, 0);
+		this.headerContainer.setDepth(501); // Above idle symbols (0) but below winning symbols (600) and overlay (500)
 		
 		const screenConfig = this.screenModeManager.getScreenConfig();
 		const assetScale = this.networkManager.getAssetScale();
@@ -83,19 +79,20 @@ export class Header {
 	}
 
 	private createHeaderElements(scene: Scene, assetScale: number): void {
-		// Add win bar first, then explicitly place the logo above it (Container render order matters)
-		const winBarBonusWidthMultiplier = 0.5;
-		const winBarBonusHeightMultiplier = 0.16;
-		const winBarX = scene.scale.width * winBarBonusWidthMultiplier;
-		const winBarY = scene.scale.height * winBarBonusHeightMultiplier;
+		// Match shuten_doji_old layout ratios/offsets
+		const winBarWidthRatio = 0.5;
+		const winBarHeightRatio = 0.16;
+		const winBarX = scene.scale.width * winBarWidthRatio;
+		const winBarY = scene.scale.height * winBarHeightRatio;
 		this.winBarCenterX = winBarX;
+
+		// Add win bar first, then place the logo above it (container render order matters)
 		this.createWinBar(scene, winBarX, winBarY, assetScale);
 		this.createWinBarText(scene, winBarX, winBarY + this.yTextOffset);
-		// Create rectangle background
 		this.createRectangle(scene, winBarX, winBarY);
-
-		if(this.winBarBackplate)
+		if (this.winBarBackplate) {
 			this.headerContainer.sendToBack(this.winBarBackplate);
+		}
 
 		// Add logo and ensure it's above the win bar in the container's display list
 		this.createLogoImage(scene, assetScale);
@@ -104,45 +101,32 @@ export class Header {
 		}
 
 		// Add multiplier bar
-		const multiplierBarWidthMultiplier = 0.85;
-		const multiplierBarHeightMultiplier = 0.18;
-		const multiplierBarX = scene.scale.width * multiplierBarWidthMultiplier;
-		const multiplierBarY = scene.scale.height * multiplierBarHeightMultiplier;
+		const multiplierBarWidthRatio = 0.85;
+		const multiplierBarHeightRatio = 0.18;
+		const multiplierBarX = scene.scale.width * multiplierBarWidthRatio;
+		const multiplierBarY = scene.scale.height * multiplierBarHeightRatio;
 		this.createMultiplierDisplay(scene, multiplierBarX, multiplierBarY);
-	}
-
-	private createRectangle(scene: Scene, x: number, y: number): void {
-		const rectangleWidth = scene.scale.width * 0.7;
-		const rectangleHeight = scene.scale.height * 0.0675;
-		const xOffset = scene.scale.width * 0.25;
-		const yOffset = 20;
-		
-		this.winBarBackplate = scene.add.rectangle(
-			x - xOffset,
-			y + yOffset,
-			rectangleWidth,
-			rectangleHeight,
-			0x777777,
-			0.5
-		)
-		.setOrigin(0, 0.5)
-		.setDepth(1);
-		
-		this.headerContainer.add(this.winBarBackplate);
 	}
 
 	private createMultiplierBar(scene: Scene, x: number, y: number, assetScale: number): void {
 		const multiplierBar = scene.add.image(x, y, 'multiplier_bar')
 		.setOrigin(0.5, 0.5)
 		.setScale(assetScale * 1.2)
-		.setDepth(10);
+		.setDepth(300); // Above idle symbols (0) but below winning symbols (600) and overlay (500)
 		this.headerContainer.add(multiplierBar);
 	}
 
 	private createMultiplierDisplay(scene: Scene, x: number, y: number): void {
+		const displayX = x + this.multiplierNumberDisplayOffset.x;
+		const displayY = y + this.multiplierNumberDisplayOffset.y;
+
+		if(this.showMultiplierWireframe) {
+			this.multiplierWireframe = this.createMultiplierWireframe(scene, displayX, displayY);
+		}
+
 		const multiplierConfig: NumberDisplayConfig = {
-			x,
-			y,
+			x: displayX,
+			y: displayY,
 			scale: 0.15,
 			prefixScale: 0.1,
 			prefixYOffset: 0,
@@ -151,7 +135,7 @@ export class Header {
 			decimalPlaces: 0,
 			showCommas: false,
 			prefix: 'x',
-			animateThreshold: 99999,
+			shouldTickUp: false,
 		};
 
 		this.multiplierDisplay = new NumberDisplay(multiplierConfig, this.networkManager, this.screenModeManager);
@@ -162,7 +146,7 @@ export class Header {
 
 		const container = this.multiplierDisplay.getContainer();
 		if (container) {
-			container.setDepth(11);
+			container.setDepth(301); // Above idle symbols (0) but below winning symbols (600) and overlay (500)
 			this.headerContainer.add(container);
 		}
 
@@ -170,19 +154,54 @@ export class Header {
 		this.hideMultiplierText();
 	}
 
+	private createMultiplierWireframe(scene: Scene, x: number, y: number): Phaser.GameObjects.Graphics {
+		const wireframeSize = 10;
+		const halfSize = wireframeSize / 2;
+
+		const wireframe = scene.add.graphics({ x, y });
+		wireframe.lineStyle(1, 0xffffff, 1);
+		wireframe.strokeRect(-halfSize, -halfSize, wireframeSize, wireframeSize);
+		wireframe.setDepth(300);
+
+		this.headerContainer.add(wireframe);
+
+		return wireframe;
+	}
+
 	private createWinBar(scene: Scene, winBarX: number, winBarY: number, assetScale: number): void {
 		const targetWidth = scene.scale.width * 0.99;
 		const winBar = scene.add.image(winBarX, winBarY, 'win_bar')
-		.setOrigin(0.5, 0.5)
-		.setDepth(10);
+			.setOrigin(0.5, 0.5)
+			.setDepth(501); // Above idle symbols (0) but below winning symbols (600) and overlay (500)
+
 		this.winBarImage = winBar;
 
 		const s = winBar.width > 0 ? (targetWidth / winBar.width) : 1;
 		winBar.setScale(s * assetScale);
-		
+
 		this.headerContainer.add(winBar);
+	}	
+
+	private createRectangle(scene: Scene, x: number, y: number): void {
+		const rectangleWidth = scene.scale.width * 0.7;
+		const rectangleHeight = scene.scale.height * 0.0675;
+		const xOffset = scene.scale.width * 0.25;
+		const yOffset = 20;
+
+		this.winBarBackplate = scene.add.rectangle(
+			x - xOffset,
+			y + yOffset,
+			rectangleWidth,
+			rectangleHeight,
+			0x777777,
+			0.5
+		)
+			.setOrigin(0, 0.5)
+			.setDepth(1);
+
+		this.headerContainer.add(this.winBarBackplate);
 	}
-	
+
 	private createLogoImage(scene: Scene, assetScale: number): void {
 		const logoWidthRatio = 0.8;
 		const logoVerticalOffsetRatio = 0.028;
@@ -212,27 +231,36 @@ export class Header {
 
 	private createWinBarText(scene: Scene, x: number, y: number): void {
 		// Line 1: "YOU WON"
-		this.youWonText = scene.add.text(x, y - 12, 'YOU WON', {
-			fontSize: '14px',
+		this.youWonText = scene.add.text(x + this.winningsLabelTextOffset.x, y + this.winningsLabelTextOffset.y, 'YOU WON', {
+			fontSize: '15px',
 			color: '#ffffff',
-			fontFamily: 'Poppins-Regular'
-		}).setOrigin(0.5, 0.5).setDepth(11); // Higher depth than win bar
+			fontFamily: 'Poppins-Regular',
+			stroke: this.textStrokeColor,
+			strokeThickness: this.textStrokeThickness,
+		}).setOrigin(0.5, 0.5).setDepth(301); // Higher depth than win bar, above idle symbols (0) but below winning symbols (600) and overlay (500)
 		this.headerContainer.add(this.youWonText);
 
 		// Line 2: "$ 0.00" with bold formatting (base winnings / expression prefix)
-		this.amountText = scene.add.text(x, y + 6, '$ 0.00', {
-			fontSize: '20px',
-			color: '#ffffff',
-			fontFamily: 'Poppins-Bold'
-		}).setOrigin(0.5, 0.5).setDepth(11); // Higher depth than win bar
+		// Check if demo mode is active - if so, use blank currency symbol
+		const isDemoInitial = this.scene?.gameAPI?.getDemoState();
+		const currencySymbolInitial = isDemoInitial ? '' : '$';
+		this.amountText = scene.add.text(x + this.winningsValueTextOffset.x, y + this.winningsValueTextOffset.y, `${currencySymbolInitial}${currencySymbolInitial ? ' ' : ''}0.00`, {
+			fontSize: '22px',
+			color: this.totalAmountTextColor,
+			fontFamily: 'Poppins-Bold',
+			stroke: this.textStrokeColor,
+			strokeThickness: this.textStrokeThickness,
+		}).setOrigin(0.5, 0.5).setDepth(301); // Higher depth than win bar, above idle symbols (0) but below winning symbols (600) and overlay (500)
 		this.headerContainer.add(this.amountText);
 
 		// Separate text object for the total winnings part (shown in green)
-		this.amountTotalText = scene.add.text(x, y + 6, '', {
-			fontSize: '20px',
-			color: '#00ff00',
-			fontFamily: 'Poppins-Bold'
-		}).setOrigin(0, 0.5).setDepth(11);
+		this.amountTotalText = scene.add.text(x + this.winningsValueTextOffset.x, y + this.winningsValueTextOffset.y, '', {
+			fontSize: '22px',
+			color: this.totalAmountTextColor,
+			fontFamily: 'Poppins-Bold',
+			stroke: this.textStrokeColor,
+			strokeThickness: this.textStrokeThickness,
+		}).setOrigin(0, 0.5).setDepth(301); // Above idle symbols (0) but below winning symbols (600) and overlay (500)
 		this.amountTotalText.setVisible(false);
 		this.headerContainer.add(this.amountTotalText);
 	}
@@ -271,7 +299,7 @@ export class Header {
 			this.currentMultiplier = this.currentMultiplier > 0 ? this.currentMultiplier + multiplier : multiplier;
 			this.updateMultiplierValue(this.currentMultiplier);
 
-			this.scene.time.delayedCall(25 * (gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1), () => {
+			this.scene.time.delayedCall(250 * (gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1), () => {
 				const formattedTotalWinnings = this.formatCurrency(this.currentWinnings * this.currentMultiplier);
 				const formattedCurrentWinnings = this.formatCurrency(this.currentWinnings);
 
@@ -281,6 +309,24 @@ export class Header {
 					formattedTotalWinnings
 				);
 			});
+		});
+
+		// When the win sequence completes, the displayed winnings represent the total win for the spin.
+		// Color that total in green; other update paths (e.g. WIN_START/REELS_START) reset back to white.
+		gameEventManager.on(GameEventType.WIN_STOP, () => {
+			// If we're currently showing an equation (prefix + separate total), the total is already green.
+			if (this.amountTotalText?.visible) {
+				this.animateWinningsDisplay(this.amountTotalText);
+				return;
+			}
+
+			if (this.amountText && this.currentWinnings > 0) {
+				this.amountText.setColor(this.totalAmountTextColor);
+				// For total win, use the configured stroke
+				this.amountText.setStroke(this.textStrokeColor, this.textStrokeThickness);
+				// Animate the final total win display
+				this.animateWinningsDisplay(this.amountText);
+			}
 		});
 
 		// Note: SPIN_RESPONSE event listener removed - now using SPIN_DATA_RESPONSE
@@ -319,23 +365,20 @@ export class Header {
 		gameEventManager.on(GameEventType.WIN_START, () => {
 			console.log('[Header] WIN_START received - showing winnings display');
 
-			const symbolsComponent = (this.headerContainer.scene as any).symbols;
-			if(symbolsComponent && symbolsComponent.currentSpinData) {
-				const spinData = symbolsComponent.currentSpinData;
+			const spinData = this.scene.gameAPI.getCurrentSpinData();
+			console.log('[Header] spinData: ', spinData);
+			if(spinData) {
 				const winnings = spinData?.slot?.tumbles?.items[this.scene.gameAPI.getCurrentTumbleIndex()]?.win || 0;
 
 				console.log(`[Header] Current winnings: ${winnings} ${this.scene.gameAPI.getCurrentTumbleIndex()}`);
-				
-				const updateDelay = 700 * (gameStateManager.isTurbo ? TurboConfig.TURBO_DURATION_MULTIPLIER : 1);
-				this.scene.time.delayedCall(updateDelay, () => {
-					if(this.currentWinnings > 0) {
-						this.currentWinnings += winnings;
-						this.updateWinningsDisplay(this.currentWinnings);
-					} else {
-						this.currentWinnings += winnings;
-						this.showWinningsDisplay(this.currentWinnings);
-					}
-				});
+
+				if(this.currentWinnings > 0) {
+					this.currentWinnings += winnings;
+					this.updateWinningsDisplay(this.currentWinnings);
+				} else {
+					this.currentWinnings += winnings;
+					this.showWinningsDisplay(this.currentWinnings);
+				}
 			}
 		});
 	}
@@ -364,8 +407,9 @@ export class Header {
 			this.currentWinnings = winnings;
 			const formattedWinnings = this.formatCurrency(winnings);
 
-			// Reset color to default white for regular winnings display
-			this.amountText.setColor('#ffffff');
+			// Reset to configured winnings color for regular winnings display
+			this.amountText.setColor(this.totalAmountTextColor);
+			this.amountText.setStroke(this.textStrokeColor, this.textStrokeThickness);
 			this.amountText.setText(formattedWinnings);
 			this.amountText.setPosition(this.getWinningsCenterX(), this.amountText.y);
 			console.log(`[Header] Winnings updated to: ${formattedWinnings} (raw: ${winnings})`);
@@ -376,24 +420,24 @@ export class Header {
 				this.amountTotalText.setText('');
 			}
 
-			// Ensure TOTAL WIN uses green, and everything else uses white
-			this.syncAmountColorToLabel();
-
 			this.animateWinningsDisplay(this.amountText);
 		}
 	}
 
 	public updateWinningsDisplayAsText(prefixText: string, totalText: string): void {
 		if (this.amountText) {
-			// Base expression (e.g. "$ 10.00  x  5  =  ") stays white
-			this.amountText.setColor('#ffffff');
+			// Base expression (e.g. "$ 10.00  x  5  =  ")
+			this.amountText.setColor(this.totalAmountTextColor);
+			this.amountText.setStroke(this.textStrokeColor, this.textStrokeThickness);
 			this.amountText.setText(prefixText);
 			this.amountText.setVisible(true);
 		}
 
 		if (this.amountTotalText) {
-			// Total winnings (e.g. "$ 50.00") is rendered separately in green
-			this.amountTotalText.setColor('#00ff00');
+			// Total winnings (e.g. "$ 50.00") is rendered separately
+			this.amountTotalText.setColor(this.totalAmountTextColor);
+			// Use the configured stroke
+			this.amountTotalText.setStroke(this.textStrokeColor, this.textStrokeThickness);
 			this.amountTotalText.setText(totalText);
 			this.amountTotalText.setVisible(true);
 
@@ -442,8 +486,9 @@ export class Header {
 			this.currentWinnings = winnings;
 			const formattedWinnings = this.formatCurrency(winnings);
 			
-			// Reset color to default white when showing standard winnings
-			this.amountText.setColor('#ffffff');
+			// Reset to configured winnings color when showing standard winnings
+			this.amountText.setColor(this.totalAmountTextColor);
+			this.amountText.setStroke(this.textStrokeColor, this.textStrokeThickness);
 
 			// Show both texts
 			this.youWonText.setVisible(true);
@@ -459,30 +504,12 @@ export class Header {
 				this.amountTotalText.setVisible(false);
 				this.amountTotalText.setText('');
 			}
-
-			// Ensure TOTAL WIN uses green, and everything else uses white
-			this.syncAmountColorToLabel();
 		} else {
 			console.warn('[Header] Cannot show winnings display - text objects not available', {
 				amountText: !!this.amountText,
 				youWonText: !!this.youWonText
 			});
 		}
-	}
-
-	/**
-	 * Display a TOTAL WIN amount in the header (amount in green).
-	 * This is safe to call even if the header normally shows standard winnings.
-	 */
-	public updateDisplayTextToTotalWin(totalWin: number): void {
-		if (!this.youWonText || !this.amountText) {
-			return;
-		}
-
-		this.youWonText.setText('TOTAL WIN');
-		this.showWinningsDisplay(totalWin);
-		// `showWinningsDisplay` defaults to white; re-sync so TOTAL WIN becomes green.
-		this.syncAmountColorToLabel();
 	}
 
 	public animateWinningsDisplay(target: any): void {
@@ -510,26 +537,19 @@ export class Header {
 	private formatCurrency(amount: number): string {
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemo = this.scene?.gameAPI?.getDemoState();
-		const currencySymbol = isDemo ? '' : '$ ';
+		const currencySymbol = isDemo ? '' : '$';
 		
 		if (amount === 0) {
-			return `${currencySymbol}0.00`;
+			return `${currencySymbol} 0.00`;
 		}
 		
 		// Format with commas for thousands and 2 decimal places
 		const formatted = new Intl.NumberFormat('en-US', {
-			style: 'currency',
-			currency: 'USD',
 			minimumFractionDigits: 2,
 			maximumFractionDigits: 2
 		}).format(amount);
 		
-		// Remove currency symbol if in demo mode
-		if (isDemo) {
-			return formatted.replace(/^\$/, '').trim();
-		}
-		
-		return formatted;
+		return `${currencySymbol}${formatted}`;
 	}
 
 	/**

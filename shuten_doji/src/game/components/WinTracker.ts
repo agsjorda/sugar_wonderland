@@ -33,6 +33,10 @@ export class WinTracker {
 	private static readonly GROUP_CONTAINER_NAME = 'win-tracker-group';
 	private static readonly WAVE_TWEEN_DATA_KEY = '__winTrackerWaveTween';
 
+	// Default WinTracker text theme
+	private static readonly DEFAULT_BASE_COLOR_RGBA = 'rgba(237, 237, 94, 1)'; // #EDED5E @ 1.0
+	private static readonly DEFAULT_STROKE_COLOR_RGBA = 'rgba(255, 2, 2, 0.7)'; // #FF0202 @ 0.7
+
 	public static startWave(
 		container?: Phaser.GameObjects.Container | null,
 		options?: {
@@ -159,7 +163,9 @@ export class WinTracker {
 		const separatorStyle: Phaser.Types.GameObjects.Text.TextStyle = {
 			fontFamily: 'Poppins-Bold',
 			fontSize: first.textFontSize ?? '20px',
-			color: first.textColor ?? '#ffffff',
+			color: first.textColor ?? WinTracker.DEFAULT_BASE_COLOR_RGBA,
+			stroke: WinTracker.DEFAULT_STROKE_COLOR_RGBA,
+			strokeThickness: 2,
 		};
 
 		configs.forEach((cfg, index) => {
@@ -255,7 +261,9 @@ export class WinTracker {
 			// Match in-game balance amount style
 			fontFamily: 'Poppins-Bold',
 			fontSize: this.config.textFontSize ?? '16px',
-			color: this.config.textColor ?? '#ffffff',
+			color: this.config.textColor ?? WinTracker.DEFAULT_BASE_COLOR_RGBA,
+			stroke: WinTracker.DEFAULT_STROKE_COLOR_RGBA,
+			strokeThickness: 3,
 			...this.config.textStyle,
 		};
 
@@ -268,7 +276,7 @@ export class WinTracker {
 		currentX += countText.width + 6;
 
 		// [sprite] – use symbol_{index} texture if available
-		const symbolKey = `symbol_${symbolIndex}`;
+		const symbolKey = `symbol${symbolIndex}`;
 		let symbolWidth = 0;
 
 		if (scene.textures.exists(symbolKey)) {

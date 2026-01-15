@@ -6,6 +6,8 @@ export interface ClockDisplayOptions {
     paddingPercentageY?: number;
     fontSize?: number;
     color?: string;
+    strokeColor?: string;
+    strokeThickness?: number;
     alpha?: number;
     depth?: number;
     scale?: number; // Scale modifier for the timer text
@@ -26,7 +28,9 @@ export class ClockDisplay {
         paddingPercentageY: 0.01,
         fontSize: 32,
         color: '#FFFFFF',
-        alpha: 0.5,
+        strokeColor: undefined,
+        strokeThickness: 0,
+        alpha: 0.75,
         depth: 30000,
         scale: 0.4,
         gameTitle: 'Game Title',
@@ -40,6 +44,8 @@ export class ClockDisplay {
             paddingPercentageY: options?.paddingPercentageY || this.defaultClockDisplayOptions.paddingPercentageY,
             fontSize: options?.fontSize || this.defaultClockDisplayOptions.fontSize,
             color: options?.color || this.defaultClockDisplayOptions.color,
+            strokeColor: options?.strokeColor ?? this.defaultClockDisplayOptions.strokeColor,
+            strokeThickness: options?.strokeThickness ?? this.defaultClockDisplayOptions.strokeThickness,
             alpha: options?.alpha || this.defaultClockDisplayOptions.alpha,
             depth: options?.depth || this.defaultClockDisplayOptions.depth,
             scale: options?.scale || this.defaultClockDisplayOptions.scale,
@@ -53,7 +59,9 @@ export class ClockDisplay {
         const timeY = this.scene.scale.height * (this.options.paddingPercentageY || 0.02); // 2% from top
         const fontSize = this.options.fontSize || 14;
         const textColor = this.options.color || '#FFFFFF';
-        const alpha = this.options.alpha !== undefined ? this.options.alpha : 0.50;
+        const strokeColor = this.options.strokeColor;
+        const strokeThickness = this.options.strokeThickness ?? 0;
+        const alpha = this.options.alpha !== undefined ? this.options.alpha : 0.75;
         const depth = this.options.depth || 30000;
         const scale = this.options.scale !== undefined ? this.options.scale : 1.0;
         this.suffixText = this.options.gameTitle || '';
@@ -69,6 +77,9 @@ export class ClockDisplay {
                 fontFamily: 'Arial',
                 fontSize: `${fontSize}px`,
                 color: textColor,
+                ...(strokeColor && strokeThickness > 0
+                    ? { stroke: strokeColor, strokeThickness }
+                    : {}),
                 fontStyle: 'normal',
                 align: 'center'
             }
@@ -111,6 +122,9 @@ export class ClockDisplay {
                     fontFamily: 'Arial',
                     fontSize: `${fontSize}px`,
                     color: textColor,
+                    ...(strokeColor && strokeThickness > 0
+                        ? { stroke: strokeColor, strokeThickness }
+                        : {}),
                     fontStyle: 'normal',
                     align: 'center'
                 }

@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { SpineGameObject } from '@esotericsoftware/spine-phaser-v3';
 import { SlotController } from './SlotController';
+import { playUtilityButtonSfx } from '../../utils/audioHelpers';
 
 export interface BuyFeatureConfig {
 	position?: { x: number; y: number };
@@ -41,6 +42,7 @@ export class BuyFeature {
 	private readonly CONTINUOUS_INTERVAL: number = 200; // 150ms interval for continuous press
 	private priceDisplay: Phaser.GameObjects.Text;
 	private featureLogo: any;
+	private featureLogoBg?: Phaser.GameObjects.Image;
 	private backgroundImage: Phaser.GameObjects.Image;
 	private onCloseCallback?: () => void;
 	private onConfirmCallback?: () => void;
@@ -191,12 +193,12 @@ export class BuyFeature {
 			const spineAtlasKey = `${spineKey}-atlas`;
 	
 			// Scatter symbol idle loop reused as the buy feature logo to keep the area animated
-			this.featureLogo = scene.add.spine(x, y, spineKey, spineAtlasKey) as SpineGameObject;
-			this.featureLogo.setOrigin(0.5, 0.5);
-			this.featureLogo.setScale(0.5);
+			this.featureLogo = scene.add.spine(x, y, spineKey, spineAtlasKey);
+			this.featureLogo.setOrigin(0.5, 0.425);
+			this.featureLogo.setScale(0.15);
 	
 			try {
-				this.featureLogo.animationState.setAnimation(0, this.featureLogo.skeleton?.data?.animations?.[0]?.name, true);
+				this.featureLogo.animationState.setAnimation(1, this.featureLogo.skeleton?.data?.animations?.[1]?.name, true);
 			} catch (error) {
 				console.warn('[BuyFeature] Unable to start feature logo animation', error);
 			}
@@ -238,7 +240,7 @@ export class BuyFeature {
 		const x = screenHeight - this.globalBottomAnchorOffset - 510;
 		
 		const featureName = scene.add.text(screenWidth / 2, x, "Oni Chan's Big Surprise", {
-			fontSize: '24px',
+			fontSize: '26px',
 			fontFamily: 'Poppins-Regular',
 			color: '#ffffff',
 			fontStyle: 'bold'
@@ -291,7 +293,10 @@ export class BuyFeature {
 		this.container.add(this.confirmButton);
 		
 		buttonImage.setInteractive();
-		buttonImage.on('pointerdown', () => this.confirmPurchase());
+		buttonImage.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
+			this.confirmPurchase();
+		});
 	}
 
 	private createCloseButton(scene: Scene): void {
@@ -306,7 +311,10 @@ export class BuyFeature {
 		});
 		this.closeButton.setOrigin(0.5);
 		this.closeButton.setInteractive();
-		this.closeButton.on('pointerdown', () => this.close());
+		this.closeButton.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
+			this.close();
+		});
 		this.container.add(this.closeButton);
 	}
 
@@ -323,10 +331,10 @@ export class BuyFeature {
 
 	private updatePriceDisplay(): void {
 		if (this.priceDisplay) {
+			const calculatedPrice = this.getCurrentBetValue();
 			// Check if demo mode is active - if so, use blank currency symbol
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState();
 			const currencySymbol = isDemo ? '' : '$';
-			const calculatedPrice = this.getCurrentBetValue();
 			this.priceDisplay.setText(`${currencySymbol}${this.formatNumberWithCommas(calculatedPrice)}`);
 		}
 	}
@@ -411,6 +419,7 @@ export class BuyFeature {
 		
 		// Handle pointer down for continuous press
 		this.minusButton.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			this.selectPreviousBet();
 			this.startContinuousDecrement(scene);
 		});
@@ -430,8 +439,8 @@ export class BuyFeature {
 		// Bet display - show current bet value
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemoBet = (scene as any).gameAPI?.getDemoState();
-		const currencySymbol = isDemoBet ? '' : '$';
-		this.betDisplay = scene.add.text(x, y, `${currencySymbol}${this.getCurrentBet().toFixed(2)}`, {
+		const currencySymbolBet = isDemoBet ? '' : '$';
+		this.betDisplay = scene.add.text(x, y, `${currencySymbolBet}${this.getCurrentBet().toFixed(2)}`, {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
@@ -450,6 +459,7 @@ export class BuyFeature {
 		
 		// Handle pointer down for continuous press
 		this.plusButton.on('pointerdown', () => {
+			playUtilityButtonSfx(scene);
 			this.selectNextBet();
 			this.startContinuousIncrement(scene);
 		});
