@@ -144,6 +144,23 @@ export class AssetConfig {
 			const spritePath = `${prefix}/symbols/symbol${i}.webp`;
 			symbolImages[spriteKey] = spritePath;
 		}
+
+		for (let i = 0; i <= 14; i++) {
+			symbolImages[`multiplier_${i}`] = `assets/portrait/high/symbols/multipliers/multiplier_${i}.webp`;
+		}
+
+		symbolSpine['multiplier_high_spine'] = {
+			atlas: `${prefix}/symbols/Symbol10_SD/Symbol10_High_SD.atlas`,
+			json: `${prefix}/symbols/Symbol10_SD/Symbol10_High_SD.json`
+		};
+		symbolSpine['multiplier_mid_spine'] = {
+			atlas: `${prefix}/symbols/Symbol10_SD/Symbol10_Mid_SD.atlas`,
+			json: `${prefix}/symbols/Symbol10_SD/Symbol10_Mid_SD.json`
+		};
+		symbolSpine['multiplier_low_spine'] = {
+			atlas: `${prefix}/symbols/Symbol10_SD/Symbol10_Low_SD.atlas`,
+			json: `${prefix}/symbols/Symbol10_SD/Symbol10_Low_SD.json`
+		};
 		
 		return {
 			images: symbolImages,

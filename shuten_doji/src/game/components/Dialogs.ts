@@ -81,37 +81,64 @@ export class Dialogs {
 	
 	// Dialog configuration
 	private dialogScales: Record<string, number> = {
-		'Congratulations': 0.7,
-		'FreeSpinDialog': 0.28,
-		'BonusFreeSpinDialog': 0.28,
-		'EpicWin': 1.025,
-		'MegaWin': 1.025,
-		'BigWin': 1.025,
-		'SuperWin': 1.025,
-		'MaxWin': 1.025,
+		'Congratulations': 0.5,
+		'FreeSpinDialog': 0.5,
+		'BonusFreeSpinDialog': 0.5,
+		'BigWin': 0.5,
+		'EpicWin': 0.5,
+		'MegaWin': 0.5,
+		'SuperWin': 0.5,
+		'MaxWin': 1,
 	};
 
 	// Dialog positions (relative: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom)
 	private dialogPositions: Record<string, { x: number; y: number }> = {
-		'BigWin': { x: 0.5, y: 0.5 },
-		'MegaWin': { x: 0.52, y: 0.5 },
-		'EpicWin': { x: 0.5, y: 0.5 },
-		'SuperWin': { x: 0.5, y: 0.5075 },
-		'FreeSpinDialog': { x: 0.5, y: 0.375 },
-		'BonusFreeSpinDialog': { x: 0.5, y: 0.375 },
-		'MaxWin': { x: 0.5, y: 0.5175 },
-		'Congratulations': { x: 0.5, y: 0.63 },
+		'BigWin': { x: 0.5, y: 0.37 },
+		'MegaWin': { x: 0.5, y: 0.37 },
+		'EpicWin': { x: 0.5, y: 0.37 },
+		'SuperWin': { x: 0.5, y: 0.37 },
+		'FreeSpinDialog': { x: 0.5, y: 0.35 },
+		'BonusFreeSpinDialog': { x: 0.5, y: 0.35 },
+		'MaxWin': { x: 0.5, y: 0.37 },
+		'Congratulations': { x: 0.5, y: 0.37 },
 	};
 
 	// Number display positions (relative). Defaults to center + offset when not specified.
 	private numberDisplayPositions: Record<string, { x: number; y: number }> = {
-		'BigWin': { x: 0.5, y: 0.525 },
-		'MegaWin': { x: 0.5, y: 0.525 },
-		'EpicWin': { x: 0.5, y: 0.525 },
-		'SuperWin': { x: 0.5, y: 0.525 },
+		'BigWin': { x: 0.5, y: 0.69 },
+		'MegaWin': { x: 0.5, y: 0.69 },
+		'EpicWin': { x: 0.5, y: 0.69 },
+		'SuperWin': { x: 0.5, y: 0.69 },
+		'FreeSpinDialog': { x: 0.515, y: 0.365 },
+		'BonusFreeSpinDialog': { x: 0.5, y: 0.365 },
+		'MaxWin': { x: 0.5, y: 0.5 },
+		'Congratulations': { x: 0.5, y: 0.66 },
+	};
+
+	// Number display scale overrides per dialog type.
+	// Falls back to a sensible default when not specified.
+	private numberDisplayScales: Record<string, number> = {
+		'BigWin': 0.25,
+		'MegaWin': 0.25,
+		'EpicWin': 0.25,
+		'SuperWin': 0.25,
+		'FreeSpinDialog': 0.5,
+		'BonusFreeSpinDialog': 0.525,
+		'MaxWin': 0.25,
+		'Congratulations': 0.25,
+	};
+
+	// "Press anywhere to continue" text positions (relative).
+	// Falls back to bottom-center when not specified.
+	private continueTextPositions: Record<string, { x: number; y: number }> = {
+		'BigWin': { x: 0.5, y: 0.75 },
+		'MegaWin': { x: 0.5, y: 0.75 },
+		'EpicWin': { x: 0.5, y: 0.75 },
+		'SuperWin': { x: 0.5, y: 0.75 },
 		'FreeSpinDialog': { x: 0.5, y: 0.625 },
-		'MaxWin': { x: 0.5, y: 0.575 },
-		'Congratulations': { x: 0.5, y: 0.575 },
+		'BonusFreeSpinDialog': { x: 0.5, y: 0.625 },
+		'MaxWin': { x: 0.5, y: 0.8 },
+		'Congratulations': { x: 0.5, y: 0.725 },
 	};
 
 	private dialogLoops: Record<string, boolean> = {
@@ -129,7 +156,7 @@ export class Dialogs {
 	private winDialogAnimationNames: Record<string, string> = {
 		'Congratulations': 'TotalW_SD',
 		'FreeSpinDialog': 'FreeSpin_SD',
-		'BonusFreeSpinDialog': 'Retrigger_SD',
+		'BonusFreeSpinDialog': 'FreeSpin_SD',
 		'BigWin': 'BigW_SD',
 		'MegaWin': 'MegaW_SD',
 		'EpicWin': 'EpicW_SD',
@@ -917,6 +944,8 @@ export class Dialogs {
 			(config.winAmount !== undefined || config.freeSpins !== undefined)
 		) {
 			this.createNumberDisplay(scene, config.winAmount || 0, config.freeSpins);
+			// Fade-in number display when shown (decoupled from paint effect)
+			this.fadeInNumberDisplay(scene, 400, 250);
 		}
 		
 		// Create continue text (delayed)
@@ -1423,10 +1452,12 @@ export class Dialogs {
 			this.continueText = null;
 		}
 		
+		const position = this.getContinueTextPosition(scene);
+
 		// Create the text with your original styling
 		this.continueText = scene.add.text(
-			scene.scale.width / 2,
-			scene.scale.height * 0.91,
+			position.x,
+			position.y,
 			'Press anywhere to continue',
 			{
 				fontFamily: 'Poppins-Bold',
@@ -1485,21 +1516,21 @@ export class Dialogs {
 		const numberConfig: NumberDisplayConfig = {
 			x: position.x,
 			y: position.y,
-			scale: 0.375,
-			spacing: -18,
+ 			scale: this.getNumberDisplayScale(),
+			spacing: -12,
 			alignment: 'center',
 			decimalPlaces: freeSpins !== undefined ? 0 : 2, // No decimals for free spins
 			showCommas: freeSpins !== undefined ? false : true, // No commas for free spins
 			prefix: '', // No prefix for any number display
 			suffix: '', // No suffix - only display numbers
-			commaYOffset: 15,
-			dotYOffset: 15,
 			shouldTickUp: freeSpins !== undefined ? false : true,
 		};
 
 		// Create the number display
 		const numberDisplay = new NumberDisplay(numberConfig, this.networkManager, this.screenModeManager);
 		numberDisplay.create(scene);
+		// Dialogs should not show the number display border
+		numberDisplay.toggleBorder(false);
 		// Display free spins if provided, otherwise display win amount
 		const displayValue = freeSpins !== undefined ? freeSpins : winAmount;
 		numberDisplay.displayValue(displayValue);
@@ -1510,7 +1541,7 @@ export class Dialogs {
 		this.numberDisplayContainer.add(numberDisplay.getContainer());
 		
 		// Start with alpha 0 (invisible) - will be faded in after paint effect
-		this.numberDisplayContainer.setAlpha(1);
+		this.numberDisplayContainer.setAlpha(0);
 		
 		// Add to dialog overlay
 		this.dialogOverlay.add(this.numberDisplayContainer);
@@ -1521,17 +1552,21 @@ export class Dialogs {
 	/**
 	 * Fade in the number display with animation
 	 */
-	private fadeInNumberDisplay(scene: Scene): void {
+	private fadeInNumberDisplay(scene: Scene, delay: number = 0, duration: number = 4500): void {
 		console.log('[Dialogs] fadeInNumberDisplay called');
 		
 		if (this.numberDisplayContainer) {
 			console.log('[Dialogs] Fading in number display');
 			
-			// Fade in over 2 seconds (as set by user)
+			// Prevent stacking multiple tweens on the same container
+			scene.tweens.killTweensOf(this.numberDisplayContainer);
+			
+			// Fade in (delay/duration configurable by caller)
 			scene.tweens.add({
 				targets: this.numberDisplayContainer,
 				alpha: 1,
-				duration: 4500,
+				duration,
+				delay,
 				ease: 'Power2',
 				onComplete: () => {
 					console.log('[Dialogs] Number display fade-in complete');
@@ -2054,11 +2089,9 @@ export class Dialogs {
 				// Log progress every 100ms
 				const progress = Math.floor(tween.progress * 100);
 				if (progress % 20 === 0) { // Log every 20%
-					console.log(`[Dialogs] Fade-out progress: ${progress}%`);
 					
 					// Check Spine animation during fade-out
 					if (this.currentDialog && this.currentDialog.animationState) {
-						console.log(`[Dialogs] Spine animation alpha at ${progress}%:`, this.currentDialog.alpha);
 					}
 				}
 				
@@ -2066,7 +2099,6 @@ export class Dialogs {
 				if (this.currentDialog && this.currentDialog.animationState) {
 					const targetAlpha = 1 - tween.progress; // Calculate target alpha based on progress
 					this.currentDialog.setAlpha(targetAlpha);
-					console.log(`[Dialogs] Manual Spine alpha update: ${targetAlpha.toFixed(2)}`);
 				}
 			},
 			onComplete: () => {
@@ -2075,14 +2107,11 @@ export class Dialogs {
 				// Log final alpha values
 				fadeOutTargets.forEach((target, index) => {
 					if (target && typeof target.alpha === 'number') {
-						console.log(`[Dialogs] Target ${index} alpha after fade-out:`, target.alpha);
 					}
 				});
 				
 				// Check Spine animation after fade-out
 				if (this.currentDialog && this.currentDialog.animationState) {
-					console.log('[Dialogs] Spine animation alpha after fade-out:', this.currentDialog.alpha);
-					console.log('[Dialogs] Spine animation visible after fade-out:', this.currentDialog.visible);
 				}
 				
 				// Wait a moment to ensure fade-out is completely visible before cleanup
@@ -2462,6 +2491,12 @@ export class Dialogs {
 			this.blackOverlay.fillStyle(0x000000, 0.7);
 			this.blackOverlay.fillRect(0, 0, scene.scale.width, scene.scale.height);
 		}
+
+		// Reposition continue text (if visible) using relative config
+		if (this.continueText) {
+			const position = this.getContinueTextPosition(scene);
+			this.continueText.setPosition(position.x, position.y);
+		}
 	}
 
 	/**
@@ -2512,6 +2547,29 @@ export class Dialogs {
 
 		// Fallback to legacy placement slightly below center for non-win dialogs
 		return null;
+	}
+
+	private getNumberDisplayScale(): number {
+		const type = this.currentDialogType || '';
+		return this.numberDisplayScales[type] ?? 0.25;
+	}
+
+	private getContinueTextPosition(scene: Scene): { x: number; y: number } {
+		const type = this.currentDialogType || '';
+		const relativePosition = this.continueTextPositions[type];
+
+		if (relativePosition) {
+			return {
+				x: relativePosition.x * scene.scale.width,
+				y: relativePosition.y * scene.scale.height
+			};
+		}
+
+		// Default: bottom-center
+		return {
+			x: scene.scale.width / 2,
+			y: scene.scale.height * 0.91
+		};
 	}
 
 	private getDialogLoop(dialogType: string): boolean {

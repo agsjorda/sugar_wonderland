@@ -87,7 +87,25 @@ export class Symbols {
 
   public static readonly SCATTER_SPINE_KEY: string = 'symbol0_spine';
   public static readonly SCATTER_HIT_ANIMATION_NAME: string = 'Symbol0_SD_win';
-  public static readonly MULTIPLIER_SPINE_KEY: string = 'multiplier_spine';
+  /**
+   * Multiplier Spine key by symbol value.
+   * Ranges (as requested):
+   * - 11..17 => multiplier_low_spine
+   * - 18..22 => multiplier_mid_spine
+   * - 23..25 => multiplier_high_spine
+   */
+  public static readonly MULTIPLIER_SPINE_KEY_BY_VALUE: Record<number, string> = (() => {
+    const map: Record<number, string> = {};
+    for (let v = 11; v <= 17; v++) map[v] = 'multiplier_low_spine';
+    for (let v = 18; v <= 22; v++) map[v] = 'multiplier_mid_spine';
+    for (let v = 23; v <= 25; v++) map[v] = 'multiplier_high_spine';
+    return map;
+  })();
+
+  public static getMultiplierSpineKey(value: number): string {
+    // Prefer explicit mapping; keep a safe fallback for unexpected multiplier values.
+    return Symbols.MULTIPLIER_SPINE_KEY_BY_VALUE[value] ?? 'multiplier_low_spine';
+  }
 
   public static readonly MULTIPLIER_ANIMATION_TIME_SCALE: number = 0.5;
   public static readonly MULTIPLIER_FRONT_DEPTH: number = 650;
@@ -187,7 +205,7 @@ export class Symbols {
     7: 0.5,  // Symbol7_RF scale (LP)
     8: 0.5,  // Symbol8_RF scale (LP)
     9: 0.5,  // Symbol9_RF scale (LP)
-    10: 0.5,  // Symbol10_RF scale (multiplier)
+    10: 0.525,  // Symbol10_RF scale (multiplier)
   };
 
   /**
@@ -1619,6 +1637,33 @@ export class Symbols {
         const startScatterScale = Math.max(0.0001, baseScatterScale * 0.6);
         bigScatter.setScale(startScatterScale);
 
+        // Pop-in scale tween for the big center scatter.
+        // IMPORTANT: We intentionally wait for the scale-up to finish before triggering the win animation.
+        const waitForPopInScaleUp = new Promise<void>((resolve) => {
+          let done = false;
+          const finish = () => {
+            if (done) return;
+            done = true;
+            resolve();
+          };
+
+          // Safety timeout so we never block on a missing tween callback.
+          try { this.scene?.time?.delayedCall?.(650, () => finish()); } catch { }
+
+          try {
+            this.scene.tweens.add({
+              targets: bigScatter,
+              scaleX: targetScatterScale,
+              scaleY: targetScatterScale,
+              duration: 450,
+              ease: 'Sine.easeOut',
+              onComplete: () => finish()
+            });
+          } catch {
+            finish();
+          }
+        });
+
         // Kick the Scatter win animation by name; fallback to first animation if missing.
         // IMPORTANT: We must not start the freespins scatter sequence until this big-center scatter
         // finishes its hit animation ONCE, returns to idle, then holds for 500ms.
@@ -1696,27 +1741,34 @@ export class Symbols {
 
               try { state.addListener?.(listener as any); } catch { }
               try {
-                this.scene?.time?.delayedCall?.(200, () => {
-                  playScatterAnimSfx();
+                // Wait for the pop-in scale-up to finish before starting the win animation.
+                waitForPopInScaleUp.then(() => {
+                  if (resolved) return;
+
+                  try {
+                    this.scene?.time?.delayedCall?.(200, () => {
+                      if (resolved) return;
+                      playScatterAnimSfx();
+                    });
+                  } catch { }
+
+                  try {
+                    state.setAnimation(0, nameToPlay, false);
+                  } catch {
+                    safeResolve();
+                  }
+                }).catch(() => {
+                  // If the tween promise fails for any reason, don't block the scatter flow.
+                  try { state.setAnimation(0, nameToPlay, false); } catch { safeResolve(); }
                 });
-                state.setAnimation(0, nameToPlay, false);
+
+                state.timeScale = 0.8;
               } catch { safeResolve(); }
             });
           }
         } catch (e) {
           console.warn('[Symbols] Failed to play big scatter Spine animation:', e);
         }
-
-        // Pop-in scale tween for the big center scatter.
-        try {
-          this.scene.tweens.add({
-            targets: bigScatter,
-            scaleX: targetScatterScale,
-            scaleY: targetScatterScale,
-            duration: 450,
-            ease: 'Sine.easeOut'
-          });
-        } catch { }
 
         // Gate progression to the freespins dialog/sequence on hit-once + idle pause (with fallback).
         try { await waitForHitThenIdlePause; } catch { }
@@ -2619,6 +2671,21 @@ function releaseSpineToPool(self: Symbols, spine: SpineGameObject | any): void {
   try {
     self.scene.tweens.killTweensOf(spine);
   } catch { }
+  // If this Spine has an attached overlay (e.g. multiplier image), stop following + DESTROY it.
+  // Keeping overlays pooled adds complexity; we can optimize later if needed.
+  try {
+    const updateFn: any = (spine as any).__multiplierOverlayUpdateFn;
+    if (updateFn) {
+      try { self.scene.events.off('update', updateFn); } catch { }
+      try { (spine as any).__multiplierOverlayUpdateFn = null; } catch { }
+    }
+    const overlay: any = (spine as any).__multiplierOverlayImage;
+    if (overlay) {
+      try { self.scene.tweens.killTweensOf(overlay); } catch { }
+      try { overlay.destroy?.(); } catch { }
+      try { (spine as any).__multiplierOverlayImage = null; } catch { }
+    }
+  } catch { }
   try {
     // Clear listeners first so clearTracks does not dispatch stale callbacks
     const state: any = spine.animationState;
@@ -2847,7 +2914,7 @@ function createInitialSymbols(self: Symbols) {
   const initialRowMajor = [
     [0, 1, 3, 1, 0, 2],
     [1, 5, 2, 5, 2, 9],
-    [2, 6, 5, 8, 5, 3],
+    [2, 6, 5, 25, 5, 3],
     [7, 4, 1, 2, 4, 1],
     [4, 2, 0, 3, 1, 7],
   ];
@@ -3548,10 +3615,13 @@ function onSpinDataReceived(self: Symbols) {
     // Use the correct area (freespin when in bonus), with safe fallback
     let symbols: any;
     if (gameStateManager.isBonus) {
-      const freeItems = data?.spinData?.slot?.freespin?.items;
+      // Accept both legacy `freespin` and newer `freeSpin` shapes
+      const freeItems =
+        data?.spinData?.slot?.freeSpin?.items ??
+        data?.spinData?.slot?.freespin?.items;
       const boundedIndex = Math.max(0, Math.min(self.scene.gameAPI.getCurrentFreeSpinIndex() - 1, (freeItems?.length ?? 1) - 1));
       symbols = freeItems?.[boundedIndex]?.area ?? data.spinData.slot.area;
-      console.log(`[Symbols] Using freespin area at index ${boundedIndex}:`, symbols);
+      console.log(`[Symbols] Using free spin area at index ${boundedIndex}:`, symbols);
     } else {
       symbols = data.spinData.slot.area;
       console.log('[Symbols] Using symbols from SpinData slot.area:', symbols);
@@ -5893,13 +5963,11 @@ function replaceWithSpineAnimations(self: Symbols, data: Data) {
 }
 
 function createMultiplierSymbol(self: Symbols, value: number, x: number, y: number, alpha: number = 1): any {
-  console.log(`[Symbols] Creating multiplier symbol: ${value}`);
-
   let spine: SpineGameObject | null = null;
+  const spineKey = Symbols.getMultiplierSpineKey(value);
   try {
-    spine = acquireSpineFromPool(self, Symbols.MULTIPLIER_SPINE_KEY, `${Symbols.MULTIPLIER_SPINE_KEY}-atlas`);
+    spine = acquireSpineFromPool(self, spineKey, `${spineKey}-atlas`);
   } catch (e) {
-    console.warn('[Symbols] Failed to acquire pooled multiplier Spine, falling back to PNG:', e);
   }
 
   // Fallback: if Spine could not be acquired/created, use the existing PNG path
@@ -5930,20 +5998,52 @@ function createMultiplierSymbol(self: Symbols, value: number, x: number, y: numb
     } catch { }
 
     try {
-      const state = spine.animationState;
-      if (state) {
-        const animName = self.findMultiplierAnimationNameByIndex(spine, value);
-        const fallbackAnimName = spine.skeleton?.data?.animations?.[0]?.name;
-        const nameToPlay = animName ?? fallbackAnimName;
+      const state: any = (spine as any).animationState;
+      const anims: Array<{ name: string }> = ((spine as any)?.skeleton?.data?.animations as any) ?? [];
+      const names = anims.map(a => a?.name).filter(Boolean) as string[];
 
-        if (nameToPlay) {
-          state.setAnimation(0, nameToPlay, false);
+      const idle = names.find(n => /idle/i.test(n)) ?? names.find(n => /loop/i.test(n)) ?? names[0];
+      const intro = names.find(n => /intro|appear|spawn|enter/i.test(n) && !/idle/i.test(n));
+
+      const overlay = ensureMultiplierOverlayImage(self, spine as any, value, x, y);
+      if (overlay) overlay.setAlpha(0);
+
+      if (state && typeof state.setAnimation === 'function') {
+        try { state.clearTrack?.(0); } catch { }
+
+        const timeScale = Symbols.MULTIPLIER_ANIMATION_TIME_SCALE || 1;
+        try { state.timeScale = timeScale; } catch { }
+
+        const playIdle = () => { if (idle) try { state.setAnimation(0, idle, true); } catch { } };
+
+        if (intro && idle && intro !== idle) {
+          try { state.setAnimation(0, intro, false); } catch { }
+          if (typeof state.addListener === 'function') {
+            const listener = { complete: (entry: any) => {
+              const n = entry?.animation?.name ?? entry?.animation?.data?.name;
+              if (n === intro) { try { state.removeListener?.(listener); } catch { } playIdle(); }
+            } };
+            try { state.addListener(listener); } catch { playIdle(); }
+          } else {
+            const durSec = (spine as any)?.skeleton?.data?.findAnimation?.(intro)?.duration;
+            const durMs = typeof durSec === 'number' && durSec > 0 ? (durSec * 1000) / Math.max(0.001, timeScale) : 350;
+            try { self.scene.time.delayedCall(durMs, playIdle); } catch { playIdle(); }
+          }
+        } else {
+          playIdle();
         }
 
-        state.timeScale = 0;
+        if (overlay) {
+          try { overlay.setVisible(true); overlay.setActive(true); } catch { }
+          try {
+            self.scene.time.delayedCall(250, () => {
+              if (!(overlay as any)?.scene || !(overlay as any)?.active) return;
+              self.scene.tweens.add({ targets: overlay, alpha: 1, duration: 120, ease: 'Sine.easeOut' });
+            });
+          } catch { }
+        }
       }
-    } catch {
-      console.error('[Symbols] Failed to set animation for multiplier symbol: ', value);
+    } catch (e) {
     }
 
     return spine;
@@ -5952,6 +6052,43 @@ function createMultiplierSymbol(self: Symbols, value: number, x: number, y: numb
     try { releaseSpineToPool(self, spine as any); } catch { }
     return createPngSymbol(self, value, x, y, alpha);
   }
+}
+
+function ensureMultiplierOverlayImage(self: Symbols, spine: any, symbolIndex: number, x: number, y: number): Phaser.GameObjects.Image | null {
+  const scene = self?.scene;
+  if (!scene) return null;
+
+  const overlayIndex = symbolIndex - 11;
+  if (overlayIndex < 0 || overlayIndex > 14) return null;
+
+  const key = `multiplier_${overlayIndex}`;
+  if (!scene.textures.exists(key)) return null;
+
+  let img: Phaser.GameObjects.Image | null = (spine as any).__multiplierOverlayImage ?? null;
+  if (!img || !(img as any).scene) {
+    img = scene.add.image(x, y, key).setOrigin(0.5, 0.5);
+    img.setDepth(Symbols.MULTIPLIER_FRONT_DEPTH + 2);
+    (spine as any).__multiplierOverlayImage = img;
+
+    const updateFn = () => {
+      if (!img || !(img as any).scene) return;
+      if (!spine?.active || !spine?.visible) { img.setVisible(false); return; }
+      img.setVisible(true);
+      img.setPosition(spine.x, spine.y);
+    };
+    (spine as any).__multiplierOverlayUpdateFn = updateFn;
+    scene.events.on('update', updateFn);
+  } else {
+    img.setTexture(key);
+    img.setPosition(x, y);
+  }
+
+  if (self.container && img.parentContainer !== self.container) self.container.add(img);
+
+  const w = (self as any).displayWidth ?? (self as any).baseSymbolWidth ?? 67;
+  const h = (self as any).displayHeight ?? (self as any).baseSymbolHeight ?? 67;
+  img.setScale(Math.min((w * 0.85) / Math.max(1, img.width), (h * 0.85) / Math.max(1, img.height)));
+  return img;
 }
 
 async function delay(duration: number) {

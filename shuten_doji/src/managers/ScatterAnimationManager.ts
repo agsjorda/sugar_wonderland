@@ -357,6 +357,15 @@ export class ScatterAnimationManager {
 
       return new Promise<void>((resolve) => {
         const finish = () => {
+          // Fallback: if the custom transition was removed/disabled, we still must enter bonus mode.
+          // Without this, the game can get stuck after closing the FreeSpin dialog because no one
+          // emits `setBonusMode/showBonusBackground/showBonusHeader`.
+          if (!scatterBonusEmitted) {
+            scatterBonusEmitted = true;
+            try { scene.events.emit('scatterBonusCompleted'); } catch { }
+            try { this.triggerBonusMode(scene); } catch { }
+          }
+
           // Restore background music volume after the transition completes
           try {
             const audioManager = (window as any).audioManager;
