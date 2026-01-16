@@ -223,7 +223,7 @@ export class Game extends Phaser.Scene {
 			(this as any).freeSpinOverlay = this.freeSpinOverlay;
 		}
 
-		// Called when TotalWinOverlay is dismissed (triggered by BubbleOverlayTransition from TotalWinOverlay)
+		// Called when TotalWinOverlay is dismissed (triggered by FireOverlayTransition from TotalWinOverlay)
 		this.events.on('finalizeBonusExit', () => {
 			try {
 				// Ensure we return to base visuals/state
@@ -239,8 +239,8 @@ export class Game extends Phaser.Scene {
 				try { this.input.enabled = true; } catch {}
 				try { this.slotController?.setExternalControlLock(false); } catch {}
 				try {
-					if (this.scene.isActive('BubbleOverlayTransition') || this.scene.isSleeping('BubbleOverlayTransition')) {
-						this.scene.stop('BubbleOverlayTransition');
+					if (this.scene.isActive('FireOverlayTransition') || this.scene.isSleeping('FireOverlayTransition')) {
+						this.scene.stop('FireOverlayTransition');
 					}
 				} catch {}
 			} catch {}
@@ -1018,10 +1018,6 @@ export class Game extends Phaser.Scene {
 				try { this.completeHookCollectorEvent(); } catch {}
 				return;
 			}
-			try {
-				const audio: any = this.audioManager ?? (window as any)?.audioManager;
-				audio?.playSoundEffect?.(SoundEffectType.CASTLINE);
-			} catch {}
 			if (!this.hookScatterTarget) {
 				try { this.completeHookCollectorEvent(); } catch {}
 				return;
@@ -1950,10 +1946,6 @@ export class Game extends Phaser.Scene {
 			if (!this.isHookScatterEventActive || !this.hookScatterTarget) {
 				return;
 			}
-			try {
-				const audio: any = this.audioManager ?? (window as any)?.audioManager;
-				audio?.playSoundEffect?.(SoundEffectType.CASTLINE);
-			} catch {}
 			if (!this.hookScatterTarget) {
 				return;
 			}
@@ -2376,7 +2368,7 @@ export class Game extends Phaser.Scene {
 				overlayActive = overlayActive || !!(gameStateManager as any).isShowingWinDialog;
 			} catch {}
 			try {
-				overlayActive = overlayActive || this.scene.isActive('BubbleOverlayTransition') || this.scene.isSleeping('BubbleOverlayTransition');
+				overlayActive = overlayActive || this.scene.isActive('FireOverlayTransition') || this.scene.isSleeping('FireOverlayTransition');
 			} catch {}
 			try {
 				const d: any = this.dialogs as any;

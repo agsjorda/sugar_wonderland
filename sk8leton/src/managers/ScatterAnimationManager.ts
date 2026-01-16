@@ -247,19 +247,31 @@ export class ScatterAnimationManager {
                 requestedBonusTransitionFinish = true;
 
                 (async () => {
-                  console.log('[ScatterAnimationManager] Launching BubbleOverlayTransition for bonus entry');
+                  console.log('[ScatterAnimationManager] Launching FireOverlayTransition for bonus entry');
                   try {
-                    if (sceneAny.scene.isActive?.('BubbleOverlayTransition') || sceneAny.scene.isSleeping?.('BubbleOverlayTransition')) {
-                      try { sceneAny.scene.stop('BubbleOverlayTransition'); } catch {}
+                    if (sceneAny.scene.isActive?.('FireOverlayTransition') || sceneAny.scene.isSleeping?.('FireOverlayTransition')) {
+                      try { sceneAny.scene.stop('FireOverlayTransition'); } catch {}
+                    }
+                  } catch {}
+
+                  let startY: number | undefined = undefined;
+                  let endY: number | undefined = undefined;
+                  try {
+                    const h = Number(sceneAny?.scale?.height);
+                    const cy = (isFinite(h) && h > 0) ? (h * 0.5) : 0;
+                    if (isFinite(h) && h > 0) {
+                      startY = cy + h;
+                      endY = cy - h;
                     }
                   } catch {}
                   try {
-                    sceneAny.scene.launch('BubbleOverlayTransition', {
+                    sceneAny.scene.launch('FireOverlayTransition', {
                       fromSceneKey: 'Game',
                       toSceneKey: 'Game',
                       stopFromScene: false,
-                      toSceneEvent: 'activateBonusMode',
                       toSceneEventOnFinish: 'bonusTransitionComplete',
+                      coverFirst: true,
+                      coverFadeOutMs: 800,
                       transitionPreset: 'bonusEnter',
                       timings: {
                         overlayAlpha: 1,
@@ -271,18 +283,22 @@ export class ScatterAnimationManager {
                         finishOutMs: 800
                       },
                       spineOffsetX: 0,
-                      spineOffsetY: -560
+                      spineStartY: startY,
+                      spineEndY: endY
                     });
-                    try { sceneAny.scene.bringToTop?.('BubbleOverlayTransition'); } catch {}
+                    try { sceneAny.scene.bringToTop?.('FireOverlayTransition'); } catch {}
                     try {
-                      sceneAny.time?.delayedCall?.(3000, () => {
-                        if (!bonusTransitionFinished) {
-                          try { sceneAny?.events?.emit?.('bonusTransitionComplete'); } catch {}
-                        }
+                      sceneAny.time?.delayedCall?.(12000, () => {
+                        if (bonusTransitionFinished) return;
+                        let stillRunning = false;
+                        try {
+                          stillRunning = !!(sceneAny?.scene?.isActive?.('FireOverlayTransition') || sceneAny?.scene?.isSleeping?.('FireOverlayTransition'));
+                        } catch {}
+                        if (stillRunning) return;
+                        try { sceneAny?.events?.emit?.('bonusTransitionComplete'); } catch {}
                       });
                     } catch {}
                   } catch {
-                    try { sceneAny?.events?.emit?.('activateBonusMode'); } catch {}
                     try { sceneAny?.events?.emit?.('bonusTransitionComplete'); } catch {}
                   }
                 })();
@@ -301,7 +317,7 @@ export class ScatterAnimationManager {
                   } catch {}
                 };
                 try { hideNow(); } catch {}
-                try { sceneAny?.events?.once?.('activateBonusMode', hideNow as any); } catch {}
+                try { sceneAny?.events?.once?.('bonusTransitionComplete', hideNow as any); } catch {}
                 try {
                   sceneAny.time?.delayedCall?.(500, () => {
                     try { hideNow(); } catch {}
@@ -328,9 +344,6 @@ export class ScatterAnimationManager {
 
     try {
       registerBonusTransitionListeners();
-      if (!requestedBonusVisualActivation) {
-        try { (this.scene as any)?.events?.emit?.('activateBonusMode'); } catch {}
-      }
       if (!requestedBonusTransitionFinish) {
         try { (this.scene as any)?.events?.emit?.('bonusTransitionComplete'); } catch {}
       }

@@ -14,7 +14,6 @@ export enum SoundEffectType {
 	SPIN = 'spin_SK8',
 	REEL_DROP = 'reeldrop_SK8',
 	TURBO_DROP = 'turbodrop_SK8',
-	CASTLINE = 'castline_TB',
 	FISHREEL = 'fishreel_TB',
 	EXPLOSION = 'explosion_TB',
 	SPLASH = 'splash_TB',
@@ -506,6 +505,11 @@ export class AudioManager {
 		};
 		try {
 			merged.volume = Phaser.Math.Clamp(Number(merged.volume) || 0, 0, 1);
+		} catch {}
+		try {
+			if (key === SoundEffectType.REEL_DROP) {
+				merged.volume = Phaser.Math.Clamp((Number(merged.volume) || 0) * 0.7, 0, 1);
+			}
 		} catch {}
 		try { (this.boundSoundManager as any).mute = false; } catch {}
 

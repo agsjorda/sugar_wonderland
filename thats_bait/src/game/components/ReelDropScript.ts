@@ -169,12 +169,9 @@ function spawnReleaseFillersForHeldReel(
  * This is extracted from Symbols.ts so it can be reused as an independent script.
  */
 export async function runDropReels(self: any, symbols: number[][], fillerCount: number): Promise<void> {
-  // Play turbo drop sound effect at the start of reel drop sequence when in turbo mode
+  // Play turbo drop sound effect once per reel drop sequence when in turbo mode
   try {
-    if (self.scene.gameData.isTurbo && (window as any).audioManager) {
-      (window as any).audioManager.playSoundEffect(SoundEffectType.TURBO_DROP);
-      console.log("[ReelDropScript] Playing turbo drop sound effect at start of reel drop sequence");
-    }
+    void 0;
   } catch {}
 
   try { (self as any).__activeFillerSymbols = []; } catch {}
@@ -226,8 +223,15 @@ export async function runDropReels(self: any, symbols: number[][], fillerCount: 
   try { (self.scene as any).__isScatterAnticipationActive = extendLastReelDrop; } catch {}
 
   const REEL_STAGGER_MS = 150;
-  const useSequentialStartForBuyAnticipation = !!gameStateManager.isBuyFeatureSpin && extendLastReelDrop;
-  let sequentialStartDelayMs = REEL_STAGGER_MS;
+  const turboSimultaneousDrop = (() => {
+    try {
+      return !!gameStateManager.isTurbo || !!self?.scene?.gameData?.isTurbo;
+    } catch {
+      return false;
+    }
+  })();
+  const useSequentialStartForBuyAnticipation = !!gameStateManager.isBuyFeatureSpin && extendLastReelDrop && !turboSimultaneousDrop;
+  let sequentialStartDelayMs = turboSimultaneousDrop ? 0 : REEL_STAGGER_MS;
   try {
     const hasIsSkipFn = typeof (self as any)?.isSkipReelDropsActive === 'function';
     const isSkipActive = hasIsSkipFn
@@ -286,7 +290,9 @@ export async function runDropReels(self: any, symbols: number[][], fillerCount: 
 
     const holdTarget = holdTargetByReel[col];
 
-    const stopStaggerMs = (useSequentialStartForBuyAnticipation || isSkipActiveNow()) ? 0 : Math.max(0, col * REEL_STAGGER_MS);
+    const stopStaggerMs = (turboSimultaneousDrop || useSequentialStartForBuyAnticipation || isSkipActiveNow())
+      ? 0
+      : Math.max(0, col * REEL_STAGGER_MS);
 
     dropPrevSymbols(self, fillerCount, col, extendThisReel, stopStaggerMs);
     if (holdTarget && isReelHeld(col)) {
@@ -308,6 +314,14 @@ export async function runDropReels(self: any, symbols: number[][], fillerCount: 
   console.log("[ReelDropScript] Waiting for all reels to complete animation...");
   await Promise.all(reelCompletionPromises);
   console.log("[ReelDropScript] All reels have completed animation");
+	try {
+		if ((window as any).audioManager) {
+			const isTurbo = !!gameStateManager.isTurbo || !!self?.scene?.gameData?.isTurbo;
+			if (isTurbo) {
+				(window as any).audioManager.playSoundEffect(SoundEffectType.TURBO_DROP);
+			}
+		}
+	} catch {}
 }
 
 /**
@@ -704,6 +718,7 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
     const totalAnimations = Array.isArray(column) ? column.length : 0;
     const START_INDEX_Y = -(fillerCount + SLOT_ROWS + extraRows);
     let skipApplied = false;
+    let dropSfxPlayed = false;
 
     if (!Array.isArray(column) || totalAnimations === 0) {
       finalize();
@@ -850,13 +865,6 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
                 duration: settleDuration,
                 ease: (window as any).Phaser?.Math?.Easing?.Linear,
                 onComplete: () => {
-                  try {
-                    if ((window as any).audioManager) {
-                      (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
-                      console.log(`[ReelDropScript] Playing reel drop sound effect for reel ${index} after drop completion`);
-                    }
-                  } catch {}
-
                   completedAnimations++;
                   if (completedAnimations === totalAnimations) {
                     finalize();
@@ -885,13 +893,6 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
                 duration: settleDuration,
                 ease: (window as any).Phaser?.Math?.Easing?.Linear,
                 onComplete: () => {
-                  try {
-                    if ((window as any).audioManager) {
-                      (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
-                      console.log(`[ReelDropScript] Playing reel drop sound effect for reel ${index} after drop completion`);
-                    }
-                  } catch {}
-
                   completedAnimations++;
                   if (completedAnimations === totalAnimations) {
                     finalize();
@@ -1058,12 +1059,12 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
 
     function finalize() {
       try {
-        if (skipApplied) {
-          try {
-            if ((window as any).audioManager) {
-              (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
-            }
-          } catch {}
+        if (!dropSfxPlayed && (window as any).audioManager) {
+          dropSfxPlayed = true;
+          const isTurbo = !!gameStateManager.isTurbo || !!self?.scene?.gameData?.isTurbo;
+          if (!isTurbo) {
+            (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
+          }
         }
       } catch {}
       try {

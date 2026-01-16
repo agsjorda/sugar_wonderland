@@ -160,11 +160,10 @@ export class AssetConfig {
 		//  - File names:  spine_symbols/Symbol{i}_TB.(atlas|json), symbols/Symbol{i}_TB.webp
 		for (let i = 0; i <= 17; i++) {
 			const symbolNameSk8 = `Symbol${i}_Sk8`;
-			const symbolNameTB = `Symbol${i}_TB`;
 			const spineKey = `symbol_${i}_spine`;
 			
 			if (tbSpineSymbols.has(i)) {
-				const spineFileBase = i === 8 ? `Symbol8_Sk8_win` : symbolNameSk8;
+				const spineFileBase = symbolNameSk8;
 				const atlasPath = `${spinePrefix}/spine_symbols/${spineFileBase}.atlas`;
 				const jsonPath = `${spinePrefix}/spine_symbols/${spineFileBase}.json`;
 				
@@ -428,7 +427,6 @@ export class AssetConfig {
 				'spin_SK8': 'assets/sounds/SFX/spin_SK8.ogg',
 				'reeldrop_SK8': 'assets/sounds/SFX/reeldrop_SK8.ogg',
 				'turbodrop_SK8': 'assets/sounds/SFX/turbodrop_SK8.ogg',
-				'castline_TB': 'assets/sounds/SFX/castline_TB.ogg',
 				'fishreel_TB': 'assets/sounds/SFX/fishreel_TB.ogg',
 				'explosion_TB': 'assets/sounds/SFX/explosion_TB.ogg',
 				'splash_TB': 'assets/sounds/SFX/splash_TB.ogg',
@@ -456,13 +454,9 @@ export class AssetConfig {
 		const forcedPortraitHighPrefix = `assets/portrait/high`;
 		return {
 			spine: {
-				'bubbles_transition': {
-					atlas: `${forcedPortraitHighPrefix}/transitions/Bubbles_Transition.atlas`,
-					json: `${forcedPortraitHighPrefix}/transitions/Bubbles_Transition.json`
-				},
-				'bubbles_transition_TB': {
-					atlas: `${forcedPortraitHighPrefix}/transitions/Bubbles_Transition_TB.atlas`,
-					json: `${forcedPortraitHighPrefix}/transitions/Bubbles_Transition_TB.json`
+				'Fire_Transition': {
+					atlas: `${forcedPortraitHighPrefix}/transitions/Fire_Transition.atlas`,
+					json: `${forcedPortraitHighPrefix}/transitions/Fire_Transition.json`
 				}
 			}
 		};

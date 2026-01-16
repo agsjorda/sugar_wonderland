@@ -2,8 +2,7 @@ import { Boot } from './scenes/Boot';
 import { Game as MainGame } from './scenes/Game';
 import { AUTO, Game } from 'phaser';
 import { Preloader } from './scenes/Preloader';
-import { BubbleTransitionScene } from './scenes/BubbleTransitionScene';
-import { BubbleOverlayTransitionScene } from './scenes/BubbleOverlayTransitionScene';
+import { FireOverlayTransitionScene } from './scenes/FireOverlayTransitionScene';
 // Import Spine runtime and plugin
 import * as Spine from '@esotericsoftware/spine-phaser-v3';
 
@@ -110,8 +109,7 @@ const config: Phaser.Types.Core.GameConfig = {
     scene: [
         Boot,
         Preloader,
-        BubbleTransitionScene,
-        BubbleOverlayTransitionScene,
+        FireOverlayTransitionScene,
         MainGame,
     ],
     plugins: {

@@ -1,7 +1,7 @@
 Symbol7_Sk8.webp
 size:2004,2004
 filter:Linear,Linear
-pma:false
+pma:true
 PNG Sequencer/fire lt_00000
 bounds:381,92,370,498
 offsets:14,0,399,502
@@ -49,7 +49,7 @@ bounds:702,1370,359,630
 Symbol7_Sk8_2.webp
 size:1516,1516
 filter:Linear,Linear
-pma:false
+pma:true
 PNG Sequencer/fire lt_00006
 bounds:381,13,375,498
 offsets:9,0,399,502

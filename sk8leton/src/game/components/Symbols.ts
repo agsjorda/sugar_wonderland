@@ -4246,18 +4246,20 @@ export class Symbols {
           const canLaunch = !!(mgr && typeof mgr.launch === 'function');
           if (canLaunch) {
             try {
-              if (mgr.isActive?.('BubbleOverlayTransition') || mgr.isSleeping?.('BubbleOverlayTransition')) {
-                try { mgr.stop('BubbleOverlayTransition'); } catch {}
+              if (mgr.isActive?.('FireOverlayTransition') || mgr.isSleeping?.('FireOverlayTransition')) {
+                try { mgr.stop('FireOverlayTransition'); } catch {}
               }
             } catch {}
-            mgr.launch('BubbleOverlayTransition', {
+            mgr.launch('FireOverlayTransition', {
               fromSceneKey: 'Game',
               toSceneKey: 'Game',
               stopFromScene: false,
               toSceneEvent: 'prepareBonusExit',
-              toSceneEventOnFinish: 'finalizeBonusExit'
+              toSceneEventOnFinish: 'finalizeBonusExit',
+              coverFirst: true,
+              coverFadeOutMs: 650
             });
-            try { mgr.bringToTop?.('BubbleOverlayTransition'); } catch {}
+            try { mgr.bringToTop?.('FireOverlayTransition'); } catch {}
           } else {
             s?.events?.emit?.('finalizeBonusExit');
           }

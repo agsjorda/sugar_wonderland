@@ -3,31 +3,49 @@ import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 
- type TransitionPreset = 'default' | 'bonusEnter' | 'bonusExit';
+type TransitionPreset = 'default' | 'bonusEnter' | 'bonusExit';
 
- interface BubbleTransitionTimings {
- 	overlayAlpha?: number;
- 	overlayInMs?: number;
- 	overlayDelayMs?: number;
- 	spineInMs?: number;
- 	switchProgress?: number;
- 	switchMs?: number;
- 	overlayOutMs?: number;
- 	finishOutMs?: number;
- }
+interface TransitionTimings {
+	overlayAlpha?: number;
+	overlayInMs?: number;
+	overlayDelayMs?: number;
+	spineInMs?: number;
+	switchProgress?: number;
+	switchMs?: number;
+	overlayOutMs?: number;
+	finishOutMs?: number;
+}
 
- interface ResolvedBubbleTransitionTimings {
- 	overlayAlpha: number;
- 	overlayInMs: number;
- 	overlayDelayMs: number;
- 	spineInMs: number;
- 	switchProgress: number;
- 	switchMs: number | null;
- 	overlayOutMs: number;
- 	finishOutMs: number;
- }
+interface ResolvedTransitionTimings {
+	overlayAlpha: number;
+	overlayInMs: number;
+	overlayDelayMs: number;
+	spineInMs: number;
+	switchProgress: number;
+	switchMs: number | null;
+	overlayOutMs: number;
+	finishOutMs: number;
+}
 
-interface BubbleTransitionData {
+export const FIRE_TRANSITION_MOTION_DEFAULTS = {
+	enabled: true,
+	startDeltaX: 0,
+	startDeltaY: 860,
+	endDeltaX: 0,
+	endDeltaY: -750,
+	durationMs: 1600,
+	delayMs: 0,
+	ease: 'Sine.easeInOut'
+} as const;
+
+export const FIRE_TRANSITION_ANIMATION_SPEED_MULTIPLIER_DEFAULT = 3;
+
+export const FIRE_TRANSITION_SCALE_MULTIPLIER_DEFAULTS = {
+	x: 1.2,
+	y: 1
+} as const;
+
+interface FireTransitionData {
 	fromSceneKey?: string;
 	toSceneKey?: string;
 	gameStartData?: any;
@@ -37,53 +55,73 @@ interface BubbleTransitionData {
 	toSceneEventOnFinish?: string;
 	toSceneEventOnFinishData?: any;
 	transitionPreset?: TransitionPreset;
-	timings?: BubbleTransitionTimings;
+	timings?: TransitionTimings;
 	overlayAlpha?: number;
 	overlayFadeInDurationMs?: number;
 	overlayFadeInDelayMs?: number;
 	spineFadeInDurationMs?: number;
 	spineOffsetX?: number;
 	spineOffsetY?: number;
+	spineStartX?: number;
+	spineStartY?: number;
+	spineEndX?: number;
+	spineEndY?: number;
+	spineMoveDurationMs?: number;
+	spineMoveDelayMs?: number;
+	spineMoveEase?: string;
+	spineAnimationSpeedMultiplier?: number;
+	spineScaleXMultiplier?: number;
+	spineScaleYMultiplier?: number;
+	coverFirst?: boolean;
+	coverFadeOutMs?: number;
 	sceneSwitchProgress?: number;
 }
 
-export class BubbleOverlayTransitionScene extends Scene {
-	private transitionData?: BubbleTransitionData;
+export class FireOverlayTransitionScene extends Scene {
+	private transitionData?: FireTransitionData;
 	private overlayRect?: Phaser.GameObjects.Rectangle;
+	private coverRect?: Phaser.GameObjects.Rectangle;
 	private transitionSpine?: any;
-	private bubbles: Phaser.GameObjects.Arc[] = [];
+	private gameCamera?: Phaser.Cameras.Scene2D.Camera;
+	private didFadeGameCamera: boolean = false;
+	private coverFirstTriggered: boolean = false;
 	private hasStarted: boolean = false;
 	private hasFinished: boolean = false;
 	private hasPlayedTransitionSfx: boolean = false;
 	private hardStopTimer?: Phaser.Time.TimerEvent;
 	private toSceneKey?: string;
 	private ensureOnTopTimer?: Phaser.Time.TimerEvent;
+	private coverPollTimer?: Phaser.Time.TimerEvent;
 	private startGameStarted: boolean = false;
-	private resolvedTimings?: ResolvedBubbleTransitionTimings;
+	private resolvedTimings?: ResolvedTransitionTimings;
 
 	constructor() {
-		super('BubbleOverlayTransition');
+		super('FireOverlayTransition');
 	}
 
-	init(data: BubbleTransitionData): void {
+	init(data: FireTransitionData): void {
 		this.transitionData = data;
 		try { this.hasStarted = false; } catch {}
 		try { this.hasFinished = false; } catch {}
 		try { this.toSceneKey = undefined; } catch {}
 		try { this.resolvedTimings = undefined; } catch {}
 		try { this.hasPlayedTransitionSfx = false; } catch {}
+		try { this.coverFirstTriggered = false; } catch {}
+		try { this.coverRect?.destroy(); } catch {}
+		try { this.coverRect = undefined; } catch {}
 	}
 
 	create(): void {
-		console.log('[BubbleOverlayTransitionScene] create');
-		try { gameEventManager.emit(GameEventType.OVERLAY_SHOW, { overlayType: 'BubbleOverlayTransition' } as any); } catch {}
+		console.log('[FireOverlayTransitionScene] create');
+		try { gameEventManager.emit(GameEventType.OVERLAY_SHOW, { overlayType: 'FireOverlayTransition' } as any); } catch {}
 		try { this.hasStarted = false; } catch {}
 		try { this.hasFinished = false; } catch {}
 		try { this.toSceneKey = undefined; } catch {}
 		try { this.startGameStarted = false; } catch {}
 		try { this.resolvedTimings = undefined; } catch {}
 		try { this.hasPlayedTransitionSfx = false; } catch {}
-		try { this.scene.bringToTop('BubbleOverlayTransition'); } catch {}
+		try { this.coverFirstTriggered = false; } catch {}
+		try { this.scene.bringToTop('FireOverlayTransition'); } catch {}
 		this.cameras.main.setBackgroundColor(0x000000);
 		try { (this.cameras.main.backgroundColor as any).alpha = 0; } catch {}
 
@@ -91,15 +129,15 @@ export class BubbleOverlayTransitionScene extends Scene {
 			this.events.once('shutdown', () => {
 				try { this.ensureOnTopTimer?.destroy(); } catch {}
 				try { this.ensureOnTopTimer = undefined; } catch {}
+				try { this.coverPollTimer?.destroy(); } catch {}
+				try { this.coverPollTimer = undefined; } catch {}
 				try { this.hardStopTimer?.destroy(); } catch {}
 				try { this.hardStopTimer = undefined; } catch {}
 				try { (this.overlayRect as any)?.disableInteractive?.(); } catch {}
+				try { (this.coverRect as any)?.disableInteractive?.(); } catch {}
 				try { this.overlayRect?.destroy(); } catch {}
+				try { this.coverRect?.destroy(); } catch {}
 				try { this.transitionSpine?.destroy(); } catch {}
-				for (const b of this.bubbles) {
-					try { b.destroy(); } catch {}
-				}
-				this.bubbles = [];
 			});
 		} catch {}
 
@@ -107,8 +145,20 @@ export class BubbleOverlayTransitionScene extends Scene {
 		try {
 			this.hardStopTimer = this.time.delayedCall(4500, () => {
 				if (this.hasFinished) return;
-				console.warn('[BubbleOverlayTransitionScene] Hard stop fallback triggered');
+				console.warn('[FireOverlayTransitionScene] Hard stop fallback triggered');
+				try {
+					if (this.transitionData?.coverFirst && !this.startGameStarted) {
+						try { this.hasStarted = true; } catch {}
+						try { this.startGameStarted = true; } catch {}
+						try { this.startGameIfNeededInternal(); } catch {}
+					}
+				} catch {}
 				try { this.hasFinished = true; } catch {}
+				try {
+					if (this.gameCamera && this.didFadeGameCamera) {
+						this.gameCamera.setAlpha(1);
+					}
+				} catch {}
 				this.cleanupAndStop();
 			});
 		} catch {}
@@ -130,35 +180,25 @@ export class BubbleOverlayTransitionScene extends Scene {
 				delay: 100,
 				loop: true,
 				callback: () => {
-					try { this.scene.bringToTop('BubbleOverlayTransition'); } catch {}
+					try { this.scene.bringToTop('FireOverlayTransition'); } catch {}
 				}
 			});
 		} catch {}
-		this.playBubbleAnimation();
+
+		this.playFireAnimation();
 	}
 
 	private playTransitionSfxOnce(): void {
 		if (this.hasPlayedTransitionSfx) return;
 		this.hasPlayedTransitionSfx = true;
-		const playNow = () => {
-			try {
-				const audio = (this as any)?.audioManager ?? ((window as any)?.audioManager ?? null);
-				if (audio && typeof audio.playSoundEffect === 'function') {
-					audio.playSoundEffect('bubble_transition_TB');
-					return;
-				}
-			} catch {}
-			try { this.sound.play('bubble_transition_TB'); } catch {}
-		};
-
-		const shouldDelay = this.transitionData?.toSceneEvent === 'activateBonusMode';
-		if (shouldDelay) {
-			try {
-				this.time.delayedCall(1250, () => playNow());
+		try {
+			const audio = (this as any)?.audioManager ?? ((window as any)?.audioManager ?? null);
+			if (audio && typeof audio.playSoundEffect === 'function') {
+				audio.playSoundEffect('bubble_transition_TB');
 				return;
-			} catch {}
-		}
-		playNow();
+			}
+		} catch {}
+		try { this.sound.play('bubble_transition_TB'); } catch {}
 	}
 
 	private resolvePreset(): TransitionPreset {
@@ -170,7 +210,7 @@ export class BubbleOverlayTransitionScene extends Scene {
 		return 'default';
 	}
 
-	private resolveTimings(isFallback: boolean): ResolvedBubbleTransitionTimings {
+	private resolveTimings(isFallback: boolean): ResolvedTransitionTimings {
 		const preset = this.resolvePreset();
 		const presetDefaults = (() => {
 			switch (preset) {
@@ -232,17 +272,17 @@ export class BubbleOverlayTransitionScene extends Scene {
 		return { overlayAlpha, overlayInMs, overlayDelayMs, spineInMs, switchProgress, switchMs, overlayOutMs, finishOutMs };
 	}
 
-	private playBubbleAnimation(): void {
+	private playFireAnimation(): void {
 		this.playTransitionSfxOnce();
-		const hasFactory = ensureSpineFactory(this as any, '[BubbleOverlayTransitionScene] playBubbleAnimation');
+		const hasFactory = ensureSpineFactory(this as any, '[FireOverlayTransitionScene] playFireAnimation');
 		if (!hasFactory) {
 			this.playFallbackOverlay();
 			return;
 		}
 		this.resolvedTimings = this.resolveTimings(false);
+		let coverFirst = !!this.transitionData?.coverFirst;
 
-		const shouldUseTbTransition = this.transitionData?.toSceneEvent === 'activateBonusMode';
-		const spineKey = shouldUseTbTransition ? 'bubbles_transition_TB' : 'bubbles_transition';
+		const spineKey = 'Fire_Transition';
 		const atlasKey = spineKey + '-atlas';
 		const jsonCache: any = (this.cache as any).json;
 		if (!jsonCache?.has?.(spineKey)) {
@@ -252,6 +292,10 @@ export class BubbleOverlayTransitionScene extends Scene {
 
 		const cx = this.scale.width * 0.5;
 		const cy = this.scale.height * 0.5;
+		const rawScaleX = Number(this.transitionData?.spineScaleXMultiplier);
+		const rawScaleY = Number(this.transitionData?.spineScaleYMultiplier);
+		const scaleXMult = (isFinite(rawScaleX) && rawScaleX > 0) ? rawScaleX : FIRE_TRANSITION_SCALE_MULTIPLIER_DEFAULTS.x;
+		const scaleYMult = (isFinite(rawScaleY) && rawScaleY > 0) ? rawScaleY : FIRE_TRANSITION_SCALE_MULTIPLIER_DEFAULTS.y;
 		let spine: any;
 		try {
 			spine = (this.add as any).spine(cx, cy, spineKey, atlasKey);
@@ -273,7 +317,15 @@ export class BubbleOverlayTransitionScene extends Scene {
 				? bounds.height
 				: ((spine as any).height || 800);
 			const scale = Math.max(desiredWidth / spineW, desiredHeight / spineH);
-			spine.setScale(scale);
+			const finalScaleX = scale * scaleXMult;
+			const finalScaleY = scale * scaleYMult;
+			try {
+				spine.setScale(finalScaleX, finalScaleY);
+			} catch {
+				try { spine.setScale(Math.max(finalScaleX, finalScaleY)); } catch {}
+				try { (spine as any).scaleX = finalScaleX; } catch {}
+				try { (spine as any).scaleY = finalScaleY; } catch {}
+			}
 			const boundsAfter: any = (spine as any).getBounds?.();
 			if (boundsAfter && isFinite(boundsAfter.x) && isFinite(boundsAfter.y) && isFinite(boundsAfter.width) && isFinite(boundsAfter.height)) {
 				spine.x += cx - (boundsAfter.x + boundsAfter.width * 0.5);
@@ -281,20 +333,54 @@ export class BubbleOverlayTransitionScene extends Scene {
 			}
 		} catch {}
 		try {
-			if (shouldUseTbTransition) {
-				const rawX = Number(this.transitionData?.spineOffsetX);
-				const rawY = Number(this.transitionData?.spineOffsetY);
-				const offsetX = isFinite(rawX) ? rawX : 0;
-				const offsetY = isFinite(rawY) ? rawY : 0;
-				spine.x += offsetX;
-				spine.y += offsetY;
-			}
+			const rawX = Number(this.transitionData?.spineOffsetX);
+			const rawY = Number(this.transitionData?.spineOffsetY);
+			const offsetX = isFinite(rawX) ? rawX : 0;
+			const offsetY = isFinite(rawY) ? rawY : 0;
+			spine.x += offsetX;
+			spine.y += offsetY;
 		} catch {}
 		try { spine.setAlpha(0); } catch {}
 
+		if (coverFirst) {
+			try { this.coverRect?.destroy(); } catch {}
+			try {
+				const baseW = this.scale.width / Math.max(0.0001, scaleXMult);
+				const baseH = this.scale.height / Math.max(0.0001, scaleYMult);
+				this.coverRect = this.add.rectangle(cx, cy, baseW, baseH, 0x000000, 1).setOrigin(0.5, 1);
+				this.coverRect.setDepth(0.9);
+				this.coverRect.setAlpha(1);
+				this.coverRect.setScale(scaleXMult, scaleYMult);
+				try { (this.coverRect as any)?.disableInteractive?.(); } catch {}
+			} catch {
+				try { this.coverRect?.destroy(); } catch {}
+				this.coverRect = undefined;
+			}
+			if (!this.coverRect) {
+				coverFirst = false;
+			}
+		}
+
+		try {
+			const rawStartX = Number(this.transitionData?.spineStartX);
+			const rawStartY = Number(this.transitionData?.spineStartY);
+			const startX = isFinite(rawStartX) ? rawStartX : null;
+			const startY = isFinite(rawStartY) ? rawStartY : null;
+			if (startX !== null) spine.x = startX;
+			if (startY !== null) spine.y = startY;
+		} catch {}
+
+		if (coverFirst && this.coverRect) {
+			try {
+				const h = this.coverRect.displayHeight;
+				this.coverRect.x = spine.x;
+				this.coverRect.y = spine.y + h;
+			} catch {}
+		}
+
 		try {
 			const timing = this.resolvedTimings || this.resolveTimings(false);
-			if (this.overlayRect) {
+			if (!coverFirst && this.overlayRect) {
 				this.tweens.add({
 					targets: this.overlayRect,
 					alpha: Math.max(0, Math.min(1, timing.overlayAlpha)),
@@ -302,6 +388,8 @@ export class BubbleOverlayTransitionScene extends Scene {
 					delay: timing.overlayDelayMs,
 					ease: 'Power2'
 				});
+			} else {
+				try { this.overlayRect?.setAlpha(0); } catch {}
 			}
 			this.tweens.add({
 				targets: spine,
@@ -314,6 +402,7 @@ export class BubbleOverlayTransitionScene extends Scene {
 		let animName: string | null = null;
 		let durationSec = 2.0;
 		let state: any = undefined;
+		let willLoop = true;
 		try {
 			const data: any = spine.skeleton?.data;
 			const animations: any[] = (data && Array.isArray(data.animations)) ? data.animations : (data?.animations || []);
@@ -338,7 +427,14 @@ export class BubbleOverlayTransitionScene extends Scene {
 			}
 			state = spine.animationState;
 			if (animName) {
-				state.setAnimation(0, animName, false);
+				willLoop = true;
+				try {
+					const rawMult = Number(this.transitionData?.spineAnimationSpeedMultiplier);
+					const mult = (isFinite(rawMult) && rawMult > 0) ? rawMult : FIRE_TRANSITION_ANIMATION_SPEED_MULTIPLIER_DEFAULT;
+					const base = (typeof state?.timeScale === 'number' && isFinite(state.timeScale) && state.timeScale > 0) ? state.timeScale : 1;
+					state.timeScale = base * mult;
+				} catch {}
+				state.setAnimation(0, animName, true);
 			}
 		} catch {}
 
@@ -355,14 +451,14 @@ export class BubbleOverlayTransitionScene extends Scene {
 			totalMsForTiming = 2000;
 		}
 
-		const timing = this.resolvedTimings || this.resolveTimings(false);
-		const midMs = (timing.switchMs !== null)
-			? Math.max(0, Math.min(totalMsForTiming, timing.switchMs))
-			: Math.max(0, Math.round(totalMsForTiming * timing.switchProgress));
-		this.time.delayedCall(midMs, () => {
-			this.startGameIfNeeded();
-			this.fadeOverlayOutEarly();
-		});
+		let motionStartX = spine.x;
+		let motionStartY = spine.y;
+		let motionEndX = spine.x;
+		let motionEndY = spine.y;
+		let motionDurationMs = totalMsForTiming;
+		let motionDelayMs = 0;
+		let motionEase = 'Linear';
+		let motionTweenCreatedAtMs = Number((this.time as any)?.now) || 0;
 
 		let finishScheduled = false;
 		const safeFinish = () => {
@@ -372,13 +468,165 @@ export class BubbleOverlayTransitionScene extends Scene {
 		};
 
 		try {
-			this.time.delayedCall(totalMsForTiming + 50, () => safeFinish());
-		} catch {
-			this.time.delayedCall(2000, () => safeFinish());
+			const rawStartX = Number(this.transitionData?.spineStartX);
+			const rawStartY = Number(this.transitionData?.spineStartY);
+			const explicitStartX = isFinite(rawStartX) ? rawStartX : null;
+			const explicitStartY = isFinite(rawStartY) ? rawStartY : null;
+
+			const rawEndX = Number(this.transitionData?.spineEndX);
+			const rawEndY = Number(this.transitionData?.spineEndY);
+			const explicitEndX = isFinite(rawEndX) ? rawEndX : null;
+			const explicitEndY = isFinite(rawEndY) ? rawEndY : null;
+
+			const useDefaults = !!FIRE_TRANSITION_MOTION_DEFAULTS.enabled;
+			const hasExplicitMotion = (explicitStartX !== null || explicitStartY !== null || explicitEndX !== null || explicitEndY !== null);
+			const shouldMove = hasExplicitMotion || useDefaults;
+			if (!shouldMove) {
+				motionStartX = spine.x;
+				motionStartY = spine.y;
+				motionEndX = spine.x;
+				motionEndY = spine.y;
+				motionDurationMs = 0;
+				motionDelayMs = 0;
+				motionEase = 'Linear';
+			} else {
+				const baseX = spine.x;
+				const baseY = spine.y;
+
+				const startX = explicitStartX !== null ? explicitStartX : (useDefaults ? baseX + FIRE_TRANSITION_MOTION_DEFAULTS.startDeltaX : baseX);
+				const startY = explicitStartY !== null ? explicitStartY : (useDefaults ? baseY + FIRE_TRANSITION_MOTION_DEFAULTS.startDeltaY : baseY);
+				const endX = explicitEndX !== null ? explicitEndX : (useDefaults ? baseX + FIRE_TRANSITION_MOTION_DEFAULTS.endDeltaX : baseX);
+				const endY = explicitEndY !== null ? explicitEndY : (useDefaults ? baseY + FIRE_TRANSITION_MOTION_DEFAULTS.endDeltaY : baseY);
+
+				motionStartX = startX;
+				motionStartY = startY;
+				motionEndX = endX;
+				motionEndY = endY;
+
+				try {
+					if (explicitStartX === null && explicitStartY === null && useDefaults) {
+						spine.x = startX;
+						spine.y = startY;
+					}
+				} catch {}
+
+				const rawDur = Number(this.transitionData?.spineMoveDurationMs);
+				const duration = (isFinite(rawDur) && rawDur >= 0)
+					? Math.max(0, rawDur | 0)
+					: (useDefaults ? FIRE_TRANSITION_MOTION_DEFAULTS.durationMs : totalMsForTiming);
+				const rawDelay = Number(this.transitionData?.spineMoveDelayMs);
+				const delay = (isFinite(rawDelay) && rawDelay >= 0)
+					? Math.max(0, rawDelay | 0)
+					: (useDefaults ? FIRE_TRANSITION_MOTION_DEFAULTS.delayMs : 0);
+				const ease = (this.transitionData?.spineMoveEase && String(this.transitionData.spineMoveEase).trim().length > 0)
+					? String(this.transitionData.spineMoveEase)
+					: (useDefaults ? FIRE_TRANSITION_MOTION_DEFAULTS.ease : 'Linear');
+
+				motionDurationMs = duration;
+				motionDelayMs = delay;
+				motionEase = ease;
+
+				motionTweenCreatedAtMs = Number((this.time as any)?.now) || 0;
+				this.tweens.add({
+					targets: spine,
+					x: endX,
+					y: endY,
+					duration,
+					delay,
+					ease
+				});
+			}
+		} catch {}
+
+		if (!coverFirst) {
+			const timing = this.resolvedTimings || this.resolveTimings(false);
+			const midMs = (timing.switchMs !== null)
+				? Math.max(0, Math.min(totalMsForTiming, timing.switchMs))
+				: Math.max(0, Math.round(totalMsForTiming * timing.switchProgress));
+			this.time.delayedCall(midMs, () => {
+				this.startGameIfNeeded();
+				try {
+					const fromKey = this.transitionData?.fromSceneKey || 'Preloader';
+					const toKey = this.transitionData?.toSceneKey || 'Game';
+					if (fromKey === toKey) {
+						this.fadeOverlayOutEarly();
+					}
+				} catch {}
+			});
+
+			try {
+				this.time.delayedCall(totalMsForTiming + 50, () => safeFinish());
+			} catch {
+				this.time.delayedCall(2000, () => safeFinish());
+			}
+		} else {
+			try { this.coverPollTimer?.destroy(); } catch {}
+			try {
+				this.coverPollTimer = this.time.addEvent({
+					delay: 16,
+					loop: true,
+					callback: () => {
+						if (this.hasFinished) return;
+						if (!this.coverRect) return;
+						if (!this.transitionSpine) return;
+						try {
+							const h = this.coverRect.displayHeight;
+							this.coverRect.x = this.transitionSpine.x;
+							const desiredBottom = this.transitionSpine.y + h;
+							this.coverRect.y = Math.max(desiredBottom, h);
+							const top = this.coverRect.y - h;
+							if (!this.coverFirstTriggered && top <= 0) {
+								this.coverFirstTriggered = true;
+								try { this.hasStarted = true; } catch {}
+								try { this.startGameStarted = true; } catch {}
+								try { this.startGameIfNeededInternal(); } catch {}
+								try {
+									const raw = Number(this.transitionData?.coverFadeOutMs);
+									const returnMs = (isFinite(raw) && raw >= 0)
+										? Math.max(0, raw | 0)
+										: Math.max(300, Math.round((motionDurationMs || 0) * 0.9));
+									const nowMs = Number((this.time as any)?.now) || 0;
+									const elapsedMs = Math.max(0, nowMs - (Number(motionTweenCreatedAtMs) || 0));
+									const remainingToEndMs = Math.max(0, (Math.max(0, motionDelayMs | 0) + Math.max(0, motionDurationMs | 0)) - elapsedMs);
+									this.time.delayedCall(remainingToEndMs, () => {
+										if (this.hasFinished) return;
+										if (!this.transitionSpine) {
+											try { this.hasFinished = true; } catch {}
+											this.cleanupAndStop();
+											return;
+										}
+										try {
+											this.tweens.killTweensOf(this.transitionSpine);
+										} catch {}
+										try {
+											this.tweens.add({
+												targets: this.transitionSpine,
+												x: motionStartX,
+												y: motionStartY,
+												duration: returnMs,
+												ease: motionEase,
+												onComplete: () => {
+												try { this.hasFinished = true; } catch {}
+												this.cleanupAndStop();
+											}
+										});
+										} catch {
+											try { this.hasFinished = true; } catch {}
+											this.cleanupAndStop();
+										}
+									});
+								} catch {
+									this.cleanupAndStop();
+								}
+							}
+						} catch {}
+					}
+				});
+			} catch {}
 		}
 
 		try {
-			if (state && typeof state.addListener === 'function') {
+			if (!willLoop && state && typeof state.addListener === 'function') {
 				state.addListener({
 					complete: (entry: any) => {
 						try {
@@ -408,8 +656,6 @@ export class BubbleOverlayTransitionScene extends Scene {
 			});
 		} catch {}
 
-		this.spawnBubbles();
-
 		const timing = this.resolvedTimings || this.resolveTimings(true);
 		const totalMsForTiming = 2200;
 		const midMs = (timing.switchMs !== null)
@@ -417,7 +663,13 @@ export class BubbleOverlayTransitionScene extends Scene {
 			: Math.max(0, Math.round(totalMsForTiming * timing.switchProgress));
 		this.time.delayedCall(midMs, () => {
 			this.startGameIfNeeded();
-			this.fadeOverlayOutEarly();
+			try {
+				const fromKey = this.transitionData?.fromSceneKey || 'Preloader';
+				const toKey = this.transitionData?.toSceneKey || 'Game';
+				if (fromKey === toKey) {
+					this.fadeOverlayOutEarly();
+				}
+			} catch {}
 		});
 		this.time.delayedCall(totalMsForTiming, () => {
 			this.finishTransition();
@@ -437,64 +689,6 @@ export class BubbleOverlayTransitionScene extends Scene {
 				ease: 'Power2'
 			});
 		} catch {}
-	}
-
-	private spawnBubbles(): void {
-		const count = 26;
-		for (let i = 0; i < count; i++) {
-			const radius = Phaser.Math.Between(8, 26);
-			const x = Phaser.Math.Between(Math.floor(-radius), Math.floor(this.scale.width + radius));
-			const y = Phaser.Math.Between(
-				Math.floor(this.scale.height + radius),
-				Math.floor(this.scale.height + radius + 180)
-			);
-			const bubble = this.add.circle(x, y, radius, 0xffffff, 1);
-			bubble.setDepth(999901);
-			bubble.setAlpha(0);
-
-			const delay = Phaser.Math.Between(0, 450);
-			const floatDuration = Phaser.Math.Between(1100, 1650);
-			const drift = Phaser.Math.Between(-40, 40);
-
-			this.bubbles.push(bubble);
-
-			try {
-				this.tweens.add({
-					targets: bubble,
-					alpha: 0.22,
-					duration: 250,
-					delay,
-					ease: 'Sine.easeOut'
-				});
-			} catch {}
-
-			try {
-				this.tweens.add({
-					targets: bubble,
-					y: -radius - 40,
-					x: x + drift,
-					duration: floatDuration,
-					delay,
-					ease: 'Sine.easeInOut',
-					onComplete: () => {
-						try { bubble.destroy(); } catch {}
-					}
-				});
-			} catch {}
-
-			try {
-				const s0 = Phaser.Math.FloatBetween(0.35, 0.75);
-				const s1 = Phaser.Math.FloatBetween(0.9, 1.35);
-				bubble.setScale(s0);
-				this.tweens.add({
-					targets: bubble,
-					scale: s1,
-					duration: floatDuration,
-					delay,
-					ease: 'Sine.easeOut'
-				});
-			} catch {}
-		}
 	}
 
 	private startGameIfNeeded(): void {
@@ -518,6 +712,8 @@ export class BubbleOverlayTransitionScene extends Scene {
 		const fromKey = this.transitionData?.fromSceneKey || 'Preloader';
 		const startData = this.transitionData?.gameStartData || {};
 		this.toSceneKey = toKey;
+		this.didFadeGameCamera = false;
+		this.gameCamera = undefined;
 
 		try {
 			const stopFrom = this.transitionData?.stopFromScene;
@@ -541,16 +737,26 @@ export class BubbleOverlayTransitionScene extends Scene {
 			}
 			toScene = this.scene.get(toKey) as any;
 		} catch {}
-		try { this.scene.bringToTop('BubbleOverlayTransition'); } catch {}
+		try { this.scene.bringToTop('FireOverlayTransition'); } catch {}
+		try {
+			const cam = toScene?.cameras?.main;
+			if (cam) {
+				this.gameCamera = cam;
+				if (fromKey !== toKey && !this.transitionData?.coverFirst) {
+					this.didFadeGameCamera = true;
+					this.gameCamera?.setAlpha(0);
+				}
+			}
+		} catch {}
 
 		try {
 			const evt = this.transitionData?.toSceneEvent;
 			if (evt && toScene?.events && typeof toScene.events.emit === 'function') {
-				console.log('[BubbleOverlayTransitionScene] emit toSceneEvent', evt);
+				console.log('[FireOverlayTransitionScene] emit toSceneEvent', evt);
 				toScene.events.emit(evt, this.transitionData?.toSceneEventData);
 			}
 		} catch {}
-		try { this.scene.bringToTop('BubbleOverlayTransition'); } catch {}
+		try { this.scene.bringToTop('FireOverlayTransition'); } catch {}
 	}
 
 	private finishTransition(): void {
@@ -568,7 +774,7 @@ export class BubbleOverlayTransitionScene extends Scene {
 		const targets: any[] = [];
 		if (this.transitionSpine) targets.push(this.transitionSpine);
 		if (this.overlayRect) targets.push(this.overlayRect);
-		for (const b of this.bubbles) targets.push(b);
+		if (this.coverRect) targets.push(this.coverRect);
 
 		if (targets.length === 0) {
 			this.cleanupAndStop();
@@ -589,29 +795,40 @@ export class BubbleOverlayTransitionScene extends Scene {
 		} catch {
 			this.cleanupAndStop();
 		}
+
+		if (this.gameCamera && this.didFadeGameCamera) {
+			try {
+				this.tweens.add({
+					targets: this.gameCamera,
+					alpha: 1,
+					duration: 600,
+					ease: 'Power2'
+				});
+			} catch {}
+		}
 	}
 
 	private cleanupAndStop(): void {
 		try { this.ensureOnTopTimer?.destroy(); } catch {}
 		try { this.ensureOnTopTimer = undefined; } catch {}
-		try { gameEventManager.emit(GameEventType.OVERLAY_HIDE, { overlayType: 'BubbleOverlayTransition' } as any); } catch {}
+		try { this.coverPollTimer?.destroy(); } catch {}
+		try { this.coverPollTimer = undefined; } catch {}
+		try { gameEventManager.emit(GameEventType.OVERLAY_HIDE, { overlayType: 'FireOverlayTransition' } as any); } catch {}
 		try {
 			const toKey = this.toSceneKey || this.transitionData?.toSceneKey || 'Game';
 			const toScene: any = this.scene.get(toKey) as any;
 			const evt = this.transitionData?.toSceneEventOnFinish;
 			if (evt && toScene?.events && typeof toScene.events.emit === 'function') {
-				console.log('[BubbleOverlayTransitionScene] emit toSceneEventOnFinish', evt);
+				console.log('[FireOverlayTransitionScene] emit toSceneEventOnFinish', evt);
 				toScene.events.emit(evt, this.transitionData?.toSceneEventOnFinishData);
 			}
 		} catch {}
 
 		try { (this.overlayRect as any)?.disableInteractive?.(); } catch {}
+		try { (this.coverRect as any)?.disableInteractive?.(); } catch {}
 		try { this.overlayRect?.destroy(); } catch {}
+		try { this.coverRect?.destroy(); } catch {}
 		try { this.transitionSpine?.destroy(); } catch {}
-		for (const b of this.bubbles) {
-			try { b.destroy(); } catch {}
-		}
-		this.bubbles = [];
 
 		try { this.hardStopTimer?.destroy(); } catch {}
 		try { this.hardStopTimer = undefined; } catch {}

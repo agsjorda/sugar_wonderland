@@ -172,8 +172,7 @@ export async function runDropReels(self: any, symbols: number[][], fillerCount: 
   // Play turbo drop sound effect at the start of reel drop sequence when in turbo mode
   try {
     if (self.scene.gameData.isTurbo && (window as any).audioManager) {
-      (window as any).audioManager.playSoundEffect(SoundEffectType.TURBO_DROP);
-      console.log("[ReelDropScript] Playing turbo drop sound effect at start of reel drop sequence");
+      void 0;
     }
   } catch {}
 
@@ -226,8 +225,15 @@ export async function runDropReels(self: any, symbols: number[][], fillerCount: 
   try { (self.scene as any).__isScatterAnticipationActive = extendLastReelDrop; } catch {}
 
   const REEL_STAGGER_MS = 150;
-  const useSequentialStartForBuyAnticipation = !!gameStateManager.isBuyFeatureSpin && extendLastReelDrop;
-  let sequentialStartDelayMs = REEL_STAGGER_MS;
+  const turboSimultaneousDrop = (() => {
+    try {
+      return !!gameStateManager.isTurbo || !!self?.scene?.gameData?.isTurbo;
+    } catch {
+      return false;
+    }
+  })();
+  const useSequentialStartForBuyAnticipation = !!gameStateManager.isBuyFeatureSpin && extendLastReelDrop && !turboSimultaneousDrop;
+  let sequentialStartDelayMs = turboSimultaneousDrop ? 0 : REEL_STAGGER_MS;
   try {
     const hasIsSkipFn = typeof (self as any)?.isSkipReelDropsActive === 'function';
     const isSkipActive = hasIsSkipFn
@@ -286,7 +292,9 @@ export async function runDropReels(self: any, symbols: number[][], fillerCount: 
 
     const holdTarget = holdTargetByReel[col];
 
-    const stopStaggerMs = (useSequentialStartForBuyAnticipation || isSkipActiveNow()) ? 0 : Math.max(0, col * REEL_STAGGER_MS);
+    const stopStaggerMs = (turboSimultaneousDrop || useSequentialStartForBuyAnticipation || isSkipActiveNow())
+      ? 0
+      : Math.max(0, col * REEL_STAGGER_MS);
 
     dropPrevSymbols(self, fillerCount, col, extendThisReel, stopStaggerMs);
     if (holdTarget && isReelHeld(col)) {
@@ -308,6 +316,14 @@ export async function runDropReels(self: any, symbols: number[][], fillerCount: 
   console.log("[ReelDropScript] Waiting for all reels to complete animation...");
   await Promise.all(reelCompletionPromises);
   console.log("[ReelDropScript] All reels have completed animation");
+  try {
+    if ((window as any).audioManager) {
+      const isTurbo = !!gameStateManager.isTurbo || !!self?.scene?.gameData?.isTurbo;
+      if (isTurbo) {
+        (window as any).audioManager.playSoundEffect(SoundEffectType.TURBO_DROP);
+      }
+    }
+  } catch {}
 }
 
 /**
@@ -315,7 +331,7 @@ export async function runDropReels(self: any, symbols: number[][], fillerCount: 
  * Extracted from Symbols.requestSkipReelDrops for reuse.
  */
 export function applySkipReelTweaks(self: any, gd: GameData, timeScale: number): void {
-	try { void self; void gd; void timeScale; } catch {}
+  try { void self; void gd; void timeScale; } catch {}
 }
 
 export function destroyActiveFillerSymbols(self: any, reelIndex?: number): void {
@@ -360,26 +376,26 @@ function dropPrevSymbols(self: any, fillerCount: number, index: number, extendDu
     return;
   }
 
-	try {
-		const hasIsSkipFn = typeof (self as any)?.isSkipReelDropsActive === 'function';
-		const isSkipActive = hasIsSkipFn
-			? !!(self as any).isSkipReelDropsActive()
-			: !!((self as any)?.skipReelDropsPending || (self as any)?.skipReelDropsActive);
-		if (isSkipActive) {
-			try {
-				const col = (self as any).symbols?.[index];
-				if (Array.isArray(col)) {
-					for (const obj of col) {
-						if (!obj || (obj as any).destroyed) continue;
-						try { self.scene?.tweens?.killTweensOf?.(obj); } catch {}
-						try { (obj as any).alpha = 0; } catch {}
-						try { (obj as any).setVisible?.(false); } catch {}
-					}
-				}
-			} catch {}
-			return;
-		}
-	} catch {}
+  try {
+    const hasIsSkipFn = typeof (self as any)?.isSkipReelDropsActive === 'function';
+    const isSkipActive = hasIsSkipFn
+      ? !!(self as any).isSkipReelDropsActive()
+      : !!((self as any)?.skipReelDropsPending || (self as any)?.skipReelDropsActive);
+    if (isSkipActive) {
+      try {
+        const col = (self as any).symbols?.[index];
+        if (Array.isArray(col)) {
+          for (const obj of col) {
+            if (!obj || (obj as any).destroyed) continue;
+            try { self.scene?.tweens?.killTweensOf?.(obj); } catch {}
+            try { (obj as any).alpha = 0; } catch {}
+            try { (obj as any).setVisible?.(false); } catch {}
+          }
+        }
+      } catch {}
+      return;
+    }
+  } catch {}
 
   // Check if symbols array has valid structure
   if (!Array.isArray(self.symbols) || self.symbols.length === 0 || !Array.isArray(self.symbols[0]) || self.symbols[0].length === 0) {
@@ -445,16 +461,17 @@ function dropFillers(
 
   const isBuyFeatureSpin = !!gameStateManager.isBuyFeatureSpin;
 
-	try {
-		const hasIsSkipFn = typeof (self as any)?.isSkipReelDropsActive === 'function';
-		const isSkipActive = hasIsSkipFn
-			? !!(self as any).isSkipReelDropsActive()
-			: !!((self as any)?.skipReelDropsPending || (self as any)?.skipReelDropsActive);
-		if (isSkipActive) {
-			try { destroyActiveFillerSymbols(self, index); } catch {}
-			return;
-		}
-	} catch {}
+  try {
+    const hasIsSkipFn = typeof (self as any)?.isSkipReelDropsActive === 'function';
+    const isSkipActive = hasIsSkipFn
+      ? !!(self as any).isSkipReelDropsActive()
+      : !!((self as any)?.skipReelDropsPending || (self as any)?.skipReelDropsActive);
+    if (isSkipActive) {
+      try { destroyActiveFillerSymbols(self, index); } catch {}
+      return;
+    }
+  } catch {}
+
   const isAnticipationLastReel = !!extendDuration && !!(self.scene as any)?.__isScatterAnticipationActive;
   const anticipationEase = (window as any).Phaser?.Math?.Easing?.Cubic?.Out
     || (window as any).Phaser?.Math?.Easing?.Quadratic?.Out
@@ -703,7 +720,8 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
     const column = self.newSymbols?.[index];
     const totalAnimations = Array.isArray(column) ? column.length : 0;
     const START_INDEX_Y = -(fillerCount + SLOT_ROWS + extraRows);
-		let skipApplied = false;
+    let skipApplied = false;
+    let dropSfxPlayed = false;
 
     if (!Array.isArray(column) || totalAnimations === 0) {
       finalize();
@@ -769,27 +787,27 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
           continue;
         }
 
-				try {
-					(symbol as any).setVisible?.(true);
-					if (!keepHiddenUntilStop) {
-						const anySym: any = symbol as any;
-						if (typeof anySym.__holdOriginalAlpha !== 'number') {
-							anySym.alpha = 1;
-						}
-					}
-				} catch {}
+        try {
+          (symbol as any).setVisible?.(true);
+          if (!keepHiddenUntilStop) {
+            const anySym: any = symbol as any;
+            if (typeof anySym.__holdOriginalAlpha !== 'number') {
+              anySym.alpha = 1;
+            }
+          }
+        } catch {}
 
         const startIndex = row + START_INDEX_Y;
         symbol.y = getYPos(self, startIndex);
 
-				try {
-					const anySym: any = symbol as any;
-					if (typeof anySym.__holdOriginalAlpha === 'number') {
-						anySym.alpha = anySym.__holdOriginalAlpha;
-						delete anySym.__holdOriginalAlpha;
-					}
-				} catch {}
-				try { self.container?.bringToTop?.(symbol); } catch {}
+        try {
+          const anySym: any = symbol as any;
+          if (typeof anySym.__holdOriginalAlpha === 'number') {
+            anySym.alpha = anySym.__holdOriginalAlpha;
+            delete anySym.__holdOriginalAlpha;
+          }
+        } catch {}
+        try { self.container?.bringToTop?.(symbol); } catch {}
 
         const isBuyFeatureSpin = !!gameStateManager.isBuyFeatureSpin;
         const mainDropDuration = isBuyFeatureSpin
@@ -850,13 +868,6 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
                 duration: settleDuration,
                 ease: (window as any).Phaser?.Math?.Easing?.Linear,
                 onComplete: () => {
-                  try {
-                    if ((window as any).audioManager) {
-                      (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
-                      console.log(`[ReelDropScript] Playing reel drop sound effect for reel ${index} after drop completion`);
-                    }
-                  } catch {}
-
                   completedAnimations++;
                   if (completedAnimations === totalAnimations) {
                     finalize();
@@ -885,13 +896,6 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
                 duration: settleDuration,
                 ease: (window as any).Phaser?.Math?.Easing?.Linear,
                 onComplete: () => {
-                  try {
-                    if ((window as any).audioManager) {
-                      (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
-                      console.log(`[ReelDropScript] Playing reel drop sound effect for reel ${index} after drop completion`);
-                    }
-                  } catch {}
-
                   completedAnimations++;
                   if (completedAnimations === totalAnimations) {
                     finalize();
@@ -903,109 +907,102 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
         }
       }
 
-			const applySkipToColumn = () => {
-				try {
-					if (skipApplied) return;
-					skipApplied = true;
-					try { destroyActiveFillerSymbols(self); } catch {}
-					try {
-						const prevCol = (self as any).symbols?.[index];
-						if (Array.isArray(prevCol)) {
-							for (const obj of prevCol) {
-								if (!obj || (obj as any).destroyed) continue;
-								try { self.scene?.tweens?.killTweensOf?.(obj); } catch {}
-								try { (obj as any).alpha = 0; } catch {}
-								try { (obj as any).setVisible?.(false); } catch {}
-							}
-						}
-					} catch {}
+      const applySkipToColumn = () => {
+        try {
+          if (skipApplied) return;
+          skipApplied = true;
+          try { destroyActiveFillerSymbols(self); } catch {}
+          try {
+            const prevCol = (self as any).symbols?.[index];
+            if (Array.isArray(prevCol)) {
+              for (const obj of prevCol) {
+                if (!obj || (obj as any).destroyed) continue;
+                try { self.scene?.tweens?.killTweensOf?.(obj); } catch {}
+                try { (obj as any).alpha = 0; } catch {}
+                try { (obj as any).setVisible?.(false); } catch {}
+              }
+            }
+          } catch {}
 
-					const isBuyFeatureSpin = !!gameStateManager.isBuyFeatureSpin;
-					const baseDurationMs = isBuyFeatureSpin
-						? Number(self.scene?.gameData?.dropReelsDuration)
-						: (Number(self.scene?.gameData?.dropDuration) * 0.9);
-					const baseDurationSafe = (isFinite(baseDurationMs) && baseDurationMs > 0) ? baseDurationMs : 800;
-					const startIndexBase = (Number(fillerCount) || 0) + SLOT_ROWS;
-					const speedPxPerMs = (startIndexBase * height) / Math.max(1, baseDurationSafe);
-					const padTop = Math.max(0, Number((self as any)?.gridMaskPaddingTop) || 0);
-					const gridTop = (Number((self as any)?.slotY) || 0) - (Number((self as any)?.totalGridHeight) || 0) * 0.5;
-					const maskTop = gridTop - padTop;
-					const preDropY = maskTop + height * 0.5;
+          const isBuyFeatureSpin = !!gameStateManager.isBuyFeatureSpin;
+          const baseDurationMs = isBuyFeatureSpin
+            ? Number(self.scene?.gameData?.dropReelsDuration)
+            : (Number(self.scene?.gameData?.dropDuration) * 0.9);
+          const baseDurationSafe = (isFinite(baseDurationMs) && baseDurationMs > 0) ? baseDurationMs : 800;
+          const startIndexBase = (Number(fillerCount) || 0) + SLOT_ROWS;
+          const speedPxPerMs = (startIndexBase * height) / Math.max(1, baseDurationSafe);
+          const padTop = Math.max(0, Number((self as any)?.gridMaskPaddingTop) || 0);
+          const gridTop = (Number((self as any)?.slotY) || 0) - (Number((self as any)?.totalGridHeight) || 0) * 0.5;
+          const maskTop = gridTop - padTop;
+          const preDropY = maskTop + height * 0.5;
 
-					for (let row = 0; row < column.length; row++) {
-						const symbol = column[row];
-						if (!symbol) {
-							completedAnimations++;
-							continue;
-						}
-						try { (symbol as any).setVisible?.(true); } catch {}
-						try {
-							const anySym: any = symbol as any;
-							if (typeof anySym.__holdOriginalAlpha === 'number') {
-								anySym.alpha = anySym.__holdOriginalAlpha;
-								delete anySym.__holdOriginalAlpha;
-							} else {
-								anySym.alpha = 1;
-							}
-						} catch {}
-						try { self.scene?.tweens?.killTweensOf?.(symbol); } catch {}
-						try { self.container?.bringToTop?.(symbol); } catch {}
+          for (let row = 0; row < column.length; row++) {
+            const symbol = column[row];
+            if (!symbol) {
+              completedAnimations++;
+              continue;
+            }
+            try { (symbol as any).setVisible?.(true); } catch {}
+            try {
+              const anySym: any = symbol as any;
+              if (typeof anySym.__holdOriginalAlpha === 'number') {
+                anySym.alpha = anySym.__holdOriginalAlpha;
+                delete anySym.__holdOriginalAlpha;
+              } else {
+                anySym.alpha = 1;
+              }
+            } catch {}
+            try { self.scene?.tweens?.killTweensOf?.(symbol); } catch {}
+            try { self.container?.bringToTop?.(symbol); } catch {}
 
-						const finalY = getYPos(self, row);
-						const cy = Number((symbol as any).y) || 0;
-						const startY = Math.max(cy, preDropY);
-						try { (symbol as any).y = startY; } catch {}
-						const dist = Math.max(0, finalY - startY);
-						if (!(dist > 0)) {
-							try { (symbol as any).y = finalY; } catch {}
-							completedAnimations++;
-							continue;
-						}
-						const dur = Math.max(60, Math.min(baseDurationSafe, Math.round(dist / Math.max(0.0001, speedPxPerMs))));
-						try {
-							self.scene?.tweens?.add?.({
-								targets: symbol,
-								y: finalY,
-								duration: dur,
-								ease: (window as any).Phaser?.Math?.Easing?.Linear,
-								onComplete: () => {
-									try {
-										completedAnimations++;
-										if (completedAnimations >= totalAnimations) {
-											finalize();
-										}
-									} catch {}
-								}
-							});
-						} catch {
-							completedAnimations++;
-						}
-					}
-					if (completedAnimations >= totalAnimations) {
-						finalize();
-					}
-				} catch {}
-			};
+            const finalY = getYPos(self, row);
+            const cy = Number((symbol as any).y) || 0;
+            const startY = Math.max(cy, preDropY);
+            try { (symbol as any).y = startY; } catch {}
+            const dist = Math.max(0, finalY - startY);
+            if (!(dist > 0)) {
+              try { (symbol as any).y = finalY; } catch {}
+              completedAnimations++;
+              continue;
+            }
+            const dur = Math.max(60, Math.min(baseDurationSafe, Math.round(dist / Math.max(0.0001, speedPxPerMs))));
+            try {
+              self.scene?.tweens?.add?.({
+                targets: symbol,
+                y: finalY,
+                duration: dur,
+                ease: (window as any).Phaser?.Math?.Easing?.Linear,
+                onComplete: () => {
+                  try {
+                    completedAnimations++;
+                    if (completedAnimations >= totalAnimations) {
+                      finalize();
+                    }
+                  } catch {}
+                }
+              });
+            } catch {
+              completedAnimations++;
+            }
+          }
+          if (completedAnimations >= totalAnimations) {
+            finalize();
+          }
+        } catch {}
+      };
 
-			try {
-				if (isSkipActiveNow()) {
-					applySkipToColumn();
-					return;
-				}
-			} catch {}
-
-			const pollSkip = () => {
-				try {
-					if (skipApplied) return;
-					if (completedAnimations >= totalAnimations) return;
-					if (isSkipActiveNow()) {
-						applySkipToColumn();
-						return;
-					}
-					self.scene?.time?.delayedCall?.(16, pollSkip);
-				} catch {}
-			};
-			try { self.scene?.time?.delayedCall?.(16, pollSkip); } catch {}
+      const pollSkip = () => {
+        try {
+          if (skipApplied) return;
+          if (completedAnimations >= totalAnimations) return;
+          if (isSkipActiveNow()) {
+            applySkipToColumn();
+            return;
+          }
+          self.scene?.time?.delayedCall?.(16, pollSkip);
+        } catch {}
+      };
+      try { self.scene?.time?.delayedCall?.(16, pollSkip); } catch {}
     };
 
     if (typeof holdTarget === 'number' && isFinite(holdTarget)) {
@@ -1058,12 +1055,12 @@ function dropNewSymbols(self: any, fillerCount: number, index: number, extendDur
 
     function finalize() {
       try {
-        if (skipApplied) {
-          try {
-            if ((window as any).audioManager) {
-              (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
-            }
-          } catch {}
+        if (!dropSfxPlayed && (window as any).audioManager) {
+          dropSfxPlayed = true;
+          const isTurbo = !!gameStateManager.isTurbo || !!self?.scene?.gameData?.isTurbo;
+          if (!isTurbo) {
+            (window as any).audioManager.playSoundEffect(SoundEffectType.REEL_DROP);
+          }
         }
       } catch {}
       try {

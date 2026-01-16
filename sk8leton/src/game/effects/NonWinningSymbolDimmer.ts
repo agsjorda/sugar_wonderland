@@ -226,13 +226,13 @@ export function applyNonWinningSymbolDim(
           const baseScaleY = (anySymbol.__nonWinOriginalScaleY ?? anySymbol.scaleY ?? 1) as number;
           const tweenConfig: any = {
             targets: anySymbol,
-            alpha: 0.5,
+            alpha: 0.75,
             duration: 400,
             ease: Phaser.Math.Easing.Sine.Out,
           };
           if (options?.scaleDown !== false) {
-            tweenConfig.scaleX = baseScaleX * 0.8;
-            tweenConfig.scaleY = baseScaleY * 0.8;
+            tweenConfig.scaleX = baseScaleX * 0.95;
+            tweenConfig.scaleY = baseScaleY * 0.95;
           }
           const tween = scene.tweens.add(tweenConfig);
 

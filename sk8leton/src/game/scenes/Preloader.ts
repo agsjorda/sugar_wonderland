@@ -531,15 +531,26 @@ export class Preloader extends Scene
 				this.buttonBg?.setTint(0x777777).setAlpha(0.9);
 			} catch {}
 			this.time.delayedCall(120, () => {
-				this.scene.launch('BubbleTransition', {
+				this.scene.launch('FireOverlayTransition', {
 					fromSceneKey: 'Preloader',
 					toSceneKey: 'Game',
 					gameStartData: {
 						networkManager: this.networkManager,
 						screenModeManager: this.screenModeManager
+					},
+					coverFirst: true,
+					coverFadeOutMs: 600,
+					timings: {
+						overlayAlpha: 1,
+						overlayInMs: 350,
+						overlayDelayMs: 0,
+						spineInMs: 800,
+						switchProgress: 0.5,
+						overlayOutMs: 200,
+						finishOutMs: 800
 					}
 				});
-				this.scene.bringToTop('BubbleTransition');
+				this.scene.bringToTop('FireOverlayTransition');
 			});
 		});
 

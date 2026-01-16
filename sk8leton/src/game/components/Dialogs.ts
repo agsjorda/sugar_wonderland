@@ -642,8 +642,8 @@ export class Dialogs {
 		}
 
 		try {
-			if (mgr.isActive?.('BubbleOverlayTransition') || mgr.isSleeping?.('BubbleOverlayTransition')) {
-				try { mgr.stop('BubbleOverlayTransition'); } catch {}
+			if (mgr.isActive?.('FireOverlayTransition') || mgr.isSleeping?.('FireOverlayTransition')) {
+				try { mgr.stop('FireOverlayTransition'); } catch {}
 			}
 		} catch {}
 
@@ -651,14 +651,16 @@ export class Dialogs {
 			try { await gameStateManager.waitForOverlaySafeState({ timeoutMs: 15000 }); } catch {}
 			try { await gameStateManager.waitUntilOverlaysClosed(15000); } catch {}
 			try {
-				mgr.launch('BubbleOverlayTransition', {
+				mgr.launch('FireOverlayTransition', {
 					fromSceneKey: 'Game',
 					toSceneKey: 'Game',
 					stopFromScene: false,
 					toSceneEvent: 'showTotalWinOverlay',
-					toSceneEventData: { winAmount }
+					toSceneEventData: { winAmount },
+					coverFirst: true,
+					coverFadeOutMs: 700
 				});
-				try { mgr.bringToTop?.('BubbleOverlayTransition'); } catch {}
+				try { mgr.bringToTop?.('FireOverlayTransition'); } catch {}
 			} catch {
 				try { showNow({ winAmount }); } catch {}
 			}
@@ -1056,15 +1058,17 @@ export class Dialogs {
 				}
 			} catch {}
 			try {
-				if (scene.scene.isActive('BubbleOverlayTransition') || scene.scene.isSleeping('BubbleOverlayTransition')) {
-					try { scene.scene.stop('BubbleOverlayTransition'); } catch {}
+				if (scene.scene.isActive('FireOverlayTransition') || scene.scene.isSleeping('FireOverlayTransition')) {
+					try { scene.scene.stop('FireOverlayTransition'); } catch {}
 				}
-				scene.scene.launch('BubbleOverlayTransition', {
+				scene.scene.launch('FireOverlayTransition', {
 					fromSceneKey: 'Game',
 					toSceneKey: 'Game',
 					stopFromScene: false,
 					toSceneEvent: 'prepareBonusExit',
 					toSceneEventOnFinish: 'finalizeBonusExit',
+					coverFirst: true,
+					coverFadeOutMs: 650,
 					transitionPreset: 'bonusExit',
 					timings: {
 						overlayAlpha: 0.55,
@@ -1076,7 +1080,7 @@ export class Dialogs {
 						finishOutMs: 500
 					}
 				});
-				try { scene.scene.bringToTop?.('BubbleOverlayTransition'); } catch {}
+				try { scene.scene.bringToTop?.('FireOverlayTransition'); } catch {}
 			} catch {}
 		})();
 	}
