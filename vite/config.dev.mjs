@@ -2,8 +2,8 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
     base: './',
-    define: {
-        __APP_VERSION__: JSON.stringify(process.env.npm_package_version || 'dev')
+    resolve: {
+        dedupe: ['phaser']
     },
     build: {
         rollupOptions: {
@@ -17,6 +17,6 @@ export default defineConfig({
     server: {
         port: 8080,
         host: true,
-        allowedHosts: ['minium.dev.fybtech.xyz']
+        allowedHosts: ['minium.dev.fybtech.xyz', 'dev-games.dijoker.com']
     }
 });
