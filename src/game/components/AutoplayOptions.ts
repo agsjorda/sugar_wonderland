@@ -9,19 +9,38 @@ export interface AutoplayOptionsConfig {
 	onClose?: () => void;
 	onConfirm?: (autoplayCount: number) => void;
 	currentAutoplayCount?: number;
+	/**
+	 * Current base bet (without enhanced multiplier).
+	 */
 	currentBet?: number;
+	/**
+	 * Current displayed bet (optional). If provided and `currentBet` is not,
+	 * we will treat it as the bet to display while keeping base bet best-effort.
+	 */
+	currentBetDisplay?: number;
 	currentBalance?: number;
+	/**
+	 * Display multiplier for bet (e.g. 1.25 when Enhance/Amplify is active)
+	 */
+	betDisplayMultiplier?: number;
+	/**
+	 * Optional legacy flag; if provided and multiplier isn't, we infer 1.25
+	 */
+	isEnhancedBet?: boolean;
 }
 
 export class AutoplayOptions {
 	private container: Phaser.GameObjects.Container;
 	private background: Phaser.GameObjects.Graphics;
 	private confirmButtonMask: Phaser.GameObjects.Graphics;
+	private confirmButtonImage: Phaser.GameObjects.Image;
 	private networkManager: NetworkManager;
 	private screenModeManager: ScreenModeManager;
 	private currentAutoplayCount: number = 10;
 	private currentBet: number = 0.20; // Default bet amount
 	private currentBalance: number = 0; // Current game balance
+	private betDisplayMultiplier: number = 1;
+	private readonly DISABLED_ALPHA: number = 0.5;
 	private autoplayOptions: number[] = [
 		10, 30, 50, 75, 100, 150, 500, 1000
 	];
@@ -44,6 +63,33 @@ export class AutoplayOptions {
 	private balanceAmountText: Phaser.GameObjects.Text;
 	private onCloseCallback?: () => void;
 	private onConfirmCallback?: (autoplayCount: number) => void;
+
+	private getAutoplaySpinCost(): number {
+		return this.currentBet * this.betDisplayMultiplier;
+	}
+
+	private canStartAutoplay(): boolean {
+		try {
+			const cost = this.getAutoplaySpinCost();
+			if (!isFinite(cost) || cost <= 0) return true;
+			return this.currentBalance >= cost;
+		} catch {
+			return true;
+		}
+	}
+
+	private updateStartAutoplayButtonState(): void {
+		if (!this.confirmButtonImage) return;
+
+		const canStart = this.canStartAutoplay();
+		if (!canStart) {
+			this.confirmButtonImage.setAlpha(this.DISABLED_ALPHA);
+			this.confirmButtonImage.disableInteractive();
+		} else {
+			this.confirmButtonImage.setAlpha(1);
+			this.confirmButtonImage.setInteractive();
+		}
+	}
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
 		this.networkManager = networkManager;
@@ -325,6 +371,7 @@ export class AutoplayOptions {
 		buttonImage.setOrigin(0.5, 0.5);
 		buttonImage.setDisplaySize(364, 62);
 		this.container.add(buttonImage);
+		this.confirmButtonImage = buttonImage;
 		
 		// Button label
 		this.confirmButton = scene.add.text(x, y, 'START AUTOPLAY', {
@@ -338,6 +385,12 @@ export class AutoplayOptions {
 		buttonImage.setInteractive();
 		buttonImage.on('pointerdown', () => {
 			console.log('[AutoplayOptions] START AUTOPLAY clicked');
+
+			// Click safety guard
+			if (!this.canStartAutoplay()) {
+				this.updateStartAutoplayButtonState();
+				return;
+			}
 
 			// Immediately flag that an autoplay spin has been requested so that
 			// the main spin button treats the game as "autoplaying" right away.
@@ -365,6 +418,8 @@ export class AutoplayOptions {
 				this.hide();
 			}
 		});
+
+		this.updateStartAutoplayButtonState();
 	}
 
 	private selectButton(index: number, value: number): void {
@@ -403,7 +458,8 @@ export class AutoplayOptions {
 		if (this.autoplayDisplay) {
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
 			const currencySymbol = isDemo ? '' : '$';
-			this.autoplayDisplay.setText(`${currencySymbol}${this.currentBet.toFixed(2)}`);
+			const displayBet = this.currentBet * this.betDisplayMultiplier;
+			this.autoplayDisplay.setText(`${currencySymbol}${displayBet.toFixed(2)}`);
 		}
 	}
 
@@ -431,6 +487,7 @@ export class AutoplayOptions {
 		this.selectedBetIndex = index;
 		this.currentBet = value;
 		this.updateAutoplayDisplay();
+		this.updateStartAutoplayButtonState();
 	}
 
 	private selectPreviousBet(): void {
@@ -450,8 +507,18 @@ export class AutoplayOptions {
 			if (config.currentAutoplayCount !== undefined) {
 				this.currentAutoplayCount = config.currentAutoplayCount;
 			}
+			if (config.betDisplayMultiplier !== undefined) {
+				this.betDisplayMultiplier = config.betDisplayMultiplier;
+			} else if (config.isEnhancedBet !== undefined) {
+				this.betDisplayMultiplier = config.isEnhancedBet ? 1.25 : 1;
+			}
+
 			if (config.currentBet !== undefined) {
+				// Base bet
 				this.currentBet = config.currentBet;
+			} else if (config.currentBetDisplay !== undefined) {
+				// Best-effort fallback: treat display bet as the base bet when not provided.
+				this.currentBet = config.currentBetDisplay / (this.betDisplayMultiplier || 1);
 			}
 			if (config.currentBalance !== undefined) {
 				this.currentBalance = config.currentBalance;
@@ -500,6 +567,7 @@ export class AutoplayOptions {
 		}
 
 		this.updateAutoplayDisplay();
+		this.updateStartAutoplayButtonState();
 		
 		// Start positioned below the screen for slide-up effect
 		this.container.setY(this.container.scene.scale.height);
@@ -548,11 +616,13 @@ export class AutoplayOptions {
 	setCurrentBet(bet: number): void {
 		this.currentBet = bet;
 		this.updateAutoplayDisplay();
+		this.updateStartAutoplayButtonState();
 	}
 
 	setCurrentBalance(balance: number): void {
 		this.currentBalance = balance;
 		this.updateBalanceDisplay();
+		this.updateStartAutoplayButtonState();
 	}
 
 	getCurrentBet(): number {

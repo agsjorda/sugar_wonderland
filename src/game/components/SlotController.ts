@@ -253,7 +253,7 @@ export class SlotController {
 	public enableControlsAfterFreeRounds(): void {
 		console.log('[SlotController] Enabling controls after free rounds');
 
-		this.enableSpinButton();
+		this.updateSpinButtonState();
 		this.enableBetButtons();
 		this.enableFeatureButton();
 
@@ -1261,6 +1261,11 @@ export class SlotController {
 				this.stopAutoplay();
 				return;
 			}
+			// Click safety guard: block if unaffordable
+			if (!this.canAffordSpin()) {
+				this.updateSpinButtonState();
+				return;
+			}
 			if (gameStateManager.isReelSpinning) {
 				console.log('[SlotController] Spin blocked - already spinning');
 				return;
@@ -1971,6 +1976,11 @@ export class SlotController {
 				this.stopAutoplay();
 				return;
 			}
+			// Click safety guard: block if unaffordable
+			if (!this.canAffordSpin()) {
+				this.updateSpinButtonState();
+				return;
+			}
 			if (gameStateManager.isReelSpinning) {
 				console.log('[SlotController] Spin blocked - already spinning');
 				return;
@@ -2195,6 +2205,9 @@ export class SlotController {
 
 		// Update bet +/- button states based on the new bet (for min/max greying)
 		this.updateBetLimitButtons(betAmount);
+
+		// Refresh affordability whenever bet changes
+		this.updateSpinButtonState();
 	}
 
 	/**
@@ -2259,6 +2272,9 @@ export class SlotController {
 				}
 			}
 		}
+
+		// Refresh affordability whenever balance changes
+		this.updateSpinButtonState();
 	}
 
 	/**
@@ -2527,7 +2543,7 @@ export class SlotController {
 			// button should be re-enabled between spins.
 			const gsmAny: any = gameStateManager as any;
 			if (gsmAny.isInFreeSpinRound === true) {
-				this.enableSpinButton();
+				this.updateSpinButtonState();
 				console.log('[SlotController] Initialization free-round mode active - re-enabled spin only on REELS_STOP');
 				return;
 			}
@@ -2546,7 +2562,7 @@ export class SlotController {
 			// For manual spins, re-enable spin button and hide autoplay counter immediately after REELS_STOP
 			// Check autoplay counter instead of state manager to avoid timing issues
 			if (this.autoplaySpinsRemaining === 0) {
-				this.enableSpinButton();
+				this.updateSpinButtonState();
 				this.enableAutoplayButton();
 				this.enableTurboButton();
 				this.enableBetButtons();
@@ -2566,7 +2582,7 @@ export class SlotController {
 			// Update spin button state when spin completes
 			// Only enable spin button if not autoplaying AND reels are not spinning
 			if(!this.gameData?.isAutoPlaying && !gameStateManager.isReelSpinning) {
-				this.enableSpinButton();
+				this.updateSpinButtonState();
 				this.enableAutoplayButton();
 				this.enableTurboButton();
 				this.enableBetButtons();
@@ -2643,13 +2659,13 @@ export class SlotController {
 			const gsmAny: any = gameStateManager as any;
 			if (gsmAny.isInFreeSpinRound === true && !gameStateManager.isBonus) {
 				// Ensure spin button itself is usable for manual free-round spins.
-				this.enableSpinButton();
+				this.updateSpinButtonState();
 				console.log('[SlotController] AUTO_STOP during initialization free-round mode - kept autoplay/bet controls disabled');
 				return;
 			}
 			
 			// Re-enable spin button, autoplay button, bet buttons, feature button, and bet background
-			this.enableSpinButton();
+			this.updateSpinButtonState();
 			this.enableAutoplayButton();
 			this.enableBetButtons();
 			this.enableFeatureButton();
@@ -2870,6 +2886,9 @@ export class SlotController {
 		EventBus.emit('amplify', gameData.isEnhancedBet);
 		
 		console.log(`[SlotController] Amplify bet state changed to: ${gameData.isEnhancedBet}`);
+
+		// Refresh affordability when amplify toggles
+		this.updateSpinButtonState();
 	}
 
 	/**
@@ -3023,7 +3042,7 @@ export class SlotController {
 		
 		// Re-enable controls if not spinning and we're back in normal mode
 		if (!gameStateManager.isReelSpinning) {
-			this.enableSpinButton();
+			this.updateSpinButtonState();
 			this.enableAutoplayButton();
 			this.enableBetButtons();
 			// Keep feature disabled during bonus or until explicitly allowed
@@ -3468,6 +3487,9 @@ export class SlotController {
 		this.updateFeatureAmountFromCurrentBet();
 		
 		console.log(`[SlotController] Amplify bet applied: $${currentBet} -> $${increasedBet.toFixed(2)} (+25%) - Base bet for API: $${this.baseBetAmount}`);
+
+		// Refresh affordability when amplify toggles
+		this.updateSpinButtonState();
 	}
 
 	/**
@@ -3490,6 +3512,9 @@ export class SlotController {
 		this.updateFeatureAmountFromCurrentBet();
 		
 		console.log(`[SlotController] Amplify bet removed: Display restored to base bet: $${this.baseBetAmount}`);
+
+		// Refresh affordability when amplify toggles
+		this.updateSpinButtonState();
 	}
 
 	/**
@@ -3952,7 +3977,7 @@ public updateAutoplayButtonState(): void {
 					this.stopAutoplay();
 				}
 				this.showOutOfBalancePopup();
-				this.enableSpinButton();
+				this.updateSpinButtonState();
 				this.enableAutoplayButton();
 				this.enableBetButtons();
 				this.enableFeatureButton();
@@ -4184,7 +4209,7 @@ public updateAutoplayButtonState(): void {
 			if (currentBalance < calculatedPrice) {
 			console.error(`[SlotController] Insufficient balance: $${currentBalance.toFixed(2)} < $${calculatedPrice.toFixed(2)}`);
 			// Re-enable controls since purchase cannot proceed
-			this.enableSpinButton();
+			this.updateSpinButtonState();
 			this.enableAutoplayButton();
 			this.enableFeatureButton();
 			this.enableBetButtons();
@@ -4267,7 +4292,7 @@ public updateAutoplayButtonState(): void {
 		} catch (error) {
 			console.error('[SlotController] Error processing buy feature purchase:', error);
 			// Re-enable controls on error to avoid locking the UI
-			this.enableSpinButton();
+			this.updateSpinButtonState();
 			this.enableAutoplayButton();
 			this.enableFeatureButton();
 			this.enableBetButtons();
@@ -4726,6 +4751,37 @@ public updateAutoplayButtonState(): void {
 	}
 
 	/**
+	 * Effective cost of one spin for affordability checks (includes enhance bet multiplier).
+	 */
+	private getSpinBetCost(): number {
+		const baseBet = this.getBaseBetAmount() || 0;
+		const gd = this.getGameData();
+		const multiplier = gd && gd.isEnhancedBet ? 1.25 : 1;
+		return baseBet * multiplier;
+	}
+
+	/**
+	 * True if balance can cover a single spin at current bet.
+	 * Free rounds are always considered affordable.
+	 */
+	private canAffordSpin(): boolean {
+		const gsmAny: any = gameStateManager as any;
+		if (gsmAny?.isInFreeSpinRound === true) {
+			return true;
+		}
+		try {
+			const cost = this.getSpinBetCost();
+			if (!isFinite(cost) || cost <= 0) {
+				// Safety fallback: don't block if cost is invalid
+				return true;
+			}
+			return this.getBalanceAmount() >= cost;
+		} catch {
+			return true;
+		}
+	}
+
+	/**
 	 * Enable the spin button
 	 */
 	public enableSpinButton(): void {
@@ -4756,18 +4812,16 @@ public updateAutoplayButtonState(): void {
 		const spinButton = this.buttons.get('spin');
 		if (!spinButton) return;
 
-		if(gameData.isAutoPlaying){
-			this.disableSpinButton();
+		// During autoplay (or about-to-start autoplay), keep spin usable so it can act as STOP autoplay.
+		if (gameStateManager.isAutoPlaying || gameStateManager.isAutoPlaySpinRequested) {
+			this.enableSpinButton();
 			return;
 		}
 
-
-		// Simple logic: disable if spinning or autoplay active, enable otherwise
-		if (gameData.isAutoPlaying || gameStateManager.isReelSpinning) {
-			console.log(`[SlotController] Disabling spin button - isReelSpinning: ${gameStateManager.isReelSpinning}, isAutoPlaying: ${gameData.isAutoPlaying}`);
+		// Disable if reels are spinning or player can't afford a spin
+		if (gameStateManager.isReelSpinning || !this.canAffordSpin()) {
 			this.disableSpinButton();
 		} else {
-			console.log(`[SlotController] Enabling spin button - no active game state`);
 			this.enableSpinButton();
 		}
 	}
