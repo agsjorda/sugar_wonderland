@@ -166,8 +166,8 @@ export class Game extends Scene
 		
 		// Backend initialization removed - using SlotController autoplay system
 		// Create header using the managers
-		this.header = new Header(this.networkManager, this.screenModeManager);
-		this.header.create(this);
+		// this.header = new Header(this.networkManager, this.screenModeManager);
+		// this.header.create(this);
 		
 		// Create background using the managers
 		this.background = new Background(this.networkManager, this.screenModeManager);
@@ -512,12 +512,19 @@ export class Game extends Scene
 		EventBus.on('show-bet-options', () => {
 			console.log('[Game] Showing bet options with fade-in effect');
 			
-			// Get the current bet from the slot controller display
+			// Use base bet for internal selection; displayed bet may include +25% when enhanced bet is active
 			const currentBetText = this.slotController.getBetAmountText();
-			const currentBet = currentBetText ? parseFloat(currentBetText) : 0.20;
+			const parsedDisplayBet = currentBetText ? parseFloat(currentBetText) : Number.NaN;
+			const fallbackBaseBet = Number.isFinite(parsedDisplayBet) && parsedDisplayBet > 0 ? parsedDisplayBet : 0.20;
+			const currentBaseBet = this.slotController.getBaseBetAmount() || fallbackBaseBet;
+
+			const isEnhancedBet = this.gameData?.isEnhancedBet === true;
+			const betDisplayMultiplier = isEnhancedBet ? 1.25 : 1;
+			const currentBetDisplay = currentBaseBet * betDisplayMultiplier;
 			
 			this.betOptions.show({
-				currentBet: currentBet,
+				currentBet: currentBaseBet,
+				currentBetDisplay: currentBetDisplay,
 				onClose: () => {
 					console.log('[Game] Bet options closed');
 				},
@@ -526,7 +533,7 @@ export class Game extends Scene
 					// Update the bet display in the slot controller
 					this.slotController.updateBetAmount(betAmount);
 					// Update the bet amount in the backend
-					gameEventManager.emit(GameEventType.BET_UPDATE, { newBet: betAmount, previousBet: currentBet });
+					gameEventManager.emit(GameEventType.BET_UPDATE, { newBet: betAmount, previousBet: currentBaseBet });
 				}
 			});
 		});
