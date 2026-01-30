@@ -3,6 +3,7 @@ import { GameAPI, SlotInitializeData } from '../../backend/GameAPI';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { SlotController } from './SlotController';
+import { CurrencyManager } from './CurrencyManager';
 
 export class FreeRoundManager {
 	private container: Phaser.GameObjects.Container | null = null;
@@ -860,7 +861,7 @@ export class FreeRoundManager {
 
 		// "With $X.XX" line
 		const isDemo = (scene as any).gameAPI?.getDemoState();
-		const currencySymbol = isDemo ? '' : '$';
+		const currencySymbol = isDemo ? '' : CurrencyManager.getInlinePrefix();
 		const betValue =
 			this.initBet != null
 				? this.initBet
@@ -1048,7 +1049,7 @@ export class FreeRoundManager {
 		// Line 1: "You won $XX.XX with"
 		const totalWinDisplay = totalWin.toFixed(2);
 		const isDemo = (scene as any).gameAPI?.getDemoState();
-		const currencySymbol = isDemo ? '' : '$';
+		const currencySymbol = isDemo ? '' : CurrencyManager.getInlinePrefix();
 
 		const line1Y = -40;
 		const line1Parts = [
@@ -1068,10 +1069,11 @@ export class FreeRoundManager {
 
 		let line1Width = 0;
 		const line1TextObjects: Phaser.GameObjects.Text[] = [];
-		for (const part of line1Parts) {
+		for (let i = 0; i < line1Parts.length; i++) {
+			const part = line1Parts[i];
 			const t = scene.add.text(0, 0, part.text, part.style);
 			// Apply green gradient to the winnings value segment
-			if (!isDemo && part.text.startsWith('$')) {
+			if (!isDemo && i === 1) {
 				this.applyBetValueGradientToText(t);
 			}
 			line1Width += t.width;

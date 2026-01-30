@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { SlotController } from './SlotController';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
+import { CurrencyManager } from './CurrencyManager';
 
 export interface BuyFeatureConfig {
 	position?: { x: number; y: number };
@@ -432,7 +433,7 @@ export class BuyFeature {
 
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemo = (scene as any).gameAPI?.getDemoState();
-		const currencySymbol = isDemo ? '' : '$';
+		const currencySymbol = isDemo ? '' : CurrencyManager.getInlinePrefix();
 		this.priceDisplay = scene.add.text(screenWidth / 2, backgroundTop + 340, `${currencySymbol}${this.formatNumberWithCommas(calculatedPrice)}`, {
 			fontSize: '42px',
 			fontFamily: 'Poppins-Regular',
@@ -509,7 +510,7 @@ export class BuyFeature {
 		if (this.priceDisplay) {
 			const calculatedPrice = this.getCurrentBetValue();
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
-			const currencySymbol = isDemo ? '' : '$';
+			const currencySymbol = isDemo ? '' : CurrencyManager.getInlinePrefix();
 			this.priceDisplay.setText(`${currencySymbol}${this.formatNumberWithCommas(calculatedPrice)}`);
 		}
 		this.updateBuyButtonState();
@@ -613,7 +614,7 @@ export class BuyFeature {
 		// Bet display - show current bet value
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemoBet = (scene as any).gameAPI?.getDemoState();
-		const currencySymbolBet = isDemoBet ? '' : '$';
+		const currencySymbolBet = isDemoBet ? '' : CurrencyManager.getInlinePrefix();
 		this.betDisplay = scene.add.text(x, y, `${currencySymbolBet}${this.getCurrentBet().toFixed(2)}`, {
 			fontSize: '24px',
 			color: '#ffffff',
@@ -733,7 +734,7 @@ export class BuyFeature {
 	private updateBetDisplay(): void {
 		if (this.betDisplay) {
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
-			const currencySymbol = isDemo ? '' : '$';
+			const currencySymbol = isDemo ? '' : CurrencyManager.getInlinePrefix();
 			this.betDisplay.setText(`${currencySymbol}${this.getCurrentBet().toFixed(2)}`);
 		}
 	}

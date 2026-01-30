@@ -3,6 +3,7 @@ import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { gameStateManager } from "../../managers/GameStateManager";
 import { ensureSpineFactory } from '../../utils/SpineGuard';
+import { CurrencyManager } from './CurrencyManager';
 
 export interface AutoplayOptionsConfig {
 	position?: { x: number; y: number };
@@ -240,7 +241,7 @@ export class AutoplayOptions {
 		// Balance amount - using the current balance from game data
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemo = (scene as any).gameAPI?.getDemoState();
-		const currencySymbol = isDemo ? '' : '$';
+		const currencySymbol = isDemo ? '' : CurrencyManager.getInlinePrefix();
 		const balanceAmount = scene.add.text(150, 1, `${currencySymbol}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, {
 			fontSize: '24px',
 			color: '#00ff00',
@@ -365,7 +366,7 @@ export class AutoplayOptions {
 		// Bet display
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemoInitial = (scene as any).gameAPI?.getDemoState();
-		const currencySymbolInitial = isDemoInitial ? '' : '$';
+		const currencySymbolInitial = isDemoInitial ? '' : CurrencyManager.getInlinePrefix();
 		this.autoplayDisplay = scene.add.text(x, y, `${currencySymbolInitial}${this.currentBet.toFixed(2)}` , {
 			fontSize: '24px',
 			color: '#ffffff',
@@ -568,7 +569,7 @@ export class AutoplayOptions {
 			console.log("[AutoplayOptions] Updating autoplay display to: $", displayBet, this.isEnhancedBet ? "(enhanced bet)" : "");
 			// Check if demo mode is active - if so, use blank currency symbol
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState();
-			const currencySymbol = isDemo ? '' : '$';
+			const currencySymbol = isDemo ? '' : CurrencyManager.getInlinePrefix();
 			this.autoplayDisplay.setText(`${currencySymbol}${displayBet.toFixed(2)}`);
 		}
 	}
@@ -576,7 +577,7 @@ export class AutoplayOptions {
 	private updateBalanceDisplay(): void {
 		if (this.balanceAmountText) {
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
-			const currencySymbol = isDemo ? '' : '$';
+			const currencySymbol = isDemo ? '' : CurrencyManager.getInlinePrefix();
 			this.balanceAmountText.setText(`${currencySymbol}${this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 		}
 	}

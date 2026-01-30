@@ -40,6 +40,7 @@ import { ClockDisplay } from '../components/ClockDisplay';
 import WinTracker from '../components/WinTracker';
 import { FreeRoundManager } from '../components/FreeRoundManager';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
+import { CurrencyManager } from '../components/CurrencyManager';
 
 export class Game extends Scene
 {
@@ -146,6 +147,11 @@ export class Game extends Scene
 		// Ensure Spine plugin instance is attached and sys keys are synced for this scene
 		// before any components try to call `scene.add.spine(...)`.
 		try { ensureSpineFactory(this, '[Game] create'); } catch {}
+
+		// Initialize currency display from initialization data (safe in demo mode).
+		try {
+			CurrencyManager.initializeFromInitData(this.gameAPI?.getInitializationData?.());
+		} catch {}
 		
 		// Set physics world bounds (physics is already enabled globally)
 		if (this.physics && this.physics.world) {
