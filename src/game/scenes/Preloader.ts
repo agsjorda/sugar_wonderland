@@ -10,6 +10,7 @@ import { FullScreenManager } from '../../managers/FullScreenManager';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { StudioLoadingScreen } from '../components/StudioLoadingScreen';
 import { ClockDisplay } from '../components/ClockDisplay';
+import { CurrencyManager } from '../components/CurrencyManager';
 
 export class Preloader extends Scene
 {
@@ -426,8 +427,15 @@ export class Preloader extends Scene
 				console.log('[Preloader] Calling backend slot initialization...');
 				const slotInitData = await this.gameAPI.initializeSlotSession();
 				console.log('[Preloader] Slot initialization data:', slotInitData);
+				try {
+					CurrencyManager.initializeFromInitData(slotInitData);
+				} catch {}
 			} else {
 				console.log('[Preloader] Demo mode active - skipping backend slot initialization');
+				// In demo mode, currency fields may be missing; this should not show a popup.
+				try {
+					CurrencyManager.initializeFromInitData(this.gameAPI.getInitializationData());
+				} catch {}
 			}
 
             console.log('[Preloader] GameAPI and slot session initialized successfully!');

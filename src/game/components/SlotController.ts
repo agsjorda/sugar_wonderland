@@ -10,6 +10,7 @@ import { GameAPI } from '../../backend/GameAPI';
 import { SpinData, SpinDataUtils } from '../../backend/SpinData';
 import { BuyFeature } from './BuyFeature';
 import { Symbols } from './Symbols';
+import { CurrencyManager } from "./CurrencyManager";
 import { SoundEffectType } from '../../managers/AudioManager';
 import { LoadingSpinner } from './LoadingSpinner';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
@@ -22,6 +23,58 @@ export class SlotController {
 	private scene: Scene | null = null;
 	private gameData: GameData | null = null;
 	private gameAPI: GameAPI | null = null;
+
+	/**
+	 * Layout helper for HUD currency + amount pairs (BALANCE/BET/BUY FEATURE).
+	 * Centers the combined group and supports non-1-character currency (e.g. "USD").
+	 */
+	private layoutCurrencyPair(
+		centerX: number,
+		centerY: number,
+		currencyText: Phaser.GameObjects.Text | null | undefined,
+		amountText: Phaser.GameObjects.Text | null | undefined,
+		isDemo: boolean,
+		spacingPx = 6
+	): void {
+		if (!amountText) return;
+
+		const glyph = CurrencyManager.getCurrencyGlyph();
+		const showCurrency = !isDemo && glyph.length > 0 && !!currencyText;
+
+		if (!currencyText || !showCurrency) {
+			try { currencyText?.setVisible(false); } catch {}
+			amountText.setPosition(centerX, centerY);
+			return;
+		}
+
+		currencyText.setText(glyph);
+		currencyText.setVisible(true);
+
+		// Ensure width is up-to-date after text changes
+		const curW = currencyText.width || 0;
+		const amtW = amountText.width || 0;
+		const groupW = curW + spacingPx + amtW;
+		const startX = centerX - groupW * 0.5;
+
+		currencyText.setPosition(startX + curW * 0.5, centerY);
+		amountText.setPosition(startX + curW + spacingPx + amtW * 0.5, centerY);
+	}
+
+	/**
+	 * Re-apply currency glyph + layout after initialization data is fetched later.
+	 */
+	public refreshCurrencySymbols(): void {
+		const scene = this.scene;
+		if (!scene) return;
+
+		const isDemo = this.gameAPI?.getDemoState();
+		const y = scene.scale.height * 0.724 + 8;
+
+		this.layoutCurrencyPair(scene.scale.width * 0.19, y, this.balanceDollarText, this.balanceAmountText, !!isDemo, 6);
+		this.layoutCurrencyPair(scene.scale.width * 0.81, y, this.betDollarText, this.betAmountText, !!isDemo, 6);
+		this.layoutCurrencyPair(scene.scale.width * 0.5, y, this.featureDollarText, this.featureAmountText, !!isDemo, 6);
+	}
+
 	private symbols: Symbols | null = null;
 	private buttons: Map<string, Phaser.GameObjects.Image> = new Map();
 	private betAmountText: Phaser.GameObjects.Text;
@@ -1529,9 +1582,8 @@ export class SlotController {
 		const containerWidth = 125;
 		const containerHeight = 55;
 		const cornerRadius = 10;
-		// Check if demo mode is active - if so, use blank currency symbol and center the text
+		// Check if demo mode is active - if so, hide currency glyph and center amount text
 		const isDemoBalance = this.gameAPI?.getDemoState();
-		const balanceValueOffset = isDemoBalance ? 0 : 5; // Center in demo mode, offset right when currency symbol exists
 
 		// Create rounded rectangle background
 		const balanceBg = scene.add.graphics();
@@ -1561,7 +1613,7 @@ export class SlotController {
 
 		// "200,000.00" amount (2nd line, right part)
 		this.balanceAmountText = scene.add.text(
-			balanceX + balanceValueOffset,
+			balanceX,
 			balanceY + 8,
 			'0',
 			{
@@ -1574,18 +1626,20 @@ export class SlotController {
 
 		// "$" symbol (2nd line, left part) - positioned dynamically
 		this.balanceDollarText = scene.add.text(
-			balanceX - (this.balanceAmountText.width / 2) - 3.5,
+			balanceX,
 			balanceY + 8,
-			isDemoBalance ? '' : '$',
+			'',
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color
 				fontFamily: 'poppins-regular'
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
-		// Hide currency symbol in demo mode
-		this.balanceDollarText.setVisible(!isDemoBalance);
+		this.balanceDollarText.setVisible(false);
 		this.controllerContainer.add(this.balanceDollarText);
+
+		// Apply currency glyph + layout
+		this.layoutCurrencyPair(balanceX, balanceY + 8, this.balanceDollarText, this.balanceAmountText, !!isDemoBalance, 6);
 	}
 
 	private createBetDisplay(scene: Scene, assetScale: number): void {
@@ -1595,9 +1649,8 @@ export class SlotController {
 		const containerWidth = 125;
 		const containerHeight = 55;
 		const cornerRadius = 10;
-		// Check if demo mode is active - if so, center the text (no currency symbol)
+		// Check if demo mode is active - if so, hide currency glyph and center amount text
 		const isDemoBet = this.gameAPI?.getDemoState();
-		const betValueOffset = isDemoBet ? 0 : 3; // Center in demo mode, offset right when currency symbol exists
 
 
 		// Create amplify bet spine animation (behind bet background)
@@ -1683,7 +1736,7 @@ export class SlotController {
 
 		// "0.60" amount (2nd line, right part)
 		this.betAmountText = scene.add.text(
-			betX + betValueOffset,
+			betX,
 			betY + 8,
 			'0.20',
 			{
@@ -1699,18 +1752,20 @@ export class SlotController {
 
 		// "$" symbol (2nd line, left part) - positioned dynamically
 		this.betDollarText = scene.add.text(
-			betX - (this.betAmountText.width / 2) - 3.5,
+			betX,
 			betY + 8,
-			isDemoBet ? '' : '$',
+			'',
 			{
 				fontSize: '14px',
 				color: '#ffffff', // White color
 				fontFamily: 'poppins-regular'
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
-		// Hide currency symbol in demo mode
-		this.betDollarText.setVisible(!isDemoBet);
+		this.betDollarText.setVisible(false);
 		this.controllerContainer.add(this.betDollarText);
+
+		// Apply currency glyph + layout
+		this.layoutCurrencyPair(betX, betY + 8, this.betDollarText, this.betAmountText, !!isDemoBet, 6);
 
 		// Decrease bet button (left side within container)
 		const decreaseBetButton = scene.add.image(
@@ -1940,11 +1995,10 @@ export class SlotController {
 		this.controllerContainer.add(this.featureLabelText);
 
 		// Amount (2nd line, right part) - bound to current bet x100
-		// Check if demo mode is active - if so, center the text (no currency symbol)
+		// Check if demo mode is active - if so, hide currency glyph and center amount text
 		const isDemoFeature = this.gameAPI?.getDemoState();
-		const featureXOffset = isDemoFeature ? 0 : 5; // Center in demo mode, offset right when currency symbol exists
 		this.featureAmountText = scene.add.text(
-			featureX + featureXOffset,
+			featureX,
 			featureY + 8,
 			'0',
 			{
@@ -1956,22 +2010,24 @@ export class SlotController {
 		this.controllerContainer.add(this.featureAmountText);
 
 		// "$" symbol (2nd line, left part) - positioned dynamically
-		// Check if demo mode is active - if so, use blank currency symbol
-		const featureCurrencySymbol = isDemoFeature ? '' : '$';
 		this.featureDollarText = scene.add.text(
-			featureX - (this.featureAmountText.width / 2) - 3,
+			featureX,
 			featureY + 8,
-			featureCurrencySymbol,
+			'',
 			{
 				fontSize: '14px',
 				color: '#ffffff',
 				fontFamily: 'poppins-regular'
 			}
 		).setOrigin(0.5, 0.5).setDepth(9);
+		this.featureDollarText.setVisible(false);
 		this.controllerContainer.add(this.featureDollarText);
 
 		// Initialize amount from current bet
 		this.updateFeatureAmountFromCurrentBet();
+
+		// Apply currency glyph + layout
+		this.layoutCurrencyPair(featureX, featureY + 8, this.featureDollarText, this.featureAmountText, !!isDemoFeature, 6);
 	}
 
 	private createLandscapeController(scene: Scene, assetScale: number): void {
@@ -2212,22 +2268,10 @@ export class SlotController {
 			if (gameData && gameData.isEnhancedBet && this.betAmountText) {
 				const increasedBet = betAmount * 1.25;
 				this.betAmountText.setText(increasedBet.toFixed(2));
-
-				// Update currency symbol position based on new bet amount width
 				const isDemo = this.gameAPI?.getDemoState();
-				if (this.betDollarText && this.scene) {
-					const betX = this.scene.scale.width * 0.81;
-					const betY = this.betAmountText.y;
-					this.betAmountText.setPosition(betX + (isDemo ? 0 : 3), betY);
-					if (isDemo) {
-						this.betDollarText.setVisible(false);
-						this.betDollarText.setText('');
-					} else {
-						this.betDollarText.setVisible(true);
-						this.betDollarText.setText('$');
-						this.betDollarText.setPosition(this.betAmountText.x - (this.betAmountText.width / 2) - 5, betY);
-					}
-				}
+				const betY = this.betAmountText.y;
+				const betX = this.scene ? this.scene.scale.width * 0.81 : this.betAmountText.x;
+				this.layoutCurrencyPair(betX, betY, this.betDollarText, this.betAmountText, !!isDemo, 6);
 			}
 		} finally {
 			this.isInternalBetChange = false;
@@ -2244,25 +2288,9 @@ export class SlotController {
 			this.betAmountText.setText(displayBet.toFixed(2));
 
 			const isDemo = this.gameAPI?.getDemoState();
-			if (this.scene) {
-				const betX = this.scene.scale.width * 0.81;
-				const betY = this.betAmountText.y;
-				// Center amount text in demo mode; maintain offset when currency symbol exists
-				this.betAmountText.setPosition(betX + (isDemo ? 0 : 3), betY);
-			}
-
-			// Update currency symbol position based on new bet amount width
-			if (this.betDollarText) {
-				const betY = this.betAmountText.y;
-				if (isDemo) {
-					this.betDollarText.setVisible(false);
-					this.betDollarText.setText('');
-				} else {
-					this.betDollarText.setVisible(true);
-					this.betDollarText.setText('$');
-					this.betDollarText.setPosition(this.betAmountText.x - (this.betAmountText.width / 2) - 5, betY);
-				}
-			}
+			const betY = this.betAmountText.y;
+			const betX = this.scene ? this.scene.scale.width * 0.81 : this.betAmountText.x;
+			this.layoutCurrencyPair(betX, betY, this.betDollarText, this.betAmountText, !!isDemo, 6);
 		}
 
 		// Update base bet amount when changed externally (not by amplify bet)
@@ -2294,20 +2322,10 @@ export class SlotController {
 		// Format with thousands separators and 2 decimals
 		this.featureAmountText.setText(price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 		
-		// Check if demo mode is active - if so, center the text (no currency symbol)
 		const isDemo = this.gameAPI?.getDemoState();
 		const featureY = this.featureAmountText.y;
-		
-		if (isDemo) {
-			// Center the text in demo mode (use feature image center as reference)
-			const featureButtonX = this.featureImage ? this.featureImage.x : this.featureAmountText.x;
-			this.featureAmountText.setPosition(featureButtonX, featureY);
-		} else {
-			// Reposition dollar sign based on updated width
-			const featureX = this.featureImage ? this.featureImage.x : this.featureAmountText.x;
-			this.featureAmountText.setPosition(featureX + 5, featureY); // Maintain offset for currency symbol
-			this.featureDollarText.setPosition(featureX - (this.featureAmountText.width / 2) - 3, featureY);
-		}
+		const featureX = this.featureImage ? this.featureImage.x : this.featureAmountText.x;
+		this.layoutCurrencyPair(featureX, featureY, this.featureDollarText, this.featureAmountText, !!isDemo, 6);
 	}
 
 	getBetAmountText(): string | null {
@@ -2326,23 +2344,9 @@ export class SlotController {
 			this.balanceAmountText.setText(balanceAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 			
 			const isDemo = this.gameAPI?.getDemoState();
-			if (this.scene) {
-				const balanceX = this.scene.scale.width * 0.19;
-				const balanceY = this.balanceAmountText.y;
-				// Center amount text in demo mode; maintain offset when currency symbol exists
-				this.balanceAmountText.setPosition(balanceX + (isDemo ? 0 : 2.5), balanceY);
-
-				if (this.balanceDollarText) {
-					if (isDemo) {
-						this.balanceDollarText.setVisible(false);
-						this.balanceDollarText.setText('');
-					} else {
-						this.balanceDollarText.setVisible(true);
-						this.balanceDollarText.setText('$');
-						this.balanceDollarText.setPosition(balanceX - (this.balanceAmountText.width / 2) - 2.5, balanceY);
-					}
-				}
-			}
+			const balanceY = this.balanceAmountText.y;
+			const balanceX = this.scene ? this.scene.scale.width * 0.19 : this.balanceAmountText.x;
+			this.layoutCurrencyPair(balanceX, balanceY, this.balanceDollarText, this.balanceAmountText, !!isDemo, 6);
 		}
 
 		// Refresh affordability whenever balance changes
@@ -2390,8 +2394,7 @@ export class SlotController {
 
 	getBalanceAmount(): number {
 		if (this.balanceAmountText) {
-			// Remove the "$" symbol and parse the numeric value
-			const balanceText = this.balanceAmountText.text.replace('$', '').replace(/,/g, '');
+			const balanceText = CurrencyManager.stripCurrencyPrefix(this.balanceAmountText.text).replace(/,/g, '');
 			return parseFloat(balanceText) || 0;
 		}
 		return 0;
@@ -3546,13 +3549,10 @@ export class SlotController {
 		// Only update the display, keep baseBetAmount unchanged for API calls
 		if (this.betAmountText) {
 			this.betAmountText.setText(increasedBet.toFixed(2));
-			
-			// Update dollar sign position based on new bet amount width
-			if (this.betDollarText) {
-				const betX = this.betAmountText.x;
-				const betY = this.betAmountText.y;
-				this.betDollarText.setPosition(betX - (this.betAmountText.width / 2) - 5, betY);
-			}
+			const isDemo = this.gameAPI?.getDemoState();
+			const betY = this.betAmountText.y;
+			const betX = this.scene ? this.scene.scale.width * 0.81 : this.betAmountText.x;
+			this.layoutCurrencyPair(betX, betY, this.betDollarText, this.betAmountText, !!isDemo, 6);
 		}
 		
 		// Even though base bet doesn't change, price uses base bet x100
@@ -3571,13 +3571,10 @@ export class SlotController {
 		// Restore display to base bet amount
 		if (this.betAmountText) {
 			this.betAmountText.setText(this.baseBetAmount.toFixed(2));
-			
-			// Update dollar sign position based on new bet amount width
-			if (this.betDollarText) {
-				const betX = this.betAmountText.x;
-				const betY = this.betAmountText.y;
-				this.betDollarText.setPosition(betX - (this.betAmountText.width / 2) - 5, betY);
-			}
+			const isDemo = this.gameAPI?.getDemoState();
+			const betY = this.betAmountText.y;
+			const betX = this.scene ? this.scene.scale.width * 0.81 : this.betAmountText.x;
+			this.layoutCurrencyPair(betX, betY, this.betDollarText, this.betAmountText, !!isDemo, 6);
 		}
 		
 		// Keep Buy Feature price in sync

@@ -9,6 +9,7 @@ import { gameStateManager } from '../../managers/GameStateManager';
 import { TurboConfig } from '../../config/TurboConfig';
 import { SLOT_ROWS, SLOT_COLUMNS, DELAY_BETWEEN_SPINS, MULTIPLIER_SYMBOLS } from '../../config/GameConfig';
 import { SoundEffectType } from '../../managers/AudioManager';
+import { CurrencyManager } from "./CurrencyManager";
 
 export class Symbols {
   private static readonly WINLINE_CHECKING_DISABLED: boolean = true;
@@ -3445,12 +3446,12 @@ function createWinText(self: Symbols, amount: number, x: number, y: number): Pha
   const px = Math.max(40, Math.round(self.displayHeight * 0.5));
   let textValue = '';
   const isDemo = (self.scene as any).gameAPI?.getDemoState();
-  const currencySymbol = isDemo ? '' : '$';
+  const prefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
   try {
-    if (Number.isInteger(amount)) textValue = `${currencySymbol}${amount}`;
-    else textValue = `${currencySymbol}${Number(amount).toFixed(2)}`;
+    if (Number.isInteger(amount)) textValue = `${prefix}${amount}`;
+    else textValue = `${prefix}${Number(amount).toFixed(2)}`;
   } catch {
-    textValue = `${currencySymbol}${amount}`;
+    textValue = `${prefix}${amount}`;
   }
   const txt = self.scene.add.text(x, y, textValue, {
     fontFamily: 'Poppins-Bold',

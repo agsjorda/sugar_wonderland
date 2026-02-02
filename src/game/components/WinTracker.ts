@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { SpinData } from '../../backend/SpinData';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
+import { CurrencyManager } from './CurrencyManager';
 
 interface WinTrackerLayoutOptions {
   offsetX?: number;
@@ -242,8 +243,8 @@ export class WinTracker {
       0,
       (() => {
         const isDemo = (this.scene as any).gameAPI?.getDemoState();
-        const currencySymbol = isDemo ? '' : '$';
-        return `${currencySymbol}${data.totalWin.toFixed(2)}`;
+        const prefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
+        return `${prefix}${data.totalWin.toFixed(2)}`;
       })(),
       {
         fontSize: `${this.labelFontSize}px`,

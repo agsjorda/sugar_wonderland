@@ -2,6 +2,7 @@ import { Scene } from 'phaser';
 import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { NumberDisplay, NumberDisplayConfig } from './NumberDisplay';
+import { CurrencyManager } from './CurrencyManager';
 import { IrisTransition } from './IrisTransition';
 import { SymbolExplosionTransition } from './SymbolExplosionTransition';
 import { gameStateManager } from '../../managers/GameStateManager';
@@ -682,7 +683,7 @@ export class Dialogs {
 			showCommas: freeSpins !== undefined ? false : true, // No commas for free spins
 			// For Congrats dialog totals, show a dollar sign prefix.
 			// Other dialogs remain unchanged.
-			prefix: isCongratsTotalWin ? (isDemo ? '' : '$ ') : '',
+			prefix: isCongratsTotalWin ? (isDemo ? '' : CurrencyManager.getInlinePrefix()) : '',
 			suffix: '', // No suffix - only display numbers
 			commaYOffset: 12,
 			dotYOffset: 10
