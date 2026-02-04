@@ -37,7 +37,7 @@ const getApiBaseUrl = (): string => {
     if (typeof configuredUrl === 'string' && configuredUrl.length > 0) {
         return configuredUrl.replace(/\/$/, "");
     }
-    return 'https://dev-game-launcher.dijoker.com/'; // 192.168.0.17:3000/
+    return 'https://stg-game-launcher.dijoker.com/'; // 192.168.0.17:3000/
 
 };
 
@@ -90,6 +90,22 @@ export interface HistoryItem {
     win: string;
     jackpotWin: string;
     createdAt: string;
+}
+
+/**
+ * Request payload for the /api/v1/refresh_token endpoint.
+ */
+export interface RefreshTokenRequest {
+    refreshToken: string;
+}
+
+/**
+ * Response payload for the /api/v1/refresh_token endpoint.
+ * Backend may return { data: { token: string } } or { token: string }.
+ */
+export interface RefreshTokenResponse {
+    data?: { token?: string };
+    token?: string;
 }
 
 
@@ -188,26 +204,14 @@ export class GameAPI {
             // Check if token is already in the URL parameters
             const existingToken = getUrlParameter('token');
             
-            if (existingToken) {
-                console.log('Game token found in URL parameters:', existingToken);
-                
-                // Store the existing token in localStorage and sessionStorage
-                localStorage.setItem('token', existingToken);
-                sessionStorage.setItem('token', existingToken);
-                
-                console.log('Game initialized with existing token from URL');
-                return existingToken;
-            } else {
-                console.log('No game token in URL, generating new token...');
-                const { token } = await this.generateGameUrlToken();
-                
-                // Store the token in localStorage and sessionStorage
-                localStorage.setItem('token', token);
-                sessionStorage.setItem('token', token);
-                
-                console.log('Game initialized successfully with new token:', token);
-                return token;
-            }
+            console.log('Game token found in URL parameters:', existingToken);
+            
+            // Store the existing token in localStorage and sessionStorage
+            localStorage.setItem('token', existingToken);
+            sessionStorage.setItem('token', existingToken);
+            
+            console.log('Game initialized with existing token from URL');
+            return existingToken;
             
         } catch (error) {
             console.error('Error initializing game:', error);
@@ -216,17 +220,140 @@ export class GameAPI {
     }
 
     /**
+     * Initialize refresh token from URL parameters
+     * This method should be called at game startup to read and store the refresh token
+     */
+    public async initializeRefreshToken(): Promise<string> {
+        const isDemo = this.getDemoState();
+        if (isDemo) {
+            return '';
+        }
+
+        try {
+            // Check if refresh token is already in the URL parameters
+            const refreshToken = getUrlParameter('refresh_token');
+            
+            console.log('Game refresh token found in URL parameters:', refreshToken);
+            
+            // Store the existing token in localStorage and sessionStorage
+            localStorage.setItem('refresh_token', refreshToken);
+            sessionStorage.setItem('refresh_token', refreshToken);
+            
+            console.log('Game initialized with existing refresh token from URL');
+            
+            return refreshToken;
+            
+        } catch (error) {
+            console.error('Error getting refresh token from URL:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Check if a refresh token is available in storage
+     */
+    private hasRefreshToken(): boolean {
+        const refreshToken =
+            localStorage.getItem('refresh_token') ||
+            sessionStorage.getItem('refresh_token') ||
+            '';
+        const hasToken = refreshToken.length > 0;
+        console.log('[GameAPI] hasRefreshToken check:', hasToken, refreshToken ? 'token exists' : 'no token');
+        return hasToken;
+    }
+
+    /**
+     * Call the refresh_token API to obtain a new access token using the stored refresh token.
+     * On success, stores the new token in localStorage/sessionStorage and returns it.
+     * @throws Error if no refresh token is available or the API call fails
+     */
+    public async refreshAccessToken(): Promise<string> {
+        const refreshToken =
+            localStorage.getItem('refresh_token') ||
+            sessionStorage.getItem('refresh_token') ||
+            '';
+
+        if (!refreshToken) {
+            throw new Error('No refresh token available.');
+        }
+
+        const apiUrl = `${getApiBaseUrl()}/api/v1/refresh_token`;
+        const requestBody: RefreshTokenRequest = { refreshToken };
+
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Refresh token failed: ${response.status}, ${errorText}`);
+        }
+
+        const data: RefreshTokenResponse = await response.json();
+        const newToken =
+            (data?.data?.token) ??
+            (data?.token) ??
+            '';
+
+        if (!newToken) {
+            throw new Error('Refresh token response missing token');
+        }
+
+        // Store the new token in localStorage and sessionStorage
+        localStorage.setItem('token', newToken);
+        sessionStorage.setItem('token', newToken);
+
+        console.log('[GameAPI] Token refreshed successfully');
+        return newToken;
+    }
+
+    /**
+     * Try to refresh the access token using the refresh token.
+     * Returns the new token on success, or null on failure (does not throw).
+     */
+    private async tryRefreshAndGetNewToken(): Promise<string | null> {
+        try {
+            console.log('[GameAPI] Attempting to refresh access token...');
+            const newToken = await this.refreshAccessToken();
+            console.log('[GameAPI] Token refresh succeeded, new token obtained');
+            return newToken;
+        } catch (e) {
+            console.warn('[GameAPI] Token refresh failed:', e);
+            return null;
+        }
+    }
+
+    /**
      * Call the backend game initialization endpoint.
      * This should be called once at the very start of the game after the token is available.
      */
     public async initializeSlotSession(): Promise<SlotInitializeData> {
-        const token =
+        let token =
             localStorage.getItem('token') ||
             sessionStorage.getItem('token') ||
             '';
 
         if (!token) {
-            throw new Error('No game token available. Please initialize the game first.');
+            // Check if refresh token exists before attempting refresh
+            if (!this.hasRefreshToken()) {
+                // No refresh token available, show popup immediately
+                this.showTokenExpiredPopup();
+                throw new Error('No game token available. Please initialize the game first.');
+            }
+            
+            // Refresh token exists, try to get new access token
+            const newToken = await this.tryRefreshAndGetNewToken();
+            if (newToken) {
+                token = newToken;
+            } else {
+                // Refresh token exists but refresh failed, show popup
+                this.showTokenExpiredPopup();
+                throw new Error('No game token available. Please initialize the game first.');
+            }
         }
 
         const apiUrl = `${getApiBaseUrl()}/api/v1/slots/initialize`;
@@ -234,17 +361,54 @@ export class GameAPI {
         try {
             console.log('[GameAPI] Calling slots initialize endpoint...', apiUrl);
 
-            const response = await fetch(apiUrl, {
+            let currentToken = token;
+            let response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${currentToken}`
                 }
             });
 
+            if (!response.ok && (response.status === 400 || response.status === 401)) {
+                // Check if refresh token exists before attempting refresh
+                if (!this.hasRefreshToken()) {
+                    // No refresh token available, show popup immediately
+                    this.showTokenExpiredPopup();
+                    localStorage.removeItem('token');
+                    const errorText = await response.text();
+                    throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+                }
+                
+                // Try to refresh and retry
+                const newToken = await this.tryRefreshAndGetNewToken();
+                if (newToken) {
+                    currentToken = newToken;
+                    response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${currentToken}`
+                        }
+                    });
+                } else {
+                    // Refresh token exists but refresh failed, show popup
+                    this.showTokenExpiredPopup();
+                    localStorage.removeItem('token');
+                    const errorText = await response.text();
+                    throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+                }
+            }
+
             if (!response.ok) {
                 const errorText = await response.text();
-                throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+                const error = new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+                // Only show session timeout popup when session is really dead: no refresh token, or refresh/retry failed
+                if (response.status === 400 || response.status === 401) {
+                    this.showTokenExpiredPopup();
+                    localStorage.removeItem('token');
+                }
+                throw error;
             }
 
             const raw = await response.json();
@@ -272,6 +436,10 @@ export class GameAPI {
             return payload;
         } catch (error) {
             console.error('[GameAPI] Error calling slots initialize endpoint:', error);
+            // Only show popup for token-related errors
+            if (this.isTokenExpiredError(error)) {
+                this.showTokenExpiredPopup();
+            }
             throw error;
         }
     }
@@ -411,30 +579,71 @@ export class GameAPI {
         }
 
         try {
-            const token = localStorage.getItem('token');
+            let token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
             if (!token) {
-                this.showTokenExpiredPopup();
-                throw new Error('No authentication token available');
+                // Check if refresh token exists before attempting refresh
+                if (!this.hasRefreshToken()) {
+                    // No refresh token available, show popup immediately
+                    this.showTokenExpiredPopup();
+                    throw new Error('No authentication token available');
+                }
+                
+                // Refresh token exists, try to get new access token
+                const newToken = await this.tryRefreshAndGetNewToken();
+                if (newToken) {
+                    token = newToken;
+                } else {
+                    // Refresh token exists but refresh failed, show popup
+                    this.showTokenExpiredPopup();
+                    throw new Error('No authentication token available');
+                }
             }
 
-            const response = await fetch(`${getApiBaseUrl()}/api/v1/slots/balance`, {
-            //const response = await fetch('http://192.168.0.17:3000/api/v1/slots/balance', {
+            const apiUrl = `${getApiBaseUrl()}/api/v1/slots/balance`;
+            let currentToken = token;
+            let response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${currentToken}`
                 }
             });
 
+            if (!response.ok && (response.status === 400 || response.status === 401)) {
+                // Check if refresh token exists before attempting refresh
+                if (!this.hasRefreshToken()) {
+                    // No refresh token available, show popup immediately
+                    this.showTokenExpiredPopup();
+                    localStorage.removeItem('token');
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                // Try to refresh and retry
+                const newToken = await this.tryRefreshAndGetNewToken();
+                if (newToken) {
+                    currentToken = newToken;
+                    response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${currentToken}`
+                        }
+                    });
+                } else {
+                    // Refresh token exists but refresh failed, show popup
+                    this.showTokenExpiredPopup();
+                    localStorage.removeItem('token');
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+            }
+
             if (!response.ok) {
                 const error = new Error(`HTTP error! status: ${response.status}`);
-                
-                // Show token expired popup for 400 or 401 status
+                // Only show session timeout popup when session is really dead: no refresh token, or refresh/retry failed
                 if (response.status === 400 || response.status === 401) {
                     this.showTokenExpiredPopup();
                     localStorage.removeItem('token');
                 }
-                
                 throw error;
             }
 
@@ -442,12 +651,10 @@ export class GameAPI {
             return data;
         } catch (error) {
             console.error('Error in getBalance:', error);
-            
-            // Handle network errors or other issues
+            // Only show popup for token-related errors
             if (this.isTokenExpiredError(error)) {
                 this.showTokenExpiredPopup();
             }
-            
             throw error;
         }
     }
@@ -499,10 +706,24 @@ export class GameAPI {
         const isDemo = this.getDemoState();
 
         // Only require token if not in demo mode
-        const token = localStorage.getItem('token');
-        if (!isDemo && !token) {
-            this.showTokenExpiredPopup();
-            throw new Error('No game token available. Please initialize the game first.');
+        if (!isDemo) {
+            let token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+            if (!token) {
+                // Check if refresh token exists before attempting refresh
+                if (!this.hasRefreshToken()) {
+                    // No refresh token available, show popup immediately
+                    this.showTokenExpiredPopup();
+                    throw new Error('No game token available. Please initialize the game first.');
+                }
+                
+                // Refresh token exists, try to get new access token
+                const newToken = await this.tryRefreshAndGetNewToken();
+                if (!newToken) {
+                    // Refresh token exists but refresh failed, show popup
+                    this.showTokenExpiredPopup();
+                    throw new Error('No game token available. Please initialize the game first.');
+                }
+            }
         }
         
         try {
@@ -514,6 +735,7 @@ export class GameAPI {
                     'Content-Type': 'application/json'
                 };
 
+                const token = localStorage.getItem('token');
                 if (token) {
                     headers['Authorization'] = `Bearer ${token}`;
                 }
@@ -553,22 +775,62 @@ export class GameAPI {
                 console.log('[GameAPI] Consuming initialization free spin round. Remaining:', this.remainingInitFreeSpins);
             }
 
-            const response = await fetch(`${getApiBaseUrl()}/api/v1/slots/bet`, {
+            // Build headers - include Authorization only if token exists
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json'
+            };
+            
+            let token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const url = `${getApiBaseUrl()}/api/v1/slots/bet`;
+            const requestBody = {
+                action: 'spin',
+                bet: bet.toString(),
+                line: 1, // Try different line count
+                isBuyFs: isBuyFs, // Use the parameter value
+                isEnhancedBet: isEnhancedBet, // Use the parameter value
+                // Mark whether this spin is using a free spin round granted at initialization
+                isFs: isFs
+            };
+
+            let currentToken = token;
+            let response = await fetch(url, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    action: 'spin',
-                    bet: bet.toString(),
-                    line: 1, // Try different line count
-                    isBuyFs: isBuyFs, // Use the parameter value
-                    isEnhancedBet: isEnhancedBet, // Use the parameter value
-                    // Mark whether this spin is using a free spin round granted at initialization
-                    isFs: isFs
-                })
+                headers: headers,
+                body: JSON.stringify(requestBody)
             });
+
+            if (!response.ok && (response.status === 400 || response.status === 401)) {
+                const errorText = await response.text();
+                
+                // Check if refresh token exists before attempting refresh
+                if (!this.hasRefreshToken()) {
+                    // No refresh token available, show popup immediately
+                    this.showTokenExpiredPopup();
+                    localStorage.removeItem('token');
+                    throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+                }
+                
+                // Try to refresh and retry
+                const newToken = await this.tryRefreshAndGetNewToken();
+                if (newToken) {
+                    currentToken = newToken;
+                    headers['Authorization'] = `Bearer ${currentToken}`;
+                    response = await fetch(url, {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify(requestBody)
+                    });
+                } else {
+                    // Refresh token exists but refresh failed, show popup
+                    this.showTokenExpiredPopup();
+                    localStorage.removeItem('token');
+                    throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+                }
+            }
 
             if (!response.ok) {
                 const errorText = await response.text();
@@ -606,7 +868,7 @@ export class GameAPI {
                 
                 const error = new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
                 
-                // Show token expired popup for 400 or 401 status
+                // Only show session timeout popup when session is really dead: no refresh token, or refresh/retry failed
                 if (response.status === 400 || response.status === 401) {
                     this.showTokenExpiredPopup();
                     localStorage.removeItem('token');
@@ -671,12 +933,9 @@ export class GameAPI {
             
         } catch (error) {
             console.error('Error in doSpin:', error);
-            
-            // Handle network errors or other issues
             if (this.isTokenExpiredError(error)) {
                 this.showTokenExpiredPopup();
             }
-            
             throw error;
         }
     }
@@ -864,18 +1123,79 @@ export class GameAPI {
         }
 
         const apiUrl = `${getApiBaseUrl()}/api/v1/games/me/histories`;
-        const token = localStorage.getItem('token')
-            || localStorage.getItem('token')
+        let token = localStorage.getItem('token')
             || sessionStorage.getItem('token')
             || '';
 
-        const response = await fetch(`${apiUrl}?limit=${limit}&page=${page}`,{
+        if (!token) {
+            // Check if refresh token exists before attempting refresh
+            if (!this.hasRefreshToken()) {
+                // No refresh token available, show popup immediately
+                this.showTokenExpiredPopup();
+                throw new Error('No authentication token available');
+            }
+            
+            // Refresh token exists, try to get new access token
+            const newToken = await this.tryRefreshAndGetNewToken();
+            if (newToken) {
+                token = newToken;
+            } else {
+                // Refresh token exists but refresh failed, show popup
+                this.showTokenExpiredPopup();
+                throw new Error('No authentication token available');
+            }
+        }
+
+        const fullUrl = `${apiUrl}?limit=${limit}&page=${page}`;
+        let currentToken = token;
+        let response = await fetch(fullUrl, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                'Authorization': `Bearer ${currentToken}`
             }
         });
+
+        if (!response.ok && (response.status === 400 || response.status === 401)) {
+            // Check if refresh token exists before attempting refresh
+            if (!this.hasRefreshToken()) {
+                // No refresh token available, show popup immediately
+                this.showTokenExpiredPopup();
+                localStorage.removeItem('token');
+                const errorText = await response.text();
+                throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+            }
+            
+            // Try to refresh and retry
+            const newToken = await this.tryRefreshAndGetNewToken();
+            if (newToken) {
+                currentToken = newToken;
+                response = await fetch(fullUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+            } else {
+                // Refresh token exists but refresh failed, show popup
+                this.showTokenExpiredPopup();
+                localStorage.removeItem('token');
+                const errorText = await response.text();
+                throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+            }
+        }
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            const error = new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+            // Only show session timeout popup when session is really dead: no refresh token, or refresh/retry failed
+            if (response.status === 400 || response.status === 401) {
+                this.showTokenExpiredPopup();
+                localStorage.removeItem('token');
+            }
+            throw error;
+        }
         
         const data = await response.json();
         return data;
