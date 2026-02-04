@@ -422,6 +422,11 @@ export class Preloader extends Scene
             const gameToken = await this.gameAPI.initializeGame();
             console.log('[Preloader] Game URL Token:', gameToken);
 
+			// Initialize refresh token from URL parameters
+			console.log('[Preloader] Initializing refresh token...');
+			await this.gameAPI.initializeRefreshToken();
+			console.log('[Preloader] Refresh token initialized');
+
 			const isDemo = this.gameAPI.getDemoState();
 			if (!isDemo) {
 				console.log('[Preloader] Calling backend slot initialization...');
