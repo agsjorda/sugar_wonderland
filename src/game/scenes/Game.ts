@@ -41,6 +41,8 @@ import WinTracker from '../components/WinTracker';
 import { FreeRoundManager } from '../components/FreeRoundManager';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { CurrencyManager } from '../components/CurrencyManager';
+import { IdleManager } from '../components/IdleManager';
+import { MAX_IDLE_TIME_MINUTES } from '../../config/GameConfig';
 
 export class Game extends Scene
 {
@@ -77,6 +79,7 @@ export class Game extends Scene
 
 	public gameData: GameData;
 	private symbols: Symbols;
+	public idleManager: IdleManager;
 
 	constructor ()
 	{
@@ -456,6 +459,8 @@ export class Game extends Scene
 		
 		// Setup bonus mode event listeners
 		this.setupBonusModeEventListeners();
+
+		this.initializeAndStartIdleManager();
 		
 		EventBus.emit('current-scene-ready', this);
 
@@ -1081,6 +1086,33 @@ export class Game extends Scene
 				console.log('[Game] No delayed scatter animation data found');
 			}
 		}
+	}
+
+	private initializeAndStartIdleManager(): void {
+		const idleTimeoutMs = MAX_IDLE_TIME_MINUTES * 60 * 1000;
+		this.idleManager = new IdleManager(this, idleTimeoutMs);
+
+		this.idleManager.events.on(IdleManager.TIMEOUT_EVENT, () => {
+			this.gameAPI.handleSessionTimeout();
+		});
+
+		this.idleManager.events.on(IdleManager.CHECK_INTERVAL_EVENT, () => {
+			if (this.gameStateManager.isBonus ||
+				this.gameStateManager.isReelSpinning ||
+				this.gameStateManager.isProcessingSpin) {
+				this.idleManager.reset();
+			}
+		});
+
+		const onPointerDownResetIdle = () => this.idleManager.reset();
+		this.input.on('pointerdown', onPointerDownResetIdle);
+
+		this.events.once('shutdown', () => {
+			try { this.input.off('pointerdown', onPointerDownResetIdle); } catch {}
+			try { this.idleManager.destroy(); } catch {}
+		});
+
+		this.idleManager.start();
 	}
 
 	private setupBonusModeEventListeners(): void {
