@@ -10,6 +10,7 @@ import { FullScreenManager } from '../../managers/FullScreenManager';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { StudioLoadingScreen } from '../components/StudioLoadingScreen';
 import { ClockDisplay } from '../components/ClockDisplay';
+import { VersionManager } from '../../managers/VersionManager';
 import { CurrencyManager } from '../components/CurrencyManager';
 
 export class Preloader extends Scene
@@ -21,6 +22,7 @@ export class Preloader extends Scene
 	private gameAPI: GameAPI;
 	private studio?: StudioLoadingScreen;
 	private clockDisplay?: ClockDisplay;
+	private versionDisplay?: VersionManager;
 	private preloaderVerticalOffsetModifier: number = 10;
 	private bootProgressHandler?: (progress: number) => void;
 
@@ -119,6 +121,17 @@ export class Preloader extends Scene
 			additionalTextFontFamily: 'poppins-regular'
 		});
 		this.clockDisplay.create();
+
+		// Version display in bottom right (same formatting as ClockDisplay)
+		this.versionDisplay = new VersionManager(this, {
+			fontSize: 16,
+			fontFamily: 'poppins-regular',
+			color: '#FFFFFF',
+			alpha: 0.5,
+			depth: 30000,
+			scale: 0.7,
+		});
+		this.versionDisplay.create();
 
 		// Loading frame + tagline + URL and max-win text (aligned to StudioLoadingScreen positions)
 		// Use the same offsets as StudioLoadingScreen defaults so both layers line up visually
@@ -520,6 +533,7 @@ export class Preloader extends Scene
 				this.taglineText?.setFontFamily('poppins-regular');
 				this.websiteText?.setFontFamily('poppins-regular');
 				this.maxWinText?.setFontFamily('poppins-bold');
+				this.versionDisplay?.setFontFamily('poppins-regular');
 			}).catch(() => {
 				// Fallback: set families anyway
 				this.progressText?.setFontFamily('poppins-regular');
@@ -527,6 +541,7 @@ export class Preloader extends Scene
 				this.taglineText?.setFontFamily('poppins-regular');
 				this.websiteText?.setFontFamily('poppins-regular');
 				this.maxWinText?.setFontFamily('poppins-bold');
+				this.versionDisplay?.setFontFamily('poppins-regular');
 			});
 		} else {
 			// Browser without document.fonts support
@@ -535,6 +550,7 @@ export class Preloader extends Scene
 			this.taglineText?.setFontFamily('poppins-regular');
 			this.websiteText?.setFontFamily('poppins-regular');
 			this.maxWinText?.setFontFamily('poppins-bold');
+			this.versionDisplay?.setFontFamily('poppins-regular');
 		}
     }
 }
