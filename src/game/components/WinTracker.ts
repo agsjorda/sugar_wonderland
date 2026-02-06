@@ -243,8 +243,15 @@ export class WinTracker {
       0,
       (() => {
         const isDemo = (this.scene as any).gameAPI?.getDemoState();
-        const prefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
-        return `${prefix}${data.totalWin.toFixed(2)}`;
+        if (isDemo) {
+          return data.totalWin.toFixed(2);
+        }
+        const currencyCode = CurrencyManager.getCurrencyCode();
+        const formatted = data.totalWin.toLocaleString('en-US', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        });
+        return currencyCode ? `${currencyCode} ${formatted}` : formatted;
       })(),
       {
         fontSize: `${this.labelFontSize}px`,

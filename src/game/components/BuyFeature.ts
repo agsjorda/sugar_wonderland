@@ -433,8 +433,10 @@ export class BuyFeature {
 
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemo = (scene as any).gameAPI?.getDemoState();
-		const currencySymbol = isDemo ? '' : CurrencyManager.getInlinePrefix();
-		this.priceDisplay = scene.add.text(screenWidth / 2, backgroundTop + 340, `${currencySymbol}${this.formatNumberWithCommas(calculatedPrice)}`, {
+		const currencyCode = isDemo ? '' : CurrencyManager.getCurrencyCode();
+		const formatted = this.formatNumberWithCommas(calculatedPrice);
+		const priceText = currencyCode ? `${currencyCode} ${formatted}` : formatted;
+		this.priceDisplay = scene.add.text(screenWidth / 2, backgroundTop + 340, priceText, {
 			fontSize: '42px',
 			fontFamily: 'Poppins-Regular',
 			color: '#ffffff',
@@ -510,8 +512,10 @@ export class BuyFeature {
 		if (this.priceDisplay) {
 			const calculatedPrice = this.getCurrentBetValue();
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
-			const currencySymbol = isDemo ? '' : CurrencyManager.getInlinePrefix();
-			this.priceDisplay.setText(`${currencySymbol}${this.formatNumberWithCommas(calculatedPrice)}`);
+			const currencyCode = isDemo ? '' : CurrencyManager.getCurrencyCode();
+			const formatted = this.formatNumberWithCommas(calculatedPrice);
+			const priceText = currencyCode ? `${currencyCode} ${formatted}` : formatted;
+			this.priceDisplay.setText(priceText);
 		}
 		this.updateBuyButtonState();
 	}
@@ -614,8 +618,9 @@ export class BuyFeature {
 		// Bet display - show current bet value
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemoBet = (scene as any).gameAPI?.getDemoState();
-		const currencySymbolBet = isDemoBet ? '' : CurrencyManager.getInlinePrefix();
-		this.betDisplay = scene.add.text(x, y, `${currencySymbolBet}${this.getCurrentBet().toFixed(2)}`, {
+		const currencyCodeBet = isDemoBet ? '' : CurrencyManager.getCurrencyCode();
+		const betText = currencyCodeBet ? `${currencyCodeBet} ${this.getCurrentBet().toFixed(2)}` : this.getCurrentBet().toFixed(2);
+		this.betDisplay = scene.add.text(x, y, betText, {
 			fontSize: '24px',
 			color: '#ffffff',
 			fontFamily: 'Poppins-Regular'
@@ -734,8 +739,9 @@ export class BuyFeature {
 	private updateBetDisplay(): void {
 		if (this.betDisplay) {
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
-			const currencySymbol = isDemo ? '' : CurrencyManager.getInlinePrefix();
-			this.betDisplay.setText(`${currencySymbol}${this.getCurrentBet().toFixed(2)}`);
+			const currencyCode = isDemo ? '' : CurrencyManager.getCurrencyCode();
+			const betText = currencyCode ? `${currencyCode} ${this.getCurrentBet().toFixed(2)}` : this.getCurrentBet().toFixed(2);
+			this.betDisplay.setText(betText);
 		}
 	}
 

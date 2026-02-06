@@ -3452,13 +3452,28 @@ function getMultiplierOverlayKey(value: number): string | null {
 function createWinText(self: Symbols, amount: number, x: number, y: number): Phaser.GameObjects.Text {
   const px = Math.max(40, Math.round(self.displayHeight * 0.5));
   let textValue = '';
-  const isDemo = (self.scene as any).gameAPI?.getDemoState();
-  const prefix = isDemo ? '' : CurrencyManager.getInlinePrefix();
   try {
-    if (Number.isInteger(amount)) textValue = `${prefix}${amount}`;
-    else textValue = `${prefix}${Number(amount).toFixed(2)}`;
+    const isDemo =
+      (self.scene as any)?.gameAPI?.getDemoState?.() ||
+      localStorage.getItem('demo') === 'true' ||
+      sessionStorage.getItem('demo') === 'true';
+    
+    if (isDemo) {
+      // Demo mode: show amount without currency prefix
+      if (Number.isInteger(amount)) textValue = `${amount}`;
+      else textValue = Number(amount).toFixed(2);
+    } else {
+      // Use currency code (prefer code over symbol, matching WinTracker pattern)
+      const formattedAmount = amount.toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+      const currencyCode = CurrencyManager.getCurrencyCode();
+      textValue = currencyCode ? `${currencyCode}\u00A0${formattedAmount}` : formattedAmount;
+    }
   } catch {
-    textValue = `${prefix}${amount}`;
+    // Fallback to basic formatting if anything fails
+    textValue = `${amount}`;
   }
   const txt = self.scene.add.text(x, y, textValue, {
     fontFamily: 'Poppins-Bold',
