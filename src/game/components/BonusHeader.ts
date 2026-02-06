@@ -115,7 +115,7 @@ export class BonusHeader {
 		// Line 2: amount value
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemoInitial = (this.scene as any)?.gameAPI?.getDemoState();
-		const initialText = isDemoInitial ? '0.00' : `${CurrencyManager.getInlinePrefix()}0.00`;
+		const initialText = isDemoInitial ? '0.00' : this.formatCurrency(0);
 		this.amountText = scene.add.text(x, y + 18, initialText, {
 			fontSize: '24px',
 			color: '#FFB837',
@@ -364,11 +364,22 @@ export class BonusHeader {
 	 * Format currency value for display
 	 */
 	private formatCurrency(amount: number): string {
-		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemo = (this.scene as any)?.gameAPI?.getDemoState();
-		const currencySymbol = isDemo ? '' : CurrencyManager.getInlinePrefix();
-		const formatted = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-		return `${currencySymbol}${formatted}`;
+		
+		// Format with commas for thousands and 2 decimal places
+		const formatted = new Intl.NumberFormat('en-US', {
+			minimumFractionDigits: 2,
+			maximumFractionDigits: 2
+		}).format(amount);
+		
+		if (isDemo) {
+			return formatted;
+		}
+		
+		// Get currency code with proper spacing
+		const currencyCode = CurrencyManager.getCurrencyCode();
+		const space = currencyCode ? ' ' : '';
+		return currencyCode ? `${currencyCode}${space}${formatted}` : formatted;
 	}
 
 	/**
