@@ -861,7 +861,7 @@ export class FreeRoundManager {
 
 		// "With $X.XX" line
 		const isDemo = (scene as any).gameAPI?.getDemoState();
-		const currencySymbol = isDemo ? '' : CurrencyManager.getInlinePrefix();
+		const currencySymbol = isDemo ? '' : CurrencyManager.getCurrencyCode();
 		const betValue =
 			this.initBet != null
 				? this.initBet
@@ -1049,7 +1049,7 @@ export class FreeRoundManager {
 		// Line 1: "You won $XX.XX with"
 		const totalWinDisplay = totalWin.toFixed(2);
 		const isDemo = (scene as any).gameAPI?.getDemoState();
-		const currencySymbol = isDemo ? '' : CurrencyManager.getInlinePrefix();
+		const currencySymbol = isDemo ? '' : CurrencyManager.getCurrencyCode();
 
 		const line1Y = -40;
 		const line1Parts = [

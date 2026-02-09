@@ -38,8 +38,8 @@ export class SlotController {
 	): void {
 		if (!amountText) return;
 
-		const glyph = CurrencyManager.getCurrencyGlyph();
-		const showCurrency = !isDemo && glyph.length > 0 && !!currencyText;
+		const currencyPrefix = CurrencyManager.getCurrencyCode();
+		const showCurrency = !isDemo && currencyPrefix.length > 0 && !!currencyText;
 
 		if (!currencyText || !showCurrency) {
 			try { currencyText?.setVisible(false); } catch {}
@@ -47,7 +47,7 @@ export class SlotController {
 			return;
 		}
 
-		currencyText.setText(glyph);
+		currencyText.setText(currencyPrefix);
 		currencyText.setVisible(true);
 
 		// Ensure width is up-to-date after text changes
@@ -1277,6 +1277,9 @@ export class SlotController {
 				this.featureImage.setAlpha(desiredAlpha);
 			}
 
+			if (this.featureLabelContainer) {
+				this.featureLabelContainer.setAlpha(desiredAlpha);
+			}
 			this.featureLabelText?.setAlpha(desiredAlpha);
 			this.featureAmountText?.setAlpha(desiredAlpha);
 			this.featureDollarText?.setAlpha(desiredAlpha);
@@ -2699,10 +2702,10 @@ export class SlotController {
 		if (this.betAmountText) {
 			this.betAmountText.setText(displayBet.toFixed(2));
 
-			const isDemo = this.gameAPI?.getDemoState();
 			const betY = this.betAmountText.y;
 			const betX = this.scene ? this.scene.scale.width * 0.81 : this.betAmountText.x;
-			this.layoutCurrencyPair(betX, betY, this.betDollarText, this.betAmountText, !!isDemo, 6);
+			if (this.betDollarText) this.betDollarText.setVisible(false);
+			this.betAmountText.setPosition(betX, betY);
 		}
 
 		// Update base bet amount when changed externally (not by amplify bet)
