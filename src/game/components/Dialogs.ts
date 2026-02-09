@@ -683,7 +683,7 @@ export class Dialogs {
 			showCommas: freeSpins !== undefined ? false : true, // No commas for free spins
 			// For Congrats dialog totals, show a dollar sign prefix.
 			// Other dialogs remain unchanged.
-			prefix: isCongratsTotalWin ? (isDemo ? '' : CurrencyManager.getInlinePrefix()) : '',
+			prefix: isCongratsTotalWin ? (isDemo ? '' : CurrencyManager.getCurrencyCode()) : '',
 			suffix: '', // No suffix - only display numbers
 			commaYOffset: 12,
 			dotYOffset: 10

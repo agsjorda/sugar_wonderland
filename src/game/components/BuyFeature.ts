@@ -22,6 +22,7 @@ export class BuyFeature {
 	private slotController: SlotController | null = null;
 	private readonly BET_MULTIPLIER: number = 100; // Multiplier for price display
 	private readonly DISABLED_ALPHA: number = 0.5;
+	private readonly BET_BUTTON_DISABLED_ALPHA: number = 0.3;
 	private betOptions: number[] = [
 		0.2, 0.4, 0.6, 0.8, 1,
 		1.2, 1.6, 2, 2.4, 2.8,
@@ -109,6 +110,28 @@ export class BuyFeature {
 			this.confirmButtonImage.setAlpha(1);
 			this.confirmButtonImage.setInteractive();
 		}
+	}
+
+	/**
+	 * Set bet +/- button enabled/disabled (same pattern as SlotController: grey out, keep interactive, no-op when disabled).
+	 */
+	private setBetButtonEnabled(button: Phaser.GameObjects.Text | undefined, enabled: boolean): void {
+		if (!button) return;
+		button.setAlpha(enabled ? 1.0 : this.BET_BUTTON_DISABLED_ALPHA);
+		if (!button.input) {
+			button.setInteractive();
+		}
+		button.setData('disabled', !enabled);
+	}
+
+	/**
+	 * Grey out bet -/+ when at min/max (same as SlotController.updateBetLimitButtons).
+	 */
+	private updateBetLimitButtons(): void {
+		const isAtMin = this.currentBetIndex <= 0;
+		const isAtMax = this.currentBetIndex >= this.betOptions.length - 1;
+		this.setBetButtonEnabled(this.minusButton, !isAtMin);
+		this.setBetButtonEnabled(this.plusButton, !isAtMax);
 	}
 
 	/**
@@ -597,8 +620,9 @@ export class BuyFeature {
 		this.minusButton.setOrigin(0.5, 0.5);
 		this.minusButton.setInteractive();
 		
-		// Handle pointer down for continuous press
+		// Handle pointer down for continuous press (no-op when disabled, same as SlotController)
 		this.minusButton.on('pointerdown', () => {
+			if (this.minusButton.getData('disabled')) return;
 			this.selectPreviousBet();
 			this.startContinuousDecrement(scene);
 		});
@@ -637,8 +661,9 @@ export class BuyFeature {
 		this.plusButton.setOrigin(0.5, 0.5);
 		this.plusButton.setInteractive();
 		
-		// Handle pointer down for continuous press
+		// Handle pointer down for continuous press (no-op when disabled, same as SlotController)
 		this.plusButton.on('pointerdown', () => {
+			if (this.plusButton.getData('disabled')) return;
 			this.selectNextBet();
 			this.startContinuousIncrement(scene);
 		});
@@ -662,6 +687,7 @@ export class BuyFeature {
 			this.currentBet = this.betOptions[this.currentBetIndex];
 			this.updateBetDisplay();
 			this.updatePriceDisplay();
+			this.updateBetLimitButtons();
 			console.log(`[BuyFeature] Previous bet selected: $${this.currentBet.toFixed(2)}`);
 		}
 	}
@@ -672,6 +698,7 @@ export class BuyFeature {
 			this.currentBet = this.betOptions[this.currentBetIndex];
 			this.updateBetDisplay();
 			this.updatePriceDisplay();
+			this.updateBetLimitButtons();
 			console.log(`[BuyFeature] Next bet selected: $${this.currentBet.toFixed(2)}`);
 		}
 	}
@@ -765,6 +792,7 @@ export class BuyFeature {
 		
 		this.updatePriceDisplay();
 		this.updateBetDisplay();
+		this.updateBetLimitButtons();
 		this.updateBuyButtonState();
 		
 		// Show full-screen blocker

@@ -1333,7 +1333,7 @@ export class Menu {
 
             // Static price text centered on the button (hide currency in demo)
             const isDemoBuyPrice = scene.gameAPI?.getDemoState();
-            const currencySymbolBuyPrice = isDemoBuyPrice ? '' : CurrencyManager.getInlinePrefix();
+            const currencySymbolBuyPrice = isDemoBuyPrice ? '' : CurrencyManager.getCurrencyCode();
             const buyPrice = scene.add.text(btnCenterX, btnCenterY + 14, `${currencySymbolBuyPrice}10,000`, {
                 fontSize: '18px',
                 color: '#FFFFFF',
@@ -2023,7 +2023,7 @@ export class Menu {
                         const repeatTimes = payoutAdjustments[0] - text2.length;
 
                         const isDemoPayout = scene.gameAPI?.getDemoState();
-                        const currencyPrefixPayout = isDemoPayout ? '' : CurrencyManager.getInlinePrefix();
+                        const currencyPrefixPayout = isDemoPayout ? '' : CurrencyManager.getCurrencyCode();
 
                         if(repeatTimes > 0){
                             text = col == 0 ? matchNumRange[row] : 
@@ -2066,7 +2066,7 @@ export class Menu {
                         const repeatTimes = payoutAdjustments[0] - text2.length;
 
                         const isDemoPayout = scene.gameAPI?.getDemoState();
-                        const currencyPrefixPayout = isDemoPayout ? '' : CurrencyManager.getInlinePrefix();
+                        const currencyPrefixPayout = isDemoPayout ? '' : CurrencyManager.getCurrencyCode();
 
                         if(repeatTimes > 0){
                             text = col == 0 ? scatterNumRange[row] : 

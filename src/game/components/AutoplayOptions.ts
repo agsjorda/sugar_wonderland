@@ -45,6 +45,7 @@ export class AutoplayOptions {
 	private betDisplayMultiplier: number = 1;
 	private isEnhancedBet: boolean = false; // Track enhanced bet state
 	private readonly DISABLED_ALPHA: number = 0.5;
+	private readonly BET_BUTTON_DISABLED_ALPHA: number = 0.3;
 	private autoplayOptions: number[] = [
 		10, 30, 50, 75, 100, 150, 500, 1000
 	];
@@ -96,6 +97,28 @@ export class AutoplayOptions {
 			this.confirmButtonImage.setAlpha(1);
 			this.confirmButtonImage.setInteractive();
 		}
+	}
+
+	/**
+	 * Set bet +/- button enabled/disabled (same pattern as SlotController: grey out, keep interactive, no-op when disabled).
+	 */
+	private setBetButtonEnabled(button: Phaser.GameObjects.Text | undefined, enabled: boolean): void {
+		if (!button) return;
+		button.setAlpha(enabled ? 1.0 : this.BET_BUTTON_DISABLED_ALPHA);
+		if (!button.input) {
+			button.setInteractive();
+		}
+		button.setData('disabled', !enabled);
+	}
+
+	/**
+	 * Grey out bet -/+ when at min/max (same as SlotController.updateBetLimitButtons).
+	 */
+	private updateBetLimitButtons(): void {
+		const isAtMin = this.selectedBetIndex <= 0;
+		const isAtMax = this.selectedBetIndex >= this.betOptions.length - 1;
+		this.setBetButtonEnabled(this.minusButton, !isAtMin);
+		this.setBetButtonEnabled(this.plusButton, !isAtMax);
 	}
 
 	constructor(networkManager: NetworkManager, screenModeManager: ScreenModeManager) {
@@ -363,6 +386,7 @@ export class AutoplayOptions {
 		this.minusButton.setOrigin(0.5, 0.5);
 		this.minusButton.setInteractive();
 		this.minusButton.on('pointerdown', () => {
+			if (this.minusButton.getData('disabled')) return;
 			this.selectPreviousBet();
 		});
 		this.container.add(this.minusButton);
@@ -389,6 +413,7 @@ export class AutoplayOptions {
 		this.plusButton.setOrigin(0.5, 0.5);
 		this.plusButton.setInteractive();
 		this.plusButton.on('pointerdown', () => {
+			if (this.plusButton.getData('disabled')) return;
 			this.selectNextBet();
 		});
 		this.container.add(this.plusButton);
@@ -606,6 +631,7 @@ export class AutoplayOptions {
 		this.selectedBetIndex = index;
 		this.currentBet = value;
 		this.updateAutoplayDisplay();
+		this.updateBetLimitButtons();
 		this.updateStartAutoplayButtonState();
 	}
 
@@ -689,6 +715,7 @@ export class AutoplayOptions {
 		}
 
 		this.updateAutoplayDisplay();
+		this.updateBetLimitButtons();
 		this.updateStartAutoplayButtonState();
 		
 		// Show/hide enhanced bet animation based on state
