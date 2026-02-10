@@ -155,6 +155,9 @@ export class Game extends Scene
 		try {
 			CurrencyManager.initializeFromInitData(this.gameAPI?.getInitializationData?.());
 		} catch {}
+
+		// Set bet levels from initialization data so GameData.betLevels is the single source of truth for all bet UIs.
+		this.initializeGameDataBetLevels();
 		
 		// Set physics world bounds (physics is already enabled globally)
 		if (this.physics && this.physics.world) {
@@ -381,6 +384,7 @@ export class Game extends Scene
 
 		// Create free round manager AFTER SlotController so it can mirror the spin button.
 		// It will read the backend initialization data and decide whether to show itself.
+		let appliedInitializationFreeSpinBet = false;
 		try {
 			const initData = this.gameAPI.getInitializationData();
 			const initFsRemaining = this.gameAPI.getRemainingInitFreeSpins();
@@ -401,6 +405,7 @@ export class Game extends Scene
 						`[Game] Applying initialization free spin bet to SlotController: ${initFsBet.toFixed(2)}`
 					);
 					this.slotController.updateBetAmount(initFsBet);
+					appliedInitializationFreeSpinBet = true;
 				}
 
 				this.freeRoundManager.setFreeSpins(initFsRemaining);
@@ -408,6 +413,12 @@ export class Game extends Scene
 			}
 		} catch (e) {
 			console.warn('[Game] Failed to create FreeRoundManager from initialization data:', e);
+		}
+
+		// After BetOptions + SlotController are initialized, set the base bet to the first bet level.
+		// Respect initialization free-spin bet if one was applied above.
+		if (!appliedInitializationFreeSpinBet) {
+			this.initializeBetAmount();
 		}
 		
 		// Create symbol explosion transition component and play at scene start
@@ -779,6 +790,47 @@ export class Game extends Scene
 				console.warn('[Game] Failed to clear WinTracker on AUTO_START:', e);
 			}
 		});
+	}
+
+	private initializeGameDataBetLevels() {
+		try {
+			const initData = this.gameAPI?.getInitializationData?.();
+			const levels = (initData as any)?.betLevels;
+			if (Array.isArray(levels) && levels.length > 0) {
+				const sanitized = levels
+					.map((v: any) => Number(v))
+					.filter((n: number) => Number.isFinite(n) && n > 0);
+				if (sanitized.length > 0) {
+					this.gameData.betLevels = sanitized;
+				}
+			}
+		} catch (e) {
+			console.warn('[Game] Failed to set gameData.betLevels from initialization data:', e);
+		}
+	}
+
+	private initializeBetAmount() {
+		try {
+			const firstBet = this.gameData.betLevels.length > 0
+				? Number(this.gameData.betLevels[0])
+				: 0.20;
+
+			const previousBet = this.slotController?.getBaseBetAmount?.() ?? 0.20;
+
+			if (this.slotController) {
+				this.slotController.updateBetAmount(firstBet);
+			}
+			if (this.betOptions) {
+				this.betOptions.setCurrentBet(firstBet);
+			}
+
+			// Keep backend (and listeners like Menu) in sync.
+			if (Math.abs(firstBet - previousBet) > 0.0001) {
+				gameEventManager.emit(GameEventType.BET_UPDATE, { newBet: firstBet, previousBet: previousBet });
+			}
+		} catch (e) {
+			console.warn('[Game] Failed to apply initialization first bet level:', e);
+		}
 	}
 
 	/**
