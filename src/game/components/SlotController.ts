@@ -4466,6 +4466,11 @@ public updateAutoplayButtonState(): void {
 			return;
 		}
 
+		// Mark spin as in progress immediately (covers autoplay path where spin button handler doesn't run).
+		// Prevents stopAutoplay() from re-enabling buttons when user stops autoplay right after confirm
+		// while the first spin is still starting (handleSpin in flight, reels not yet dropping).
+		(gameStateManager as any).isProcessingSpin = true;
+
 		// Guard: ensure sufficient balance before proceeding
 		try {
 			const currentBalance = this.getBalanceAmount();
