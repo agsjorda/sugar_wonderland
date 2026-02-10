@@ -155,6 +155,9 @@ export class Game extends Scene
 		try {
 			CurrencyManager.initializeFromInitData(this.gameAPI?.getInitializationData?.());
 		} catch {}
+
+		// Set bet levels from initialization data so GameData.betLevels is the single source of truth for all bet UIs.
+		this.initializeGameDataBetLevels();
 		
 		// Set physics world bounds (physics is already enabled globally)
 		if (this.physics && this.physics.world) {
@@ -381,6 +384,7 @@ export class Game extends Scene
 
 		// Create free round manager AFTER SlotController so it can mirror the spin button.
 		// It will read the backend initialization data and decide whether to show itself.
+		let appliedInitializationFreeSpinBet = false;
 		try {
 			const initData = this.gameAPI.getInitializationData();
 			const initFsRemaining = this.gameAPI.getRemainingInitFreeSpins();
@@ -401,6 +405,7 @@ export class Game extends Scene
 						`[Game] Applying initialization free spin bet to SlotController: ${initFsBet.toFixed(2)}`
 					);
 					this.slotController.updateBetAmount(initFsBet);
+					appliedInitializationFreeSpinBet = true;
 				}
 
 				this.freeRoundManager.setFreeSpins(initFsRemaining);
@@ -408,6 +413,12 @@ export class Game extends Scene
 			}
 		} catch (e) {
 			console.warn('[Game] Failed to create FreeRoundManager from initialization data:', e);
+		}
+
+		// After BetOptions + SlotController are initialized, set the base bet to the first bet level.
+		// Respect initialization free-spin bet if one was applied above.
+		if (!appliedInitializationFreeSpinBet) {
+			this.initializeBetAmount();
 		}
 		
 		// Create symbol explosion transition component and play at scene start
@@ -781,6 +792,47 @@ export class Game extends Scene
 		});
 	}
 
+	private initializeGameDataBetLevels() {
+		try {
+			const initData = this.gameAPI?.getInitializationData?.();
+			const levels = (initData as any)?.betLevels;
+			if (Array.isArray(levels) && levels.length > 0) {
+				const sanitized = levels
+					.map((v: any) => Number(v))
+					.filter((n: number) => Number.isFinite(n) && n > 0);
+				if (sanitized.length > 0) {
+					this.gameData.betLevels = sanitized;
+				}
+			}
+		} catch (e) {
+			console.warn('[Game] Failed to set gameData.betLevels from initialization data:', e);
+		}
+	}
+
+	private initializeBetAmount() {
+		try {
+			const firstBet = this.gameData.betLevels.length > 0
+				? Number(this.gameData.betLevels[0])
+				: 0.20;
+
+			const previousBet = this.slotController?.getBaseBetAmount?.() ?? 0.20;
+
+			if (this.slotController) {
+				this.slotController.updateBetAmount(firstBet);
+			}
+			if (this.betOptions) {
+				this.betOptions.setCurrentBet(firstBet);
+			}
+
+			// Keep backend (and listeners like Menu) in sync.
+			if (Math.abs(firstBet - previousBet) > 0.0001) {
+				gameEventManager.emit(GameEventType.BET_UPDATE, { newBet: firstBet, previousBet: previousBet });
+			}
+		} catch (e) {
+			console.warn('[Game] Failed to apply initialization first bet level:', e);
+		}
+	}
+
 	/**
 	 * Initialize the game balance on start
 	 */
@@ -916,7 +968,9 @@ export class Game extends Scene
 			console.warn('[Game] Failed to check multiplier animation status:', e);
 		}
 
-		// If scatter retrigger animation is in progress, defer win dialog until animation and dialog complete
+		// If scatter retrigger animation is already in progress, defer win dialog until retrigger dialog closes.
+		// When only "pending" retrigger (not yet started), we show the win dialog first; Symbols defers its
+		// retrigger sequence until after this dialog closes so order is: win dialog (staged) -> retrigger -> retrigger dialog.
 		try {
 			const symbolsAny: any = this.symbols as any;
 			const isRetriggerAnimationInProgress =
@@ -925,16 +979,13 @@ export class Game extends Scene
 					: false;
 			
 			if (isRetriggerAnimationInProgress) {
-				console.log('[Game] Scatter retrigger animation in progress - deferring win dialog until retrigger dialog closes');
+				console.log('[Game] Scatter retrigger animation already in progress - deferring win dialog until retrigger dialog closes');
 				this.winQueue.push({ payout, bet });
 				console.log(`[Game] Added to win queue due to retrigger animation. Queue length: ${this.winQueue.length}`);
-				// Wait for retrigger animation to complete, then the retrigger dialog will show
-				// After the retrigger dialog closes (dialogAnimationsComplete), we'll process the win queue
-				// This is handled by the existing dialogAnimationsComplete listener which calls processWinQueue()
 				return;
 			}
 		} catch (e) {
-			console.warn('[Game] Failed to check retrigger animation status:', e);
+			console.warn('[Game] Failed to check retrigger status:', e);
 		}
 		
 		// If scatter is active and we're autoplaying (normal or free spin), defer win dialog
