@@ -916,7 +916,9 @@ export class Game extends Scene
 			console.warn('[Game] Failed to check multiplier animation status:', e);
 		}
 
-		// If scatter retrigger animation is in progress, defer win dialog until animation and dialog complete
+		// If scatter retrigger animation is already in progress, defer win dialog until retrigger dialog closes.
+		// When only "pending" retrigger (not yet started), we show the win dialog first; Symbols defers its
+		// retrigger sequence until after this dialog closes so order is: win dialog (staged) -> retrigger -> retrigger dialog.
 		try {
 			const symbolsAny: any = this.symbols as any;
 			const isRetriggerAnimationInProgress =
@@ -925,16 +927,13 @@ export class Game extends Scene
 					: false;
 			
 			if (isRetriggerAnimationInProgress) {
-				console.log('[Game] Scatter retrigger animation in progress - deferring win dialog until retrigger dialog closes');
+				console.log('[Game] Scatter retrigger animation already in progress - deferring win dialog until retrigger dialog closes');
 				this.winQueue.push({ payout, bet });
 				console.log(`[Game] Added to win queue due to retrigger animation. Queue length: ${this.winQueue.length}`);
-				// Wait for retrigger animation to complete, then the retrigger dialog will show
-				// After the retrigger dialog closes (dialogAnimationsComplete), we'll process the win queue
-				// This is handled by the existing dialogAnimationsComplete listener which calls processWinQueue()
 				return;
 			}
 		} catch (e) {
-			console.warn('[Game] Failed to check retrigger animation status:', e);
+			console.warn('[Game] Failed to check retrigger status:', e);
 		}
 		
 		// If scatter is active and we're autoplaying (normal or free spin), defer win dialog
