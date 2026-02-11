@@ -886,7 +886,7 @@ export class FreeRoundManager {
 		this.panelBetText = scene.add.text(
 			0,
 			0,
-			`${currencySymbol}${betDisplay}`,
+			`${currencySymbol} ${betDisplay}`,
 			{
 				fontSize: '20px',
 				color: '#379557',
@@ -1058,7 +1058,7 @@ export class FreeRoundManager {
 				style: { fontSize: '24px', color: '#ffffff', fontFamily: 'poppins-bold' }
 			},
 			{
-				text: `${currencySymbol}${totalWinDisplay}`,
+				text: `${currencySymbol} ${totalWinDisplay}`,
 				style: { fontSize: '32px', color: '#00ff00', fontFamily: 'poppins-bold' }
 			},
 			{
