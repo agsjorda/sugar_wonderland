@@ -2,7 +2,7 @@ import { ContentSection } from "../ContentSection";
 
 export const gameSettingsContent: ContentSection = {
     Header: {
-        key: 'help_game-settings',
+        key: 'help_game-settings-title',
         value: 'Game Settings',
     },
     Border: {
@@ -24,7 +24,7 @@ export const gameSettingsContent: ContentSection = {
                 opts: {
                     padding: { top: 20, bottom: 20 },
                 },
-                key: 'help_paylines-desc',
+                key: 'help_paylines-desc0',
                 value: 'Symbols can land anywhere on the screen.',
             }
         },
@@ -55,26 +55,8 @@ export const gameSettingsContent: ContentSection = {
                 opts: {
                     padding: { top: 40, bottom: 10 },
                 },
-                key: 'help_wins-multiplied',
-                value: 'All wins are multiplied by the base bet.',
-            }
-        },
-        {
-            Text: {
-                opts: {
-                    padding: { top: 10, bottom: 10 },
-                },
-                key: 'help_wins-combined',
-                value: 'When multiple symbol wins occur, all values are combined into the total win.',
-            }
-        },
-        {
-            Text: {
-                opts: {
-                    padding: { top: 10 },
-                },
-                key: 'help_freespins-rewards',
-                value: 'Free spins rewards are granted after the round ends.',
+                key: 'help_paylines-desc1',
+                value: 'All wins are multiplied by the base bet.\nWhen multiple symbol wins occur, all values are combined into the total win.\nFree spins rewards are granted after the round ends.',
             }
         }
     ]

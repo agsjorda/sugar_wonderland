@@ -120,7 +120,7 @@ const betTextSection: ContentSection = {
     Content: [
         {
             Text: {
-                key: 'help_wager-desc',
+                key: 'help_bet-desc',
                 value: 'Adjust your wager using the – and + buttons.'
             }
         }
@@ -190,7 +190,7 @@ export const displayStatsSection: ContentSection = {
     Content: [
         {
             Header: {
-                key: 'help_display-stats',
+                key: 'help_display-stats-title',
                 value: 'Display & Stats',
                 opts: {
                     padding: { top: 30 },

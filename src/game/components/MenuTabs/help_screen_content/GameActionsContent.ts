@@ -214,7 +214,7 @@ const turboSection: ContentSection = {
 
 export const gameActionsSection: ContentSection = {
     Header: {
-        key: 'help_game-actions',
+        key: 'help_game-actions-title',
         value: 'Game Actions',
         opts: {
             padding: { top: 24 },

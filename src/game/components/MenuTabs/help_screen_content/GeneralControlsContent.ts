@@ -143,7 +143,7 @@ export const generalControlsSection: ContentSection = {
     Content: [
         {
             Header: {
-                key: 'help_general-controls',
+                key: 'help_general-controls-title',
                 value: 'General Controls',
                 opts: {
                     padding: { top: 36, bottom: 12 },

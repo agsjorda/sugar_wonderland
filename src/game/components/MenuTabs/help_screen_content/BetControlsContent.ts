@@ -2,7 +2,7 @@ import type { ContentSection } from '../ContentSection';
 
 export const betControlsSection: ContentSection = {
     Header: {
-        key: 'help_bet-controls',
+        key: 'help_bet-controls-title',
         value: 'Bet Controls',
     },
     Border: {
@@ -49,7 +49,7 @@ export const betControlsSection: ContentSection = {
         },
         {
             Text: {
-                key: 'help_bet-adjust',
+                key: 'help_bet-controls-desc',
                 value: 'Adjust your total bet',
             }
         }

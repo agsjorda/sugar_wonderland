@@ -5,14 +5,14 @@ export const gameRulesContent: ContentSection = {
         opts: { 
             padding: { top: 12, bottom: 12 },
         },
-        key: 'help_game-rules',
+        key: 'help_game-rules-title',
         value: 'Game Rules',
     },
     Content: [
         {
             Text: {
                 opts: { padding: 2 },
-                key: 'help_rules-desc',
+                key: 'help_game-rules-desc',
                 value: 'Win by landing 8 or more matching symbols anywhere on the screen. The more matching symbols you get, the higher your payout.',
             },
         },
