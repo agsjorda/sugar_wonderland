@@ -706,8 +706,36 @@ export class GameAPI {
             errorMessage.includes('token') || 
             errorMessage.includes('expired') || 
             errorMessage.includes('unauthorized') ||
+            errorMessage.includes('auth') ||
+            errorMessage.includes('jwt') ||
+            errorMessage.includes('session') ||
             errorMessage.includes('401') ||
-            errorMessage.includes('400')
+            errorMessage.includes('403')
+        );
+    }
+
+    /**
+     * Determine if an HTTP failure should be treated as an auth/session expiry issue.
+     * Some endpoints may return 400 for auth problems, so we only classify 400 as auth
+     * when the backend message explicitly indicates token/session/authentication failure.
+     * HARDENING NOTE: This helper was added for "session expired" false-positive protection.
+     * To roll back to legacy behavior, remove this helper and treat all 400 as auth failures.
+     */
+    private isAuthHttpFailure(status: number, errorText: string = ''): boolean {
+        if (status === 401 || status === 403) {
+            return true;
+        }
+        if (status !== 400) {
+            return false;
+        }
+        const msg = (errorText || '').toLowerCase();
+        return (
+            msg.includes('token') ||
+            msg.includes('expired') ||
+            msg.includes('unauthorized') ||
+            msg.includes('auth') ||
+            msg.includes('jwt') ||
+            msg.includes('session')
         );
     }
 
@@ -817,18 +845,15 @@ export class GameAPI {
                 body: JSON.stringify(requestBody)
             });
 
-            if (!response.ok && (response.status === 400 || response.status === 401)) {
-                const errorText = await response.text();
-                
-                // Check if refresh token exists before attempting refresh
-                if (!this.hasRefreshToken()) {
-                    // No refresh token available, show popup immediately
-                    this.showTokenExpiredPopup();
-                    localStorage.removeItem('token');
-                    throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
-                }
-                
-                // Try to refresh and retry
+            // SESSION-EXPIRED HARDENING:
+            // Retry refresh only for auth-like failures (401/403 or auth-indicated 400),
+            // not for every 400 validation/business error.
+            let shouldRetryWithRefresh = response.status === 401;
+            if (!shouldRetryWithRefresh && response.status === 400) {
+                const probeText = await response.clone().text().catch(() => '');
+                shouldRetryWithRefresh = this.isAuthHttpFailure(response.status, probeText);
+            }
+            if (shouldRetryWithRefresh) {
                 const newToken = await this.tryRefreshAndGetNewToken();
                 if (newToken) {
                     currentToken = newToken;
@@ -838,11 +863,6 @@ export class GameAPI {
                         headers: headers,
                         body: JSON.stringify(requestBody)
                     });
-                } else {
-                    // Refresh token exists but refresh failed, show popup
-                    this.showTokenExpiredPopup();
-                    localStorage.removeItem('token');
-                    throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
                 }
             }
 
@@ -882,8 +902,10 @@ export class GameAPI {
                 
                 const error = new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
                 
-                // Only show session timeout popup when session is really dead: no refresh token, or refresh/retry failed
-                if (response.status === 400 || response.status === 401) {
+                // SESSION-EXPIRED HARDENING:
+                // Show token expired popup only for auth-like failures.
+                // Legacy behavior showed popup for all 400 responses.
+                if (this.isAuthHttpFailure(response.status, errorText)) {
                     this.showTokenExpiredPopup();
                     localStorage.removeItem('token');
                 }
@@ -897,6 +919,7 @@ export class GameAPI {
             // and emit an event to update the FreeRoundManager display
             if (isFs && typeof responseData.fsCount === 'number') {
                 console.log('[GameAPI] Free spin response received with fsCount:', responseData.fsCount);
+                this.remainingInitFreeSpins = responseData.fsCount;
                 // Import gameEventManager dynamically to emit the event
                 import('../event/EventManager').then(module => {
                     const { gameEventManager, GameEventType } = module;

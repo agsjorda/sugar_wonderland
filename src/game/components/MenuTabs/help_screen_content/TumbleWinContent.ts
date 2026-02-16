@@ -2,7 +2,7 @@ import type { ContentSection } from '../ContentSection';
 
 export const tumbleWinContent: ContentSection = {
     Header: {
-        key: 'help_tumble-win',
+        key: 'help_tumble-title',
         value: 'Tumble Win',
     },
     Border: {

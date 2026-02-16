@@ -11,7 +11,7 @@ const SYMBOL_CHILD_SECTION_GAP = 10;
 
 const symbolCount = 9;
 const baseSymbolKey = 'symbol';
-const scatterSymbolKey = 'symbol0';
+export const scatterSymbolKey = `${baseSymbolKey}0`;
 
 const symbolImageScaleMultiplier: Record<number, number> = {
     1: 1,
@@ -30,7 +30,7 @@ const symbolImageScaleMultiplier: Record<number, number> = {
  * Used only for visual scaling; layout (border/grid) uses base size.
  */
 function getSymbolScaleMultiplier(imageKey: string): number {
-    const match = /symbol(\d+)/i.exec(imageKey);
+    const match = new RegExp(`${baseSymbolKey}(\\d+)`).exec(imageKey);
     if (match == null) return 1;
     const index = parseInt(match[1], 10);
     return symbolImageScaleMultiplier[index] ?? 1;
@@ -296,22 +296,8 @@ function getScatterPayoutContent(
             {
                 Text: {
                     opts: { padding: 2 },
-                    key: 'help_scatter-desc1',
-                    value: 'This is the SCATTER symbol.',
-                },
-            },
-            {
-                Text: {
-                    opts: { padding: 2 },
-                    key: 'help_scatter-desc2',
-                    value: 'SCATTER symbol is present on all reels.',
-                },
-            },
-            {
-                Text: {
-                    opts: { padding: 2 },
-                    key: 'help_scatter-desc3',
-                    value: 'SCATTER pays on any position.',
+                    key: 'help_scatter-desc',
+                    value: 'This is the SCATTER symbol.\nSCATTER symbol is present on all reels.\nSCATTER pays on any position.',
                 },
             },
         ],

@@ -6,7 +6,7 @@ import { generalControlsSection } from './GeneralControlsContent';
 
 export const howToPlayContent: ContentSection = {
     Header: {
-        key: 'help_how-play',
+        key: 'help_how-play-title',
         value: 'How to Play',
         opts: {
             padding: { top: 12, bottom: 12 },

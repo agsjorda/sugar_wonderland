@@ -94,10 +94,43 @@ export class HelpScreen {
     /** When true, draw element wireframes (green). */
     private showElementWireframe: boolean = false;
 
-    /** Default (fallback) text for help content when localization is missing. */
+    /** Default (fallback) text for help content when localization is missing. Ordered by display order (top to bottom). */
     private static readonly helpDefaultText: Record<string, string> = {
-        'help_how-play': 'How to Play',
-        'help_game-actions': 'Game Actions',
+        // --- Game Rules (first section) ---
+        'help_game-rules-title': 'Game Rules',
+        'help_game-rules-desc': 'Win by landing 8 or more matching symbols anywhere on the screen. The more matching symbols you get, the higher your payout.',
+        // --- RTP ---
+        'help_rtp-title': 'RTP',
+        // --- Max Win ---
+        'help_max-win-title': 'Max Win',
+        // --- Payout (symbol + scatter) ---
+        'help_payout-title': 'Payout',
+        'help_scatter-title': 'Scatter',
+        'help_scatter-desc': 'This is the SCATTER symbol.\nSCATTER symbol is present on all reels.\nSCATTER pays on any position.',
+        // --- Tumble Win ---
+        'help_tumble-title': 'Tumble Win',
+        'help_tumble-desc': 'After each spin, winning symbols are paid and then removed from the screen. Remaining symbols drop down, and new ones fall from above to fill the empty spaces.\n\nTumbles continue as long as new winning combinations appear — there is no limit to the number of tumbles per spin.\n\nAll wins are credited to the player\'s balance after all tumbles from a base spin are completed.',
+        // --- Free Spin Rules ---
+        'help_freespin-rules-title': 'Free Spin Rules',
+        'help_bonus-trigger-title': 'Bonus Trigger',
+        'help_bonus-trigger-desc': 'Land 4 or more {image} SCATTER symbols anywhere on the screen to trigger the FREE SPINS feature.\nYou\'ll start with 10 free spins.\nDuring the bonus round, hitting 3 or more SCATTER symbols awards 5 extra free spins.',
+        'help_retrigger-title': 'In-Bonus Freespin Retrigger',
+        'help_retrigger-desc': 'Land 3 {image} SCATTER and win 5 more spins',
+        'help_multiplier-title': 'Multiplier',
+        'help_multiplier-desc': 'The {image} Multiplier symbol appears only during the FREE SPINS round and remains on the screen until the tumbling sequence ends.\nEach time a {image} lands, it randomly takes a multiplier value: 2x, 3x, 4x, 5x, 6x, 8x, 10x, 12x, 15x, 20x, 25x, 50x, or even 100x!\nOnce all tumbles are finished, the total of all {image} multipliers is added and applied to the total win of that sequence.\n\nSpecial reels are used during the FREE SPINS round.',
+        // --- Game Settings ---
+        'help_game-settings-title': 'Game Settings',
+        'help_paylines-title': 'Paylines',
+        'help_paylines-desc0': 'Symbols can land anywhere on the screen.',
+        'help_paylines-desc1': 'All wins are multiplied by the base bet.\nWhen multiple symbol wins occur, all values are combined into the total win.\nFree spins rewards are granted after the round ends.',
+        // --- How to Play (container) ---
+        'help_how-play-title': 'How to Play',
+        // --- Bet Controls (under How to Play) ---
+        'help_bet-controls-title': 'Bet Controls',
+        'help_buttons-label': 'Buttons',
+        'help_bet-controls-desc': 'Adjust your total bet',
+        // --- Game Actions (under How to Play) ---
+        'help_game-actions-title': 'Game Actions',
         'help_spin-label': 'Spin',
         'help_spin-desc': 'Starts the game round.',
         'help_buy-label': 'Buy Feature',
@@ -108,47 +141,22 @@ export class HelpScreen {
         'help_autoplay-desc': 'Opens the autoplay menu. Tap again to stop autoplay.',
         'help_turbo-label': 'Turbo',
         'help_turbo-desc': 'Speeds up the game.',
-        'help_game-rules': 'Game Rules',
-        'help_rules-desc': 'Win by landing 8 or more matching symbols anywhere on the screen. The more matching symbols you get, the higher your payout.',
-        'help_tumble-win': 'Tumble Win',
-        'help_tumble-desc': 'After each spin, winning symbols are paid and then removed from the screen. Remaining symbols drop down, and new ones fall from above to fill the empty spaces.\n\nTumbles continue as long as new winning combinations appear — there is no limit to the number of tumbles per spin.\n\nAll wins are credited to the player\'s balance after all tumbles from a base spin are completed.',
-        'help_freespin-rules': 'Free Spin Rules',
-        'help_bonus-trigger': 'Bonus Trigger',
-        'help_scatter-desc': 'Land 4 or more {image} SCATTER symbols anywhere on the screen to trigger the FREE SPINS feature.\nYou\'ll start with 10 free spins.\nDuring the bonus round, hitting 3 or more SCATTER symbols awards 5 extra free spins.',
-        'help_retrigger-title': 'In-Bonus Freespin Retrigger',
-        'help_retrigger-desc': 'Land 3 {image} SCATTER and win 5 more spins',
-        'help_multiplier-game': 'Multiplier',
-        'help_multiplier-desc': 'The {image} Multiplier symbol appears only during the FREE SPINS round and remains on the screen until the tumbling sequence ends.\nEach time a {image} lands, it randomly takes a multiplier value: 2x, 3x, 4x, 5x, 6x, 8x, 10x, 12x, 15x, 20x, 25x, 50x, or even 100x!\nOnce all tumbles are finished, the total of all {image} multipliers is added and applied to the total win of that sequence.\nSpecial reels are used during the FREE SPINS round.',
-        'help_display-stats': 'Display & Stats',
+        // --- Display & Stats (under How to Play) ---
+        'help_display-stats-title': 'Display & Stats',
         'help_balance-desc': 'Shows your current available credits.',
         'help_balance-label': 'BALANCE',
         'help_totalwin-desc': 'Displays your total winnings from the current round.',
         'help_totalwin-label': 'TOTAL WIN',
+        'help_bet-desc': 'Adjust your wager using the – and + buttons.',
         'help_bet-label': 'BET',
-        'help_wager-desc': 'Adjust your wager using the – and + buttons.',
-        'help_bet-controls': 'Bet Controls',
-        'help_buttons-label': 'Buttons',
-        'help_bet-adjust': 'Adjust your total bet',
-        'help_general-controls': 'General Controls',
+        // --- General Controls (under How to Play) ---
+        'help_general-controls-title': 'General Controls',
         'help_sounds-label': 'Sounds',
         'help_sounds-desc': 'Toggle game sounds on or off.',
         'help_settings-label': 'Settings',
         'help_settings-desc': 'Access gameplay preferences and systems options.',
         'help_info-label': 'Info',
         'help_info-desc': 'View game rules, features, and paytable.',
-        'help_game-settings': 'Game Settings',
-        'help_paylines-title': 'Paylines',
-        'help_paylines-desc': 'Symbols can land anywhere on the screen.',
-        'help_wins-multiplied': 'All wins are multiplied by the base bet.',
-        'help_wins-combined': 'When multiple symbol wins occur, all values are combined into the total win.',
-        'help_freespins-rewards': 'Free spins rewards are granted after the round ends.',
-        'help_payout-title': 'Payout',
-        'help_scatter-title': 'Scatter',
-        'help_scatter-desc1': 'This is the SCATTER symbol.',
-        'help_scatter-desc2': 'SCATTER symbol is present on all reels.',
-        'help_scatter-desc3': 'SCATTER pays on any position.',
-        'help_max-win': 'Max Win',
-        'help_rtp-title': 'RTP',
     };
 
     /** Resolves help content text via localization, with fallback to default. */
