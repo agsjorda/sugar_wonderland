@@ -4,6 +4,7 @@ import { gameStateManager } from '../../managers/GameStateManager';
 import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { SlotController } from './SlotController';
 import { CurrencyManager } from './CurrencyManager';
+import { formatCurrencyNumber } from '../../utils/NumberPrecisionFormatter';
 
 export class FreeRoundManager {
 	private container: Phaser.GameObjects.Container | null = null;
@@ -869,7 +870,7 @@ export class FreeRoundManager {
 					? (this.slotControllerRef as any).getBaseBetAmount()
 					: 0;
 
-		const betDisplay = betValue.toFixed(2);
+		const betDisplay = formatCurrencyNumber(betValue);
 
 		// "With" (white) and bet value (green) as separate texts so styles can differ
 		const withText = scene.add.text(
@@ -1047,7 +1048,7 @@ export class FreeRoundManager {
 		this.panelContainer.add(titleText);
 
 		// Line 1: "You won $XX.XX with"
-		const totalWinDisplay = totalWin.toFixed(2);
+		const totalWinDisplay = formatCurrencyNumber(totalWin);
 		const isDemo = (scene as any).gameAPI?.getDemoState();
 		const currencySymbol = isDemo ? '' : CurrencyManager.getCurrencyCode();
 
@@ -1095,7 +1096,7 @@ export class FreeRoundManager {
 				: (this.slotControllerRef && (this.slotControllerRef as any).getBaseBetAmount)
 					? (this.slotControllerRef as any).getBaseBetAmount()
 					: 0;
-		const betDisplay = betValue.toFixed(2);
+		const betDisplay = formatCurrencyNumber(betValue);
 
 		const line2Y = 0;
 		const spinsCountText = scene.add.text(
@@ -1288,7 +1289,7 @@ export class FreeRoundManager {
 		this.panelContainer.add(titleText);
 
 		// Line 1: "$XX.XX" (winnings only, on its own line)
-		const totalWinDisplay = totalWin.toFixed(2);
+		const totalWinDisplay = formatCurrencyNumber(totalWin);
 		const winningsY = -50;
 
 		const winningsText = scene.add.text(

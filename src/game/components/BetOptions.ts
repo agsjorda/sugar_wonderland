@@ -3,6 +3,7 @@ import { NetworkManager } from "../../managers/NetworkManager";
 import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { CurrencyManager } from './CurrencyManager';
+import { formatCurrencyNumber } from '../../utils/NumberPrecisionFormatter';
 
 export interface BetOptionsConfig {
 	position?: { x: number; y: number };
@@ -441,7 +442,7 @@ export class BetOptions {
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemoInitial = (scene as any).gameAPI?.getDemoState();
 		const currencyCodeInitial = isDemoInitial ? '' : CurrencyManager.getCurrencyCode();
-		const betText = currencyCodeInitial ? `${currencyCodeInitial} ${this.currentBet.toFixed(2)}` : this.currentBet.toFixed(2);
+		const betText = currencyCodeInitial ? `${currencyCodeInitial} ${formatCurrencyNumber(this.currentBet)}` : formatCurrencyNumber(this.currentBet);
 		this.betDisplay = scene.add.text(x, y, betText, {
 			fontSize: '24px',
 			color: '#ffffff',
@@ -550,7 +551,7 @@ export class BetOptions {
 			const displayBet = this.currentBet * multiplier;
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
 			const currencyCode = isDemo ? '' : CurrencyManager.getCurrencyCode();
-			const betText = currencyCode ? `${currencyCode} ${displayBet.toFixed(2)}` : displayBet.toFixed(2);
+			const betText = currencyCode ? `${currencyCode} ${formatCurrencyNumber(displayBet)}` : formatCurrencyNumber(displayBet);
 			this.betDisplay.setText(betText);
 		}
 	}

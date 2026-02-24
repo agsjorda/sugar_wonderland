@@ -6,6 +6,7 @@ import { gameEventManager, GameEventType } from '../../event/EventManager';
 import { gameStateManager } from '../../managers/GameStateManager';
 import { PaylineData } from '../../backend/SpinData';
 import { CurrencyManager } from './CurrencyManager';
+import { formatCurrencyNumber } from '../../utils/NumberPrecisionFormatter';
 
 
 export class Header {
@@ -447,18 +448,10 @@ export class Header {
 	 */
 	private formatCurrency(amount: number): string {
 		const isDemo = (this.scene as any)?.gameAPI?.getDemoState();
-		
-		// Format with commas for thousands and 2 decimal places
-		const formatted = new Intl.NumberFormat('en-US', {
-			minimumFractionDigits: 2,
-			maximumFractionDigits: 2
-		}).format(amount);
-		
+		const formatted = formatCurrencyNumber(amount);
 		if (isDemo) {
 			return formatted;
 		}
-		
-		// Get currency code with proper spacing
 		const currencyCode = CurrencyManager.getCurrencyCode();
 		const space = currencyCode ? ' ' : '';
 		return currencyCode ? `${currencyCode}${space}${formatted}` : formatted;

@@ -3,6 +3,7 @@ import { NetworkManager } from '../../managers/NetworkManager';
 import { ScreenModeManager } from '../../managers/ScreenModeManager';
 import { NumberDisplay, NumberDisplayConfig } from './NumberDisplay';
 import { CurrencyManager } from './CurrencyManager';
+import { formatCurrencyNumber } from '../../utils/NumberPrecisionFormatter';
 import { IrisTransition } from './IrisTransition';
 import { SymbolExplosionTransition } from './SymbolExplosionTransition';
 import { gameStateManager } from '../../managers/GameStateManager';
@@ -676,7 +677,7 @@ export class Dialogs {
 		const isCongratsTotalWin = this.currentDialogType === 'Congrats_KA' && freeSpins === undefined;
 		const isDemo = (scene as any).gameAPI?.getDemoState();
 
-		// Create number display configuration
+		// Create number display configuration (win amount uses precision formatter)
 		const numberConfig: NumberDisplayConfig = {
 			x: scene.scale.width / 2,
 			y: this.getNumberDisplayY(scene, this.currentDialogType),
@@ -690,7 +691,8 @@ export class Dialogs {
 			prefix: isCongratsTotalWin ? (isDemo ? '' : CurrencyManager.getCurrencyCode()) : '',
 			suffix: '', // No suffix - only display numbers
 			commaYOffset: 12,
-			dotYOffset: 10
+			dotYOffset: 10,
+			...(freeSpins === undefined && { formatValue: (n) => formatCurrencyNumber(n) })
 		};
 
 		// Create the number display (primary win amount / free spins, depending on dialog)

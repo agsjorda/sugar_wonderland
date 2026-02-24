@@ -41,6 +41,7 @@ import WinTracker from '../components/WinTracker';
 import { FreeRoundManager } from '../components/FreeRoundManager';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { CurrencyManager } from '../components/CurrencyManager';
+import { setDecimalPlaces } from '../../utils/NumberPrecisionFormatter';
 import { IdleManager } from '../components/IdleManager';
 import { MAX_IDLE_TIME_MINUTES } from '../../config/GameConfig';
 
@@ -151,9 +152,11 @@ export class Game extends Scene
 		// before any components try to call `scene.add.spine(...)`.
 		try { ensureSpineFactory(this, '[Game] create'); } catch {}
 
-		// Initialize currency display from initialization data (safe in demo mode).
+		// Initialize currency display and decimal precision from initialization data (safe in demo mode).
 		try {
-			CurrencyManager.initializeFromInitData(this.gameAPI?.getInitializationData?.());
+			const initData = this.gameAPI?.getInitializationData?.();
+			CurrencyManager.initializeFromInitData(initData);
+			setDecimalPlaces(initData?.currencyDecimalPlaces ?? 2);
 		} catch {}
 
 		// Set bet levels from initialization data so GameData.betLevels is the single source of truth for all bet UIs.

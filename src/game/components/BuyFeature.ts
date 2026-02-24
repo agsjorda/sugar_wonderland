@@ -2,6 +2,7 @@ import { Scene } from 'phaser';
 import { SlotController } from './SlotController';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { CurrencyManager } from './CurrencyManager';
+import { formatCurrencyNumber } from '../../utils/NumberPrecisionFormatter';
 
 export interface BuyFeatureConfig {
 	position?: { x: number; y: number };
@@ -565,7 +566,7 @@ export class BuyFeature {
 	}
 
 	private formatNumberWithCommas(num: number): string {
-		return num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+		return formatCurrencyNumber(num);
 	}
 
 	private animateIn(): void {
@@ -664,7 +665,7 @@ export class BuyFeature {
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemoBet = (scene as any).gameAPI?.getDemoState();
 		const currencyCodeBet = isDemoBet ? '' : CurrencyManager.getCurrencyCode();
-		const betText = currencyCodeBet ? `${currencyCodeBet} ${this.getCurrentBet().toFixed(2)}` : this.getCurrentBet().toFixed(2);
+		const betText = currencyCodeBet ? `${currencyCodeBet} ${formatCurrencyNumber(this.getCurrentBet())}` : formatCurrencyNumber(this.getCurrentBet());
 		this.betDisplay = scene.add.text(x, y, betText, {
 			fontSize: '24px',
 			color: '#ffffff',
@@ -788,7 +789,7 @@ export class BuyFeature {
 		if (this.betDisplay) {
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
 			const currencyCode = isDemo ? '' : CurrencyManager.getCurrencyCode();
-			const betText = currencyCode ? `${currencyCode} ${this.getCurrentBet().toFixed(2)}` : this.getCurrentBet().toFixed(2);
+			const betText = currencyCode ? `${currencyCode} ${formatCurrencyNumber(this.getCurrentBet())}` : formatCurrencyNumber(this.getCurrentBet());
 			this.betDisplay.setText(betText);
 		}
 	}

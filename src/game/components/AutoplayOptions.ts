@@ -4,6 +4,7 @@ import { ScreenModeManager } from "../../managers/ScreenModeManager";
 import { gameStateManager } from "../../managers/GameStateManager";
 import { ensureSpineFactory } from '../../utils/SpineGuard';
 import { CurrencyManager } from './CurrencyManager';
+import { formatCurrencyNumber } from '../../utils/NumberPrecisionFormatter';
 
 export interface AutoplayOptionsConfig {
 	position?: { x: number; y: number };
@@ -283,7 +284,7 @@ export class AutoplayOptions {
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemo = (scene as any).gameAPI?.getDemoState();
 		const currencyCode = isDemo ? '' : CurrencyManager.getCurrencyCode();
-		const formatted = this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+		const formatted = formatCurrencyNumber(this.currentBalance);
 		const balanceText = currencyCode ? `${currencyCode} ${formatted}` : formatted;
 		const balanceAmount = scene.add.text(xPos, 1, balanceText, {
 			fontSize: '22px',
@@ -411,7 +412,7 @@ export class AutoplayOptions {
 		// Check if demo mode is active - if so, use blank currency symbol
 		const isDemoInitial = (scene as any).gameAPI?.getDemoState();
 		const currencyCodeInitial = isDemoInitial ? '' : CurrencyManager.getCurrencyCode();
-		const betText = currencyCodeInitial ? `${currencyCodeInitial} ${this.currentBet.toFixed(2)}` : this.currentBet.toFixed(2);
+		const betText = currencyCodeInitial ? `${currencyCodeInitial} ${formatCurrencyNumber(this.currentBet)}` : formatCurrencyNumber(this.currentBet);
 		this.autoplayDisplay = scene.add.text(x, y, betText, {
 			fontSize: '24px',
 			color: '#ffffff',
@@ -616,7 +617,7 @@ export class AutoplayOptions {
 			// Check if demo mode is active - if so, use blank currency symbol
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState();
 			const currencyCode = isDemo ? '' : CurrencyManager.getCurrencyCode();
-			const betText = currencyCode ? `${currencyCode} ${displayBet.toFixed(2)}` : displayBet.toFixed(2);
+			const betText = currencyCode ? `${currencyCode} ${formatCurrencyNumber(displayBet)}` : formatCurrencyNumber(displayBet);
 			this.autoplayDisplay.setText(betText);
 		}
 	}
@@ -625,7 +626,7 @@ export class AutoplayOptions {
 		if (this.balanceAmountText) {
 			const isDemo = (this.container?.scene as any)?.gameAPI?.getDemoState?.();
 			const currencyCode = isDemo ? '' : CurrencyManager.getCurrencyCode();
-			const formatted = this.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+			const formatted = formatCurrencyNumber(this.currentBalance);
 			const balanceText = currencyCode ? `${currencyCode} ${formatted}` : formatted;
 			this.balanceAmountText.setText(balanceText);
 		}

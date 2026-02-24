@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { SpinData } from '../../backend/SpinData';
 import { ensureSpineFactory } from '../../utils/SpineGuard';
+import { formatCurrencyNumber } from '../../utils/NumberPrecisionFormatter';
 import { CurrencyManager } from './CurrencyManager';
 
 interface WinTrackerLayoutOptions {
@@ -244,14 +245,9 @@ export class WinTracker {
       (() => {
         const isDemo = (this.scene as any).gameAPI?.getDemoState();
         if (isDemo) {
-          return data.totalWin.toFixed(2);
+          return formatCurrencyNumber(data.totalWin);
         }
-        const currencyCode = CurrencyManager.getCurrencyCode();
-        const formatted = data.totalWin.toLocaleString('en-US', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2
-        });
-        return currencyCode ? `${currencyCode} ${formatted}` : formatted;
+        return CurrencyManager.formatAmount(data.totalWin);
       })(),
       {
         fontSize: `${this.labelFontSize}px`,
